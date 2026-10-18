@@ -15,24 +15,30 @@ ask for the tag leaves the nibble as it was.
 
 The register file is a ring of the newest stack values. Logical slot 0 is
 the oldest resident slot; the stack pointer is the count of resident
-slots. Appending past the end of the 64 copies the oldest 16 values into
-an 80-byte block growing down from the end of the frame reserve
-(`0x2000_8000`). The block is 16-byte aligned, so the link value can keep
-its kind in the low nibble: tag `CONTROL`, kind `RF_LINK` (6), and
-`payload[31:4]` is the block address shifted right by 4. That link is
-written into the resident slot that held the newest of the 16, which
-becomes logical slot 0.
+slots. Appending past the end of the 64 copies the oldest values into a
+block growing down from the end of the frame reserve (`0x2000_8000`).
+While the stack has only been growing, that block holds 36 values. A
+spill from a full ring then still leaves 25 resident slots, which is
+above the line where the next instruction would pull the chunk back.
+After a pop the block holds 16, which is cheap to pull back. The block is 16-byte
+aligned, so the link value can keep its kind in the low nibble: tag
+`CONTROL`, kind `RF_LINK` (6), and `payload[31:4]` is the block address
+shifted right by 4. That link is written into the resident slot just
+after the copied values, which becomes logical slot 0.
 
 | Offset | Size | Contents |
 | --- | ---: | --- |
-| `0` | 4 B | Previous chunk address, or 0 for the oldest chunk |
-| `4` | 4 B | Zero |
-| `8` | 8 B | 16 tags. Lane 0 is bits `[3:0]` |
-| `16` | 64 B | 16 payloads, oldest first |
+| `0` | 4 B | Previous chunk address in bits `[31:4]` (0 for the oldest chunk). The word tag holds count `[5:4]` and bits `[3:0]` hold count `[3:0]` |
+| `4` | 4·ceil(count/8) B | Count tags, eight nibbles per word. Lane 0 is bits `[3:0]` |
+| next | 4·count B | Payloads, oldest first |
 
-All 16 slots are values. The previous link lives in the header, so a
-later spill frees 16 registers instead of 15. A walk follows the header,
-not a value slot.
+The byte length is padded out to a multiple of 16. A 16-value chunk is
+80 bytes. A 36-value chunk is 176. A 48-value chunk is 224, which is the
+most that still reloads into the 64-entry ring. Every slot in the chunk
+is a value. The previous link lives in the header, so a later spill frees
+one register per copied value (the first spill of a chain frees one
+fewer, because the new link occupies a freed slot). A walk reads one
+header word per chunk.
 
 There is no DRAM. There is no L1 and no L2. SRAM is one cycle. Flash adds
 `MPY_FLASH_WAIT_STATES` (default 1) on top of that cycle. The 12-byte

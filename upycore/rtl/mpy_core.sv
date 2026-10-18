@@ -3,11 +3,13 @@
 //
 // One frame is live. Locals sit in the frame record in SRAM (up to 255).
 // The operand stack is the 64-entry register file, used as a ring of the
-// newest values: when it is full, the oldest 16 values are copied to a
-// packed SRAM block. The block header holds the previous chunk address.
-// The slot that held the newest of those 16 becomes a CONTROL/RF_LINK
-// back to the block. A call snapshots the resident ring into the caller's
-// frame and a return copies it back.
+// newest values. When it is full, the oldest values are copied to a packed
+// SRAM block. A stack that has only been growing spills a wide block so a
+// deep expression walks fewer links. A stack that has been popping spills
+// 16, which is cheap to pull back. The block header holds the previous
+// chunk address and the count. The slot just after the copied values
+// becomes a CONTROL/RF_LINK back to the block. A call snapshots the
+// resident ring into the caller's frame and a return copies it back.
 //
 // The core handles the common shapes of every opcode itself: small and
 // long-long ints and binary32 floats, str/qstr equality and hashing, list,
@@ -38,7 +40,11 @@ module mpy_core
     import mpy_dec::*;
     import mpy_alu_pkg::*;
 #(
-    parameter int RSTK_DEPTH = 16
+    parameter int RSTK_DEPTH = 16,
+    // Values copied by one spill while the stack has only been growing.
+    // 16 is the shrink chunk. +GROW= and +ADAPT= override these in sim.
+    parameter int GROW_CHUNK = 36,
+    parameter int GROW_ADAPT = 1
 ) (
     input  logic        clk_i,
     input  logic        rst_n_i,
@@ -655,11 +661,17 @@ module mpy_core
     logic        rf_pend;
     val_t        rf_pend_v;
     state_e      rf_resume;
-    logic [31:0] spill_addr, spill_tag0, spill_tag1;
+    logic [31:0] spill_addr;
+    logic [5:0]  spill_n, spill_ntag;
+    logic [31:0] spill_words;
     logic        spill_had_link;
     logic [31:0] spill_prev;
-    val_t        rld [0:15];
-    logic [31:0] rld_tag0, rld_tag1;
+    val_t        rld [0:47];
+    // 1 while the last change to sp was a push. Spill and reload do not count.
+    logic        rf_mono, sp_hold, rf_reload_miss;
+    logic [6:0]  sp_d;
+    logic [5:0]  cfg_grow;
+    logic        cfg_adapt;
     logic [31:0] exc_base, stack_base;
     logic [15:0] srd_g, srd_off, stk_from;
     logic [31:0] srd_addr;
@@ -788,11 +800,24 @@ module mpy_core
     function automatic logic [31:0] loc_ptr(input logic [7:0] idx);
         loc_ptr = fbase + 32'h40 + {22'd0, idx, 2'b00};
     endfunction
-    function automatic logic [3:0] chunk_nibble(input logic [31:0] lo, input logic [31:0] hi,
-                                                input logic [4:0] i);
-        if (i < 5'd8) chunk_nibble = lo[4 * i +: 4];
-        else          chunk_nibble = hi[4 * (i - 5'd8) +: 4];
-    endfunction
+`ifndef SYNTHESIS
+    initial begin
+        int grow_v, adapt_v;
+        grow_v = GROW_CHUNK;
+        adapt_v = GROW_ADAPT;
+        if (!$value$plusargs("GROW=%d", grow_v)) grow_v = GROW_CHUNK;
+        if (!$value$plusargs("ADAPT=%d", adapt_v)) adapt_v = GROW_ADAPT;
+        if (grow_v < MPY_RF_CHUNK_MIN) grow_v = MPY_RF_CHUNK_MIN;
+        if (grow_v > MPY_RF_CHUNK_MAX) grow_v = MPY_RF_CHUNK_MAX;
+        cfg_grow = grow_v[5:0];
+        cfg_adapt = (adapt_v != 0);
+    end
+`else
+    initial begin
+        cfg_grow = GROW_CHUNK[5:0];
+        cfg_adapt = (GROW_ADAPT != 0);
+    end
+`endif
 
     function automatic val_t hdr_word(input logic [31:0] i);
         case (i[3:0])
@@ -953,6 +978,7 @@ module mpy_core
             fw_ok <= 1'b0; fw_base <= 32'd0;
             sp <= 7'd0; nloc <= 8'd0; rf_base <= 6'd0; spilled_reals <= 16'd0;
             spill_hp <= ABI_FRAME_END; rf_pend <= 1'b0;
+            rf_mono <= 1'b1; sp_hold <= 1'b0; sp_d <= 7'd0; rf_reload_miss <= 1'b0;
             xsp <= 5'd0; nexc <= 5'd0;
             noframe <= 1'b1; ovr <= ABI_OVR_NONE;
             cl_loc <= VNULL; al_soft <= 1'b0;
@@ -968,6 +994,11 @@ module mpy_core
             alu_start <= 1'b0;
             trace <= 1'b0;
             if (!halted) cyc <= cyc + 32'd1;
+            // A spill or a reload moves sp without a push or a pop.
+            if (sp_hold) sp_hold <= 1'b0;
+            else if (sp < sp_d) rf_mono <= 1'b0;
+            else if (sp > sp_d) rf_mono <= 1'b1;
+            sp_d <= sp;
 
             if (rf_pend && st != S_MWAIT && st != S_RF_SPILL && st != S_RF_SPILL_W &&
                 st != S_RF_RELOAD && st != S_RF_RELOAD_R && st != S_RF_RELOAD_G) begin
@@ -1564,6 +1595,7 @@ module mpy_core
                     // need = positional words + keyword pairs + callable (+ self)
                     v2 = v0 + (v1 << 1) + ((op == 8'h36) ? 32'd2 : 32'd1);
                     if (v2 <= 32'(resident_reals)) begin
+                        rf_reload_miss <= 1'b0;
                         vs0 = 7'(sp - 7'(v0) - 7'(2 * v1));      // first argument
                         vs1 = 7'(vs0 - ((op == 8'h36) ? 7'd2 : 7'd1));  // callable
                         ab[0] <= rf[`SX(vs1)];
@@ -1575,13 +1607,15 @@ module mpy_core
                         ab_pe <= 8'd32 + v0[7:0]; ab_nkw <= v1[7:0];
                         sp <= vs1; crk <= ABI_RK_PUSH;
                         st <= S_CALL;
-                    end else if (has_link && (sp <= 7'd48) && (v2 <= 32'd64)) begin
+                    end else if (has_link && !rf_reload_miss && (v2 <= 32'd64)) begin
                         // The window fits in the ring. Pull chunks back and retry.
+                        // A chunk that does not fit sets rf_reload_miss and comes back here.
                         rf_resume <= S_EXEC;
                         st <= S_RF_RELOAD;
                     end else if (v0 + (v1 << 1) > 32'd224) begin
                         raise_err(ABI_ERR_STAR_ARGS, VNULL, VNULL);
                     end else begin
+                        rf_reload_miss <= 1'b0;
                         // Wider than the ring: copy one stack value at a time.
                         b0 <= (op == 8'h36);
                         x4 <= v0;
@@ -2868,102 +2902,117 @@ module mpy_core
             end
 
             // ---- register-stack spill / reload / chain walk ----
-            // Chunk: previous address, a zero word, 8 tag bytes, 16 payloads.
-            // A spill with a link already at logical 0 moves that link into
-            // the header and copies the next 16 values, freeing 16 registers.
-            // The first spill has no previous chunk and frees 15.
+            // Word 0 packs the previous address and the value count. Tag
+            // words follow, then payloads, oldest first. A growth spill
+            // copies cfg_grow values (clamped so the ring stays above the
+            // eager-reload line). After a pop, the chunk is 16. A spill
+            // that already has a link moves that link into the header and
+            // frees `n` registers. The first spill frees `n - 1`.
             S_RF_SPILL: begin
-                if ((!has_link && sp < 7'd16) || (has_link && sp < 7'd17)) st <= rf_resume;
-                else if (spill_hp < ftop + 32'(MPY_RF_BLOCK_BYTES)) raise_msg(ABI_MSG_RECURSION);
+                v0 = (cfg_adapt && !rf_mono) ? 32'd16 : 32'(cfg_grow);
+                if (v0 < 32'(MPY_RF_CHUNK_MIN)) v0 = 32'(MPY_RF_CHUNK_MIN);
+                if (v0 > 32'(MPY_RF_CHUNK_MAX)) v0 = 32'(MPY_RF_CHUNK_MAX);
+                // Leave sp >= 17 so the next fetch does not reload at once.
+                v1 = has_link ? ((sp > 7'd17) ? 32'(sp - 7'd17) : 32'd0)
+                              : ((sp > 7'd16) ? 32'(sp - 7'd16) : 32'd0);
+                if (v0 > v1) v0 = v1;
+                v2 = mpy_rf_block_bytes(v0[5:0]);
+                if (v0 < 32'(MPY_RF_CHUNK_MIN)) st <= rf_resume;
+                else if (spill_hp < ftop + v2) raise_msg(ABI_MSG_RECURSION);
                 else begin
-                    spill_addr <= spill_hp - 32'(MPY_RF_BLOCK_BYTES);
+                    spill_n <= v0[5:0];
+                    spill_ntag <= 6'((v0[5:0] + 6'd7) >> 3);
+                    spill_words <= 32'd1 + 32'((v0[5:0] + 6'd7) >> 3) + v0;
+                    spill_addr <= spill_hp - v2;
                     spill_had_link <= has_link;
                     spill_prev <= has_link ? mpy_rf_link_addr(rf[`SX(7'd0)]) : 32'd0;
-                    for (int i = 0; i < 8; i++) begin
-                        spill_tag0[4*i +: 4] <= rf[`SX(has_link ? 7'(i + 1) : 7'(i))][35:32];
-                        spill_tag1[4*i +: 4] <= rf[`SX(has_link ? 7'(i + 9) : 7'(i + 8))][35:32];
-                    end
                     sw_i <= 32'd0;
                     st <= S_RF_SPILL_W;
                 end
             end
-            S_RF_SPILL_W: if (sw_i == 32'd20) begin
+            S_RF_SPILL_W: if (sw_i == spill_words) begin
                 if (spill_had_link) begin
-                    rf[`SX(7'd16)] <= mpy_make_rf_link(spill_addr);
-                    rf_base <= rf_base + 6'd16;
-                    sp <= sp - 7'd16;
+                    rf[`SX(spill_n)] <= mpy_make_rf_link(spill_addr);
+                    rf_base <= rf_base + spill_n;
+                    sp <= sp - {1'b0, spill_n};
                 end else begin
-                    rf[`SX(7'd15)] <= mpy_make_rf_link(spill_addr);
-                    rf_base <= rf_base + 6'd15;
-                    sp <= sp - 7'd15;
+                    rf[`SX(spill_n - 6'd1)] <= mpy_make_rf_link(spill_addr);
+                    rf_base <= rf_base + spill_n - 6'd1;
+                    sp <= (sp - {1'b0, spill_n}) + 7'd1;
                 end
                 spill_hp <= spill_addr;
-                spilled_reals <= spilled_reals + 16'd16;
+                spilled_reals <= spilled_reals + {10'd0, spill_n};
+                sp_hold <= 1'b1;
                 st <= rf_resume;
             end else if (sw_i == 32'd0) begin
-                wr(spill_addr, {4'd0, spill_prev}, S_RF_SPILL_W);
+                wr(spill_addr, mpy_rf_chunk_hdr(spill_prev, spill_n), S_RF_SPILL_W);
                 sw_i <= 32'd1;
-            end else if (sw_i == 32'd1) begin
-                wr(spill_addr + 32'd4, {4'd0, 32'd0}, S_RF_SPILL_W);
-                sw_i <= 32'd2;
-            end else if (sw_i == 32'd2) begin
-                wr(spill_addr + 32'd8, {4'd0, spill_tag0}, S_RF_SPILL_W);
-                sw_i <= 32'd3;
-            end else if (sw_i == 32'd3) begin
-                wr(spill_addr + 32'd12, {4'd0, spill_tag1}, S_RF_SPILL_W);
-                sw_i <= 32'd4;
+            end else if (sw_i <= 32'(spill_ntag)) begin
+                v3 = 32'd0;
+                for (int k = 0; k < 8; k++) begin
+                    vs0 = 7'((sw_i[5:0] - 6'd1) << 3) + 7'(k);
+                    if (vs0 < {1'b0, spill_n})
+                        v3[4*k +: 4] = rf[`SX(spill_had_link ? (vs0 + 7'd1) : vs0)][35:32];
+                end
+                wr(spill_addr + (sw_i << 2), {4'd0, v3}, S_RF_SPILL_W);
+                sw_i <= sw_i + 32'd1;
             end else begin
-                wr(spill_addr + 32'd16 + ((sw_i - 32'd4) << 2),
-                   rf[`SX(spill_had_link ? (sw_i[6:0] - 7'd3) : (sw_i[6:0] - 7'd4))],
-                   S_RF_SPILL_W);
+                vs0 = spill_had_link ? (sw_i[6:0] - {1'b0, spill_ntag})
+                                     : (sw_i[6:0] - 7'd1 - {1'b0, spill_ntag});
+                wr(spill_addr + (sw_i << 2), rf[`SX(vs0)], S_RF_SPILL_W);
                 sw_i <= sw_i + 32'd1;
             end
 
             S_RF_RELOAD: begin
-                if (!has_link || sp > 7'd49) st <= rf_resume;
+                if (!has_link) st <= rf_resume;
                 else begin
                     spill_addr <= mpy_rf_link_addr(rf[`SX(7'd0)]);
                     sw_i <= 32'd0;
                     st <= S_RF_RELOAD_R;
                 end
             end
-            S_RF_RELOAD_R: if (sw_i == 32'd20) begin
-                spilled_reals <= (spilled_reals >= 16'd16) ? spilled_reals - 16'd16 : 16'd0;
+            S_RF_RELOAD_R: if (sw_i != 32'd0 && sw_i == spill_words) begin
+                spilled_reals <= (spilled_reals >= {10'd0, spill_n}) ? (spilled_reals - {10'd0, spill_n}) : 16'd0;
                 if (spill_prev != 32'd0) begin
-                    rf[6'(rf_base - 6'd16)] <= mpy_make_rf_link(spill_prev);
-                    for (int i = 0; i < 16; i++)
-                        rf[6'(rf_base - 6'd15 + 6'(i))] <= rld[i];
-                    rf_base <= rf_base - 6'd16;
-                    sp <= sp + 7'd16;
+                    rf[6'(rf_base - spill_n)] <= mpy_make_rf_link(spill_prev);
+                    for (int i = 0; i < MPY_RF_CHUNK_MAX; i++)
+                        if (i < spill_n) rf[6'(rf_base - spill_n + 6'(i) + 6'd1)] <= rld[i];
+                    rf_base <= rf_base - spill_n;
+                    sp <= sp + {1'b0, spill_n};
                 end else begin
-                    for (int i = 0; i < 16; i++)
-                        rf[6'(rf_base - 6'd15 + 6'(i))] <= rld[i];
-                    rf_base <= rf_base - 6'd15;
-                    sp <= sp + 7'd15;
+                    for (int i = 0; i < MPY_RF_CHUNK_MAX; i++)
+                        if (i < spill_n) rf[6'(rf_base - spill_n + 6'(i) + 6'd1)] <= rld[i];
+                    rf_base <= rf_base - (spill_n - 6'd1);
+                    sp <= (sp + {1'b0, spill_n}) - 7'd1;
                 end
+                rf_reload_miss <= 1'b0;
+                sp_hold <= 1'b1;
                 st <= rf_resume;
-            end else if (sw_i == 32'd0) begin
-                rd(spill_addr, S_RF_RELOAD_G);
-            end else if (sw_i == 32'd1) begin
-                rd(spill_addr + 32'd4, S_RF_RELOAD_G);
-            end else if (sw_i == 32'd2) begin
-                rd(spill_addr + 32'd8, S_RF_RELOAD_G);
-            end else if (sw_i == 32'd3) begin
-                rd(spill_addr + 32'd12, S_RF_RELOAD_G);
-            end else rd(spill_addr + 32'd16 + ((sw_i - 32'd4) << 2), S_RF_RELOAD_G);
+            end else rd(spill_addr + (sw_i << 2), S_RF_RELOAD_G);
             S_RF_RELOAD_G: begin
                 if (sw_i == 32'd0) begin
-                    spill_prev <= md;
-                    if (md != 32'd0 && sp > 7'd48) st <= rf_resume;
-                    else begin sw_i <= 32'd1; st <= S_RF_RELOAD_R; end
-                end else if (sw_i == 32'd1) begin
-                    sw_i <= 32'd2; st <= S_RF_RELOAD_R;
-                end else if (sw_i == 32'd2) begin
-                    rld_tag0 <= md; sw_i <= 32'd3; st <= S_RF_RELOAD_R;
-                end else if (sw_i == 32'd3) begin
-                    rld_tag1 <= md; sw_i <= 32'd4; st <= S_RF_RELOAD_R;
+                    v0 = 32'(mpy_rf_chunk_count(mt, md));
+                    v1 = mpy_rf_chunk_prev(md);
+                    // With a previous link the reload occupies `count` slots.
+                    // The oldest chunk occupies `count - 1` (no link to restore).
+                    v2 = 32'(sp) + ((v1 != 32'd0) ? v0 : (v0 - 32'd1));
+                    spill_n <= v0[5:0];
+                    spill_prev <= v1;
+                    spill_ntag <= 6'((v0[5:0] + 6'd7) >> 3);
+                    spill_words <= 32'd1 + 32'((v0[5:0] + 6'd7) >> 3) + v0;
+                    if (v0 < 32'(MPY_RF_CHUNK_MIN) || v0 > 32'(MPY_RF_CHUNK_MAX) || v2 > 32'd64) begin
+                        if (rf_resume == S_EXEC) begin
+                            rf_reload_miss <= 1'b1;
+                            st <= S_EXEC;
+                        end else halt(ABI_HALT_INTERNAL, 32'h0000_5F01);
+                    end else begin
+                        // Payloads carry their tags in the side array. Skip the tag words.
+                        sw_i <= 32'd1 + 32'((v0[5:0] + 6'd7) >> 3);
+                        st <= S_RF_RELOAD_R;
+                    end
                 end else begin
-                    rld[sw_i[4:0] - 5'd4] <= {chunk_nibble(rld_tag0, rld_tag1, 5'(sw_i[4:0] - 5'd4)), md};
+                    v0 = sw_i - 32'd1 - 32'(spill_ntag);
+                    rld[v0[5:0]] <= mv;
                     sw_i <= sw_i + 32'd1;
                     st <= S_RF_RELOAD_R;
                 end
@@ -2983,14 +3032,17 @@ module mpy_core
             end
             S_SRD_T0: rd(srd_addr, S_SRD_T1);
             S_SRD_T1: begin
-                if (srd_off < 16'd16)
-                    rd(srd_addr + 32'd16 + ((32'd15 - 32'(srd_off)) << 2), S_SRD_GOT);
-                else if (md == 32'd0 || srd_hops == 8'd64) begin
+                v0 = 32'(mpy_rf_chunk_count(mt, md));
+                v1 = mpy_rf_chunk_prev(md);
+                if (v0 != 32'd0 && srd_off < v0[15:0])
+                    rd(srd_addr + 32'd4 + (32'((v0[5:0] + 6'd7) >> 3) << 2)
+                       + ((v0 - 32'd1 - 32'(srd_off)) << 2), S_SRD_GOT);
+                else if (v1 == 32'd0 || srd_hops == 8'd64) begin
                     srd_v <= VNULL;
                     ret();
                 end else begin
-                    srd_off <= srd_off - 16'd16;
-                    srd_addr <= md;
+                    srd_off <= srd_off - v0[15:0];
+                    srd_addr <= v1;
                     srd_hops <= srd_hops + 8'd1;
                     st <= S_SRD_T0;
                 end

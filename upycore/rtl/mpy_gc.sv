@@ -101,8 +101,11 @@ module mpy_gc #(
     logic [31:0]   zaddr, zend;
     logic [31:0]   raddr, rhi;
     logic          rsel;          // 0: root range 0, 1: root range 1
-    logic [31:0]   lnk_addr, lnk_next, lnk_tag0, lnk_tag1;
-    logic [4:0]    lnk_i;
+    logic [31:0]   lnk_addr, lnk_next;
+    logic [3:0]    lnk_tags [0:47];
+    logic [7:0]    lnk_n;
+    logic [5:0]    lnk_i;
+    logic [2:0]    lnk_ntag, lnk_tw;
     logic [7:0]    lnk_hops;
     logic          lnk_follow;
     logic [BW-1:0] oblk;          // object scan: current block
@@ -312,7 +315,7 @@ module mpy_gc #(
                         if (mem_rtag_i == MPY_TAG_CONTROL &&
                             mem_rdata_i[3:0] == MPY_CTL_RF_LINK &&
                             {mem_rdata_i[31:4], 4'b0000} >= MPY_SRAM_BASE &&
-                            ({mem_rdata_i[31:4], 4'b0000} + 32'(MPY_RF_BLOCK_BYTES)) <=
+                            ({mem_rdata_i[31:4], 4'b0000} + 32'd4) <=
                                 (MPY_SRAM_BASE + MPY_FRAME_RESERVE_BYTES)) begin
                             lnk_addr <= {mem_rdata_i[31:4], 4'b0000};
                             lnk_hops <= 8'd0;
@@ -326,36 +329,48 @@ module mpy_gc #(
                     end
                 end
 
-                // Chunk header word 0 is the previous chunk address, or 0.
-                // Tags are at +8/+12. Sixteen value payloads start at +16.
+                // Chunk word 0 packs the previous address and the value count.
+                // Tag words start at +4. Payloads follow the tag words.
                 G_LNK: begin
                     lnk_follow <= 1'b0;
                     mem_read(lnk_addr);
                     st <= G_LNK_T0;
                 end
                 G_LNK_T0: if (mem_ack_i) begin
-                    if (mem_rdata_i != 32'd0 && lnk_hops != 8'd64) begin
-                        lnk_next   <= mem_rdata_i;
+                    lnk_n <= mpy_rf_chunk_count(mem_rtag_i, mem_rdata_i);
+                    if (mpy_rf_chunk_prev(mem_rdata_i) != 32'd0 && lnk_hops != 8'd64) begin
+                        lnk_next   <= mpy_rf_chunk_prev(mem_rdata_i);
                         lnk_follow <= 1'b1;
                     end
-                    mem_read(lnk_addr + 32'd8);
-                    st <= G_LNK_T1;
+                    lnk_ntag <= 3'((mpy_rf_chunk_count(mem_rtag_i, mem_rdata_i) + 8'd7) >> 3);
+                    lnk_tw <= 3'd0;
+                    if (mpy_rf_chunk_count(mem_rtag_i, mem_rdata_i) < 8'(MPY_RF_CHUNK_MIN) ||
+                        mpy_rf_chunk_count(mem_rtag_i, mem_rdata_i) > 8'(MPY_RF_CHUNK_MAX) ||
+                        lnk_addr + mpy_rf_block_bytes(mpy_rf_chunk_count(mem_rtag_i, mem_rdata_i)[5:0]) >
+                            (MPY_SRAM_BASE + MPY_FRAME_RESERVE_BYTES)) begin
+                        st <= G_ROOT;
+                    end else begin
+                        mem_read(lnk_addr + 32'd4);
+                        st <= G_LNK_T1;
+                    end
                 end
                 G_LNK_T1: if (mem_ack_i) begin
-                    lnk_tag0 <= mem_rdata_i;
-                    mem_read(lnk_addr + 32'd12);
-                    st <= G_LNK_P0;
+                    for (int k = 0; k < 8; k++)
+                        lnk_tags[8 * lnk_tw + k] <= mem_rdata_i[4*k +: 4];
+                    if (3'(lnk_tw + 3'd1) < lnk_ntag) begin
+                        lnk_tw <= lnk_tw + 3'd1;
+                        mem_read(lnk_addr + 32'd8 + ({29'd0, lnk_tw} << 2));
+                        st <= G_LNK_T1;
+                    end else begin
+                        lnk_i <= 6'd0;
+                        mem_read(lnk_addr + 32'd4 + ({29'd0, lnk_ntag} << 2));
+                        st <= G_LNK_DEC;
+                    end
                 end
-                G_LNK_P0: if (mem_ack_i) begin
-                    lnk_tag1 <= mem_rdata_i;
-                    lnk_i    <= 5'd0;
-                    mem_read(lnk_addr + 32'd16);
-                    st <= G_LNK_DEC;
-                end
+                G_LNK_P0: st <= G_ROOT;
                 G_LNK_DEC: if (mem_ack_i) begin
-                    if (mpy_tag_is_pointer((lnk_i < 5'd8) ? lnk_tag0[4*lnk_i +: 4]
-                                                          : lnk_tag1[4*(lnk_i - 5'd8) +: 4])) begin
-                        if (((lnk_i < 5'd8) ? lnk_tag0[4*lnk_i +: 4] : lnk_tag1[4*(lnk_i - 5'd8) +: 4]) == MPY_TAG_MUT_COLLEC) begin
+                    if (mpy_tag_is_pointer(lnk_tags[lnk_i])) begin
+                        if (lnk_tags[lnk_i] == MPY_TAG_MUT_COLLEC) begin
                             if ({mem_rdata_i[31:2], 2'b00} >= POOL_BASE &&
                                 ({mem_rdata_i[31:2], 2'b00} - POOL_BASE) < 32'(POOL_BYTES))
                                 try_mark(BW'(({mem_rdata_i[31:2], 2'b00} - POOL_BASE) >> 4));
@@ -364,15 +379,15 @@ module mpy_gc #(
                             try_mark(BW'((mem_rdata_i - POOL_BASE) >> 4));
                         end
                     end
-                    if (lnk_i == 5'd15) begin
+                    if ({2'b00, lnk_i} + 8'd1 == lnk_n) begin
                         if (lnk_follow && lnk_hops != 8'd64) begin
                             lnk_addr <= lnk_next;
                             lnk_hops <= lnk_hops + 8'd1;
                             st <= G_LNK;
                         end else st <= G_ROOT;
                     end else begin
-                        lnk_i <= lnk_i + 5'd1;
-                        mem_read(lnk_addr + 32'd20 + ({27'd0, lnk_i} << 2));
+                        lnk_i <= lnk_i + 6'd1;
+                        mem_read(lnk_addr + 32'd8 + ({29'd0, lnk_ntag} << 2) + ({26'd0, lnk_i} << 2));
                         st <= G_LNK_DEC;
                     end
                 end
