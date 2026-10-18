@@ -9,6 +9,7 @@ or planning markdown.
 | Path | Topic |
 | --- | --- |
 | `systems/call_fsm.tex` | `S_CALL` FSM, shared argument binder, CPython call shapes |
+| `systems/upycore_architecture.tex` | uPyCore system and subsystem diagrams: build flow, SoC, core and hook dispatch, frames, memory map, value tags, heap objects, ALU/FPU, GC, IRQ/peripherals, verification |
 
 ## Build
 
@@ -16,10 +17,12 @@ or planning markdown.
 cd docs/paper/systems
 pdflatex call_fsm.tex
 pdflatex call_fsm.tex   # TOC
+pdflatex upycore_architecture.tex && pdflatex upycore_architecture.tex
 ```
 
 Needs a TeX distribution with `tikz`, `booktabs`, `hyperref`, `listings`,
-`geometry`, `microtype`.
+`geometry`, `microtype` (`upycore_architecture.tex` also uses `caption`, `float`,
+and the TikZ `shapes.misc` / `patterns` libraries).
 
 ## Conventions
 
