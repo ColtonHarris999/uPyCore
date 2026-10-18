@@ -10,6 +10,7 @@
 #   make oracle        build the 32-bit unix oracle and smoke it
 #   make synth         elaborate every synth top with Yosys+slang (needs yosys)
 #   make synth-gates   map mpy_core and components to gates
+#   make bench         tier-A perf_bench on the simulator (not a merge gate)
 
 PYTHON ?= python3
 BUILD_PY := upycore/tools/mpy_build.py
@@ -30,7 +31,7 @@ HW_AREAS := smoke alu control calls containers strings exceptions objects \
 
 .PHONY: test sim fw run oracle oracle-header oracle-variant oracle-smoke mpy-cross \
 	docker-build docker-test test-hw test-host test-compiler regen-goldens check-goldens \
-	synth synth-gates clean
+	synth synth-gates clean bench
 
 $(MPY_CROSS):
 	variants/upycore/build.sh mpy-cross
@@ -50,6 +51,7 @@ test: $(MPY_CROSS)
 	$(PYTHON) upycore/tests/test_mpy_periph_model.py
 	$(PYTHON) upycore/tests/test_hw_manifest.py
 	$(PYTHON) upycore/tests/test_numeric_const.py
+	$(PYTHON) upycore/tests/test_perfbench.py
 	$(PYTHON) upycore/tools/compiler_suite.py
 	$(PYTHON) $(BUILD_PY) sim
 	$(PYTHON) upycore/tools/hw_tests.py
@@ -70,6 +72,7 @@ test-hw-%: $(MPY_CROSS)
 test-host: $(MPY_CROSS)
 	$(PYTHON) upycore/tests/test_mpy_periph_model.py
 	$(PYTHON) upycore/tests/test_hw_manifest.py
+	$(PYTHON) upycore/tests/test_perfbench.py
 	$(PYTHON) upycore/tools/compiler_suite.py
 
 test-compiler: $(MPY_CROSS)
@@ -112,6 +115,12 @@ synth:
 
 synth-gates:
 	$(PYTHON) $(SYNTH_PY) --synth $(SYNTH_TOP)
+
+# Smallest qualifying (N, M) for each tier-A program. Nightly-sized; the
+# hardware suite does not wait on it.
+bench: $(MPY_CROSS)
+	$(PYTHON) $(BUILD_PY) sim
+	$(PYTHON) upycore/tools/perfbench.py run
 
 clean:
 	rm -rf build/mpy build/mpy_soc build/synth

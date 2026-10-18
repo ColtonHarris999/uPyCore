@@ -101,10 +101,10 @@ def build_sim(force: bool = False, quiet: bool = True) -> Path:
     return SIM
 
 
-def mpy_cross(src: Path, out: Path, source_name: str) -> None:
+def mpy_cross(src: Path, out: Path, source_name: str, extra: tuple[str, ...] = ()) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     r = subprocess.run(
-        [str(MPY_CROSS), *MPY_CROSS_FLAGS, "-s", source_name, "-o", str(out), str(src)],
+        [str(MPY_CROSS), *MPY_CROSS_FLAGS, *extra, "-s", source_name, "-o", str(out), str(src)],
         capture_output=True, text=True,
     )
     if r.returncode != 0:
@@ -137,9 +137,10 @@ def compile_mpyc(src: Path, out: Path, source_name: str) -> None:
     out.write_bytes(data)
 
 
-def compile_user(src: Path, out: Path, source_name: str, compiler: str = "mpy-cross") -> None:
+def compile_user(src: Path, out: Path, source_name: str, compiler: str = "mpy-cross",
+                  extra: tuple[str, ...] = ()) -> None:
     if compiler == "mpy-cross":
-        mpy_cross(src, out, source_name)
+        mpy_cross(src, out, source_name, extra)
     elif compiler == "mpyc":
         compile_mpyc(src, out, source_name)
     else:
@@ -239,7 +240,8 @@ def run_image(image: Path, max_cycles: int = 50_000_000, trace: bool = False,
 
 def build_program(src: Path, work: Path, source_name: str | None = None,
                   modules: dict[str, Path] | None = None,
-                  compiler: str = "mpy-cross") -> Path:
+                  compiler: str = "mpy-cross",
+                  extra: tuple[str, ...] = ()) -> Path:
     """Compile and link one program (plus frozen modules); returns the image prefix.
 
     ``compiler`` selects the user-program compiler. The firmware is always
@@ -250,7 +252,7 @@ def build_program(src: Path, work: Path, source_name: str | None = None,
     fw = build_firmware()
     name = source_name or src.name
     main_mpy = work / "main.mpy"
-    compile_user(src, main_mpy, name, compiler)
+    compile_user(src, main_mpy, name, compiler, extra)
     specs = []
     for mname, mpath in (modules or {}).items():
         mm = work / (mname.replace(".", "_") + ".mpy")
