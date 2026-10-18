@@ -637,11 +637,25 @@ def _format_braces(fmt, args, kw):
                 j += 1
             field = _substr(fmt, i + 1, j, TAG_STR)
             spec = ''
+            conv = 0
             name = field
-            k = _find_bytes(field, ':', 0, _slen(field))
-            if k >= 0:
-                name = _substr(field, 0, k, TAG_STR)
-                spec = _substr(field, k + 1, _slen(field), TAG_STR)
+            bang = _find_bytes(field, '!', 0, _slen(field))
+            colon = _find_bytes(field, ':', 0, _slen(field))
+            if bang >= 0 and (colon < 0 or bang < colon):
+                name = _substr(field, 0, bang, TAG_STR)
+                if bang + 1 >= _slen(field):
+                    raise ValueError('bad conversion character')
+                conv = _byte(field, bang + 1)
+                if colon < 0:
+                    if bang + 2 != _slen(field):
+                        raise ValueError('bad conversion character')
+                elif bang + 2 != colon:
+                    raise ValueError('bad conversion character')
+                else:
+                    spec = _substr(field, colon + 1, _slen(field), TAG_STR)
+            elif colon >= 0:
+                name = _substr(field, 0, colon, TAG_STR)
+                spec = _substr(field, colon + 1, _slen(field), TAG_STR)
             if _slen(name) == 0:
                 if manual:
                     raise ValueError("can't switch from manual field specification to automatic field numbering")
@@ -657,6 +671,14 @@ def _format_braces(fmt, args, kw):
                 val = args[int(name)]
             else:
                 val = kw[name]
+            if conv == 114:
+                val = _repr(val)
+            elif conv == 115:
+                val = _str(val)
+            elif conv == 97:
+                val = _repr(val)
+            elif conv != 0:
+                raise ValueError('bad conversion character')
             out.append(_fmt_spec(val, spec))
             i = j + 1
             continue

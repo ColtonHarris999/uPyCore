@@ -154,6 +154,67 @@ _ARG_NAMES_NEW = """        n_args = scope.num_pos_args + scope.num_kwonly_args
 """
 
 
+# scope_find is a linear scan. A few hundred parameters make that the
+# compile. A qstr-to-index map keeps the same first-mention indexes.
+_SCOPE_INIT = """        self.ids = array('i')
+"""
+
+_SCOPE_INIT_NEW = """        self.ids = array('i')
+        self._index = {}
+"""
+
+_SCOPE_SWAP = """        for k in range(ID_STRIDE):
+            ids[a + k], ids[b + k] = ids[b + k], ids[a + k]
+"""
+
+_SCOPE_SWAP_NEW = """        for k in range(ID_STRIDE):
+            ids[a + k], ids[b + k] = ids[b + k], ids[a + k]
+        self._index[ids[a + ID_QST]] = i
+        self._index[ids[b + ID_QST]] = j
+"""
+
+_SCOPE_FIND = """    def find(self, qst):
+        \"\"\"The index of *qst* in this scope, or -1.\"\"\"
+        ids = self.ids
+        i = 0
+        n = len(ids)
+        while i < n:
+            if ids[i + ID_QST] == qst:
+                return i // ID_STRIDE
+            i += ID_STRIDE
+        return -1
+"""
+
+_SCOPE_FIND_NEW = """    def find(self, qst):
+        \"\"\"The index of *qst* in this scope, or -1.\"\"\"
+        hit = self._index.get(qst)
+        if hit is None:
+            return -1
+        return hit
+"""
+
+_SCOPE_ADD = """        ids.append(0)   # local_num
+        return len(ids) // ID_STRIDE - 1
+"""
+
+_SCOPE_ADD_NEW = """        ids.append(0)   # local_num
+        i = len(ids) // ID_STRIDE - 1
+        self._index[qst] = i
+        return i
+"""
+
+
+def _patched_scope(text: str) -> str:
+    _require(text, _SCOPE_INIT, "scope")
+    _require(text, _SCOPE_SWAP, "scope")
+    _require(text, _SCOPE_FIND, "scope")
+    _require(text, _SCOPE_ADD, "scope")
+    text = text.replace(_SCOPE_INIT, _SCOPE_INIT_NEW, 1)
+    text = text.replace(_SCOPE_SWAP, _SCOPE_SWAP_NEW, 1)
+    text = text.replace(_SCOPE_FIND, _SCOPE_FIND_NEW, 1)
+    return text.replace(_SCOPE_ADD, _SCOPE_ADD_NEW, 1)
+
+
 def _patched_emitbc(text: str) -> str:
     _require(text, _ARG_NAMES, "emitbc")
     return text.replace(_ARG_NAMES, _ARG_NAMES_NEW, 1)
@@ -183,6 +244,8 @@ def prepare(dest: Path | None = None) -> Path:
             text = _patched_parser(text)
         elif src.name == "emitbc.py":
             text = _patched_emitbc(text)
+        elif src.name == "scope.py":
+            text = _patched_scope(text)
         _put(out / src.name, text)
     _put(out / "stages.py", STAGES.read_text(encoding="utf-8"))
     return out
