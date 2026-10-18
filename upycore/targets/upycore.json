@@ -850,7 +850,7 @@
         "opcode": 103,
         "format": "byte",
         "stack_effect": "0",
-        "phase": "reject",
+        "phase": 4,
         "signed": false,
         "extra_byte": false
       },

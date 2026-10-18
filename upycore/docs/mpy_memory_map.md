@@ -62,12 +62,14 @@ OBJECT kinds in word 0:
 | --- | ---: |
 | INSTANCE | 1 |
 | TYPE | 2 |
-| BOUND_METHOD | 3 |
-| BUILTIN | 4 |
-| EXCEPTION | 6 |
-| CELL | 7 |
-| FUNCTION | 8 |
-| MODULE | 11 |
+| EXCEPTION | 3 |
+| CELL | 4 |
+| FUNCTION | 5 |
+| GENERATOR | 6 |
+| BOUND_METHOD | 7 |
+| BUILTIN | 8 |
+| MODULE | 9 |
+| NOTIMPL | 18 |
 
 Word 1 is the type pointer, or 0. Fields start at word 2. Heap words are
 32-bit payloads with a tag nibble each. There is no 32-byte stride.

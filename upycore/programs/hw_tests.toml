@@ -481,18 +481,18 @@ gc_leak_check = { file = "hw/gc/gc_leak_check.py", cycles = 40_000_000, timeout 
 gc_bench_churn = { file = "hw/gc/gc_bench_churn.py", cycles = 40_000_000, timeout = 240 }
 
 [generators]
-gen_yield = { file = "hw/generators/gen_yield.py", xfail = "generators aren't supported", mpyc = false }
-gen_send = { file = "hw/generators/gen_send.py", xfail = "generators aren't supported", mpyc = false }
-gen_return = { file = "hw/generators/gen_return.py", xfail = "generators aren't supported", mpyc = false }
-gen_throw = { file = "hw/generators/gen_throw.py", xfail = "generators aren't supported", mpyc = false }
-gen_close = { file = "hw/generators/gen_close.py", xfail = "generators aren't supported", mpyc = false }
-gen_pend = { file = "hw/generators/gen_pend.py", xfail = "generators aren't supported", mpyc = false }
-gen_state = { file = "hw/generators/gen_state.py", xfail = "generators aren't supported", mpyc = false }
-gen_repr = { file = "hw/generators/gen_repr.py", xfail = "generators aren't supported", mpyc = false }
-gen_gc = { file = "hw/generators/gen_gc.py", xfail = "generators aren't supported", mpyc = false, cycles = 40_000_000, timeout = 240 }
+gen_yield = { file = "hw/generators/gen_yield.py", mpyc = false }
+gen_send = { file = "hw/generators/gen_send.py", mpyc = false }
+gen_return = { file = "hw/generators/gen_return.py", mpyc = false }
+gen_throw = { file = "hw/generators/gen_throw.py", mpyc = false }
+gen_close = { file = "hw/generators/gen_close.py", mpyc = false }
+gen_pend = { file = "hw/generators/gen_pend.py", mpyc = false }
+gen_state = { file = "hw/generators/gen_state.py", mpyc = false }
+gen_repr = { file = "hw/generators/gen_repr.py", mpyc = false }
+gen_gc = { file = "hw/generators/gen_gc.py", mpyc = false, cycles = 40_000_000, timeout = 240 }
 gen_yield_from = { file = "hw/generators/gen_yield_from.py", xfail = "generators aren't supported", mpyc = false }
 gen_yield_from_iter = { file = "hw/generators/gen_yield_from_iter.py", xfail = "generators aren't supported", mpyc = false }
 gen_yield_from_throw = { file = "hw/generators/gen_yield_from_throw.py", xfail = "generators aren't supported", mpyc = false }
 gen_async = { file = "hw/generators/gen_async.py", xfail = "generators aren't supported", mpyc = false }
-gen_with = { file = "hw/generators/gen_with.py", xfail = "generators aren't supported", mpyc = false }
-gen_trace = { file = "hw/generators/gen_trace.py", xfail = "generators aren't supported", mpyc = false, uncaught = true }
+gen_with = { file = "hw/generators/gen_with.py", mpyc = false }
+gen_trace = { file = "hw/generators/gen_trace.py", mpyc = false, uncaught = true }

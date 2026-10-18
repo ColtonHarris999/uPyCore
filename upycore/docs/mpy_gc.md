@@ -62,7 +62,7 @@ are Python values. Their own tag selects the object layout.
 
 | Object | Words | What is traced |
 | --- | --- | --- |
-| list | length, item-array pointer | `length` tagged words in the array |
+| list | length, item-array pointer | `length` tagged words in the array. A generator frame block is the same kind of second allocation |
 | dict | used count in `[30:0]`, bit 31 object indicator, allocated slots, entry-table pointer, types-table pointer | each entry is a key then a value, for every allocated slot. The types table is traced only when bit 31 is set |
 | set | same header as dict | one tagged word per allocated slot. Types table same rule as dict |
 | bytearray | length, capacity, buffer pointer | the buffer is marked and not scanned |
@@ -80,12 +80,19 @@ other value. Fields start at word 2. The kind selects how many:
 | --- | --- | --- |
 | `INSTANCE` | 1 | `__dict__` |
 | `TYPE` | 2 | `tp_dict`, `tp_base`, `tp_name`, `tp_hash` |
-| `BOUND_METHOD` | 3 | function, self |
-| `BUILTIN` | 4 | builtin id, bound self |
-| `EXCEPTION` | 6 | exception type, `args` tuple |
-| `CELL` | 7 | contents |
-| `FUNCTION` | 8 | code pointer, closure tuple |
-| `MODULE` | 11 | globals dict |
+| `EXCEPTION` | 3 | `args` tuple, traceback, `__dict__` |
+| `CELL` | 4 | contents |
+| `FUNCTION` | 5 | raw code, closure, defaults, globals |
+| `GENERATOR` | 6 | kind, type, function, status, pending exception, frame block |
+| `BOUND_METHOD` | 7 | function, self |
+| `BUILTIN` | 8 | native id, fallback, name |
+| `MODULE` | 9 | globals dict, name |
+
+The generator's frame block is the allocation word 5 points at. The
+collector follows that `CONT` pointer the way it follows a list's item
+array, then the tagged words of the block. A local lives because it is
+one of those words. Counts and saved program counters are `INT` or
+`CONTROL`, so they are not swept.
 
 An unknown kind marks the object and traces the type word only. `tp_hash`
 is a value: empty `CONTROL` for the default hash, `None` for unhashable,

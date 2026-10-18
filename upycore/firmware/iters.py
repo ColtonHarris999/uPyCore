@@ -258,3 +258,35 @@ def _chr_code(c):
         _poke8(d, 2, 0x80 | ((c >> 6) & 0x3F))
         _poke8(d, 3, 0x80 | (c & 0x3F))
     return _strfin(s)
+
+
+def generator____next__(self):
+    return _gresume(self, None, None)
+
+
+def generator__send(self, value):
+    return _gresume(self, value, None)
+
+
+def generator__throw(self, typ, val=None, tb=None):
+    if val is None:
+        return _gresume(self, None, typ)
+    return _gresume(self, None, val)
+
+
+def generator__close(self):
+    try:
+        _gresume(self, None, GeneratorExit())
+    except GeneratorExit:
+        return None
+    except StopIteration:
+        return None
+    raise RuntimeError("generator ignored GeneratorExit")
+
+
+def generator__pend_throw(self, exc):
+    if _ld(self, 3) & 1:
+        raise ValueError("generator already executing")
+    prev = _ld(self, 4)
+    _st(self, 4, exc)
+    return prev

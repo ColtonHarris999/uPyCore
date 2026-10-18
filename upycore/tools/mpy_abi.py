@@ -113,30 +113,39 @@ DICT_FLAG_ROM = 1
 SET_FLAG_FROZEN = 2
 
 # OBJECT word 0. Word 1 is always the type object.
+# A new kind is inserted above the ELLIPSIS/NOTIMPL pair. NOTIMPL stays last.
 OB = {
+    # Instances.
     "INSTANCE": 1,       # [2] __dict__
     "TYPE": 2,           # [2] dict [3] bases [4] name [5] mro [6] id [7] flags [8] make_new
-    "BOUND_METHOD": 3,   # [2] function [3] self
-    "BUILTIN": 4,        # [2] native id [3] fallback callable [4] name qstr
-    "EXCEPTION": 6,      # [2] args tuple [3] traceback list [4] __dict__
-    "CELL": 7,           # [2] contents
-    "FUNCTION": 8,       # [2] raw code [3] closure tuple [4] defaults tuple
+    "EXCEPTION": 3,      # [2] args tuple [3] traceback list [4] __dict__
+    # Code. A generator is the suspended frame of a function.
+    "CELL": 4,           # [2] contents
+    "FUNCTION": 5,       # [2] raw code [3] closure tuple [4] defaults tuple
                          # [5] kw defaults dict [6] globals dict
-    "MODULE": 11,        # [2] globals dict [3] name qstr
-    "ELLIPSIS": 12,
-    "SLICE": 13,         # [2] start [3] stop [4] step
-    "PROPERTY": 14,      # [2] fget [3] fset [4] fdel
-    "STATICMETHOD": 15,  # [2] function
-    "CLASSMETHOD": 16,   # [2] function
-    "DICT_VIEW": 17,     # [2] dict [3] kind (0 keys, 1 values, 2 items)
-    "SUPER": 18,         # [2] type [3] object
-    "NOTIMPL": 19,
+    "GENERATOR": 6,      # [2] function [3] status [4] pend_exc [5] frame block
+    "BOUND_METHOD": 7,   # [2] function [3] self
+    "BUILTIN": 8,        # [2] native id [3] fallback callable [4] name qstr
+    # Namespaces and descriptors.
+    "MODULE": 9,         # [2] globals dict [3] name qstr
+    "SUPER": 10,         # [2] type [3] object
+    "PROPERTY": 11,      # [2] fget [3] fset [4] fdel
+    "STATICMETHOD": 12,  # [2] function
+    "CLASSMETHOD": 13,   # [2] function
+    # Views and the iterator objects firmware builds
+    # (enumerate, zip, map, filter, reversed, str iterators).
+    "SLICE": 14,         # [2] start [3] stop [4] step
+    "DICT_VIEW": 15,     # [2] dict [3] kind (0 keys, 1 values, 2 items)
+    "ITEROBJ": 16,
+    # Singletons.
+    "ELLIPSIS": 17,
+    "NOTIMPL": 18,
 }
 OBJ_WORDS = {
-    "INSTANCE": 3, "TYPE": 9, "BOUND_METHOD": 4, "BUILTIN": 5,
-    "EXCEPTION": 5, "CELL": 3, "FUNCTION": 7, "MODULE": 4, "ELLIPSIS": 2,
-    "SLICE": 5, "PROPERTY": 5, "STATICMETHOD": 3, "CLASSMETHOD": 3,
-    "DICT_VIEW": 4, "SUPER": 4, "NOTIMPL": 2,
+    "INSTANCE": 3, "TYPE": 9, "EXCEPTION": 5, "CELL": 3, "FUNCTION": 7,
+    "GENERATOR": 6, "BOUND_METHOD": 4, "BUILTIN": 5, "MODULE": 4, "SUPER": 4,
+    "PROPERTY": 5, "STATICMETHOD": 3, "CLASSMETHOD": 3, "SLICE": 5,
+    "DICT_VIEW": 4, "ITEROBJ": 5, "ELLIPSIS": 2, "NOTIMPL": 2,
 }
 
 # TYPE word 7.
@@ -174,12 +183,18 @@ IT = {
 # ---------------------------------------------------------------------------
 # Native type ids: the core finds TYPE_TABLE[id]. Order matters only here.
 TYPES = [
-    "object", "type", "NoneType", "bool", "int", "float", "complex", "str",
-    "bytes", "bytearray", "tuple", "list", "dict", "set", "frozenset",
-    "range", "iterator", "function", "bound_method", "builtin_function",
-    "module", "cell", "slice", "property", "staticmethod", "classmethod",
-    "dict_view", "super", "ellipsis", "NotImplementedType", "generator",
-    "closure", "enumerate", "zip", "map", "filter", "reversed",
+    "object", "type",
+    "NoneType", "bool", "int", "float", "complex",
+    "str", "bytes", "bytearray",
+    "tuple", "list", "dict", "set", "frozenset",
+    "range", "slice",
+    "iterator", "enumerate", "zip", "map", "filter", "reversed",
+    "function", "generator", "bound_method", "builtin_function",
+    "closure", "cell",
+    "module",
+    "property", "staticmethod", "classmethod",
+    "dict_view", "super",
+    "ellipsis", "NotImplementedType",
     # Exceptions. The hierarchy is in EXC_BASES.
     "BaseException", "Exception", "ArithmeticError", "AssertionError",
     "AttributeError", "EOFError", "GeneratorExit", "ImportError",
@@ -276,6 +291,7 @@ NATIVES = [
     "_gcinfo",   # _gcinfo(which) -> 0 free blocks, 1 total blocks, 2 collections
     "_ftoi",     # _ftoi(f) -> int (truncate); STOP for nan/inf
     "_inext",    # _inext(it) -> next item of an RTL-steppable iterator or STOP
+    "_gresume",  # _gresume(gen, send, throw) -> yielded value, or raise
     "_bcmp",     # _bcmp(a, b) -> <0, 0, >0 (str/bytes/qstr byte compare)
     "_hash",     # _hash(x) -> hash of a simple key, or STOP
     "_data",     # _data(s) -> INT address of the bytes of a str/bytes/qstr
@@ -301,6 +317,7 @@ HOOKS = [
     "_subscr",        # _subscr(obj, index): load fallback
     "_setsubscr",     # _setsubscr(obj, index, value): store fallback (value NULL: delete)
     "_getiter",       # _getiter(x): an iterator the RTL can step
+    "_yfrom",         # _yfrom(sub, send, throw): yield-from delegation
     "_tuple",         # _tuple(x): any iterable to a tuple (star arguments)
     "_dictop",        # _dictop(op, d, key, value): dict/set ops on keys the RTL cannot hash
     "_import",        # _import(name, fromlist, level, globals)
@@ -365,6 +382,10 @@ MSGS = [
     ("NO_ACTIVE_EXC", "RuntimeError", "no active exception to reraise"),
     ("ZERO_STEP", "ValueError", "zero step"),
     ("STOP_ITER", "StopIteration", None),
+    ("GEN_SEND", "TypeError", "can't send non-None value to a just-started generator"),
+    ("GEN_RUNNING", "ValueError", "generator already executing"),
+    ("GEN_IGNORED", "RuntimeError", "generator ignored GeneratorExit"),
+    ("GEN_STOP", "RuntimeError", "generator raised StopIteration"),
     ("MEMORY", "MemoryError", "memory allocation failed"),
     ("ASSERT", "AssertionError", None),
     ("BYTES_INDEX", "IndexError", "bytes index out of range"),
@@ -471,6 +492,7 @@ FR = {
     "AUX3": 11,      # tagged
     "QBASE": 12,     # raw: module qstr table
     "CBASE": 13,     # raw: module const table
+    "GEN": 14,       # tagged: this generator, or NULL on an ordinary frame
 }
 FRAME_HDR_WORDS = 16
 FRAME_EXC_WORDS = 3       # handler, val_sp | finally << 31, prev_exc (tagged)
