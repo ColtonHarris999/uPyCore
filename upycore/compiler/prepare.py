@@ -85,6 +85,80 @@ def _patched_floatfmt(text: str) -> str:
     return text[:start] + _FLOAT_NEW + text[end:]
 
 
+# The collector does not compact. Parsing a long parameter list interns
+# every name and drops short-lived buffers between those qstrs, so the next
+# dict growth cannot find a contiguous hole even though a collection would
+# free more than the request. Collect while a large tail is still free.
+_PARSE_LOOP = """        backtrack = False
+        while self.rule_depth() > 0:
+"""
+
+_PARSE_LOOP_NEW = """        backtrack = False
+        _low_heap = None
+        try:
+            import gc as _gc_mod
+            _low_heap = _gc_mod.mem_free
+        except (ImportError, AttributeError):
+            _gc_mod = None
+        _steps = 0
+        while self.rule_depth() > 0:
+            if _low_heap is not None:
+                _steps += 1
+                if _steps == 64:
+                    _steps = 0
+                    if _low_heap() < 98304:
+                        _gc_mod.collect()
+"""
+
+
+def _patched_parser(text: str) -> str:
+    _require(text, _PARSE_LOOP, "parser")
+    return text.replace(_PARSE_LOOP, _PARSE_LOOP_NEW, 1)
+
+
+# Naming each argument scans every identifier. On the hart that is a
+# Python loop, and a few hundred parameters make it the whole compile.
+# One pass records the first parameter in each slot; the bytes match.
+_ARG_NAMES = """        n_args = scope.num_pos_args + scope.num_kwonly_args
+        for i in range(n_args):
+            qst = self.emit_common.pool.intern(b"*")
+            for j in range(scope.num_ids()):
+                if scope.id_is_param(j) and scope.id_local_num(j) == i:
+                    qst = scope.id_qst(j)
+                    break
+            self._ci_qstr(qst)
+"""
+
+_ARG_NAMES_NEW = """        n_args = scope.num_pos_args + scope.num_kwonly_args
+        arg_qst = []
+        i = 0
+        while i < n_args:
+            arg_qst.append(None)
+            i += 1
+        j = 0
+        n_ids = scope.num_ids()
+        while j < n_ids:
+            if scope.id_is_param(j):
+                slot = scope.id_local_num(j)
+                if slot >= 0 and slot < n_args and arg_qst[slot] is None:
+                    arg_qst[slot] = scope.id_qst(j)
+            j += 1
+        star = self.emit_common.pool.intern(b"*")
+        i = 0
+        while i < n_args:
+            qst = arg_qst[i]
+            if qst is None:
+                qst = star
+            self._ci_qstr(qst)
+            i += 1
+"""
+
+
+def _patched_emitbc(text: str) -> str:
+    _require(text, _ARG_NAMES, "emitbc")
+    return text.replace(_ARG_NAMES, _ARG_NAMES_NEW, 1)
+
+
 def prepare(dest: Path | None = None) -> Path:
     """Return the patched ``mpyc`` package directory.
 
@@ -105,6 +179,10 @@ def prepare(dest: Path | None = None) -> Path:
             text = _patched_floatfmt(text)
         elif src.name == "compile_walk.py":
             text = _patched_walk(text)
+        elif src.name == "parser.py":
+            text = _patched_parser(text)
+        elif src.name == "emitbc.py":
+            text = _patched_emitbc(text)
         _put(out / src.name, text)
     _put(out / "stages.py", STAGES.read_text(encoding="utf-8"))
     return out
