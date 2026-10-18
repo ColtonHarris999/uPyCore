@@ -3,7 +3,9 @@
 uPyCore is a microcontroller-class CPU whose instruction set is MicroPython
 bytecode. Programs are MicroPython source. Host `mpy-cross` compiles them to
 `.mpy`, the linker packs firmware and the program into a flash image, and the
-Verilator model of `mpy_soc` runs that image. There is no on-device compiler.
+Verilator model of `mpy_soc` runs that image. `compile`, `exec`, and `eval`
+run the frozen uPy2 compiler on the hart: each stage is its own call, and
+the firmware collects between them.
 
 The unix oracle is MicroPython v1.29.0 built as the `upycore` variant
 (`sys.platform` and `sys.implementation.name` are `upycore`).

@@ -73,6 +73,12 @@ builtin_fns = { file = "hw/builtins/funcs.py" }
 method_getattr = { file = "hw/builtins/method_getattr.py" }
 sysmod = { file = "hw/builtins/sysmod.py" }
 gcmod = { file = "hw/builtins/gcmod.py", cycles = 40_000_000 }
+arraymod = { file = "hw/builtins/arraymod.py" }
+
+[compile]
+compile_basic = { file = "hw/compile/basic.py", cycles = 2_000_000_000, timeout = 2400 }
+compile_program = { file = "hw/compile/program.py", cycles = 4_000_000_000, timeout = 3600 }
+compile_syntax = { file = "hw/compile/syntax.py", cycles = 2_000_000_000, timeout = 1200, oracle = false }
 
 [modules]
 import_missing = { file = "hw/modules/import_missing.py" }

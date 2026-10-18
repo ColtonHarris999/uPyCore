@@ -556,11 +556,13 @@ def _encode(s, enc):
     return _strfin(b)
 
 
-def bytes__decode(self, encoding='utf-8'):
+def bytes__decode(self, encoding='utf-8', errors='strict'):
+    # errors is accepted so the compiler's decode(..., "replace") calls link.
+    # The bytes it decodes are source text; the replacement policy is unused.
     return _decode(self, encoding)
 
 
-def bytearray__decode(self, encoding='utf-8'):
+def bytearray__decode(self, encoding='utf-8', errors='strict'):
     return _decode(_barr_bytes(self), encoding)
 
 

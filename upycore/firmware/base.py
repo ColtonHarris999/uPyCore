@@ -124,7 +124,15 @@ def _ch(b):
 
 
 def _qstr_ascii(q):
-    return _peek32(_peek32(HDR_QDESC_ADDR) + 8 * _pay(q) + 4) >= 0
+    i = _pay(q)
+    n = _peek32(4 * HDR_QSTR_COUNT)
+    if i < n:
+        return _peek32(_peek32(HDR_QDESC_ADDR) + 8 * i + 4) >= 0
+    # Ids at and above the image count live in the RAM table compile() grows.
+    st = _sysget(SR_FW5)
+    if st is NULL:
+        return True
+    return _peek32(_data(st[1]) + (i - n) * 8 + 4) >= 0
 
 
 def _ascii(s):

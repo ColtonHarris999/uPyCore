@@ -282,6 +282,7 @@ NATIVES = [
     "_slen",     # _slen(s) -> byte length of a str/bytes/qstr
     "_fget",     # _fget(i) -> caller frame header word i
     "_floc",     # _floc(i) -> caller frame local i
+    "_qxset",    # _qxset(base, count): RAM qstr descriptors past the image pool
     # type methods
     "list.append", "object.__init__", "BaseException.__init__",
     # constructors
