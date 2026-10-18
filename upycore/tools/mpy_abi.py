@@ -271,7 +271,7 @@ NATIVES = [
     "_strnew",   # _strnew(nbytes, tag) -> STR/BYTES with zeroed data, hash unset
     "_strfin",   # _strfin(s) -> s with hash and ASCII flag computed
     "_lookup",   # _lookup(d, key) -> value or NULL (simple keys; complex keys -> STOP)
-    "_ticks",    # _ticks() -> cycle counter (31 bits)
+    "_ticks",    # _ticks() -> cyc[29:0], a 30-bit cycle counter
     "_gc",       # _gc(): collect now
     "_gcinfo",   # _gcinfo(which) -> 0 free blocks, 1 total blocks, 2 collections
     "_ftoi",     # _ftoi(f) -> int (truncate); STOP for nan/inf

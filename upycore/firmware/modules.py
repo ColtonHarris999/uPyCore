@@ -109,7 +109,9 @@ def _build_sys(filename):
         'version_info': (3, 4, 0),
         'implementation': impl,
         'modules': _sysget(SR_MODULES),
-        'path': ['.', '.frozen'],
+        # '' is what a script-on-stdin puts in sys.path[0]. perf_bench's
+        # runner removes it, and import does not consult this list.
+        'path': ['', '.', '.frozen'],
         'executable': '',
         'exit': _sys_exit,
         'print_exception': _sys_print_exception,
@@ -284,3 +286,51 @@ def _import_star(mod, loc):
         if _slen(k) and _byte(k, 0) != 95:
             loc[k] = g[k]
     return None
+
+
+# time.ticks_us is the cycle counter, not a microsecond clock. benchrun.py
+# times run() with ticks_us and ticks_diff. With the difference in cycles,
+# 1e6 * norm / difference is the perf_bench score per MHz. _ticks returns
+# cyc[29:0], the same 2**30 period as MicroPython's utime ticks.
+_TICK_MASK = const(1073741823)  # 2**30 - 1
+_TICK_SIGN = const(536870912)   # 2**29
+
+
+def mod_time__ticks_us():
+    return _ticks()
+
+
+def mod_time__ticks_cpu():
+    return _ticks()
+
+
+def _tick_wrap(d):
+    if d >= _TICK_SIGN:
+        d = d - _TICK_MASK - 1
+    return d
+
+
+def mod_time__ticks_diff(end, start):
+    e = end & _TICK_MASK
+    s = start & _TICK_MASK
+    if e >= s:
+        d = e - s
+    else:
+        d = e + (_TICK_MASK - s) + 1
+    return _tick_wrap(d)
+
+
+def mod_time__ticks_add(ticks, delta):
+    t = ticks & _TICK_MASK
+    if delta < 0:
+        n = -delta
+        # -2**30 is one full turn of the counter.
+        if n > _TICK_MASK:
+            return t
+        if t >= n:
+            return t - n
+        return t + (_TICK_MASK - n) + 1
+    d = delta & _TICK_MASK
+    if d <= _TICK_MASK - t:
+        return t + d
+    return d - (_TICK_MASK - t) - 1
