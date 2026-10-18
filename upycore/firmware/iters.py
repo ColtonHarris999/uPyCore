@@ -332,7 +332,9 @@ def _yfrom(sub, send, throw):
             thrown = NULL
         if thrown is not NULL:
             return (True, thrown(throw))
-    if isinstance(throw, StopIteration):
+    # mp_obj_exception_match: a StopIteration type is the same as an instance.
+    # Instantiating the class would let S_YF_SI finish the delegation.
+    if _exc_is(throw, StopIteration):
         raise RuntimeError("generator raised StopIteration")
     if _istype(throw):
         throw = throw()

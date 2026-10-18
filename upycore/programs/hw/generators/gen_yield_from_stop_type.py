@@ -1,6 +1,6 @@
-# Throw the StopIteration class through yield from a list.
-# The oracle raises RuntimeError. The device completes the delegation.
-# Not a manifest entry. See planning/generators_review.md.
+# Throw the StopIteration class, or a subclass of it, through yield from
+# of a list. Both sides raise RuntimeError and skip the statements after
+# yield from.
 
 
 def show(label, fn):

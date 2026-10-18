@@ -493,6 +493,7 @@ gen_gc = { file = "hw/generators/gen_gc.py", mpyc = false, cycles = 40_000_000, 
 gen_yield_from = { file = "hw/generators/gen_yield_from.py", mpyc = false }
 gen_yield_from_iter = { file = "hw/generators/gen_yield_from_iter.py", mpyc = false }
 gen_yield_from_throw = { file = "hw/generators/gen_yield_from_throw.py", mpyc = false }
+gen_yield_from_stop_type = { file = "hw/generators/gen_yield_from_stop_type.py", mpyc = false }
 gen_async = { file = "hw/generators/gen_async.py", mpyc = false }
 gen_with = { file = "hw/generators/gen_with.py", mpyc = false }
 gen_trace = { file = "hw/generators/gen_trace.py", mpyc = false, uncaught = true }

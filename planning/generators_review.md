@@ -1,5 +1,7 @@
 **does not match**
 
+This change fixes the finding: `_yfrom` raises `RuntimeError: generator raised StopIteration` for a `StopIteration` class or subclass before that class is instantiated.
+
 Reviewed `05ba2b9` (Implement yield from on the generator resume path) against `planning/generators_plan.md` and the unix oracle (MicroPython v1.29.0, the `variants/upycore` port).
 
 ## Suite
