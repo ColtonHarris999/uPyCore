@@ -383,7 +383,8 @@ compile_reject_closure = { file = "hw/compiler/compile_reject_closure.py" }
 compile_closure = { file = "hw/compiler/compile_closure.py" }
 compile_exec_roundtrip = { file = "hw/compiler/compile_exec_roundtrip.py" }
 compile_kwargs = { file = "hw/compiler/compile_kwargs.py" }
-compile_reject_locals = { file = "hw/compiler/compile_reject_locals.py" }
+# 241 parameters: about 1.8e9 cycles and 58 minutes on this simulator.
+compile_reject_locals = { file = "hw/compiler/compile_reject_locals.py", timeout = 7200 }
 compile_repeat = { file = "hw/compiler/compile_repeat.py" }
 compile_try_except = { file = "hw/compiler/compile_try_except.py" }
 compile_try_else = { file = "hw/compiler/compile_try_else.py" }
