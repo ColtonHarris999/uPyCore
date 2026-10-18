@@ -350,6 +350,56 @@ def _opcode_named(catalog: Catalog, name: str) -> int:
     raise MpyError(f"catalog is missing {name}")
 
 
+# Scope-flag bits from the prelude (py/bc.h). Same values as mpy_abi.
+_SCOPE_VARKEYWORDS = 0x02
+_SCOPE_VARARGS = 0x04
+MAX_LOCALS = 255
+
+
+def local_index(opcode: int, arg: int | None) -> int | None:
+    """Bytecode local slot, or None when the opcode does not name one.
+
+    FAST and DEREF operands are local indexes. The 16-wide multi-ops encode
+    the index in the opcode byte.
+    """
+
+    if 0xB0 <= opcode <= 0xBF:
+        return opcode - 0xB0
+    if 0xC0 <= opcode <= 0xCF:
+        return opcode - 0xC0
+    # LOAD_FAST_N, LOAD_DEREF, STORE_FAST_N, STORE_DEREF, DELETE_FAST, DELETE_DEREF.
+    if opcode in (36, 37, 38, 39, 40, 41):
+        return 0 if arg is None else arg
+    return None
+
+
+def count_locals(raw: RawCode, catalog: Catalog) -> int:
+    """How many local slots this raw code can name, including parameters.
+
+    MicroPython allows 255 locals. ``n_state`` is locals plus the compiler's
+    stack budget, so it is not the local count.
+    """
+
+    prelude = raw.prelude if raw.prelude is not None else decode_prelude(raw.fun_data)
+    count = prelude.n_pos_args + prelude.n_kwonly_args
+    if prelude.scope_flags & _SCOPE_VARARGS:
+        count += 1
+    if prelude.scope_flags & _SCOPE_VARKEYWORDS:
+        count += 1
+    ip = prelude.opcode_off
+    while ip < len(raw.fun_data):
+        op = decode_opcode(raw.fun_data, ip, catalog)
+        idx = local_index(op.opcode, op.arg)
+        if idx is not None and idx + 1 > count:
+            count = idx + 1
+        ip += op.size
+    cells = raw.fun_data[prelude.closure_off : prelude.closure_off + prelude.n_cell]
+    for cell in cells:
+        if cell + 1 > count:
+            count = cell + 1
+    return count
+
+
 def disassemble(module: MpyModule, catalog: Catalog) -> str:
     """Match ``tools/mpy-tool.py -d`` text, including the trailing spaces it prints."""
 

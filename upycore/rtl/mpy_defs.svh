@@ -16,6 +16,12 @@ localparam int MPY_TAG_LSB     = MPY_VAL_WIDTH;                 // 32
 // Architectural register file (upycore/docs/mpy_memory_map.md).
 localparam int MPY_RF_DEPTH  = 64;
 localparam int MPY_RF_ADDR_W = 6; // $clog2(MPY_RF_DEPTH)
+// One spill chunk is 16 register slots. Sixteen nibbles are 8 bytes;
+// the payloads follow, and the block is padded to 16 bytes so a CONTROL
+// kind can sit in address[3:0].
+localparam int MPY_RF_CHUNK           = 16;
+localparam int MPY_RF_CHUNK_TAG_BYTES = 8;
+localparam int MPY_RF_BLOCK_BYTES     = 80;
 
 // Locked tag table. 0101 stays unassigned.
 localparam logic [3:0] MPY_TAG_CONTROL    = 4'b0000;
@@ -44,6 +50,8 @@ localparam logic [3:0] MPY_CTL_NULL      = 4'd2; // end of iteration
 localparam logic [3:0] MPY_CTL_TOMBSTONE = 4'd3;
 localparam logic [3:0] MPY_CTL_FALSE     = 4'd4;
 localparam logic [3:0] MPY_CTL_TRUE      = 4'd5;
+// Stack-chunk link. Payload[31:4] is the SRAM block address >> 4.
+localparam logic [3:0] MPY_CTL_RF_LINK   = 4'd6;
 
 // MUT_COLLEC kind is the pointer's low 2 bits. The address clears them.
 localparam logic [1:0] MPY_MUT_LIST      = 2'd0;
@@ -191,6 +199,25 @@ function automatic logic [MPY_ENTRY_WIDTH-1:0] mpy_make_control(
     input logic [3:0] kind
 );
     mpy_make_control = mpy_make_entry(MPY_TAG_CONTROL, {28'b0, kind});
+endfunction
+
+function automatic logic [MPY_ENTRY_WIDTH-1:0] mpy_make_rf_link(
+    input logic [31:0] addr
+);
+    mpy_make_rf_link = mpy_make_entry(MPY_TAG_CONTROL, {addr[31:4], MPY_CTL_RF_LINK});
+endfunction
+
+function automatic logic mpy_is_rf_link(
+    input logic [MPY_ENTRY_WIDTH-1:0] entry
+);
+    mpy_is_rf_link = (mpy_entry_tag(entry) == MPY_TAG_CONTROL) &&
+                     (mpy_entry_payload(entry)[3:0] == MPY_CTL_RF_LINK);
+endfunction
+
+function automatic logic [31:0] mpy_rf_link_addr(
+    input logic [MPY_ENTRY_WIDTH-1:0] entry
+);
+    mpy_rf_link_addr = {mpy_entry_payload(entry)[31:4], 4'b0000};
 endfunction
 
 // Physical registers occupied by a head tag. Reserved occupies none.

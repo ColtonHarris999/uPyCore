@@ -29,6 +29,7 @@ localparam logic [31:0] ABI_CTL_STOP = 32'd2;
 localparam logic [31:0] ABI_CTL_TOMB = 32'd3;
 localparam logic [31:0] ABI_CTL_FALSE = 32'd4;
 localparam logic [31:0] ABI_CTL_TRUE = 32'd5;
+localparam logic [31:0] ABI_CTL_RF_LINK = 32'd6;
 
 localparam logic [1:0] ABI_MUT_LIST = 2'd0;
 localparam logic [1:0] ABI_MUT_DICT = 2'd1;

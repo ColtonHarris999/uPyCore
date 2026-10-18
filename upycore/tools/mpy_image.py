@@ -22,7 +22,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from mpy_catalog import VENDOR_ROOT, Catalog, verify_against_pin
-from mpy_file import FMT_OFFSET, FMT_QSTR, MpyError, MpyModule, RawCode, decode_opcode, disassemble, read_mpy
+from mpy_file import (
+    FMT_OFFSET,
+    FMT_QSTR,
+    MAX_LOCALS,
+    MpyError,
+    MpyModule,
+    RawCode,
+    count_locals,
+    decode_opcode,
+    disassemble,
+    read_mpy,
+)
 from mpy_prelude import decode_prelude, decode_signature, decode_size, encode_signature, encode_size
 
 
@@ -116,9 +127,9 @@ class ImageParts:
 
 def _check_state(raw: RawCode, catalog: Catalog) -> None:
     assert raw.prelude is not None
-    limit = catalog.register_file_entries
-    if raw.prelude.n_state > limit:
-        raise MpyError(f"n_state {raw.prelude.n_state} does not fit in {limit} registers")
+    n_locals = count_locals(raw, catalog)
+    if n_locals > MAX_LOCALS:
+        raise MpyError(f"function needs {n_locals} locals; the frame holds {MAX_LOCALS}")
     for child in raw.children:
         _check_state(child, catalog)
 

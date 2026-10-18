@@ -359,6 +359,7 @@ locals_40_uninit = { file = "hw/memory/locals_40_uninit.py" }
 rf_deep_recursion = { file = "hw/memory/rf_deep_recursion.py", cycles = 40_000_000, timeout = 240 }
 rf_spill_refill = { file = "hw/memory/rf_spill_refill.py", cycles = 40_000_000, timeout = 240 }
 rf_thrash = { file = "hw/memory/rf_thrash.py", cycles = 40_000_000, timeout = 240 }
+stack_ring = { file = "hw/memory/stack_ring.py", cycles = 40_000_000, timeout = 240 }
 align_mask = { file = "hw/memory/align_mask.py" }
 
 # On-device compiler programs. Disabled until that compiler can run them.

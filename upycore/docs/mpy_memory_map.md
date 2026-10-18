@@ -5,16 +5,30 @@ Value layout for the MicroPython hart. The CPython map in
 one later phases read for the GC pool size.
 
 A value is a 4-bit tag beside a 32-bit payload. The register file is one
-36-bit array, 64 entries. A read of an index returns the tag and the payload
-together. SRAM and flash data words are 32 bits and are byte-addressed. The
-tag does not sit in the word. Slot `i` of a region is the word at
-`data_base + 4*i`, and nibble `i` of a side array. Eight tags fill one
-32-bit word. Lane 0 is bits `[3:0]`. A store that does not ask for the tag
-leaves the nibble as it was.
+36-bit array, 64 entries, and it holds the operand stack only. Locals live
+in the frame in SRAM, up to 255 of them. A read of a register returns the
+tag and the payload together. SRAM and flash data words are 32 bits and
+are byte-addressed. The tag does not sit in the word. Slot `i` of a region
+is the word at `data_base + 4*i`, and nibble `i` of a side array. Eight
+tags fill one 32-bit word. Lane 0 is bits `[3:0]`. A store that does not
+ask for the tag leaves the nibble as it was.
+
+The register file is a ring of the newest stack values. Logical slot 0 is
+the oldest resident slot; the stack pointer is the count of resident
+slots. Appending past the end of the 64 reuses the physical registers
+after the oldest 16 have been copied out. The copy is one 80-byte block
+growing down from the end of the frame reserve (`0x2000_8000`). Bytes 0–7
+are the 16 tags, lane 0 in bits `[3:0]`. Bytes 8–71 are the 16 payloads,
+oldest first. The block is 16-byte aligned, so the link value can keep
+its kind in the low nibble: tag `CONTROL`, kind `RF_LINK` (6), and
+`payload[31:4]` is the block address shifted right by 4. That link is
+written into the resident slot that held the newest of the 16, which
+becomes logical slot 0. The next spill copies the link with the new
+oldest chunk, so a walk follows slot 0 of each block.
 
 There is no DRAM. There is no L1 and no L2. SRAM is one cycle. Flash adds
-`MPY_FLASH_WAIT_STATES` (default 1) on top of that cycle. The 8-byte fetch
-buffer is instruction bytes only. It is not part of this data map.
+`MPY_FLASH_WAIT_STATES` (default 1) on top of that cycle. The 12-byte
+fetch window is instruction bytes only. It is not part of this data map.
 
 ## Tag table
 
@@ -39,8 +53,10 @@ Locked by the pivot plan. Tag `0101` is reserved.
 | `1110` | OBJECT | 1 | Pointer. Word 0 is the kind |
 | `1111` | CONT | 1 | Extra entry of INT64, COMPLEX, or SHORT_STR |
 
-`False` and `True` are CONTROL kinds 4 and 5. Arithmetic and dict hashing
-use them as int 0 and int 1. They are not pointers. CONTROL, INT, INT64,
+`False` and `True` are CONTROL kinds 4 and 5. Kind 6 is `RF_LINK`, a
+pointer to a spilled register chunk; the collector follows it, and
+arithmetic does not. Arithmetic and dict hashing use `False` and `True`
+as int 0 and int 1. They are not pointers. CONTROL, INT, INT64,
 FLOAT, COMPLEX, QSTR, SHORT_STR, CONT, and the reserved code are not
 pointers. STR, TUPLE, MUT_COLLEC, RANGE, ITER, BYTES, and OBJECT are.
 

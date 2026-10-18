@@ -53,7 +53,7 @@ IMAGE_DATA_BASE = TYPE_TABLE_BASE + 4 * TYPE_TABLE_WORDS
 # Raw-code descriptor (one per function, class body, comprehension, module).
 RC = {
     "OP_START": 0,        # byte address of the first opcode
-    "SIG": 1,             # n_state | n_exc_stack << 8 | scope_flags << 16 | flags << 24
+    "SIG": 1,             # n_locals | n_exc_stack << 8 | scope_flags << 16 | flags << 24
     "ARGS": 2,            # n_pos | n_kwonly << 8 | n_def_pos << 16 | n_cell << 24
     "ARG_NAMES": 3,       # word array of global qstr ids, n_pos + n_kwonly
     "CELLS": 4,           # word array of local indexes, n_cell
@@ -97,7 +97,7 @@ TAG = {
     "MUT": 10, "RANGE": 11, "ITER": 12, "BYTES": 13, "OBJECT": 14,
     "CONT": 15,
 }
-CTL = {"NULL": 0, "NONE": 1, "STOP": 2, "TOMB": 3, "FALSE": 4, "TRUE": 5}
+CTL = {"NULL": 0, "NONE": 1, "STOP": 2, "TOMB": 3, "FALSE": 4, "TRUE": 5, "RF_LINK": 6}
 MUT = {"LIST": 0, "DICT": 1, "SET": 2, "BYTEARRAY": 3}
 
 # Word counts of the fixed-size heap layouts (upycore/docs/mpy_memory_map.md).

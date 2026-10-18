@@ -30,11 +30,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import mpy_abi as abi  # noqa: E402
 from mpy_catalog import Catalog  # noqa: E402
 from mpy_file import (  # noqa: E402
+    MAX_LOCALS,
     ComplexConst,
     FloatConst,
     MpyError,
     MpyModule,
     RawCode,
+    count_locals,
     decode_opcode,
     read_mpy,
 )
@@ -436,8 +438,11 @@ def place_module(img: Image, mod: ModuleInfo, catalog: Catalog) -> None:
 def place_raw(img: Image, mod: ModuleInfo, rc: RawCode, catalog: Catalog) -> int:
     p = rc.prelude
     assert p is not None
-    if p.n_state > 64:
-        raise LinkError(f"{mod.source_file}: function needs {p.n_state} state slots; the core has 64")
+    n_locals = count_locals(rc, catalog)
+    if n_locals > MAX_LOCALS:
+        raise LinkError(
+            f"{mod.source_file}: function needs {n_locals} locals; the frame holds {MAX_LOCALS}"
+        )
     if p.n_exc_stack > abi.FRAME_EXC_ENTRIES:
         raise LinkError(f"{mod.source_file}: function nests {p.n_exc_stack} exception blocks; the frame holds {abi.FRAME_EXC_ENTRIES}")
     children = [place_raw(img, mod, child, catalog) for child in rc.children]
@@ -454,7 +459,7 @@ def place_raw(img: Image, mod: ModuleInfo, rc: RawCode, catalog: Catalog) -> int
         abi.RC_FLAG_GENERATOR if p.scope_flags & abi.SCOPE_GENERATOR else 0)
     addr = img.emit_words([
         bc + p.opcode_off,
-        p.n_state | (p.n_exc_stack << 8) | (p.scope_flags << 16) | (flags << 24),
+        n_locals | (p.n_exc_stack << 8) | (p.scope_flags << 16) | (flags << 24),
         p.n_pos_args | (p.n_kwonly_args << 8) | (p.n_def_pos_args << 16) | (p.n_cell << 24),
         naddr,
         celladdr,
