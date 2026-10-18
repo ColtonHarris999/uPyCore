@@ -1,0 +1,8 @@
+next 1
+send 10
+send2 20
+early TypeError can't send non-None value to a just-started generator
+still started
+y 1
+ret StopIteration 7 7
+after StopIteration  None

@@ -1,0 +1,11 @@
+y 1
+prev None
+fired ValueError p
+drained [1, 2]
+fin-prev None
+fin-next StopIteration  None
+self-y 1
+self ValueError generator already executing
+early-prev None
+early-send TypeError can't send non-None value to a just-started generator
+early-next ValueError kept
