@@ -1,12 +1,8 @@
-# 70 constants force the operand stack past the 64-entry ring.
-# 80 locals sit in the frame, past the old register-file cap.
-t = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79)
-print(t[0])
-print(t[15])
-print(t[16])
-print(t[30])
-print(t[31])
-print(t[79])
+# Values are computed so the 80-element tuple is built on the operand
+# stack. Slots 0 and 15 land in the oldest chunk, 16 and 31 in the next.
+def build(n):
+    return (n+0, n+1, n+2, n+3, n+4, n+5, n+6, n+7, n+8, n+9, n+10, n+11, n+12, n+13, n+14, n+15, n+16, n+17, n+18, n+19, n+20, n+21, n+22, n+23, n+24, n+25, n+26, n+27, n+28, n+29, n+30, n+31, n+32, n+33, n+34, n+35, n+36, n+37, n+38, n+39, n+40, n+41, n+42, n+43, n+44, n+45, n+46, n+47, n+48, n+49, n+50, n+51, n+52, n+53, n+54, n+55, n+56, n+57, n+58, n+59, n+60, n+61, n+62, n+63, n+64, n+65, n+66, n+67, n+68, n+69, n+70, n+71, n+72, n+73, n+74, n+75, n+76, n+77, n+78, n+79)
+
 def big():
     a0 = 1
     a1 = 2
@@ -89,4 +85,12 @@ def big():
     a78 = 79
     a79 = 80
     return a0 + a79
+
+t = build(0)
+print(t[0])
+print(t[15])
+print(t[16])
+print(t[31])
+print(t[32])
+print(t[79])
 print(big())

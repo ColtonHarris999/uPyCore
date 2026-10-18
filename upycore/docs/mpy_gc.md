@@ -139,7 +139,8 @@ the stack pointer (MicroPython's `fastn` sits at `state[n_state - 1]`):
 
 A `CONTROL` word whose kind is `RF_LINK` is not a pool pointer. The
 collector reads the packed register chunk it names and marks the pointer
-payloads inside it, then follows a link in slot 0 of that chunk.
+payloads inside it, then follows the previous-chunk address in the
+chunk header.
 
 The function object on the frame is what keeps a heap function alive.
 Flash bytecode is not a root.

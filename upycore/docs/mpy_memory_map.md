@@ -15,16 +15,24 @@ ask for the tag leaves the nibble as it was.
 
 The register file is a ring of the newest stack values. Logical slot 0 is
 the oldest resident slot; the stack pointer is the count of resident
-slots. Appending past the end of the 64 reuses the physical registers
-after the oldest 16 have been copied out. The copy is one 80-byte block
-growing down from the end of the frame reserve (`0x2000_8000`). Bytes 0–7
-are the 16 tags, lane 0 in bits `[3:0]`. Bytes 8–71 are the 16 payloads,
-oldest first. The block is 16-byte aligned, so the link value can keep
+slots. Appending past the end of the 64 copies the oldest 16 values into
+an 80-byte block growing down from the end of the frame reserve
+(`0x2000_8000`). The block is 16-byte aligned, so the link value can keep
 its kind in the low nibble: tag `CONTROL`, kind `RF_LINK` (6), and
 `payload[31:4]` is the block address shifted right by 4. That link is
 written into the resident slot that held the newest of the 16, which
-becomes logical slot 0. The next spill copies the link with the new
-oldest chunk, so a walk follows slot 0 of each block.
+becomes logical slot 0.
+
+| Offset | Size | Contents |
+| --- | ---: | --- |
+| `0` | 4 B | Previous chunk address, or 0 for the oldest chunk |
+| `4` | 4 B | Zero |
+| `8` | 8 B | 16 tags. Lane 0 is bits `[3:0]` |
+| `16` | 64 B | 16 payloads, oldest first |
+
+All 16 slots are values. The previous link lives in the header, so a
+later spill frees 16 registers instead of 15. A walk follows the header,
+not a value slot.
 
 There is no DRAM. There is no L1 and no L2. SRAM is one cycle. Flash adds
 `MPY_FLASH_WAIT_STATES` (default 1) on top of that cycle. The 12-byte

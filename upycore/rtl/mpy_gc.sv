@@ -85,6 +85,7 @@ module mpy_gc #(
         G_SWEEP,
         G_LNK,        // follow a CONTROL/RF_LINK chunk
         G_LNK_T0,
+        G_LNK_T1,
         G_LNK_P0,
         G_LNK_DEC,
         G_DONE
@@ -325,23 +326,30 @@ module mpy_gc #(
                     end
                 end
 
-                // Packed spill chunk: 8 tag bytes, then 16 payloads. Slot 0 may
-                // be the previous link. The tags live in the chunk, not the
-                // side array.
+                // Chunk header word 0 is the previous chunk address, or 0.
+                // Tags are at +8/+12. Sixteen value payloads start at +16.
                 G_LNK: begin
                     lnk_follow <= 1'b0;
                     mem_read(lnk_addr);
                     st <= G_LNK_T0;
                 end
                 G_LNK_T0: if (mem_ack_i) begin
+                    if (mem_rdata_i != 32'd0 && lnk_hops != 8'd64) begin
+                        lnk_next   <= mem_rdata_i;
+                        lnk_follow <= 1'b1;
+                    end
+                    mem_read(lnk_addr + 32'd8);
+                    st <= G_LNK_T1;
+                end
+                G_LNK_T1: if (mem_ack_i) begin
                     lnk_tag0 <= mem_rdata_i;
-                    mem_read(lnk_addr + 32'd4);
+                    mem_read(lnk_addr + 32'd12);
                     st <= G_LNK_P0;
                 end
                 G_LNK_P0: if (mem_ack_i) begin
                     lnk_tag1 <= mem_rdata_i;
                     lnk_i    <= 5'd0;
-                    mem_read(lnk_addr + 32'd8);
+                    mem_read(lnk_addr + 32'd16);
                     st <= G_LNK_DEC;
                 end
                 G_LNK_DEC: if (mem_ack_i) begin
@@ -356,12 +364,6 @@ module mpy_gc #(
                             try_mark(BW'((mem_rdata_i - POOL_BASE) >> 4));
                         end
                     end
-                    if (lnk_i == 5'd0 &&
-                        ((lnk_i < 5'd8) ? lnk_tag0[4*lnk_i +: 4] : lnk_tag1[4*(lnk_i - 5'd8) +: 4]) == MPY_TAG_CONTROL &&
-                        mem_rdata_i[3:0] == MPY_CTL_RF_LINK && lnk_hops != 8'd64) begin
-                        lnk_next   <= {mem_rdata_i[31:4], 4'b0000};
-                        lnk_follow <= 1'b1;
-                    end
                     if (lnk_i == 5'd15) begin
                         if (lnk_follow && lnk_hops != 8'd64) begin
                             lnk_addr <= lnk_next;
@@ -370,7 +372,7 @@ module mpy_gc #(
                         end else st <= G_ROOT;
                     end else begin
                         lnk_i <= lnk_i + 5'd1;
-                        mem_read(lnk_addr + 32'd12 + ({27'd0, lnk_i} << 2));
+                        mem_read(lnk_addr + 32'd20 + ({27'd0, lnk_i} << 2));
                         st <= G_LNK_DEC;
                     end
                 end
