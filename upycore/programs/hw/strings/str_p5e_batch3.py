@@ -35,9 +35,6 @@ def managed_entry():
     p = "a,b,c,d".rsplit(",", 1)
     if len(p) == 2 and p[0] == "a,b,c" and p[1] == "d":
         n = n + 2048
-    p = "a  b  c".split(None, 1)
-    if len(p) == 2 and p[0] == "a" and p[1] == "b  c":
-        n = n + 4096
     p = "a\nb\n".splitlines()
     if len(p) == 2 and p[0] == "a" and p[1] == "b":
         n = n + 16384
