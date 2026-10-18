@@ -1,0 +1,82 @@
+lit
+0.1
+0.3
+0.15
+100.0
+inf
+2.44318106e-44
+0.0
+-0.0
+1.0
+6.0221404e+23
+1.1754944e-38
+123456790.0
+1000.5
+0.5
+1.0
+0.5
+25.0
+imag
+1j
+1.5j
+100j
+0.15j
+2.44318106e-44j
+-0j
+(1.25+3.5j)
+(-25+3j)
+(1.5-2j)
+rt
+0.1
+0.15
+2.44318106e-44
+inf
+-0.0
+0.15
+1.5
+inf
+-inf
+inf
+inf
+-inf
+nan
+nan
+nan
+1000.5
+100.0
+1.5
+inf
+0.0
+1j
+1j
+-1j
+1j
+0.15j
+(1.25+3.5j)
+(-25+3j)
+(1.5-2j)
+(1+2j)
+infj
+(inf+nanj)
+100j
+(nan+0j)
+cmp
+True
+True
+True
+True
+True
+True
+bad ValueError
+bad ValueError
+bad ValueError
+bad ValueError
+bad ValueError
+bad ValueError
+bad ValueError
+badc ValueError
+badc ValueError
+badc ValueError
+badc ValueError
+badc ValueError
+badc ValueError

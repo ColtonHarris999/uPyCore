@@ -41,6 +41,7 @@ run: $(MPY_CROSS)
 test: $(MPY_CROSS)
 	$(PYTHON) upycore/tests/test_mpy_periph_model.py
 	$(PYTHON) upycore/tests/test_hw_manifest.py
+	$(PYTHON) upycore/tests/test_numeric_const.py
 	$(PYTHON) upycore/tools/compiler_suite.py
 	$(PYTHON) $(BUILD_PY) sim
 	$(PYTHON) upycore/tools/hw_tests.py
