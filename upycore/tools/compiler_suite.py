@@ -91,7 +91,7 @@ def suite_sources() -> list[tuple[str, Path]]:
     """Unique ``(source name, path)`` pairs the hardware suite compiles."""
 
     seen: dict[str, Path] = {}
-    for t in hw_tests.load_manifest():
+    for t in hw_tests.for_device(hw_tests.load_manifest()):
         seen.setdefault(t.source.name, t.source)
         for spec in t.modules:
             name, rel = spec.split("=", 1)
