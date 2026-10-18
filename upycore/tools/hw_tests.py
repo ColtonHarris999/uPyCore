@@ -26,11 +26,17 @@ A test with ``disabled`` set is part of the manifest and keeps its golden,
 but the device run and the uPy2 byte compare skip it. Compiler programs
 ported from pycore use that until the on-device compiler can run them.
 ``--include-disabled`` runs them anyway.
+
+A test with ``mpyc = false`` is still booted from ``mpy-cross``. The uPy2
+compiler does not accept it (generator programs set this, because ``mpyc``
+rejects ``yield``). ``--compiler mpyc`` prints ``SKIP`` and does not build
+the image. ``compiler_suite.py`` leaves the file out of its compare.
 """
 
 from __future__ import annotations
 
 import argparse
+import ctypes
 import difflib
 import fnmatch
 import os
@@ -59,7 +65,14 @@ _ADDR_RES = (
     re.compile(rb"at 0x[0-9a-fA-F]+"),
     re.compile(rb"<cell 0x[0-9a-fA-F]+>"),
     re.compile(rb"<cell [0-9a-fA-F]+>"),
+    # Oracle ``%p`` has no ``0x``: ``<generator object 'name' at f7b5e180>``.
+    re.compile(rb" at [0-9a-fA-F]+>"),
 )
+
+# personality(2). The unix oracle is a PIE binary, so a repr's pointer
+# changes every exec unless address layout is fixed. Goldens store that
+# pointer and ``--check-goldens`` requires the same bytes.
+_ADDR_NO_RANDOMIZE = 0x0040000
 
 
 def mask_output(data: bytes) -> bytes:
@@ -79,6 +92,8 @@ def _mask_match(m: re.Match[bytes]) -> bytes:
         return b"at PTR"
     if text.startswith(b"<cell"):
         return b"<cell PTR>"
+    if text.startswith(b" at ") and text.endswith(b">"):
+        return b" at PTR>"
     return b"PTR"
 
 
@@ -100,6 +115,8 @@ class Test:
     oracle: bool = True
     # Kept in the manifest, not booted. The string says why.
     disabled: str | None = None
+    # False: mpy-cross still boots it. ``--compiler mpyc`` skips it.
+    mpyc: bool = True
 
     @property
     def source(self) -> Path:
@@ -212,6 +229,13 @@ def _write_golden(t: Test, stdout: bytes, stderr: bytes, code: int) -> None:
     exit_p.write_text(f"{code}\n", encoding="utf-8")
 
 
+def _oracle_preexec() -> None:
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.personality(_ADDR_NO_RANDOMIZE) < 0:
+        err = ctypes.get_errno()
+        raise OSError(err, "personality")
+
+
 def run_oracle(t: Test) -> tuple[bytes, bytes, int]:
     if not oracle_ready():
         raise SystemExit(
@@ -223,6 +247,7 @@ def run_oracle(t: Test) -> tuple[bytes, bytes, int]:
     cmd.append(t.source.name)
     proc = subprocess.run(
         cmd, cwd=t.source.parent, capture_output=True, timeout=t.timeout,
+        preexec_fn=_oracle_preexec,
     )
     stdout, stderr, code = proc.stdout, proc.stderr, proc.returncode
     if t.uncaught and stderr == b"" and stdout.startswith(b"Traceback"):
@@ -401,6 +426,8 @@ def main(argv: list[str] | None = None) -> int:
             mark = "  (xfail)" if t.xfail else ""
             if t.disabled:
                 mark = f"  (disabled: {t.disabled})"
+            if not t.mpyc:
+                mark += "  (mpyc=false)"
             print(f"{t.area:<12} {t.name:<24} {t.file}{mark}")
         print(f"{len(picked)} test(s)")
         return 0
@@ -428,6 +455,15 @@ def main(argv: list[str] | None = None) -> int:
         return regen(picked)
     if args.check_goldens:
         return check_goldens(picked)
+
+    if args.compiler == "mpyc":
+        opted = [t for t in picked if not t.mpyc]
+        picked = [t for t in picked if t.mpyc]
+        for t in opted:
+            print(f"SKIP  {t.area}/{t.name}  mpyc = false", flush=True)
+        if not picked:
+            print(f"hw_tests: 0 of {len(opted)} passed, {len(opted)} skipped")
+            return 0
 
     print(f"hw_tests: {len(picked)} test(s), {args.jobs} job(s), compiler {args.compiler}", flush=True)
     start = time.monotonic()

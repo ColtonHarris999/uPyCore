@@ -22,6 +22,16 @@ class MaskTest(unittest.TestCase):
         self.assertIn(b"at PTR", masked)
         self.assertIn(b"<cell PTR>", masked)
 
+    def test_masks_generator_address_without_0x(self) -> None:
+        raw = b"<generator object 'named' at f7b5e180>\n"
+        other = b"<generator object 'named' at abcd1234>\n"
+        self.assertEqual(hw_tests.mask_output(raw), b"<generator object 'named' at PTR>\n")
+        self.assertEqual(hw_tests.mask_output(raw), hw_tests.mask_output(other))
+        self.assertEqual(
+            hw_tests.compare_streams(raw, b"", 0, b"<generator object 'named' at 0x10>\n", b"", 0),
+            "",
+        )
+
     def test_leaves_program_text(self) -> None:
         raw = b"hello\n0xff\nadd 5\n"
         self.assertEqual(hw_tests.mask_output(raw), raw)
@@ -58,6 +68,21 @@ class ManifestTest(unittest.TestCase):
         booted = {t.name for t in hw_tests.for_device(tests)}
         self.assertTrue(disabled)
         self.assertTrue(all(t.name not in booted for t in disabled))
+
+    def test_mpyc_false_boots_on_device_and_leaves_the_compiler_suite(self) -> None:
+        import compiler_suite
+
+        tests = hw_tests.load_manifest()
+        opted = [t for t in tests if not t.mpyc]
+        gens = [t for t in tests if t.area == "generators"]
+        self.assertTrue(gens)
+        self.assertEqual({t.name for t in opted}, {t.name for t in gens})
+        self.assertFalse(any(t.disabled for t in opted))
+        booted = {t.name for t in hw_tests.for_device(tests)}
+        self.assertTrue(all(t.name in booted for t in opted))
+        compiled = {name for name, _path in compiler_suite.suite_sources()}
+        for t in opted:
+            self.assertNotIn(t.source.name, compiled)
 
     def test_compare_ignores_addresses_only(self) -> None:
         detail = hw_tests.compare_streams(

@@ -258,3 +258,86 @@ def _chr_code(c):
         _poke8(d, 2, 0x80 | ((c >> 6) & 0x3F))
         _poke8(d, 3, 0x80 | (c & 0x3F))
     return _strfin(s)
+
+
+def generator____next__(self):
+    return _gresume(self, None, None)
+
+
+def generator__send(self, value):
+    return _gresume(self, value, None)
+
+
+def generator__throw(self, typ, val=None, tb=None):
+    if val is None:
+        return _gresume(self, None, typ)
+    return _gresume(self, None, val)
+
+
+def generator__close(self):
+    try:
+        _gresume(self, None, GeneratorExit())
+    except GeneratorExit:
+        return None
+    except StopIteration:
+        return None
+    raise RuntimeError("generator ignored GeneratorExit")
+
+
+def generator__pend_throw(self, exc):
+    if _ld(self, 3) & 1:
+        raise ValueError("generator already executing")
+    prev = _ld(self, 4)
+    _st(self, 4, exc)
+    return prev
+
+
+def _yfrom(sub, send, throw):
+    # mp_resume. (True, v) the sub-iterator yielded. (False, v) it finished.
+    # StopIteration from a non-generator __next__/send/throw propagates;
+    # the opcode turns that into the finished value. A generator's own
+    # StopIteration is the return value, caught here so GeneratorExit
+    # swallowed by the sub-generator can be raised again.
+    if _kind(sub) == OB_GENERATOR:
+        try:
+            v = _gresume(sub, None if throw is not None else send, throw)
+        except StopIteration as e:
+            return (False, e.value)
+        return (True, v)
+    if throw is None and send is None and _tag(sub) == TAG_ITER:
+        v = _inext(sub)
+        if v is STOP:
+            return (False, None)
+        return (True, v)
+    if throw is None and send is None:
+        try:
+            nxt = sub.__next__
+        except AttributeError:
+            nxt = NULL
+        if nxt is not NULL:
+            return (True, nxt())
+    if throw is None:
+        return (True, sub.send(send))
+    if isinstance(throw, GeneratorExit):
+        try:
+            close = sub.close
+        except AttributeError:
+            close = NULL
+        if close is not NULL:
+            return (False, close())
+    else:
+        try:
+            thrown = sub.throw
+        except AttributeError:
+            thrown = NULL
+        if thrown is not NULL:
+            return (True, thrown(throw))
+    # mp_obj_exception_match: a StopIteration type is the same as an instance.
+    # Instantiating the class would let S_YF_SI finish the delegation.
+    if _exc_is(throw, StopIteration):
+        raise RuntimeError("generator raised StopIteration")
+    if _istype(throw):
+        throw = throw()
+    if not isinstance(throw, BaseException):
+        raise TypeError("exceptions must derive from BaseException")
+    raise throw

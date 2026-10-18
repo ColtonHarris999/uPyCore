@@ -442,8 +442,10 @@ def place_raw(img: Image, mod: ModuleInfo, rc: RawCode, catalog: Catalog) -> int
         raise LinkError(f"{mod.source_file}: function nests {p.n_exc_stack} exception blocks; the frame holds {abi.FRAME_EXC_ENTRIES}")
     children = [place_raw(img, mod, child, catalog) for child in rc.children]
     for op in iter_ops(rc, catalog):
-        if op.opcode in (0x67, 0x68):  # YIELD_VALUE, YIELD_FROM
-            pass  # accepted; the core raises at the call of a generator function
+        if op.opcode == 0x67:  # YIELD_VALUE: the core executes it
+            pass
+        if op.opcode == 0x68:  # YIELD_FROM: the core executes it
+            pass
     bc = img.emit_bytes(rc.fun_data)
     names = [mod.qstr_ids[i] for i in p.name_qstrs[1:]]
     naddr = img.emit_words(names) if names else 0

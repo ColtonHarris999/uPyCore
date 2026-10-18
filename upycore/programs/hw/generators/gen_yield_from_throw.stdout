@@ -1,0 +1,15 @@
+t0 1
+sub ValueError n
+t1 2
+t2 7
+c0 1
+sub-fin
+outer-fin
+c1 None
+i0 1
+sub-yield
+i1 RuntimeError generator ignored GeneratorExit
+r0 1
+sub-return
+outer-exit
+r1 None
