@@ -95,6 +95,12 @@ def mp_decimal_exp(num: float, dec_exp: int) -> float:
 
 
 def mp_parse_float(text: str) -> float:
+    """Binary32 parse of one decimal, matching ``py/parsenum.c`` (APPROX).
+
+    The whole text is consumed. ``_`` is ignored, as the oracle ignores it.
+    A trailing ``e`` with no digit is rejected.
+    """
+
     s = text.strip().lower()
     neg = s.startswith("-")
     if s[:1] in "+-":
@@ -102,7 +108,7 @@ def mp_parse_float(text: str) -> float:
     if s in ("inf", "infinity"):
         return -math.inf if neg else math.inf
     if s == "nan":
-        return math.nan
+        return math.copysign(math.nan, -1.0 if neg else 1.0)
     mantissa_max = 0x19999998
     mantissa = 0
     exp_val = 0
@@ -110,14 +116,22 @@ def mp_parse_float(text: str) -> float:
     tz_int = tz_frac = 0
     state = "int"
     exp_neg = False
+    exp_digit = False
+    saw = False
     i = 0
     while i < len(s):
         c = s[i]
         i += 1
+        if c == "_":
+            continue
         if c.isdigit():
+            saw = True
             d = ord(c) - 48
             if state == "exp":
-                exp_val = 10 * exp_val + d
+                exp_digit = True
+                # Same ceiling as parsenum.c: extra digits cannot change inf/0.
+                if exp_val < (2**31 // 2 - 9) // 10:
+                    exp_val = 10 * exp_val + d
             elif d == 0 or mantissa >= mantissa_max:
                 if state == "int":
                     tz_int += 1
@@ -148,12 +162,53 @@ def mp_parse_float(text: str) -> float:
                 exp_neg = s[i] == "-"
                 i += 1
         else:
+            i -= 1
             break
+    if not saw or i != len(s) or state == "exp" and not exp_digit:
+        raise ValueError(f"invalid syntax for number: {text!r}")
     if exp_neg:
         exp_val = -exp_val
     exp_val += exp_extra + tz_int
     value = mp_decimal_exp(f32(float(mantissa)), exp_val)
     return -value if neg else value
+
+
+def _complex_split(body: str) -> int | None:
+    """Index of the imag sign in ``real+imag``, or None when it is imag-only."""
+
+    k = len(body) - 1
+    while k > 0:
+        c = body[k]
+        if c in "+-":
+            prev = body[k - 1]
+            if prev not in "eE":
+                return k
+        k -= 1
+    return None
+
+
+def mp_parse_complex(text: str) -> tuple[float, float]:
+    """Real and imag of a complex const or ``complex()`` spelling.
+
+    ``.mpy`` stores a complex with ``PRINT_REPR``, which parenthesizes a
+    non-zero real (``(1.25+3.5j)``). ``complex()`` accepts the same
+    spelling without those parentheses, plus a bare ``j``.
+    """
+
+    s = text.strip()
+    if len(s) >= 2 and s[0] == "(" and s[-1] == ")":
+        s = s[1:-1].strip()
+    if not s or s[-1] not in "jJ":
+        raise ValueError(f"invalid syntax for number: {text!r}")
+    body = s[:-1].rstrip()
+    if body in ("", "+"):
+        return 0.0, 1.0
+    if body == "-":
+        return 0.0, -1.0
+    split = _complex_split(body)
+    if split is None:
+        return 0.0, mp_parse_float(body)
+    return mp_parse_float(body[:split]), mp_parse_float(body[split:])
 
 
 # ---------------------------------------------------------------------------
@@ -335,9 +390,8 @@ def encode_const(img: Image, value: object) -> tuple[int, int]:
     if isinstance(value, float):
         return (T["FLOAT"], f32_bits(value))
     if isinstance(value, ComplexConst):
-        text = value.text.rstrip("j")
-        im = mp_parse_float(text) if text else 0.0
-        return emit_box(img, "COMPLEX", 0, f32_bits(im))
+        real, imag = mp_parse_complex(value.text)
+        return emit_box(img, "COMPLEX", f32_bits(real), f32_bits(imag))
     if isinstance(value, complex):
         return emit_box(img, "COMPLEX", f32_bits(value.real), f32_bits(value.imag))
     if isinstance(value, str):

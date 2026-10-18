@@ -1,0 +1,20 @@
+add sub 22 12
+mul div 85 3 2
+pow 1024 -27
+bits 1 21 20 -18
+shift 136 4
+neg -17 5 17
+fold 3 11
+cmp False True True False
+chain True False True
+bool True False False
+short 0 1
+is True False True
+in True False True
+big 1048576 1024 True
+str abcde 3
+join 26 48
+strcmp True True True
+index a c c
+slice bc ab ell
+ternary 1 2

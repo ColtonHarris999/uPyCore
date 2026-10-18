@@ -50,6 +50,15 @@ class ManifestTest(unittest.TestCase):
         picked = hw_tests.select(tests, [], ["use_*"])
         self.assertEqual(sorted(t.name for t in picked), ["use_helper", "use_pkg", "use_rel"])
 
+    def test_disabled_tests_stay_in_the_manifest_and_off_the_device(self) -> None:
+        tests = hw_tests.load_manifest()
+        disabled = [t for t in tests if t.disabled]
+        self.assertTrue(disabled)
+        self.assertTrue(all(t.area == "compiler" for t in disabled))
+        booted = {t.name for t in hw_tests.for_device(tests)}
+        self.assertTrue(disabled)
+        self.assertTrue(all(t.name not in booted for t in disabled))
+
     def test_compare_ignores_addresses_only(self) -> None:
         detail = hw_tests.compare_streams(
             b"<Foo object at 10>\n", b"", 0,

@@ -1,0 +1,2 @@
+ValueError
+('char not in range(0x110000)',)

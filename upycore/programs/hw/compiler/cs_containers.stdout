@@ -1,0 +1,12 @@
+listcomp 8 16 49
+setcomp 3 True
+dictcomp 2 3
+list ops 5 0 19 1 9
+sorted 1 9
+dict ops 1 0 3 6
+items 6
+zip 3 20
+enumerate 2
+display slice 30 2
+unpack 18
+set 1 join a-b
