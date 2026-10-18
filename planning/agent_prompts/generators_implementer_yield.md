@@ -46,9 +46,12 @@ six-word header plus a frame block, not a tail on the header. `FR_GEN`
 is header word 14. Extend spill and fill through it so an ordinary call
 still round-trips. `pc == 0` means finished.
 
-Resume checks, in this order: finished, already running, `pend_throw`,
-just-started `send`, store the sent value at the top of stack, set
-running, install the frame, then inject a throw if there is one.
+Resume checks, in this order: finished, already running, take a pending
+throw without clearing it, just-started `send`, store the sent value at
+the top of stack, clear the pending throw, set running, install the
+frame, then inject a throw if there is one. `send(1)` on a fresh
+generator that already has a `pend_throw` raises the `TypeError` and
+leaves the pending exception for the next `next`.
 `YIELD_VALUE` captures the top of stack, stores `None` there, writes
 the image, and returns the captured value. A normal `return` and an
 escaping exception set `pc` to 0 before the frame is filled back. A

@@ -217,10 +217,12 @@ Check order, which is the oracle's order:
    `None`. The original `return` value is not raised again.
 2. Status bit 0 set: `ValueError: generator already executing`.
 3. If word 4 is not `None`, that object is the throw value for this
-   resume, then word 4 becomes `None`. This is `pend_throw`.
+   attempt. Leave word 4 in place until execution actually starts.
 4. `sp == 0` and `send` is not `None`: the `TypeError` above. Do not set
-   the running bit and do not move `pc`. A later `next` still starts the
-   body.
+   the running bit, do not move `pc`, and do not clear word 4. `gen_pend`
+   does this: `pend_throw` then `send(1)` raises, and the following
+   `next` still injects the pending exception. A later `next` with no
+   pending exception still starts the body.
 5. Otherwise, if `sp != 0`, store `send` at the top of the value stack.
    `YIELD_VALUE` has stack effect 0 in `upycore/targets/upycore.json`.
    The yielded value is still sitting there. Resume replaces it. The
@@ -228,8 +230,8 @@ Check order, which is the oracle's order:
    value. With `MICROPY_PY_GENERATOR_PEND_THROW`, the snapshot taken at
    yield stores `None` in that slot after the yielded value has been
    captured. The next resume overwrites it.
-6. Set the running bit. Spill the caller, install the image as the live
-   frame, set `FR_GEN` to the object.
+6. Clear word 4, then set the running bit. Spill the caller, install the
+   image as the live frame, set `FR_GEN` to the object.
 7. If there is a throw value and the byte at `pc` is not `YIELD_FROM`,
    raise it inside the generator as `RAISE_OBJ` would, including
    `mp_make_raise_obj` (a type is instantiated, a non-exception becomes
@@ -338,9 +340,10 @@ plan §1.3 row 18.
 ### Printing
 
 `upycore/firmware/fmt.py` prints a generator as
-`<generator object 'name' at 0x...>`. The name is the raw code's simple
-name, the same string `_rc_name` uses for functions. The hardware
-runner masks `at 0x...` before comparing.
+`<generator object 'name' at f7b5e180>`. There is no `0x`. The name is
+the raw code's simple name, the same string `_rc_name` uses for
+functions. The address is the object's address in hex. The hardware
+runner masks both `at 0x...` and a bare 8-digit hex address after `at`.
 
 ### What this does not do
 
@@ -447,9 +450,10 @@ exit is green.
 ## Risks
 
 - **Check order.** Finished before running, running before `pend_throw`,
-  `pend_throw` before the just-started `TypeError`. A different order
-  fails `gen_pend` or `gen_send` in a way that looks like an off-by-one
-  in the stack.
+  `pend_throw` before the just-started `TypeError`. The pending
+  exception is cleared only when the body actually starts. Clearing it
+  on the `TypeError` path makes `gen_pend`'s `early-next` line run the
+  body instead of raising `ValueError kept`.
 - **`pc` saved by `yield from`.** Saving the address after the opcode
   runs the following instruction twice or skips the delegation.
 - **PEP 479 versus `yield from`.** A `StopIteration` from the
