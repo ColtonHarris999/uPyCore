@@ -29,10 +29,11 @@ Opcode `0x68`. Disassemble `gen_yield_from` with
 shape is the sub-iterator, then a send value, then `YIELD_FROM`.
 
 Pop the send value. The top of stack is the sub-iterator. Step it with
-one firmware hook, `_yield_from_step`, that follows `mp_resume` in
-MicroPython v1.29.0 `py/runtime.c`:
+the `_yfrom` hook, which the yield work placed in `HOOKS` immediately
+after `_getiter`. The hook follows `mp_resume` in MicroPython v1.29.0
+`py/runtime.c`:
 
-- a generator goes through the slice 1 native
+- a generator goes through `_gresume`
 - `send is None` and no throw uses `__next__` or the native iterator step
 - a non-`None` send loads `send` and calls it
 - `GeneratorExit` loads `close` when the object has one
@@ -60,7 +61,7 @@ tests use the methods and unwinder that already exist.
 
 - Do not edit goldens or the programs.
 - Do not clear the outer running bit while the sub-iterator is inside
-  `_gen_resume`.
+  `_gresume`.
 - Do not freeze `uasyncio`.
 - Do not archive `planning/generators_plan.md`.
 - If the disassembly and the spec's "usual shape" sentence disagree,

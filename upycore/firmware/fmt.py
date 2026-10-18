@@ -342,6 +342,8 @@ def _obj_repr(x, as_str):
         if _peek32(_ld(x, 2) + 4 * RC_SIG) >> 24 & RC_FLAG_FIRMWARE:
             return '<function>'
         return _s('<function ', _rc_name(x), ' at 0x', _hexaddr(_addr(x)), '>')
+    if k == OB_GENERATOR:
+        return _s("<generator object '", _rc_name(_ld(x, 2)), "' at ", _hexaddr(_addr(x)), '>')
     if k == OB_BUILTIN:
         return '<function>'
     if k == OB_BOUND_METHOD:

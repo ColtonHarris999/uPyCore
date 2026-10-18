@@ -36,6 +36,38 @@ Phase 4 tracebacks use the span. The four scope-flag bits are generator,
 `**kwargs`, `*args`, and a keyword-default dict. Positional defaults are
 `n_def_pos_args`, not one of those bits.
 
+## Generators
+
+A call of a function whose scope flags include the generator bit binds
+arguments the usual way, then returns a generator object and does not
+fetch. The object is six words: kind, type, the function, a status
+integer (bit 0 set while the body is running), a pending exception or
+`None`, and a `CONT` pointer to the frame block. The block is the
+16-word frame header, the state words, and the exception records. Saved
+`pc == 0` means the generator has finished.
+
+`YIELD_VALUE` (opcode `0x67`) captures the top of stack, stores `None`
+there, writes the block, and returns that value to `next` or `send`.
+The saved program counter is the next opcode. A disassembly of `yield`
+shows `POP_TOP` or `STORE_FAST` in that slot, which is what the next
+resume runs. A `yield` whose frame has no generator object still raises
+`NotImplementedError: generators aren't supported`.
+
+`YIELD_FROM` (opcode `0x68`) pops the send value. The top of stack is
+the sub-iterator. A disassembly of `yield from` is `GET_ITER`,
+`LOAD_CONST_NONE`, `YIELD_FROM`: the sub-iterator, then the send value.
+The opcode calls `_yfrom`, which follows `mp_resume`. A yielded value
+is pushed and the generator suspends with `pc` still on this opcode, so
+the next resume runs it again. A finished value replaces the
+sub-iterator and execution continues. `StopIteration` from the
+sub-iterator completes the delegation; its `.value` is that finished
+value. The outer generator stays marked running while the sub-iterator
+runs.
+
+A normal `return` becomes `StopIteration(value)` at `send` and
+`__next__`. An escaping `StopIteration` becomes
+`RuntimeError: generator raised StopIteration`.
+
 ## Phase 1 check
 
 `python3 upycore/tools/mpy_image.py --check upycore/programs/mpy/phase1`

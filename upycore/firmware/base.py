@@ -17,7 +17,6 @@ SR_FW0_ADDR = const(536903856)   # SYSROOT + 4 * SR_FW0
 SR_EMERG_ADDR = const(536903872)  # SYSROOT + 4 * SR_EMERG
 INT32_MIN = const(-2147483648)
 FLT_SIGN = const(-2147483648)
-OB_ITEROBJ = const(20)
 _U32 = 4294967296
 # Default-argument sentinel. NULL itself is injected by the linker and is
 # not a name the module body can load.
