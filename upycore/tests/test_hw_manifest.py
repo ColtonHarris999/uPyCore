@@ -22,6 +22,16 @@ class MaskTest(unittest.TestCase):
         self.assertIn(b"at PTR", masked)
         self.assertIn(b"<cell PTR>", masked)
 
+    def test_masks_generator_address_without_0x(self) -> None:
+        raw = b"<generator object 'named' at f7b5e180>\n"
+        other = b"<generator object 'named' at abcd1234>\n"
+        self.assertEqual(hw_tests.mask_output(raw), b"<generator object 'named' at PTR>\n")
+        self.assertEqual(hw_tests.mask_output(raw), hw_tests.mask_output(other))
+        self.assertEqual(
+            hw_tests.compare_streams(raw, b"", 0, b"<generator object 'named' at 0x10>\n", b"", 0),
+            "",
+        )
+
     def test_leaves_program_text(self) -> None:
         raw = b"hello\n0xff\nadd 5\n"
         self.assertEqual(hw_tests.mask_output(raw), raw)
@@ -70,6 +80,25 @@ class ManifestTest(unittest.TestCase):
             disabled="later",
         )
         self.assertEqual(hw_tests.for_device([sample]), [])
+
+    def test_generator_programs_are_in_the_byte_compare(self) -> None:
+        import compiler_suite
+
+        tests = hw_tests.load_manifest()
+        gens = [t for t in tests if t.area == "generators"]
+        self.assertTrue(gens)
+        self.assertTrue(all(t.mpyc and not t.disabled for t in gens))
+        compiled = {name for name, _path in compiler_suite.suite_sources()}
+        for t in gens:
+            self.assertIn(t.source.name, compiled)
+
+    def test_mpyc_false_stays_on_the_device(self) -> None:
+        sample = hw_tests.Test(
+            name="skip_me", area="generators", file="hw/generators/gen_yield.py",
+            mpyc=False,
+        )
+        self.assertEqual(hw_tests.for_device([sample]), [sample])
+        self.assertFalse(any(not t.mpyc for t in hw_tests.load_manifest()))
 
     def test_compare_ignores_addresses_only(self) -> None:
         detail = hw_tests.compare_streams(

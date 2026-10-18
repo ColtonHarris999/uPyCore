@@ -1,0 +1,10 @@
+y 1
+finally
+close None
+y2 1
+caught-exit
+ignore RuntimeError generator ignored GeneratorExit
+ran [1]
+finished None
+fresh None
+fresh-next StopIteration  None

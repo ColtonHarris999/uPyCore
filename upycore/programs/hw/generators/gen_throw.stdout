@@ -1,0 +1,7 @@
+type ValueError 
+inst ValueError n
+c0 1
+caught ValueError n
+c1 3
+third ValueError second
+bad TypeError exceptions must derive from BaseException

@@ -33,18 +33,25 @@ All four exit 0.
 ## What to build
 
 The call of a generator function binds arguments with the existing
-`S_BF` / `S_BS` / `S_CELLS` path, copies that frame into an
-`OB_GENERATOR` object, and returns the object without fetching. `next`
-and `send` copy it back into the register file and run until
+`S_BF` / `S_BS` / `S_CELLS` path, writes that frame into the generator's
+frame block, and returns the six-word object without fetching. `next`
+and `send` copy the block back into the register file and run until
 `YIELD_VALUE`, `RETURN_VALUE`, or an exception that leaves the frame.
 
-Follow the spec's word layout. Kind 20. Header word 14 of every frame
-is the generator object or `VNULL`. Extend spill and fill so an ordinary
-call still round-trips. `pc == 0` means finished.
+Follow the spec's tables. Rewrite `OB` and the `TYPES` prefix in
+`upycore/tools/mpy_abi.py` as that file shows. `NOTIMPL` stays the last
+kind. `NotImplementedType` stays the last type before the exceptions.
+Move `OB_ITEROBJ` out of `upycore/firmware/base.py`. The generator is a
+six-word header plus a frame block, not a tail on the header. `FR_GEN`
+is header word 14. Extend spill and fill through it so an ordinary call
+still round-trips. `pc == 0` means finished.
 
-Resume checks, in this order: finished, already running, `pend_throw`,
-just-started `send`, store the sent value at the top of stack, set
-running, install the frame, then inject a throw if there is one.
+Resume checks, in this order: finished, already running, take a pending
+throw without clearing it, just-started `send`, store the sent value at
+the top of stack, clear the pending throw, set running, install the
+frame, then inject a throw if there is one. `send(1)` on a fresh
+generator that already has a `pend_throw` raises the `TypeError` and
+leaves the pending exception for the next `next`.
 `YIELD_VALUE` captures the top of stack, stores `None` there, writes
 the image, and returns the captured value. A normal `return` and an
 escaping exception set `pc` to 0 before the frame is filled back. A
@@ -60,9 +67,9 @@ Firmware wrappers in `upycore/firmware/iters.py`:
 - `generator__close(self)`
 - `generator__pend_throw(self, exc)`
 
-`close` is the wrapper in the spec. `pend_throw` reads and writes words
-3 and 4. The repr is `_rc_name` inside
-`<generator object 'name' at 0x...>`.
+`close` is the wrapper in the spec. It calls `_gresume`, the native
+next to `_inext`. `pend_throw` reads and writes header words 3 and 4.
+The repr case sits next to `OB_FUNCTION`.
 
 `for` and `iter` go through `__next__`. Do not add an iterator kind.
 
@@ -85,5 +92,5 @@ the next opcode after `YIELD_VALUE`.
   it. Do not invent a second frame model.
 - Update `upycore/docs/mpy_bytecode.md` and `upycore/docs/mpy_gc.md` to
   describe the object you actually built.
-- A `yield` in a frame whose header word 14 is `VNULL` still raises the
-  old `generators aren't supported` error.
+- A `yield` in a frame whose `FR_GEN` is `VNULL` still raises the old
+  `generators aren't supported` error.

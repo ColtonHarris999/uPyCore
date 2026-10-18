@@ -65,6 +65,7 @@ jobs:
           - variables
           - memory
           - gc
+          - generators
           - compiler
     steps:
       - uses: actions/checkout@v4

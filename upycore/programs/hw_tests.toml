@@ -15,10 +15,11 @@
 # and fails the suite, so the marker comes off with the fix.
 # uncaught: the oracle prints the traceback on stdout; the golden stores
 # it as stderr, which is where the device prints it.
-# disabled: kept, not booted. Compiler programs wait on the on-device
-# compiler. Goldens still come from the unix oracle.
+# disabled: kept, not booted. Goldens still come from the unix oracle.
 # oracle = false: the unix port cannot import a filesystem module, so the
 # golden is the frozen-module result and regen leaves it alone.
+# mpyc = false: mpy-cross still boots the program. The host uPy2 compiler
+# skips it. Generator programs match mpy-cross, so they stay in the compare.
 
 [smoke]
 hello = { file = "hw/smoke/hello.py" }
@@ -381,6 +382,7 @@ compile_mode_trap = { file = "hw/compiler/compile_mode_trap.py" }
 compile_reject_import = { file = "hw/compiler/compile_reject_import.py" }
 compile_reject_closure = { file = "hw/compiler/compile_reject_closure.py" }
 compile_closure = { file = "hw/compiler/compile_closure.py" }
+compile_generators = { file = "hw/compiler/compile_generators.py" }
 compile_exec_roundtrip = { file = "hw/compiler/compile_exec_roundtrip.py" }
 compile_kwargs = { file = "hw/compiler/compile_kwargs.py" }
 # 241 parameters: about 1.8e9 cycles and 58 minutes on this simulator.
@@ -479,3 +481,21 @@ gc_bench_wide = { file = "hw/gc/gc_bench_wide.py", cycles = 40_000_000, timeout 
 gc_deep_live_chain = { file = "hw/gc/gc_deep_live_chain.py", cycles = 40_000_000, timeout = 240 }
 gc_leak_check = { file = "hw/gc/gc_leak_check.py", cycles = 40_000_000, timeout = 240 }
 gc_bench_churn = { file = "hw/gc/gc_bench_churn.py", cycles = 40_000_000, timeout = 240 }
+
+[generators]
+gen_yield = { file = "hw/generators/gen_yield.py" }
+gen_send = { file = "hw/generators/gen_send.py" }
+gen_return = { file = "hw/generators/gen_return.py" }
+gen_throw = { file = "hw/generators/gen_throw.py" }
+gen_close = { file = "hw/generators/gen_close.py" }
+gen_pend = { file = "hw/generators/gen_pend.py" }
+gen_state = { file = "hw/generators/gen_state.py" }
+gen_repr = { file = "hw/generators/gen_repr.py" }
+gen_gc = { file = "hw/generators/gen_gc.py", cycles = 40_000_000, timeout = 240 }
+gen_yield_from = { file = "hw/generators/gen_yield_from.py" }
+gen_yield_from_iter = { file = "hw/generators/gen_yield_from_iter.py" }
+gen_yield_from_throw = { file = "hw/generators/gen_yield_from_throw.py" }
+gen_yield_from_stop_type = { file = "hw/generators/gen_yield_from_stop_type.py" }
+gen_async = { file = "hw/generators/gen_async.py" }
+gen_with = { file = "hw/generators/gen_with.py" }
+gen_trace = { file = "hw/generators/gen_trace.py", uncaught = true }

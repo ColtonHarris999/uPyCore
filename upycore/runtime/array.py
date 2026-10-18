@@ -20,6 +20,15 @@ class array:
         return self._n
 
     def append(self, v):
+        if self._w == 4:
+            if self.typecode == "i":
+                if v < -2147483648 or v > 2147483647:
+                    raise OverflowError("signed int is out of range")
+            elif v < 0 or v > 4294967295:
+                raise OverflowError("unsigned int is out of range")
+            self._b.append32(v)
+            self._n += 1
+            return
         self._b.extend(self._pack(v))
         self._n += 1
 

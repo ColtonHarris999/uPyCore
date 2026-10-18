@@ -84,6 +84,27 @@ def bytearray____init__(self, *args):
     return None
 
 
+def bytearray__clear(self):
+    _st(self, 0, 0)
+    return None
+
+
+def bytearray__append32(self, v):
+    # One little-endian word. The compiler's array('i') used to allocate a
+    # 4-byte bytes object on every slot.
+    if v < 0:
+        v = v + 4294967296
+    n = _ld(self, 0)
+    _barr_grow(self, n + 4)
+    d = _data(self)
+    _poke8(d, n, v & 255)
+    _poke8(d, n + 1, (v >> 8) & 255)
+    _poke8(d, n + 2, (v >> 16) & 255)
+    _poke8(d, n + 3, (v >> 24) & 255)
+    _st(self, 0, n + 4)
+    return None
+
+
 def bytearray__append(self, v):
     if not _isint(v) or v < 0 or v > 255:
         raise ValueError('byte must be in range(0, 256)')

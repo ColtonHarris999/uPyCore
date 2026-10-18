@@ -240,6 +240,8 @@ def prepare(dest: Path | None = None) -> Path:
             text = _patched_floatfmt(text)
         elif src.name == "compile_walk.py":
             text = _patched_walk(text)
+        elif src.name == "lexer.py":
+            text = _patched_lexer(text)
         elif src.name == "parser.py":
             text = _patched_parser(text)
         elif src.name == "emitbc.py":
@@ -256,7 +258,8 @@ _WALK_OLD = """        self._emit_fns = tuple(getattr(self.emit, n) for n, _a in
         self._emit_arity = tuple(a for _n, a in _EMIT_METHODS)
 """
 
-_WALK_NEW = """        # The hart rejects generator expressions. Build the tuples in a loop.
+_WALK_NEW = """        # These two tables are filled once. A generator expression would
+        # suspend a frame per name; the loop allocates neither frame.
         _fns = []
         _arity = []
         for _n, _a in _EMIT_METHODS:
@@ -265,6 +268,24 @@ _WALK_NEW = """        # The hart rejects generator expressions. Build the tuple
         self._emit_fns = tuple(_fns)
         self._emit_arity = tuple(_arity)
 """
+
+
+_LEX_OLD = '''    def to_next(self):
+        """Advance to the next token."""
+        self.vstr = bytearray()
+'''
+
+_LEX_NEW = '''    def to_next(self):
+        """Advance to the next token."""
+        # Reuse the buffer. A new bytearray per token is garbage between
+        # the qstrs a long parameter list has to keep.
+        self.vstr.clear()
+'''
+
+
+def _patched_lexer(text: str) -> str:
+    _require(text, _LEX_OLD, "lexer")
+    return text.replace(_LEX_OLD, _LEX_NEW, 1)
 
 
 def _patched_walk(text: str) -> str:
