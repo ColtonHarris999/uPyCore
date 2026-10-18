@@ -604,6 +604,13 @@ module mpy_core
         S_SRD_T0,
         S_SRD_T1,
         S_SRD_GOT,
+        S_CC_FUN,
+        S_CC_FUN2,
+        S_CC_SELF,
+        S_CC_SELF2,
+        S_CC_ARG,
+        S_CC_ARG2,
+        S_CC_DONE,
         S_DROP,
         S_BL_W,
         S_TUP_W,
@@ -1554,24 +1561,37 @@ module mpy_core
                 8'h34, 8'h36: begin
                     v0 = {24'd0, arg[7:0]};
                     v1 = {24'd0, arg[15:8]};
-                    // Pull spilled chunks back while the whole call window can
-                    // sit in the ring. The copy below reads resident slots.
+                    // need = positional words + keyword pairs + callable (+ self)
                     v2 = v0 + (v1 << 1) + ((op == 8'h36) ? 32'd2 : 32'd1);
-                    if ((v2 > 32'(resident_reals)) && has_link && (sp <= 7'd48)) begin
+                    if (v2 <= 32'(resident_reals)) begin
+                        vs0 = 7'(sp - 7'(v0) - 7'(2 * v1));      // first argument
+                        vs1 = 7'(vs0 - ((op == 8'h36) ? 7'd2 : 7'd1));  // callable
+                        ab[0] <= rf[`SX(vs1)];
+                        for (int k = 0; k < 64; k++)
+                            if (k < v0 + 2 * v1) ab[32 + k] <= rf[`SX(6'(vs0 + 7'(k)))];
+                        if (op == 8'h36 && rf[`SX(6'(vs1 + 7'd1))] != VNULL) begin
+                            ab[31] <= rf[`SX(6'(vs1 + 7'd1))]; ab_lo <= 8'd31;
+                        end else ab_lo <= 8'd32;
+                        ab_pe <= 8'd32 + v0[7:0]; ab_nkw <= v1[7:0];
+                        sp <= vs1; crk <= ABI_RK_PUSH;
+                        st <= S_CALL;
+                    end else if (has_link && (sp <= 7'd48) && (v2 <= 32'd64)) begin
+                        // The window fits in the ring. Pull chunks back and retry.
                         rf_resume <= S_EXEC;
                         st <= S_RF_RELOAD;
+                    end else if (v0 + (v1 << 1) > 32'd224) begin
+                        raise_err(ABI_ERR_STAR_ARGS, VNULL, VNULL);
                     end else begin
-                    vs0 = 7'(sp - 7'(v0) - 7'(2 * v1));      // first argument
-                    vs1 = 7'(vs0 - ((op == 8'h36) ? 7'd2 : 7'd1));  // callable
-                    ab[0] <= rf[`SX(vs1)];
-                    for (int k = 0; k < 64; k++)
-                        if (k < v0 + 2 * v1) ab[32 + k] <= rf[`SX(6'(vs0 + 7'(k)))];
-                    if (op == 8'h36 && rf[`SX(6'(vs1 + 7'd1))] != VNULL) begin
-                        ab[31] <= rf[`SX(6'(vs1 + 7'd1))]; ab_lo <= 8'd31;
-                    end else ab_lo <= 8'd32;
-                    ab_pe <= 8'd32 + v0[7:0]; ab_nkw <= v1[7:0];
-                    sp <= vs1; crk <= ABI_RK_PUSH;
-                    st <= S_CALL;
+                        // Wider than the ring: copy one stack value at a time.
+                        b0 <= (op == 8'h36);
+                        x4 <= v0;
+                        x1 <= v0 + (v1 << 1);
+                        ab_nkw <= v1[7:0];
+                        x0 <= 32'(stk_depth) - v2;
+                        x2 <= 32'(stk_depth) - v2 + ((op == 8'h36) ? 32'd2 : 32'd1);
+                        x3 <= v2;
+                        gi <= 32'd0;
+                        st <= S_CC_FUN;
                     end
                 end
                 8'h35, 8'h37: begin
@@ -2976,6 +2996,56 @@ module mpy_core
                 end
             end
             S_SRD_GOT: begin srd_v <= mv; ret(); end
+
+            // Call window wider than the ring. x0 is the callable's global
+            // index, x2 the first argument word, x1 how many argument words,
+            // x3 the slots to drop (callable, optional self, arguments),
+            // x4 the positional count. b0 means CALL_METHOD.
+            S_CC_FUN: if (stk_hit(x0[15:0])) begin
+                    ab[0] <= stk_val(x0[15:0]);
+                    st <= S_CC_SELF;
+                end else begin
+                    srd_g <= x0[15:0];
+                    gosub(S_SRD, S_CC_FUN2);
+                end
+            S_CC_FUN2: begin ab[0] <= srd_v; st <= S_CC_SELF; end
+            S_CC_SELF: if (!b0) begin
+                    ab_lo <= 8'd32; st <= S_CC_ARG;
+                end else if (stk_hit(x0[15:0] + 16'd1)) begin
+                    if (stk_val(x0[15:0] + 16'd1) != VNULL) begin
+                        ab[31] <= stk_val(x0[15:0] + 16'd1); ab_lo <= 8'd31;
+                    end else ab_lo <= 8'd32;
+                    st <= S_CC_ARG;
+                end else begin
+                    srd_g <= x0[15:0] + 16'd1;
+                    gosub(S_SRD, S_CC_SELF2);
+                end
+            S_CC_SELF2: begin
+                    if (srd_v != VNULL) begin ab[31] <= srd_v; ab_lo <= 8'd31; end
+                    else ab_lo <= 8'd32;
+                    st <= S_CC_ARG;
+                end
+            S_CC_ARG: if (gi == x1) st <= S_CC_DONE;
+                else if (stk_hit(x2[15:0] + gi[15:0])) begin
+                    ab[8'(32 + gi)] <= stk_val(x2[15:0] + gi[15:0]);
+                    gi <= gi + 32'd1;
+                end else begin
+                    srd_g <= x2[15:0] + gi[15:0];
+                    gosub(S_SRD, S_CC_ARG2);
+                end
+            S_CC_ARG2: begin
+                    ab[8'(32 + gi)] <= srd_v;
+                    gi <= gi + 32'd1;
+                    st <= S_CC_ARG;
+                end
+            S_CC_DONE: begin
+                    ab_pe <= 8'(32 + x4);
+                    crk <= ABI_RK_PUSH;
+                    drop_left <= x3[15:0];
+                    drop_push_en <= 1'b0;
+                    drop_then <= S_CALL;
+                    st <= S_DROP;
+                end
 
             S_DROP: if (drop_left == 16'd0) begin
                 if (drop_push_en) begin
