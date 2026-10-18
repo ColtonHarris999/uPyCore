@@ -1,0 +1,2 @@
+NameError
+("name 'missing_global' isn't defined",)

@@ -1,0 +1,2 @@
+TypeError
+("unsupported type for __invert__: 'float'",)

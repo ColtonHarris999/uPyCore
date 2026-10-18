@@ -22,34 +22,74 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' && (github.event.action != 'edited' || github.event.changes.base.ref.from) }}
 
 jobs:
-  sim:
-    name: sim
+  # Host checks. No Verilator. The uPy2 byte compare lives here too.
+  host-tools:
+    name: host-tools
     # Title and body edits share the head SHA with the run already in
     # progress. Skip them. Retargets fall through.
     if: github.event.action != 'edited' || github.event.changes.base.ref.from
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
 
-      - name: Build the simulator image
-        run: docker build -t upycore-sim:local .
+      - name: Unit tests and uPy2 byte compare
+        run: make docker-test-host
 
-      - name: Hello, raise, and the peripheral model
-        run: docker run --rm -v "$GITHUB_WORKSPACE:/work" -w /work upycore-sim:local make test
+  # Hardware tests, one job per area of upycore/programs/hw_tests.toml.
+  # Each job verilates once, then runs the area from mpy-cross and from uPy2.
+  # `compiler` is not a leg: those programs are disabled until the on-device
+  # compiler can run them. `make test-compiler` is the uPy2 suite, not that area.
+  hardware:
+    name: ${{ matrix.area }}
+    if: github.event.action != 'edited' || github.event.changes.base.ref.from
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        area:
+          - smoke
+          - alu
+          - control
+          - calls
+          - containers
+          - strings
+          - exceptions
+          - objects
+          - builtins
+          - modules
+          - integ
+          - variables
+          - memory
+          - gc
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Run ${{ matrix.area }}
+        run: make docker-test-hw-${{ matrix.area }}
 
   # Keep this job id/name so existing branch protection on "all-tests" still
-  # matches.
+  # matches. It is a gate over the area jobs, not one suite run.
   all-tests:
     name: all-tests
-    needs: [sim]
+    needs: [host-tools, hardware]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     steps:
-      - name: Require the simulator job
+      - name: Require every job that ran
         if: github.event.action != 'edited' || github.event.changes.base.ref.from
         run: |
           set -euo pipefail
-          test "${{ needs.sim.result }}" = "success"
+          RESULTS='${{ toJSON(needs) }}'
+          echo "$RESULTS"
+          if echo "$RESULTS" | grep -qE '"result": *"(failure|cancelled|timed_out)"'; then
+            echo "::error::one or more required jobs did not pass"
+            exit 1
+          fi
+          test "${{ needs.host-tools.result }}" = "success"
+          test "${{ needs.hardware.result }}" = "success"

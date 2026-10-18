@@ -1,0 +1,2 @@
+AttributeError
+("'list' object has no attribute 'foo'",)

@@ -15,6 +15,8 @@
 # and fails the suite, so the marker comes off with the fix.
 # uncaught: the oracle prints the traceback on stdout; the golden stores
 # it as stderr, which is where the device prints it.
+# disabled: kept, not booted. Compiler programs wait on the on-device
+# compiler. Goldens still come from the unix oracle.
 # oracle = false: the unix port cannot import a filesystem module, so the
 # golden is the frozen-module result and regen leaves it alone.
 
@@ -34,16 +36,97 @@ floats = { file = "hw/alu/floats.py", cycles = 30_000_000 }
 floatparse = { file = "hw/alu/floatparse.py", cycles = 30_000_000 }
 complex = { file = "hw/alu/complex.py", cycles = 30_000_000 }
 
+bitwise_calls = { file = "hw/alu/bitwise_calls.py" }
+complex_ops = { file = "hw/alu/complex_ops.py" }
+complex_type_trap = { file = "hw/alu/complex_type_trap.py", xfail = "device rejects complex(1, 1j); the unix port returns 0j" }
+unary_invert_float_trap = { file = "hw/alu/unary_invert_float_trap.py" }
+compare_op_type_trap = { file = "hw/alu/compare_op_type_trap.py" }
+
 [control]
 branch = { file = "hw/control/branch.py" }
 loops = { file = "hw/control/loops.py" }
 for_iter = { file = "hw/control/for_iter.py" }
+
+branchy = { file = "hw/control/branchy.py" }
+pop_jump_if_none = { file = "hw/control/pop_jump_if_none.py" }
+for_iter_type_trap = { file = "hw/control/for_iter_type_trap.py" }
+for_iter_nested = { file = "hw/control/for_iter_nested.py" }
+for_iter_edges = { file = "hw/control/for_iter_edges.py" }
+for_iter_branch = { file = "hw/control/for_iter_branch.py" }
+for_iter_mutate = { file = "hw/control/for_iter_mutate.py" }
+for_iter_mutate_visited = { file = "hw/control/for_iter_mutate_visited.py" }
+for_iter_rebind = { file = "hw/control/for_iter_rebind.py" }
+for_iter_delete = { file = "hw/control/for_iter_delete.py" }
+for_iter_clear = { file = "hw/control/for_iter_clear.py" }
+for_iter_subscr = { file = "hw/control/for_iter_subscr.py" }
+for_iter_build_tuple = { file = "hw/control/for_iter_build_tuple.py" }
+for_iter_range_type_trap = { file = "hw/control/for_iter_range_type_trap.py" }
+for_iter_range_bool = { file = "hw/control/for_iter_range_bool.py" }
+for_iter_str_empty = { file = "hw/control/for_iter_str_empty.py" }
+for_iter_str_long = { file = "hw/control/for_iter_str_long.py" }
+for_iter_str_unicode = { file = "hw/control/for_iter_str_unicode.py" }
+for_iter_str_branch = { file = "hw/control/for_iter_str_branch.py" }
+for_iter_str_type_trap = { file = "hw/control/for_iter_str_type_trap.py" }
+for_iter_dict_keys = { file = "hw/control/for_iter_dict_keys.py" }
+for_iter_dict_empty = { file = "hw/control/for_iter_dict_empty.py" }
+for_iter_dict_delete = { file = "hw/control/for_iter_dict_delete.py" }
+for_iter_dict_str_keys = { file = "hw/control/for_iter_dict_str_keys.py" }
+for_iter_set_basic = { file = "hw/control/for_iter_set_basic.py" }
+for_iter_set_empty = { file = "hw/control/for_iter_set_empty.py" }
+for_iter_set_type_trap = { file = "hw/control/for_iter_set_type_trap.py" }
+for_iter_object_list = { file = "hw/control/for_iter_object_list.py" }
+for_iter_object_next = { file = "hw/control/for_iter_object_next.py" }
+for_iter_object_exhaust = { file = "hw/control/for_iter_object_exhaust.py" }
+for_iter_object_no_iter_trap = { file = "hw/control/for_iter_object_no_iter_trap.py" }
+for_iter_object_nested = { file = "hw/control/for_iter_object_nested.py" }
+for_iter_object_raise_catch = { file = "hw/control/for_iter_object_raise_catch.py" }
+for_call_toplevel = { file = "hw/control/for_call_toplevel.py" }
 
 [calls]
 call_funcs = { file = "hw/calls/funcs.py" }
 varargs = { file = "hw/calls/varargs.py" }
 closure = { file = "hw/calls/closure.py" }
 recursion = { file = "hw/calls/recursion.py", cycles = 40_000_000, timeout = 240 }
+
+call_chain = { file = "hw/calls/call_chain.py" }
+noncallable = { file = "hw/calls/noncallable.py" }
+bad_argc = { file = "hw/calls/bad_argc.py", xfail = "TypeError text differs from the unix port" }
+deep_callgraph = { file = "hw/calls/deep_callgraph.py" }
+default_arg = { file = "hw/calls/default_arg.py" }
+default_arg_argc_trap = { file = "hw/calls/default_arg_argc_trap.py", xfail = "TypeError text differs from the unix port" }
+default_none = { file = "hw/calls/default_none.py" }
+default_false_zero = { file = "hw/calls/default_false_zero.py" }
+default_empty_tuple = { file = "hw/calls/default_empty_tuple.py" }
+default_multi_zero_argc = { file = "hw/calls/default_multi_zero_argc.py" }
+default_arg_too_many = { file = "hw/calls/default_arg_too_many.py" }
+default_kwonly_none = { file = "hw/calls/default_kwonly_none.py" }
+default_partial_none = { file = "hw/calls/default_partial_none.py" }
+default_call_ex_empty = { file = "hw/calls/default_call_ex_empty.py" }
+default_nested = { file = "hw/calls/default_nested.py" }
+varargs_pos_defaults = { file = "hw/calls/varargs_pos_defaults.py" }
+call_kw = { file = "hw/calls/call_kw.py" }
+call_kw_unexpected = { file = "hw/calls/call_kw_unexpected.py" }
+call_function_ex = { file = "hw/calls/call_function_ex.py" }
+call_function_ex_kw = { file = "hw/calls/call_function_ex_kw.py" }
+varargs_basic = { file = "hw/calls/varargs_basic.py" }
+varargs_empty = { file = "hw/calls/varargs_empty.py" }
+varargs_kwonly = { file = "hw/calls/varargs_kwonly.py" }
+varargs_kwonly2 = { file = "hw/calls/varargs_kwonly2.py" }
+varargs_kwonly2_partial = { file = "hw/calls/varargs_kwonly2_partial.py" }
+varargs_ex_kw = { file = "hw/calls/varargs_ex_kw.py" }
+varargs_call_ex = { file = "hw/calls/varargs_call_ex.py" }
+varkw_basic = { file = "hw/calls/varkw_basic.py" }
+varkw_empty = { file = "hw/calls/varkw_empty.py" }
+varkw_only = { file = "hw/calls/varkw_only.py" }
+varkw_and_varargs = { file = "hw/calls/varkw_and_varargs.py" }
+varkw_call_ex = { file = "hw/calls/varkw_call_ex.py" }
+varkw_name_collision = { file = "hw/calls/varkw_name_collision.py" }
+varkw_no_wipe = { file = "hw/calls/varkw_no_wipe.py" }
+varkw_many = { file = "hw/calls/varkw_many.py" }
+varkw_kwonly = { file = "hw/calls/varkw_kwonly.py" }
+varkw_combo = { file = "hw/calls/varkw_combo.py" }
+varkw_dup_trap = { file = "hw/calls/varkw_dup_trap.py" }
+varkw_kwonly_missing_trap = { file = "hw/calls/varkw_kwonly_missing_trap.py" }
 
 [containers]
 lists = { file = "hw/containers/lists.py" }
@@ -53,27 +136,197 @@ sets = { file = "hw/containers/sets.py" }
 set_order = { file = "hw/containers/set_order.py" }
 unpack = { file = "hw/containers/unpack.py" }
 
+unpack_len_trap = { file = "hw/containers/unpack_len_trap.py" }
+list_to_tuple = { file = "hw/containers/list_to_tuple.py" }
+list_repeat = { file = "hw/containers/list_repeat.py" }
+list_repeat_type_trap = { file = "hw/containers/list_repeat_type_trap.py" }
+list_concat = { file = "hw/containers/list_concat.py" }
+list_concat_type_trap = { file = "hw/containers/list_concat_type_trap.py" }
+list_comp_fast_clear = { file = "hw/containers/list_comp_fast_clear.py" }
+list_del_last_only = { file = "hw/containers/list_del_last_only.py" }
+list_contains_types = { file = "hw/containers/list_contains_types.py" }
+list_del_contains_call = { file = "hw/containers/list_del_contains_call.py" }
+list_del_oob = { file = "hw/containers/list_del_oob.py" }
+list_del_tuple_trap = { file = "hw/containers/list_del_tuple_trap.py" }
+dict_del_trap = { file = "hw/containers/dict_del_trap.py" }
+dict_del_simple = { file = "hw/containers/dict_del_simple.py" }
+dict_del_then_insert = { file = "hw/containers/dict_del_then_insert.py" }
+dict_hash_neg1 = { file = "hw/containers/dict_hash_neg1.py" }
+dict_str_keys = { file = "hw/containers/dict_str_keys.py" }
+dict_large_pycore = { file = "hw/containers/dict_large_pycore.py" }
+dict_bool_int_collision = { file = "hw/containers/dict_bool_int_collision.py" }
+dict_false_zero = { file = "hw/containers/dict_false_zero.py" }
+dict_del_collision = { file = "hw/containers/dict_del_collision.py" }
+dict_contains_collision = { file = "hw/containers/dict_contains_collision.py" }
+set_bool_int = { file = "hw/containers/set_bool_int.py" }
+set_hash_neg1 = { file = "hw/containers/set_hash_neg1.py" }
+set_str = { file = "hw/containers/set_str.py" }
+list_method_missing = { file = "hw/containers/list_method_missing.py" }
+list_method_unbound = { file = "hw/containers/list_method_unbound.py" }
+list_extend = { file = "hw/containers/list_extend.py" }
+list_extend_del_contains = { file = "hw/containers/list_extend_del_contains.py" }
+list_del_simple = { file = "hw/containers/list_del_simple.py" }
+list_del_first_last = { file = "hw/containers/list_del_first_last.py" }
+list_del_contains = { file = "hw/containers/list_del_contains.py" }
+list_del_nested = { file = "hw/containers/list_del_nested.py" }
+dict_mixed_ops = { file = "hw/containers/dict_mixed_ops.py" }
+set_update = { file = "hw/containers/set_update.py" }
+set_update_tuple = { file = "hw/containers/set_update_tuple.py" }
+map_add = { file = "hw/containers/map_add.py" }
+dict_update = { file = "hw/containers/dict_update.py" }
+dict_update_obj = { file = "hw/containers/dict_update_obj.py" }
+dict_merge = { file = "hw/containers/dict_merge.py" }
+container_list_append_grow = { file = "hw/containers/container_list_append_grow.py" }
+container_dict_collision = { file = "hw/containers/container_dict_collision.py" }
+container_dict_full_insert = { file = "hw/containers/container_dict_full_insert.py" }
+for_iter_grow = { file = "hw/containers/for_iter_grow.py" }
+for_iter_dict_grow = { file = "hw/containers/for_iter_dict_grow.py" }
+attr_grow_global = { file = "hw/containers/attr_grow_global.py" }
+seed_grow_global = { file = "hw/containers/seed_grow_global.py" }
+allocator_list = { file = "hw/containers/allocator_list.py", cycles = 40_000_000, timeout = 240 }
+list_del_shift_excore = { file = "hw/containers/list_del_shift_excore.py" }
+dict_grow_basic = { file = "hw/containers/dict_grow_basic.py" }
+dict_grow_large = { file = "hw/containers/dict_grow_large.py" }
+set_grow_basic = { file = "hw/containers/set_grow_basic.py" }
+
 [strings]
 text = { file = "hw/strings/text.py" }
 unicode = { file = "hw/strings/unicode.py" }
 bytesobj = { file = "hw/strings/bytesobj.py" }
 format = { file = "hw/strings/format.py" }
 
+slice_str_clamp = { file = "hw/strings/slice_str_clamp.py" }
+slice_str_long = { file = "hw/strings/slice_str_long.py" }
+slice_str_unicode = { file = "hw/strings/slice_str_unicode.py", xfail = "unicode slice bounds do not match the unix port" }
+slice_str_empty = { file = "hw/strings/slice_str_empty.py" }
+slice_str_scan = { file = "hw/strings/slice_str_scan.py" }
+slice_str_neg_trap = { file = "hw/strings/slice_str_neg_trap.py" }
+slice_damerau = { file = "hw/strings/slice_damerau.py" }
+str_eq_runtime_long = { file = "hw/strings/str_eq_runtime_long.py" }
+str_consts = { file = "hw/strings/str_consts.py" }
+string_ops = { file = "hw/strings/string_ops.py" }
+list_repeat_jaro = { file = "hw/strings/list_repeat_jaro.py" }
+list_concat_damerau = { file = "hw/strings/list_concat_damerau.py" }
+build_string = { file = "hw/strings/build_string.py" }
+str_subscr_long = { file = "hw/strings/str_subscr_long.py" }
+str_subscr_unicode = { file = "hw/strings/str_subscr_unicode.py" }
+str_subscr_loop = { file = "hw/strings/str_subscr_loop.py" }
+str_subscr_oob_trap = { file = "hw/strings/str_subscr_oob_trap.py" }
+str_subscr_char_oob_trap = { file = "hw/strings/str_subscr_char_oob_trap.py" }
+str_dict_key_runtime = { file = "hw/strings/str_dict_key_runtime.py" }
+str_dict_key_runtime_del = { file = "hw/strings/str_dict_key_runtime_del.py" }
+jaro_window = { file = "hw/strings/jaro_window.py" }
+str_search_methods = { file = "hw/strings/str_search_methods.py" }
+str_p5e_batch2 = { file = "hw/strings/str_p5e_batch2.py" }
+str_p5e_batch3 = { file = "hw/strings/str_p5e_batch3.py" }
+
 [exceptions]
 handling = { file = "hw/exceptions/handling.py" }
 custom = { file = "hw/exceptions/custom.py" }
 with_stmt = { file = "hw/exceptions/with_stmt.py" }
+
+try_syntaxerror = { file = "hw/exceptions/try_syntaxerror.py" }
+try_exc_types = { file = "hw/exceptions/try_exc_types.py" }
+try_syntaxerror_msg = { file = "hw/exceptions/try_syntaxerror_msg.py" }
+raise_syntaxerror_fatal = { file = "hw/exceptions/raise_syntaxerror_fatal.py" }
+try_exc_cross_frame_fatal = { file = "hw/exceptions/try_exc_cross_frame_fatal.py" }
+try_stopiteration = { file = "hw/exceptions/try_stopiteration.py" }
+try_stopiteration_nested = { file = "hw/exceptions/try_stopiteration_nested.py" }
+raise_stopiteration_fatal = { file = "hw/exceptions/raise_stopiteration_fatal.py" }
+try_exception = { file = "hw/exceptions/try_exception.py" }
+try_after_call = { file = "hw/exceptions/try_after_call.py" }
+try_typeerror = { file = "hw/exceptions/try_typeerror.py" }
+raise_typeerror_call = { file = "hw/exceptions/raise_typeerror_call.py" }
+raise_instance = { file = "hw/exceptions/raise_instance.py" }
+try_tuple_match = { file = "hw/exceptions/try_tuple_match.py" }
+try_lookuperror = { file = "hw/exceptions/try_lookuperror.py" }
+try_except_miss = { file = "hw/exceptions/try_except_miss.py" }
+bare_raise = { file = "hw/exceptions/bare_raise.py" }
+bare_raise_no_active = { file = "hw/exceptions/bare_raise_no_active.py" }
+try_except_else = { file = "hw/exceptions/try_except_else.py" }
+try_finally = { file = "hw/exceptions/try_finally.py" }
+try_except_as = { file = "hw/exceptions/try_except_as.py" }
+try_callee_unhandled = { file = "hw/exceptions/try_callee_unhandled.py" }
+fw_next_exhausted = { file = "hw/exceptions/fw_next_exhausted.py" }
+exc_args = { file = "hw/exceptions/exc_args.py" }
+raise_varargs = { file = "hw/exceptions/raise_varargs.py" }
+raise_after_call_loop = { file = "hw/exceptions/raise_after_call_loop.py" }
 
 [objects]
 classes = { file = "hw/objects/classes.py" }
 inherit = { file = "hw/objects/inherit.py" }
 props = { file = "hw/objects/props.py" }
 
+attr_basic = { file = "hw/objects/attr_basic.py" }
+attr_overwrite = { file = "hw/objects/attr_overwrite.py" }
+attr_many = { file = "hw/objects/attr_many.py" }
+attr_missing = { file = "hw/objects/attr_missing.py" }
+attr_type_trap = { file = "hw/objects/attr_type_trap.py" }
+attr_del = { file = "hw/objects/attr_del.py" }
+attr_del_reinsert = { file = "hw/objects/attr_del_reinsert.py" }
+attr_shadow = { file = "hw/objects/attr_shadow.py" }
+attr_mro = { file = "hw/objects/attr_mro.py" }
+attr_dunder_dict = { file = "hw/objects/attr_dunder_dict.py" }
+attr_dunder_class = { file = "hw/objects/attr_dunder_class.py" }
+attr_dunder_base = { file = "hw/objects/attr_dunder_base.py" }
+attr_dunder_store_trap = { file = "hw/objects/attr_dunder_store_trap.py" }
+attr_dunder_del_trap = { file = "hw/objects/attr_dunder_del_trap.py" }
+firmware_attr_helpers = { file = "hw/objects/firmware_attr_helpers.py" }
+method_call = { file = "hw/objects/method_call.py" }
+method_nested = { file = "hw/objects/method_nested.py" }
+ctor_noinit = { file = "hw/objects/ctor_noinit.py" }
+ctor_init = { file = "hw/objects/ctor_init.py" }
+method_default = { file = "hw/objects/method_default.py" }
+varkw_method = { file = "hw/objects/varkw_method.py" }
+method_call_kw = { file = "hw/objects/method_call_kw.py" }
+bound_method_obj = { file = "hw/objects/bound_method_obj.py" }
+class_const = { file = "hw/objects/class_const.py" }
+class_two_instances = { file = "hw/objects/class_two_instances.py" }
+
 [builtins]
 builtin_fns = { file = "hw/builtins/funcs.py" }
 method_getattr = { file = "hw/builtins/method_getattr.py" }
 sysmod = { file = "hw/builtins/sysmod.py" }
 gcmod = { file = "hw/builtins/gcmod.py", cycles = 40_000_000 }
+
+helper_containers = { file = "hw/builtins/helper_containers.py" }
+fw_range_zero_step = { file = "hw/builtins/fw_range_zero_step.py" }
+fw_pow_neg_mod = { file = "hw/builtins/fw_pow_neg_mod.py" }
+fw_pow_mulmod = { file = "hw/builtins/fw_pow_mulmod.py" }
+fw_round_half_even = { file = "hw/builtins/fw_round_half_even.py" }
+fw_float_str = { file = "hw/builtins/fw_float_str.py" }
+builtin_len_long_str = { file = "hw/builtins/builtin_len_long_str.py" }
+builtin_len_obj = { file = "hw/builtins/builtin_len_obj.py" }
+builtin_len_obj_missing = { file = "hw/builtins/builtin_len_obj_missing.py" }
+builtin_ord_unicode = { file = "hw/builtins/builtin_ord_unicode.py" }
+builtin_ord_scan = { file = "hw/builtins/builtin_ord_scan.py" }
+builtin_ord_len_trap = { file = "hw/builtins/builtin_ord_len_trap.py" }
+builtin_ord_type_trap = { file = "hw/builtins/builtin_ord_type_trap.py", xfail = "TypeError text differs from the unix port" }
+builtin_chr_range_trap = { file = "hw/builtins/builtin_chr_range_trap.py", xfail = "ValueError text differs from the unix port" }
+builtin_chr_surrogate_trap = { file = "hw/builtins/builtin_chr_surrogate_trap.py" }
+builtin_int_type_trap = { file = "hw/builtins/builtin_int_type_trap.py" }
+builtin_max_float = { file = "hw/builtins/builtin_max_float.py" }
+builtin_str_type_trap = { file = "hw/builtins/builtin_str_type_trap.py" }
+firmware_iterators = { file = "hw/builtins/firmware_iterators.py" }
+firmware_wave3a = { file = "hw/builtins/firmware_wave3a.py" }
+firmware_wave3_strings = { file = "hw/builtins/firmware_wave3_strings.py" }
+firmware_wave3_pow = { file = "hw/builtins/firmware_wave3_pow.py" }
+firmware_wave3_containers = { file = "hw/builtins/firmware_wave3_containers.py" }
+firmware_sorted_kw = { file = "hw/builtins/firmware_sorted_kw.py" }
+firmware_filter_pred = { file = "hw/builtins/firmware_filter_pred.py" }
+firmware_isinstance = { file = "hw/builtins/firmware_isinstance.py" }
+firmware_tuple_empty = { file = "hw/builtins/firmware_tuple_empty.py" }
+firmware_min_varargs = { file = "hw/builtins/firmware_min_varargs.py" }
+print_empty = { file = "hw/builtins/print_empty.py" }
+print_sep_end = { file = "hw/builtins/print_sep_end.py" }
+print_end_only = { file = "hw/builtins/print_end_only.py" }
+print_none_sep = { file = "hw/builtins/print_none_sep.py" }
+print_many = { file = "hw/builtins/print_many.py" }
+print_star = { file = "hw/builtins/print_star.py" }
+print_star_kw = { file = "hw/builtins/print_star_kw.py" }
+print_neg = { file = "hw/builtins/print_neg.py" }
+print_bools = { file = "hw/builtins/print_bools.py" }
+print_type_trap = { file = "hw/builtins/print_type_trap.py" }
 
 [modules]
 import_missing = { file = "hw/modules/import_missing.py" }
@@ -84,3 +337,143 @@ use_rel = { file = "hw/modules/use_rel.py", modules = ["rel=hw/modules/rel/__ini
 [integ]
 fib = { file = "hw/integ/fib.py" }
 sort = { file = "hw/integ/sort.py" }
+
+# Locals, globals, and builtins lookup.
+[variables]
+undef_global = { file = "hw/variables/undef_global.py" }
+globals_accum = { file = "hw/variables/globals_accum.py" }
+swap = { file = "hw/variables/swap.py" }
+delete_fast = { file = "hw/variables/delete_fast.py" }
+delete_fast_unbound = { file = "hw/variables/delete_fast_unbound.py" }
+load_fast_check = { file = "hw/variables/load_fast_check.py" }
+load_fast_check_unbound = { file = "hw/variables/load_fast_check_unbound.py" }
+builtins_fallback = { file = "hw/variables/builtins_fallback.py" }
+builtins_shadow = { file = "hw/variables/builtins_shadow.py" }
+builtins_null_bit = { file = "hw/variables/builtins_null_bit.py" }
+load_name_builtin = { file = "hw/variables/load_name_builtin.py" }
+
+# Deep frames and many locals. Register-file spill counters are not portable.
+[memory]
+code_ram_call_rom = { file = "hw/memory/code_ram_call_rom.py" }
+locals_40_uninit = { file = "hw/memory/locals_40_uninit.py" }
+rf_deep_recursion = { file = "hw/memory/rf_deep_recursion.py", cycles = 40_000_000, timeout = 240 }
+rf_spill_refill = { file = "hw/memory/rf_spill_refill.py", cycles = 40_000_000, timeout = 240 }
+rf_thrash = { file = "hw/memory/rf_thrash.py", cycles = 40_000_000, timeout = 240 }
+align_mask = { file = "hw/memory/align_mask.py" }
+
+# On-device compiler programs. Disabled until that compiler can run them.
+[compiler]
+compile_store_name_grow_loop = { file = "hw/compiler/compile_store_name_grow_loop.py", disabled = "on-device compiler is not wired up yet" }
+exec_code_basic = { file = "hw/compiler/exec_code_basic.py", disabled = "on-device compiler is not wired up yet" }
+exec_code_globals_rw = { file = "hw/compiler/exec_code_globals_rw.py", disabled = "on-device compiler is not wired up yet" }
+exec_code_returns_none = { file = "hw/compiler/exec_code_returns_none.py", disabled = "on-device compiler is not wired up yet" }
+exec_code_nested = { file = "hw/compiler/exec_code_nested.py", disabled = "on-device compiler is not wired up yet" }
+eval_code_expr = { file = "hw/compiler/eval_code_expr.py", disabled = "on-device compiler is not wired up yet" }
+exec_bad_arg_trap = { file = "hw/compiler/exec_bad_arg_trap.py", disabled = "on-device compiler is not wired up yet" }
+exec_globals_dict = { file = "hw/compiler/exec_globals_dict.py", disabled = "on-device compiler is not wired up yet" }
+exec_globals_read = { file = "hw/compiler/exec_globals_read.py", disabled = "on-device compiler is not wired up yet" }
+exec_globals_restore = { file = "hw/compiler/exec_globals_restore.py", disabled = "on-device compiler is not wired up yet" }
+exec_globals_nested = { file = "hw/compiler/exec_globals_nested.py", disabled = "on-device compiler is not wired up yet" }
+exec_globals_type_trap = { file = "hw/compiler/exec_globals_type_trap.py", disabled = "on-device compiler is not wired up yet" }
+compile_eval_expr = { file = "hw/compiler/compile_eval_expr.py", disabled = "on-device compiler is not wired up yet" }
+compile_mode_trap = { file = "hw/compiler/compile_mode_trap.py", disabled = "on-device compiler is not wired up yet" }
+compile_reject_import = { file = "hw/compiler/compile_reject_import.py", disabled = "on-device compiler is not wired up yet" }
+compile_reject_closure = { file = "hw/compiler/compile_reject_closure.py", disabled = "on-device compiler is not wired up yet" }
+compile_closure = { file = "hw/compiler/compile_closure.py", disabled = "on-device compiler is not wired up yet" }
+compile_exec_roundtrip = { file = "hw/compiler/compile_exec_roundtrip.py", disabled = "on-device compiler is not wired up yet" }
+compile_kwargs = { file = "hw/compiler/compile_kwargs.py", disabled = "on-device compiler is not wired up yet" }
+compile_reject_locals = { file = "hw/compiler/compile_reject_locals.py", disabled = "on-device compiler is not wired up yet" }
+compile_repeat = { file = "hw/compiler/compile_repeat.py", disabled = "on-device compiler is not wired up yet" }
+compile_try_except = { file = "hw/compiler/compile_try_except.py", disabled = "on-device compiler is not wired up yet" }
+compile_try_else = { file = "hw/compiler/compile_try_else.py", disabled = "on-device compiler is not wired up yet" }
+compile_try_finally = { file = "hw/compiler/compile_try_finally.py", disabled = "on-device compiler is not wired up yet" }
+compile_raise = { file = "hw/compiler/compile_raise.py", disabled = "on-device compiler is not wired up yet" }
+compile_str_slice = { file = "hw/compiler/compile_str_slice.py", disabled = "on-device compiler is not wired up yet" }
+compile_lambda = { file = "hw/compiler/compile_lambda.py", disabled = "on-device compiler is not wired up yet" }
+compile_assert = { file = "hw/compiler/compile_assert.py", disabled = "on-device compiler is not wired up yet" }
+compile_decorator = { file = "hw/compiler/compile_decorator.py", disabled = "on-device compiler is not wired up yet" }
+compile_fstring = { file = "hw/compiler/compile_fstring.py", disabled = "on-device compiler is not wired up yet" }
+compile_const_pool = { file = "hw/compiler/compile_const_pool.py", disabled = "on-device compiler is not wired up yet" }
+eval_str_direct = { file = "hw/compiler/eval_str_direct.py", disabled = "on-device compiler is not wired up yet" }
+eval_str_long = { file = "hw/compiler/eval_str_long.py", disabled = "on-device compiler is not wired up yet" }
+exec_str_direct = { file = "hw/compiler/exec_str_direct.py", disabled = "on-device compiler is not wired up yet" }
+compile_grammar = { file = "hw/compiler/compile_grammar.py", disabled = "on-device compiler is not wired up yet" }
+startup_multiprogram = { file = "hw/compiler/startup_multiprogram.py", disabled = "on-device compiler is not wired up yet" }
+compile_list_comp = { file = "hw/compiler/compile_list_comp.py", disabled = "on-device compiler is not wired up yet" }
+gc_mutant_44 = { file = "hw/compiler/gc_mutant_44.py", disabled = "on-device compiler is not wired up yet" }
+gc_code_new = { file = "hw/compiler/gc_code_new.py", disabled = "on-device compiler is not wired up yet" }
+gc_root_frames = { file = "hw/compiler/gc_root_frames.py", disabled = "on-device compiler is not wired up yet" }
+gc_steady_compile = { file = "hw/compiler/gc_steady_compile.py", disabled = "on-device compiler is not wired up yet" }
+gc_compile_loop = { file = "hw/compiler/gc_compile_loop.py", disabled = "on-device compiler is not wired up yet" }
+gc_compile_syntaxerror = { file = "hw/compiler/gc_compile_syntaxerror.py", disabled = "on-device compiler is not wired up yet" }
+cs_containers = { file = "hw/compiler/cs_containers.py", disabled = "on-device compiler is not wired up yet" }
+cs_control = { file = "hw/compiler/cs_control.py", disabled = "on-device compiler is not wired up yet" }
+cs_exceptions = { file = "hw/compiler/cs_exceptions.py", disabled = "on-device compiler is not wired up yet" }
+cs_expressions = { file = "hw/compiler/cs_expressions.py", disabled = "on-device compiler is not wired up yet" }
+cs_functions = { file = "hw/compiler/cs_functions.py", disabled = "on-device compiler is not wired up yet" }
+cs_peephole = { file = "hw/compiler/cs_peephole.py", disabled = "on-device compiler is not wired up yet" }
+cs_program = { file = "hw/compiler/cs_program.py", disabled = "on-device compiler is not wired up yet" }
+cs_starred = { file = "hw/compiler/cs_starred.py", disabled = "on-device compiler is not wired up yet" }
+cs_t5_t6 = { file = "hw/compiler/cs_t5_t6.py", disabled = "on-device compiler is not wired up yet" }
+
+# Collector behavior expressed with gc.collect(). Byte-count oracles are not portable.
+[gc]
+gc_verify_containers = { file = "hw/gc/gc_verify_containers.py", cycles = 40_000_000, timeout = 240 }
+gc_verify_cycles = { file = "hw/gc/gc_verify_cycles.py", cycles = 40_000_000, timeout = 240 }
+gc_reuse_after_collect = { file = "hw/gc/gc_reuse_after_collect.py", cycles = 40_000_000, timeout = 240 }
+gc_zero_on_reuse = { file = "hw/gc/gc_zero_on_reuse.py", cycles = 40_000_000, timeout = 240 }
+gc_cycle_self = { file = "hw/gc/gc_cycle_self.py", cycles = 40_000_000, timeout = 240 }
+gc_cycle_mutual = { file = "hw/gc/gc_cycle_mutual.py", cycles = 40_000_000, timeout = 240 }
+gc_root_spill = { file = "hw/gc/gc_root_spill.py", cycles = 40_000_000, timeout = 240 }
+gc_root_caller_rf = { file = "hw/gc/gc_root_caller_rf.py", cycles = 40_000_000, timeout = 240 }
+gc_ltt_churn = { file = "hw/gc/gc_ltt_churn.py", cycles = 40_000_000, timeout = 240 }
+gc_unpack_ex = { file = "hw/gc/gc_unpack_ex.py", cycles = 40_000_000, timeout = 240 }
+gc_stracc_partition = { file = "hw/gc/gc_stracc_partition.py", cycles = 40_000_000, timeout = 240 }
+gc_call_churn = { file = "hw/gc/gc_call_churn.py", cycles = 40_000_000, timeout = 240 }
+gc_range_churn = { file = "hw/gc/gc_range_churn.py", cycles = 40_000_000, timeout = 240 }
+gc_bind_churn = { file = "hw/gc/gc_bind_churn.py", cycles = 40_000_000, timeout = 240 }
+gc_set_update = { file = "hw/gc/gc_set_update.py", cycles = 40_000_000, timeout = 240 }
+gc_exc_churn = { file = "hw/gc/gc_exc_churn.py", cycles = 40_000_000, timeout = 240 }
+gc_stale_saved_rs2 = { file = "hw/gc/gc_stale_saved_rs2.py", cycles = 40_000_000, timeout = 240 }
+gc_root_iterators = { file = "hw/gc/gc_root_iterators.py", cycles = 40_000_000, timeout = 240 }
+gc_root_exception = { file = "hw/gc/gc_root_exception.py", cycles = 40_000_000, timeout = 240 }
+gc_suspended_next = { file = "hw/gc/gc_suspended_next.py", cycles = 40_000_000, timeout = 240 }
+gc_static_to_dynamic = { file = "hw/gc/gc_static_to_dynamic.py", cycles = 40_000_000, timeout = 240 }
+gc_precision = { file = "hw/gc/gc_precision.py", cycles = 40_000_000, timeout = 240 }
+gc_boot_reset = { file = "hw/gc/gc_boot_reset.py", cycles = 40_000_000, timeout = 240 }
+gc_stracc_split = { file = "hw/gc/gc_stracc_split.py", cycles = 40_000_000, timeout = 240 }
+gc_str_replace_expand = { file = "hw/gc/gc_str_replace_expand.py", cycles = 40_000_000, timeout = 240 }
+gc_preload_stale = { file = "hw/gc/gc_preload_stale.py", cycles = 40_000_000, timeout = 240 }
+gc_fragmented_alloc = { file = "hw/gc/gc_fragmented_alloc.py", cycles = 40_000_000, timeout = 240 }
+gc_live_exceeds_heap = { file = "hw/gc/gc_live_exceeds_heap.py", cycles = 40_000_000, timeout = 240 }
+gc_memoryerror_caught = { file = "hw/gc/gc_memoryerror_caught.py", cycles = 40_000_000, timeout = 240 }
+gc_len_varkw = { file = "hw/gc/gc_len_varkw.py", cycles = 40_000_000, timeout = 240 }
+gc_call_kw_varargs = { file = "hw/gc/gc_call_kw_varargs.py", cycles = 40_000_000, timeout = 240 }
+gc_call_varargs = { file = "hw/gc/gc_call_varargs.py", cycles = 40_000_000, timeout = 240 }
+gc_memoryerror_again = { file = "hw/gc/gc_memoryerror_again.py", cycles = 40_000_000, timeout = 240 }
+gc_protocol_body_call = { file = "hw/gc/gc_protocol_body_call.py", cycles = 40_000_000, timeout = 240 }
+gc_memoryerror_recover = { file = "hw/gc/gc_memoryerror_recover.py", cycles = 40_000_000, timeout = 240 }
+gc_alias_identity_key = { file = "hw/gc/gc_alias_identity_key.py", cycles = 40_000_000, timeout = 240 }
+gc_overwrite_bindings = { file = "hw/gc/gc_overwrite_bindings.py", cycles = 40_000_000, timeout = 240 }
+gc_mutant_43 = { file = "hw/gc/gc_mutant_43.py", cycles = 40_000_000, timeout = 240 }
+gc_mutant_36 = { file = "hw/gc/gc_mutant_36.py", cycles = 40_000_000, timeout = 240 }
+gc_wide_live_list = { file = "hw/gc/gc_wide_live_list.py", cycles = 40_000_000, timeout = 240 }
+gc_verify_closures = { file = "hw/gc/gc_verify_closures.py", cycles = 40_000_000, timeout = 240 }
+gc_root_heap_iter = { file = "hw/gc/gc_root_heap_iter.py", cycles = 40_000_000, timeout = 240 }
+gc_fuzz_11 = { file = "hw/gc/gc_fuzz_11.py", cycles = 40_000_000, timeout = 240 }
+gc_fuzz_13 = { file = "hw/gc/gc_fuzz_13.py", cycles = 40_000_000, timeout = 240 }
+gc_iter_short = { file = "hw/gc/gc_iter_short.py", cycles = 40_000_000, timeout = 240 }
+gc_bulk_churn = { file = "hw/gc/gc_bulk_churn.py", cycles = 40_000_000, timeout = 240 }
+gc_root_closure = { file = "hw/gc/gc_root_closure.py", cycles = 40_000_000, timeout = 240 }
+gc_steady_list = { file = "hw/gc/gc_steady_list.py", cycles = 40_000_000, timeout = 240 }
+gc_steady_dict = { file = "hw/gc/gc_steady_dict.py", cycles = 40_000_000, timeout = 240 }
+gc_steady_set = { file = "hw/gc/gc_steady_set.py", cycles = 40_000_000, timeout = 240 }
+gc_steady_str = { file = "hw/gc/gc_steady_str.py", cycles = 40_000_000, timeout = 240 }
+gc_steady_exc = { file = "hw/gc/gc_steady_exc.py", cycles = 40_000_000, timeout = 240 }
+gc_steady_closure = { file = "hw/gc/gc_steady_closure.py", cycles = 40_000_000, timeout = 240 }
+gc_bench_full = { file = "hw/gc/gc_bench_full.py", cycles = 40_000_000, timeout = 240 }
+gc_bench_deep = { file = "hw/gc/gc_bench_deep.py", cycles = 40_000_000, timeout = 240 }
+gc_bench_wide = { file = "hw/gc/gc_bench_wide.py", cycles = 40_000_000, timeout = 240 }
+gc_deep_live_chain = { file = "hw/gc/gc_deep_live_chain.py", cycles = 40_000_000, timeout = 240 }
+gc_leak_check = { file = "hw/gc/gc_leak_check.py", cycles = 40_000_000, timeout = 240 }
+gc_bench_churn = { file = "hw/gc/gc_bench_churn.py", cycles = 40_000_000, timeout = 240 }

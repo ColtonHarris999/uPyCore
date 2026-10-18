@@ -1,0 +1,7 @@
+defaults 6 12 10
+varargs 1 6 30
+kwargs 3 11
+fib 610
+global 6
+closure 10 0
+closure2 5

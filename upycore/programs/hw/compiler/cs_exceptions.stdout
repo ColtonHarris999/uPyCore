@@ -1,0 +1,6 @@
+div 3 -1
+finally 32
+ret fin 2
+reraise 7
+call try 102
+tuple except 21

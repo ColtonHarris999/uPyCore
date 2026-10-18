@@ -2,6 +2,8 @@
 #
 #   make test          build mpy-cross if needed, verilate, run the hardware suite
 #   make test-hw       the hardware suite on its own
+#   make test-hw-<area> one area, then the same area compiled with uPy2
+#   make test-host     host unit tests and the uPy2 byte compare
 #   make test-compiler compile the suite with the uPy2 compiler and run it
 #   make regen-goldens  rewrite suite goldens from the unix oracle
 #   make run RUN=path  run one MicroPython program
@@ -20,8 +22,14 @@ DOCKER_IMAGE ?= upycore-sim:local
 
 ORACLE := build/oracle/src/ports/unix/build-upycore/micropython
 
+# Areas of upycore/programs/hw_tests.toml that boot on the device. `compiler`
+# stays out of this list: those programs are disabled until the on-device
+# compiler can run them, and `test-compiler` is the uPy2 run of the suite.
+HW_AREAS := smoke alu control calls containers strings exceptions objects \
+	builtins modules integ variables memory gc
+
 .PHONY: test sim fw run oracle oracle-header oracle-variant oracle-smoke mpy-cross \
-	docker-build docker-test test-hw test-compiler regen-goldens check-goldens \
+	docker-build docker-test test-hw test-host test-compiler regen-goldens check-goldens \
 	synth synth-gates clean
 
 $(MPY_CROSS):
@@ -52,6 +60,18 @@ test-hw: $(MPY_CROSS)
 	$(PYTHON) $(BUILD_PY) sim
 	$(PYTHON) upycore/tools/hw_tests.py
 
+# One area, on its own. CI runs these in parallel. The uPy2 pass reuses the
+# simulator just built. Disabled programs in the area are skipped.
+test-hw-%: $(MPY_CROSS)
+	$(PYTHON) $(BUILD_PY) sim
+	$(PYTHON) upycore/tools/hw_tests.py --area $*
+	$(PYTHON) upycore/tools/hw_tests.py --area $* --compiler mpyc
+
+test-host: $(MPY_CROSS)
+	$(PYTHON) upycore/tests/test_mpy_periph_model.py
+	$(PYTHON) upycore/tests/test_hw_manifest.py
+	$(PYTHON) upycore/tools/compiler_suite.py
+
 test-compiler: $(MPY_CROSS)
 	$(PYTHON) upycore/tools/compiler_suite.py --nstate
 	$(PYTHON) $(BUILD_PY) sim
@@ -80,6 +100,10 @@ docker-build:
 
 docker-test: docker-build
 	docker run --rm -v "$(CURDIR):/work" -w /work $(DOCKER_IMAGE) make test
+
+# `make docker-test-hw-alu` and `make docker-test-host`. CI uses these.
+docker-test-%: docker-build
+	docker run --rm -v "$(CURDIR):/work" -w /work $(DOCKER_IMAGE) make test-$*
 
 # Yosys + yosys-slang (OSS CAD Suite). SYNTH_TOP=mpy_core limits the run.
 # synth elaborates every top; synth-gates maps the logic tops (not full mem/gc).

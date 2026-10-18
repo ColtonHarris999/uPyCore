@@ -21,6 +21,11 @@ Usage::
     python3 upycore/tools/hw_tests.py --regen          # rewrite goldens
     python3 upycore/tools/hw_tests.py --check-goldens  # oracle must match goldens
     python3 upycore/tools/hw_tests.py --compiler mpyc  # same suite, uPy2 compiler
+
+A test with ``disabled`` set is part of the manifest and keeps its golden,
+but the device run and the uPy2 byte compare skip it. Compiler programs
+ported from pycore use that until the on-device compiler can run them.
+``--include-disabled`` runs them anyway.
 """
 
 from __future__ import annotations
@@ -93,6 +98,8 @@ class Test:
     # The unix port has no filesystem imports. These goldens are the
     # frozen-module result and are not rewritten from the oracle.
     oracle: bool = True
+    # Kept in the manifest, not booted. The string says why.
+    disabled: str | None = None
 
     @property
     def source(self) -> Path:
@@ -148,6 +155,12 @@ def areas_of(tests: list[Test]) -> list[str]:
         if t.area not in out:
             out.append(t.area)
     return out
+
+
+def for_device(tests: list[Test]) -> list[Test]:
+    """Tests the simulator boots. Disabled entries stay in the manifest."""
+
+    return [t for t in tests if not t.disabled]
 
 
 def select(tests: list[Test], areas: list[str], names: list[str]) -> list[Test]:
@@ -373,6 +386,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--check-goldens", action="store_true", help="fail if the oracle disagrees with the goldens")
     ap.add_argument("--compiler", choices=("mpy-cross", "mpyc"), default="mpy-cross",
                     help="compiler for the test program and its frozen modules")
+    ap.add_argument("--include-disabled", action="store_true",
+                    help="boot tests marked disabled (the device run skips them otherwise)")
     args = ap.parse_args(argv)
 
     tests = load_manifest()
@@ -384,12 +399,30 @@ def main(argv: list[str] | None = None) -> int:
     if args.list:
         for t in picked:
             mark = "  (xfail)" if t.xfail else ""
-            print(f"{t.area:<12} {t.name:<20} {t.file}{mark}")
+            if t.disabled:
+                mark = f"  (disabled: {t.disabled})"
+            print(f"{t.area:<12} {t.name:<24} {t.file}{mark}")
         print(f"{len(picked)} test(s)")
         return 0
     if not picked:
         print("hw_tests: nothing selected", file=sys.stderr)
         return 1
+
+    if not (args.regen or args.check_goldens or args.include_disabled):
+        skipped = [t for t in picked if t.disabled]
+        picked = for_device(picked)
+        if skipped and not picked:
+            print(
+                f"hw_tests: {len(skipped)} disabled test(s) selected; "
+                "pass --include-disabled to boot them",
+                file=sys.stderr,
+            )
+            return 0
+        if skipped:
+            print(f"hw_tests: skipping {len(skipped)} disabled test(s)", flush=True)
+        if not picked:
+            print("hw_tests: nothing selected", file=sys.stderr)
+            return 1
 
     if args.regen:
         return regen(picked)
