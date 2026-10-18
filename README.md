@@ -38,7 +38,9 @@ once from `mpy-cross` bytecode and once from the vendored uPy2 compiler
 plus a byte compare of the two compilers.
 `make regen-goldens` rewrites the goldens after `make oracle`. An `xfail`
 entry is a known mismatch: the run is expected to fail, and a pass fails
-the suite so the marker is removed with the fix.
+the suite so the marker is removed with the fix. The `compiler` area calls
+`compile`, `exec`, and `eval` on the hart. Those programs take minutes
+each; `make test-hw-compiler` runs that area on its own.
 
 ```bash
 python3 upycore/tools/hw_tests.py --list

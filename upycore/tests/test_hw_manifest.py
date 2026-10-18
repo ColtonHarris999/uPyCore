@@ -50,14 +50,26 @@ class ManifestTest(unittest.TestCase):
         picked = hw_tests.select(tests, [], ["use_*"])
         self.assertEqual(sorted(t.name for t in picked), ["use_helper", "use_pkg", "use_rel"])
 
-    def test_disabled_tests_stay_in_the_manifest_and_off_the_device(self) -> None:
+    def test_area_matches_the_program_directory(self) -> None:
+        for t in hw_tests.load_manifest():
+            self.assertEqual(Path(t.file).parts[1], t.area, t.name)
+
+    def test_compiler_area_is_enabled_with_a_long_budget(self) -> None:
         tests = hw_tests.load_manifest()
-        disabled = [t for t in tests if t.disabled]
-        self.assertTrue(disabled)
-        self.assertTrue(all(t.area == "compiler" for t in disabled))
+        compiler = [t for t in tests if t.area == "compiler"]
+        self.assertGreater(len(compiler), 10)
+        self.assertTrue(all(not t.disabled for t in compiler))
+        self.assertTrue(all(t.cycles >= 1_000_000_000 for t in compiler))
+        self.assertTrue(all(t.timeout >= 1800 for t in compiler))
         booted = {t.name for t in hw_tests.for_device(tests)}
-        self.assertTrue(disabled)
-        self.assertTrue(all(t.name not in booted for t in disabled))
+        self.assertTrue(all(t.name in booted for t in compiler))
+
+    def test_disabled_entries_stay_off_the_device(self) -> None:
+        sample = hw_tests.Test(
+            name="x", area="compiler", file="hw/compiler/compile_eval_expr.py",
+            disabled="later",
+        )
+        self.assertEqual(hw_tests.for_device([sample]), [])
 
     def test_compare_ignores_addresses_only(self) -> None:
         detail = hw_tests.compare_streams(

@@ -91,6 +91,13 @@ class HostCompilerTest(unittest.TestCase):
             stages.stage_end()
         self.assertEqual(got, ref)
 
+    def test_oversized_float_key_is_binary32_infinity(self) -> None:
+        _load_stages()
+        from mpyc.parsetree import _f32bits
+
+        self.assertEqual(_f32bits(1e39) & 0xFFFFFFFF, 0x7F800000)
+        self.assertEqual(_f32bits(-1e39) & 0xFFFFFFFF, 0xFF800000)
+
     def test_float_key_is_binary32(self) -> None:
         pkg = prepare.prepare()
         text = (pkg / "parsetree.py").read_text(encoding="utf-8")

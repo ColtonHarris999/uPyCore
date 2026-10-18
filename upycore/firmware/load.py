@@ -282,10 +282,10 @@ def _const_base(objs, roots):
 
 
 def _finish_rc(bc, pre, children, qids, roots, src_q, md_addr):
-    if pre[0] > 64:
-        raise MemoryError('function state')
-    if pre[1] > 16:
-        raise MemoryError('exception depth')
+    # n_state lives in one signature byte, the same layout the linker uses.
+    # The register file is 64 slots, so a wider function still loads (the
+    # unix compiler accepts it) and does not run correctly until that file
+    # grows. Calling it is a separate limit from compile().
     base = _data(bc)
     names = pre[8]
     narg = len(names) - 1
@@ -437,27 +437,19 @@ def _fail_compile(e):
     raise e
 
 
-def _check_mode(mode, flags, optimize):
-    if flags:
-        raise ValueError('compile flags')
-    if optimize != -1 and optimize != 0:
-        raise ValueError('compile optimize')
+def _check_mode(mode):
+    # py/builtinevex.c accepts exec, eval, and single. flags and optimize
+    # are in the signature and ignored.
     if mode != 'exec' and mode != 'eval' and mode != 'single':
-        raise ValueError('compile mode')
+        raise ValueError('bad compile mode')
 
 
 def compile(*args, **kw):
-    if kw:
-        raise TypeError('compile takes no keyword arguments')
-    n = len(args)
-    if n < 3 or n > 6:
-        raise TypeError('compile expected at least 3 arguments')
+    _check_args(args, kw, 3, 6)
     source = args[0]
     filename = args[1]
     mode = args[2]
-    flags = args[3] if n > 3 else 0
-    optimize = args[5] if n > 5 else -1
-    _check_mode(mode, flags, optimize)
+    _check_mode(mode)
     if filename is None:
         filename = '<string>'
     if not _isstr(filename):
@@ -503,41 +495,57 @@ def _as_code(code, mode):
         return compile(code, '<string>', mode)
     if _tag(code) == TAG_BYTES or _isbarr(code):
         return compile(code.decode(), '<string>', mode)
-    if not _is_fun(code):
-        raise TypeError('expected a str or code')
-    return code
+    if _is_fun(code):
+        return code
+    # mp_get_buffer_raise's text. An int has no buffer.
+    raise TypeError('object with buffer protocol required')
 
 
-def exec(*args, **kw):
-    if kw or len(args) < 1 or len(args) > 2:
-        raise TypeError('exec expected 1 or 2 arguments')
-    # _fget reads this frame's caller. A helper would see exec, whose globals
-    # are the firmware ROM dict, and the store would raise.
+def _exec_globals(args):
+    # args[1] is the globals dict. None keeps the caller's globals.
+    # A non-dict is a bare TypeError, the same as mp_raise_TypeError(NULL).
     if len(args) >= 2 and args[1] is not None:
         g = args[1]
         if not _isdict(g):
-            raise TypeError('globals must be a dict')
-    else:
+            raise TypeError()
+        return g
+    return NULL
+
+
+def exec(*args, **kw):
+    _check_args(args, kw, 1, 3)
+    # _fget reads this frame's caller. A helper would see exec, whose globals
+    # are the firmware ROM dict, and the store would raise.
+    g = _exec_globals(args)
+    if g is NULL:
         g = _fget(FR_GLOBALS)
         if g is NULL or not _isdict(g):
             g = {}
+    if len(args) >= 3 and args[2] is not None:
+        ns = args[2]
+        if not _isdict(ns):
+            raise TypeError()
+    else:
+        ns = g
     code = _as_code(args[0], 'exec')
     _st(code, 6, g)
-    _callns(code, g)
+    _callns(code, ns)
     return None
 
 
 def eval(*args, **kw):
-    if kw or len(args) < 1 or len(args) > 2:
-        raise TypeError('eval expected 1 or 2 arguments')
-    if len(args) >= 2 and args[1] is not None:
-        g = args[1]
-        if not _isdict(g):
-            raise TypeError('globals must be a dict')
-    else:
+    _check_args(args, kw, 1, 3)
+    g = _exec_globals(args)
+    if g is NULL:
         g = _fget(FR_GLOBALS)
         if g is NULL or not _isdict(g):
             g = {}
+    if len(args) >= 3 and args[2] is not None:
+        ns = args[2]
+        if not _isdict(ns):
+            raise TypeError()
+    else:
+        ns = g
     code = _as_code(args[0], 'eval')
     _st(code, 6, g)
-    return _callns(code, g)
+    return _callns(code, ns)

@@ -26,7 +26,12 @@ def _f32bits(value):
         return f32bits(value)
     except NameError:
         import struct
-        return struct.unpack("<I", struct.pack("<f", float(value)))[0]
+        x = float(value)
+        try:
+            packed = struct.pack("<f", x)
+        except OverflowError:
+            packed = struct.pack("<f", float("inf") if x > 0.0 else float("-inf"))
+        return struct.unpack("<I", packed)[0]
 '''
 
 _FLOAT_MARK = "def float_repr(value):"

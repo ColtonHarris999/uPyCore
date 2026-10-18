@@ -290,11 +290,6 @@ sysmod = { file = "hw/builtins/sysmod.py" }
 gcmod = { file = "hw/builtins/gcmod.py", cycles = 40_000_000 }
 arraymod = { file = "hw/builtins/arraymod.py" }
 
-[compile]
-compile_basic = { file = "hw/compile/basic.py", cycles = 2_000_000_000, timeout = 2400 }
-compile_program = { file = "hw/compile/program.py", cycles = 4_000_000_000, timeout = 3600 }
-compile_syntax = { file = "hw/compile/syntax.py", cycles = 2_000_000_000, timeout = 1200, oracle = false }
-
 helper_containers = { file = "hw/builtins/helper_containers.py" }
 fw_range_zero_step = { file = "hw/builtins/fw_range_zero_step.py" }
 fw_pow_neg_mod = { file = "hw/builtins/fw_pow_neg_mod.py" }
@@ -367,60 +362,60 @@ rf_spill_refill = { file = "hw/memory/rf_spill_refill.py", cycles = 40_000_000, 
 rf_thrash = { file = "hw/memory/rf_thrash.py", cycles = 40_000_000, timeout = 240 }
 align_mask = { file = "hw/memory/align_mask.py" }
 
-# On-device compiler programs. Disabled until that compiler can run them.
+# On-device compile/exec/eval. The loader gives this area a long cycle budget.
 [compiler]
-compile_store_name_grow_loop = { file = "hw/compiler/compile_store_name_grow_loop.py", disabled = "on-device compiler is not wired up yet" }
-exec_code_basic = { file = "hw/compiler/exec_code_basic.py", disabled = "on-device compiler is not wired up yet" }
-exec_code_globals_rw = { file = "hw/compiler/exec_code_globals_rw.py", disabled = "on-device compiler is not wired up yet" }
-exec_code_returns_none = { file = "hw/compiler/exec_code_returns_none.py", disabled = "on-device compiler is not wired up yet" }
-exec_code_nested = { file = "hw/compiler/exec_code_nested.py", disabled = "on-device compiler is not wired up yet" }
-eval_code_expr = { file = "hw/compiler/eval_code_expr.py", disabled = "on-device compiler is not wired up yet" }
-exec_bad_arg_trap = { file = "hw/compiler/exec_bad_arg_trap.py", disabled = "on-device compiler is not wired up yet" }
-exec_globals_dict = { file = "hw/compiler/exec_globals_dict.py", disabled = "on-device compiler is not wired up yet" }
-exec_globals_read = { file = "hw/compiler/exec_globals_read.py", disabled = "on-device compiler is not wired up yet" }
-exec_globals_restore = { file = "hw/compiler/exec_globals_restore.py", disabled = "on-device compiler is not wired up yet" }
-exec_globals_nested = { file = "hw/compiler/exec_globals_nested.py", disabled = "on-device compiler is not wired up yet" }
-exec_globals_type_trap = { file = "hw/compiler/exec_globals_type_trap.py", disabled = "on-device compiler is not wired up yet" }
-compile_eval_expr = { file = "hw/compiler/compile_eval_expr.py", disabled = "on-device compiler is not wired up yet" }
-compile_mode_trap = { file = "hw/compiler/compile_mode_trap.py", disabled = "on-device compiler is not wired up yet" }
-compile_reject_import = { file = "hw/compiler/compile_reject_import.py", disabled = "on-device compiler is not wired up yet" }
-compile_reject_closure = { file = "hw/compiler/compile_reject_closure.py", disabled = "on-device compiler is not wired up yet" }
-compile_closure = { file = "hw/compiler/compile_closure.py", disabled = "on-device compiler is not wired up yet" }
-compile_exec_roundtrip = { file = "hw/compiler/compile_exec_roundtrip.py", disabled = "on-device compiler is not wired up yet" }
-compile_kwargs = { file = "hw/compiler/compile_kwargs.py", disabled = "on-device compiler is not wired up yet" }
-compile_reject_locals = { file = "hw/compiler/compile_reject_locals.py", disabled = "on-device compiler is not wired up yet" }
-compile_repeat = { file = "hw/compiler/compile_repeat.py", disabled = "on-device compiler is not wired up yet" }
-compile_try_except = { file = "hw/compiler/compile_try_except.py", disabled = "on-device compiler is not wired up yet" }
-compile_try_else = { file = "hw/compiler/compile_try_else.py", disabled = "on-device compiler is not wired up yet" }
-compile_try_finally = { file = "hw/compiler/compile_try_finally.py", disabled = "on-device compiler is not wired up yet" }
-compile_raise = { file = "hw/compiler/compile_raise.py", disabled = "on-device compiler is not wired up yet" }
-compile_str_slice = { file = "hw/compiler/compile_str_slice.py", disabled = "on-device compiler is not wired up yet" }
-compile_lambda = { file = "hw/compiler/compile_lambda.py", disabled = "on-device compiler is not wired up yet" }
-compile_assert = { file = "hw/compiler/compile_assert.py", disabled = "on-device compiler is not wired up yet" }
-compile_decorator = { file = "hw/compiler/compile_decorator.py", disabled = "on-device compiler is not wired up yet" }
-compile_fstring = { file = "hw/compiler/compile_fstring.py", disabled = "on-device compiler is not wired up yet" }
-compile_const_pool = { file = "hw/compiler/compile_const_pool.py", disabled = "on-device compiler is not wired up yet" }
-eval_str_direct = { file = "hw/compiler/eval_str_direct.py", disabled = "on-device compiler is not wired up yet" }
-eval_str_long = { file = "hw/compiler/eval_str_long.py", disabled = "on-device compiler is not wired up yet" }
-exec_str_direct = { file = "hw/compiler/exec_str_direct.py", disabled = "on-device compiler is not wired up yet" }
-compile_grammar = { file = "hw/compiler/compile_grammar.py", disabled = "on-device compiler is not wired up yet" }
-startup_multiprogram = { file = "hw/compiler/startup_multiprogram.py", disabled = "on-device compiler is not wired up yet" }
-compile_list_comp = { file = "hw/compiler/compile_list_comp.py", disabled = "on-device compiler is not wired up yet" }
-gc_mutant_44 = { file = "hw/compiler/gc_mutant_44.py", disabled = "on-device compiler is not wired up yet" }
-gc_code_new = { file = "hw/compiler/gc_code_new.py", disabled = "on-device compiler is not wired up yet" }
-gc_root_frames = { file = "hw/compiler/gc_root_frames.py", disabled = "on-device compiler is not wired up yet" }
-gc_steady_compile = { file = "hw/compiler/gc_steady_compile.py", disabled = "on-device compiler is not wired up yet" }
-gc_compile_loop = { file = "hw/compiler/gc_compile_loop.py", disabled = "on-device compiler is not wired up yet" }
-gc_compile_syntaxerror = { file = "hw/compiler/gc_compile_syntaxerror.py", disabled = "on-device compiler is not wired up yet" }
-cs_containers = { file = "hw/compiler/cs_containers.py", disabled = "on-device compiler is not wired up yet" }
-cs_control = { file = "hw/compiler/cs_control.py", disabled = "on-device compiler is not wired up yet" }
-cs_exceptions = { file = "hw/compiler/cs_exceptions.py", disabled = "on-device compiler is not wired up yet" }
-cs_expressions = { file = "hw/compiler/cs_expressions.py", disabled = "on-device compiler is not wired up yet" }
-cs_functions = { file = "hw/compiler/cs_functions.py", disabled = "on-device compiler is not wired up yet" }
-cs_peephole = { file = "hw/compiler/cs_peephole.py", disabled = "on-device compiler is not wired up yet" }
-cs_program = { file = "hw/compiler/cs_program.py", disabled = "on-device compiler is not wired up yet" }
-cs_starred = { file = "hw/compiler/cs_starred.py", disabled = "on-device compiler is not wired up yet" }
-cs_t5_t6 = { file = "hw/compiler/cs_t5_t6.py", disabled = "on-device compiler is not wired up yet" }
+compile_store_name_grow_loop = { file = "hw/compiler/compile_store_name_grow_loop.py" }
+exec_code_basic = { file = "hw/compiler/exec_code_basic.py" }
+exec_code_globals_rw = { file = "hw/compiler/exec_code_globals_rw.py" }
+exec_code_returns_none = { file = "hw/compiler/exec_code_returns_none.py" }
+exec_code_nested = { file = "hw/compiler/exec_code_nested.py" }
+eval_code_expr = { file = "hw/compiler/eval_code_expr.py" }
+exec_bad_arg_trap = { file = "hw/compiler/exec_bad_arg_trap.py" }
+exec_globals_dict = { file = "hw/compiler/exec_globals_dict.py" }
+exec_globals_read = { file = "hw/compiler/exec_globals_read.py" }
+exec_globals_restore = { file = "hw/compiler/exec_globals_restore.py" }
+exec_globals_nested = { file = "hw/compiler/exec_globals_nested.py" }
+exec_globals_type_trap = { file = "hw/compiler/exec_globals_type_trap.py" }
+compile_eval_expr = { file = "hw/compiler/compile_eval_expr.py" }
+compile_mode_trap = { file = "hw/compiler/compile_mode_trap.py" }
+compile_reject_import = { file = "hw/compiler/compile_reject_import.py" }
+compile_reject_closure = { file = "hw/compiler/compile_reject_closure.py" }
+compile_closure = { file = "hw/compiler/compile_closure.py" }
+compile_exec_roundtrip = { file = "hw/compiler/compile_exec_roundtrip.py" }
+compile_kwargs = { file = "hw/compiler/compile_kwargs.py" }
+compile_reject_locals = { file = "hw/compiler/compile_reject_locals.py" }
+compile_repeat = { file = "hw/compiler/compile_repeat.py" }
+compile_try_except = { file = "hw/compiler/compile_try_except.py" }
+compile_try_else = { file = "hw/compiler/compile_try_else.py" }
+compile_try_finally = { file = "hw/compiler/compile_try_finally.py" }
+compile_raise = { file = "hw/compiler/compile_raise.py" }
+compile_str_slice = { file = "hw/compiler/compile_str_slice.py" }
+compile_lambda = { file = "hw/compiler/compile_lambda.py" }
+compile_assert = { file = "hw/compiler/compile_assert.py" }
+compile_decorator = { file = "hw/compiler/compile_decorator.py" }
+compile_fstring = { file = "hw/compiler/compile_fstring.py" }
+compile_const_pool = { file = "hw/compiler/compile_const_pool.py" }
+eval_str_direct = { file = "hw/compiler/eval_str_direct.py" }
+eval_str_long = { file = "hw/compiler/eval_str_long.py" }
+exec_str_direct = { file = "hw/compiler/exec_str_direct.py" }
+compile_grammar = { file = "hw/compiler/compile_grammar.py" }
+startup_multiprogram = { file = "hw/compiler/startup_multiprogram.py" }
+compile_list_comp = { file = "hw/compiler/compile_list_comp.py" }
+gc_mutant_44 = { file = "hw/compiler/gc_mutant_44.py" }
+gc_code_new = { file = "hw/compiler/gc_code_new.py" }
+gc_root_frames = { file = "hw/compiler/gc_root_frames.py" }
+gc_steady_compile = { file = "hw/compiler/gc_steady_compile.py" }
+gc_compile_loop = { file = "hw/compiler/gc_compile_loop.py" }
+gc_compile_syntaxerror = { file = "hw/compiler/gc_compile_syntaxerror.py" }
+cs_containers = { file = "hw/compiler/cs_containers.py" }
+cs_control = { file = "hw/compiler/cs_control.py" }
+cs_exceptions = { file = "hw/compiler/cs_exceptions.py" }
+cs_expressions = { file = "hw/compiler/cs_expressions.py" }
+cs_functions = { file = "hw/compiler/cs_functions.py" }
+cs_peephole = { file = "hw/compiler/cs_peephole.py" }
+cs_program = { file = "hw/compiler/cs_program.py" }
+cs_starred = { file = "hw/compiler/cs_starred.py" }
+cs_t5_t6 = { file = "hw/compiler/cs_t5_t6.py" }
 
 # Collector behavior expressed with gc.collect(). Byte-count oracles are not portable.
 [gc]

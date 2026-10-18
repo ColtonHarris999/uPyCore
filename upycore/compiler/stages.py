@@ -95,7 +95,7 @@ def stage_parse(source, filename, mode):
         kind = kind_file
         _is_repl = False
     else:
-        raise ValueError("mode must be 'exec', 'eval' or 'single'")
+        raise ValueError("bad compile mode")
     if type(filename) is bytes:
         _fname = filename
         shown = filename.decode("utf-8")
