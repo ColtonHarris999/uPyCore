@@ -343,6 +343,18 @@ module mpy_core
         S_YLD,
         S_YLD2,
         S_YLD3,
+        S_YF_F,
+        S_YF_V,
+        S_YF_GE,
+        S_YF_GK,
+        S_YF_GT,
+        S_YF_GC,
+        S_YF_GR,
+        S_YF_SI,
+        S_YF_SI2,
+        S_YF_SV,
+        S_YF_SL,
+        S_YF_SA,
         S_GC,
         S_GC_1,
         S_GC_AB,
@@ -651,6 +663,7 @@ module mpy_core
     val_t        xp [0:15];
     logic        noframe;
     val_t        gen;          // FR_GEN: this generator, or VNULL
+    val_t        inj;          // throw deferred into YIELD_FROM; VNONE if none
     logic        fl_img;       // fill from a heap image; keep fbase and fprev
 
     // current instruction
@@ -902,7 +915,7 @@ module mpy_core
             cl_loc <= VNULL; al_soft <= 1'b0;
             fflags <= 8'd0; fcont <= 8'd0; frk <= ABI_RK_HALT;
             fbase <= ABI_FRAME_BASE; fprev <= 32'd0;
-            gen <= VNULL; fl_img <= 1'b0;
+            gen <= VNULL; inj <= VNONE; fl_img <= 1'b0;
             for (int k = 0; k < 8; k++) t[k] <= VNULL;
             xc <= VNULL;
             for (int k = 0; k < 64; k++) rf[k] <= VNULL;
@@ -1258,6 +1271,7 @@ module mpy_core
                     rf[6'(sp - 7'd1)] <= t[7]; ovr <= ABI_OVR_PYOBJ; pc <= op_pc; st <= S_FETCH;
                 end
                 ABI_CONT_BIND: rd(adr(t[7]), S_CB_N);
+                ABI_CONT_YFROM: rd(adr(t[7]) + 4, S_YF_F);
                 default: halt(ABI_HALT_INTERNAL, {24'd0, fcont});
             endcase
             S_WC_TR: begin
@@ -1292,6 +1306,8 @@ module mpy_core
             S_RAISE: if ((rx_from && rx_crk == ABI_RK_CONT && fcont == ABI_CONT_FOR_NEXT) ||
                          (!rx_from && op == 8'h4b))
                          rd(adr(xc) + 4, S_RX_SI);
+                     else if (rx_from && rx_crk == ABI_RK_CONT && fcont == ABI_CONT_YFROM)
+                         rd(adr(xc) + 4, S_YF_SI);
                      else st <= S_RX_TB;
             S_RX_SI: begin is_t <= mv; is_c <= ty_stop; gosub(S_ISSUB, S_RX_SI2); end
             S_RX_SI2: if (is_r) begin sp <= sp - 7'd4; pc <= aux[31:0]; st <= S_FETCH; end
@@ -1517,7 +1533,17 @@ module mpy_core
                 end
                 8'h67: if (gen == VNULL) raise_err(ABI_ERR_GENERATOR, VNULL, VNULL);
                        else st <= S_YLD;
-                8'h68: raise_err(ABI_ERR_GENERATOR, VNULL, VNULL);
+                8'h68: begin
+                    // Pop the send value. The sub-iterator stays. inj is a throw
+                    // this resume deferred; VNONE means use the popped send.
+                    aux <= inj;
+                    fcont <= ABI_CONT_YFROM;
+                    hook(ABI_HOOK_YFROM, ABI_RK_CONT, 8'd3, rf[6'(sp - 7'd2)],
+                         (inj != VNONE) ? VNONE : rf[6'(sp - 7'd1)],
+                         (inj != VNONE) ? inj : VNONE, VNULL);
+                    inj <= VNONE;
+                    sp <= sp - 7'd1;
+                end
                 8'h69: begin
                     sp <= sp - 7'd1;
                     hook(ABI_HOOK_IMPORT_STAR, ABI_RK_DISCARD, 8'd2, rf[6'(sp - 7'd1)],
@@ -2427,11 +2453,14 @@ module mpy_core
                 gen <= t[0];
                 if (b1) rf[6'(sp - 7'd1)] <= t[1];
                 if (t[2] != VNONE) st <= S_GR_OPC;
-                else st <= S_FETCH;
+                else begin inj <= VNONE; st <= S_FETCH; end
             end
             S_GR_OPC: rd({pc[31:2], 2'b00}, S_GR_OPB);
-            S_GR_OPB: if (byte_of(md, pc[1:0]) == 8'h68) st <= S_FETCH;
-                      else begin
+            S_GR_OPB: if (byte_of(md, pc[1:0]) == 8'h68) begin
+                          inj <= t[2];
+                          st <= S_FETCH;
+                      end else begin
+                          inj <= VNONE;
                           t[0] <= t[2];
                           op <= 8'h65;
                           op_pc <= pc;
@@ -2446,6 +2475,51 @@ module mpy_core
             end
             S_YLD2: gosub(S_GSAVE, S_YLD3);
             S_YLD3: st <= S_RET;
+
+            // _yfrom returned (True, value) or (False, value). The sub-iterator
+            // is still the top of stack. A yield suspends on the YIELD_VALUE
+            // path with pc put back on this opcode. The running bit stays set
+            // until that suspend.
+            S_YF_F: begin b0 <= (mv == VTRUE); rd(adr(t[7]) + 8, S_YF_V); end
+            S_YF_V: begin
+                fcont <= 8'd0;
+                if (b0) begin
+                    aux <= VNONE;
+                    push(mv);
+                    pc <= op_pc;
+                    st <= S_YLD;
+                end else begin
+                    rf[6'(sp - 7'd1)] <= mv;
+                    if (aux != VNONE) st <= S_YF_GE;
+                    else st <= S_FETCH;
+                end
+            end
+            // Finished, and this resume injected an exception. GeneratorExit
+            // that the sub-iterator swallowed is raised again.
+            S_YF_GE: if (tg(aux) != ABI_TAG_OBJECT) begin aux <= VNONE; st <= S_FETCH; end
+                     else rd(adr(aux), S_YF_GK);
+            S_YF_GK: if (md == ABI_OB_EXCEPTION) rd(adr(aux) + 4, S_YF_GT);
+                     else if (md == ABI_OB_TYPE) begin
+                         is_t <= aux;
+                         rd(TT + 4 * ABI_T_GENERATOREXIT, S_YF_GC);
+                     end else begin aux <= VNONE; st <= S_FETCH; end
+            S_YF_GT: begin is_t <= mv; rd(TT + 4 * ABI_T_GENERATOREXIT, S_YF_GC); end
+            S_YF_GC: begin is_c <= mv; gosub(S_ISSUB, S_YF_GR); end
+            S_YF_GR: begin
+                if (is_r) begin t[0] <= aux; st <= S_ROBJ; end
+                else st <= S_FETCH;
+                aux <= VNONE;
+            end
+            // StopIteration raised by the sub-iterator's __next__/send/throw
+            // completes the delegation. Its .value replaces the sub-iterator.
+            // Any other exception drops the sub-iterator and propagates.
+            S_YF_SI: begin is_t <= mv; is_c <= ty_stop; fcont <= 8'd0; gosub(S_ISSUB, S_YF_SI2); end
+            S_YF_SI2: if (is_r) rd(adr(xc) + 8, S_YF_SV);
+                      else begin sp <= sp - 7'd1; st <= S_RX_TB; end
+            S_YF_SV: begin t[6] <= mv; rd(adr(mv), S_YF_SL); end
+            S_YF_SL: if (md == 32'd0) begin rf[6'(sp - 7'd1)] <= VNONE; st <= S_FETCH; end
+                     else rd(adr(t[6]) + 4, S_YF_SA);
+            S_YF_SA: begin rf[6'(sp - 7'd1)] <= mv; st <= S_FETCH; end
 
             // =================================================================
             // Subroutines

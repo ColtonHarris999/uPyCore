@@ -520,6 +520,7 @@ CONT = [
     "GETITER",       # __iter__/_getiter returned: an iterator for slot AUX, re-run
     "INIT_ARGS",     # __init__ of an exception subclass returned: must be None, push AUX
     "BIND",          # _bind returned the locals tuple of this frame: store them and start
+    "YFROM",         # _yfrom returned (True, value) to yield, or (False, value) to finish
 ]
 
 # One-shot overrides the REPLACE/GETITER/TRUTH continuations hand to the

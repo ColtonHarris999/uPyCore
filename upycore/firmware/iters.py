@@ -290,3 +290,52 @@ def generator__pend_throw(self, exc):
     prev = _ld(self, 4)
     _st(self, 4, exc)
     return prev
+
+
+def _yfrom(sub, send, throw):
+    # mp_resume. (True, v) the sub-iterator yielded. (False, v) it finished.
+    # StopIteration from a non-generator __next__/send/throw propagates;
+    # the opcode turns that into the finished value. A generator's own
+    # StopIteration is the return value, caught here so GeneratorExit
+    # swallowed by the sub-generator can be raised again.
+    if _kind(sub) == OB_GENERATOR:
+        try:
+            v = _gresume(sub, None if throw is not None else send, throw)
+        except StopIteration as e:
+            return (False, e.value)
+        return (True, v)
+    if throw is None and send is None and _tag(sub) == TAG_ITER:
+        v = _inext(sub)
+        if v is STOP:
+            return (False, None)
+        return (True, v)
+    if throw is None and send is None:
+        try:
+            nxt = sub.__next__
+        except AttributeError:
+            nxt = NULL
+        if nxt is not NULL:
+            return (True, nxt())
+    if throw is None:
+        return (True, sub.send(send))
+    if isinstance(throw, GeneratorExit):
+        try:
+            close = sub.close
+        except AttributeError:
+            close = NULL
+        if close is not NULL:
+            return (False, close())
+    else:
+        try:
+            thrown = sub.throw
+        except AttributeError:
+            thrown = NULL
+        if thrown is not NULL:
+            return (True, thrown(throw))
+    if isinstance(throw, StopIteration):
+        raise RuntimeError("generator raised StopIteration")
+    if _istype(throw):
+        throw = throw()
+    if not isinstance(throw, BaseException):
+        raise TypeError("exceptions must derive from BaseException")
+    raise throw

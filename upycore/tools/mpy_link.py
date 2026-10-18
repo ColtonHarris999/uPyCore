@@ -444,7 +444,7 @@ def place_raw(img: Image, mod: ModuleInfo, rc: RawCode, catalog: Catalog) -> int
     for op in iter_ops(rc, catalog):
         if op.opcode == 0x67:  # YIELD_VALUE: the core executes it
             pass
-        if op.opcode == 0x68:  # YIELD_FROM: accepted; the core still raises
+        if op.opcode == 0x68:  # YIELD_FROM: the core executes it
             pass
     bc = img.emit_bytes(rc.fun_data)
     names = [mod.qstr_ids[i] for i in p.name_qstrs[1:]]

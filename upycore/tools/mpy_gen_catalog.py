@@ -89,7 +89,7 @@ NAMED: list[tuple[str, int, str, int | str]] = [
     ("RAISE_OBJ", BYTE_E + 0x05, "0", 4),
     ("RAISE_FROM", BYTE_E + 0x06, "-1", 4),
     ("YIELD_VALUE", BYTE_E + 0x07, "0", 4),
-    ("YIELD_FROM", BYTE_E + 0x08, "variable", "reject"),
+    ("YIELD_FROM", BYTE_E + 0x08, "variable", 4),
     ("MAKE_FUNCTION", VINT_O + 0x02, "+1", 2),
     ("MAKE_FUNCTION_DEFARGS", VINT_O + 0x03, "-1", 4),
     ("MAKE_CLOSURE", VINT_E + 0x00, "1-n_closed", 4),

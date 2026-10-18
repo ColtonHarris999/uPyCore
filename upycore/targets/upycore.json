@@ -859,7 +859,7 @@
         "opcode": 104,
         "format": "byte",
         "stack_effect": "variable",
-        "phase": "reject",
+        "phase": 4,
         "signed": false,
         "extra_byte": false
       },

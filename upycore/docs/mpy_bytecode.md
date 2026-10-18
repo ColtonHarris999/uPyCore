@@ -53,9 +53,20 @@ shows `POP_TOP` or `STORE_FAST` in that slot, which is what the next
 resume runs. A `yield` whose frame has no generator object still raises
 `NotImplementedError: generators aren't supported`.
 
-`YIELD_FROM` (opcode `0x68`) is still that error. A normal `return`
-becomes `StopIteration(value)` at `send` and `__next__`. An escaping
-`StopIteration` becomes `RuntimeError: generator raised StopIteration`.
+`YIELD_FROM` (opcode `0x68`) pops the send value. The top of stack is
+the sub-iterator. A disassembly of `yield from` is `GET_ITER`,
+`LOAD_CONST_NONE`, `YIELD_FROM`: the sub-iterator, then the send value.
+The opcode calls `_yfrom`, which follows `mp_resume`. A yielded value
+is pushed and the generator suspends with `pc` still on this opcode, so
+the next resume runs it again. A finished value replaces the
+sub-iterator and execution continues. `StopIteration` from the
+sub-iterator completes the delegation; its `.value` is that finished
+value. The outer generator stays marked running while the sub-iterator
+runs.
+
+A normal `return` becomes `StopIteration(value)` at `send` and
+`__next__`. An escaping `StopIteration` becomes
+`RuntimeError: generator raised StopIteration`.
 
 ## Phase 1 check
 
