@@ -31,6 +31,7 @@ truth = { file = "hw/alu/truth.py" }
 divzero = { file = "hw/alu/divzero.py" }
 overflow = { file = "hw/alu/overflow.py" }
 floats = { file = "hw/alu/floats.py", cycles = 30_000_000 }
+floatparse = { file = "hw/alu/floatparse.py", cycles = 30_000_000 }
 complex = { file = "hw/alu/complex.py", cycles = 30_000_000 }
 
 [control]

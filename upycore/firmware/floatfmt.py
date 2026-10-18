@@ -1,6 +1,9 @@
 # Binary32 float formatting and parsing (py/formatfloat.c, py/parsenum.c,
 # APPROX). Powers of five are the binary32 values of 5**n, so decimal_exp
 # matches the host model that was checked against the oracle's repr.
+# The positive table runs through the last finite power (5**55). The
+# negative table covers the decimal exponents a binary32 value can have,
+# not only the ten powers that divide exactly.
 from ._abi import *
 
 _MM = const(429496728)
@@ -14,11 +17,19 @@ _POW5 = (
     1765840846, 1785773506, 1805022873, 1824265280, 1844123984, 1863512018,
     1882696646, 1902483128, 1922006579, 1941134784, 1960850735, 1980506430,
     1999579533, 2019226608, 2039011446, 2058030740, 2077610553, 2097521507,
-    2116488252,
+    2116488252, 2136002379,
 )
 _POW5N = (
     1045220557, 1025758986, 1006834287, 986822423, 967296428, 948320189,
-    928432021, 908840055, 889811039, 870049535,
+    928432021, 908840055, 889811039, 870049535, 850390015, 831306956,
+    811675155, 791946460, 772808061, 753309077, 733509546, 714314479,
+    694951498, 675079432, 655826336, 636602625, 616656282, 597343765,
+    578262664, 558240262, 538866898, 519931830, 499831544, 480395872,
+    461491891, 441430303, 421930828, 402975805, 383036718, 363471909,
+    344464618, 324650973, 305019262, 285958449, 266273256, 246573037,
+    227457418, 207903761, 188133389, 168961649, 149542683, 129700476,
+    110471267, 91190226, 71274459, 51986403, 32846596, 12855504,
+    2571101, 514220, 102844, 20569, 4114, 823,
 )
 _LOG10_2 = 0.3010299956639812
 
@@ -120,6 +131,8 @@ def _ff_parse(s):
                 i += 1
             else:
                 eneg = False
+        elif c == 95:
+            continue
         else:
             break
     if st == 2 and eneg:
@@ -293,8 +306,10 @@ def _format_float(f, fmt, prec, sign):
             if iv is STOP:
                 iv = 0
         mant = (mant * iv) & (_U32 - 1)
-        out, e2 = _fmt_mantissa(mant, cap, prefix, ndig, max_exp_zeros, extra_zeros, dec, e, mode_g, mode_f, mode_e)
-        e = e2
+        # e is the value's decimal exponent. _fmt_mantissa may fold it into
+        # the digit string for 'g' and return that display exponent. The
+        # next wider attempt still needs the original e.
+        out, _shown = _fmt_mantissa(mant, cap, prefix, ndig, max_exp_zeros, extra_zeros, dec, e, mode_g, mode_f, mode_e)
         check = _ff_parse(out)
         diff = check - f
         best_diff = diff
@@ -312,7 +327,7 @@ def _format_float(f, fmt, prec, sign):
                 mant += err
             else:
                 mant -= err
-            out, e2 = _fmt_mantissa(mant, cap, prefix, ndig, max_exp_zeros, extra_zeros, dec, e, mode_g, mode_f, mode_e)
+            out, _shown = _fmt_mantissa(mant, cap, prefix, ndig, max_exp_zeros, extra_zeros, dec, e, mode_g, mode_f, mode_e)
             check = _ff_parse(out)
             diff = check - f
             if diff == 0.0:
@@ -331,7 +346,7 @@ def _format_float(f, fmt, prec, sign):
                     retry = True
                     break
                 if mant != best:
-                    out, e2 = _fmt_mantissa(best, cap, prefix, ndig, max_exp_zeros, extra_zeros, dec, e, mode_g, mode_f, mode_e)
+                    out, _shown = _fmt_mantissa(best, cap, prefix, ndig, max_exp_zeros, extra_zeros, dec, e, mode_g, mode_f, mode_e)
                 return _cat(sign, out)
         if not retry:
             return _cat(sign, out)
@@ -360,11 +375,13 @@ def _float_repr(f):
 
 def _complex_repr(c):
     re, im = _cparts(c)
-    if re != 0.0 or _pay(re) < 0:
-        rr = _format_float(re, 'g', 6, '')
-        ir = _format_float(im, 'g', 6, '+')
+    # Same rule as complex_print: -0.0 counts as a zero real, so -0j stays
+    # "-0j" rather than "(-0-0j)". Precision 99 is MP_FLOAT_REPR_PREC.
+    if re != 0.0:
+        rr = _format_float(re, 'g', 99, '')
+        ir = _format_float(im, 'g', 99, '+')
         return _s('(', rr, ir, 'j)')
-    return _cat(_format_float(im, 'g', 6, ''), 'j')
+    return _cat(_format_float(im, 'g', 99, ''), 'j')
 
 
 def _skip_ws(s, i):
@@ -372,6 +389,24 @@ def _skip_ws(s, i):
     while i < n and _byte(s, i) <= 32:
         i += 1
     return i
+
+
+def _fold(c):
+    if 65 <= c <= 90:
+        return c + 32
+    return c
+
+
+def _has_prefix(s, word):
+    n = _slen(word)
+    if _slen(s) < n:
+        return False
+    i = 0
+    while i < n:
+        if _fold(_byte(s, i)) != _byte(word, i):
+            return False
+        i += 1
+    return True
 
 
 def _parse_float(s):
@@ -384,37 +419,56 @@ def _parse_float(s):
         neg = _byte(s, i) == 45
         i += 1
     rest = _substr(s, i, n, TAG_STR)
-    low = rest
-    # inf / nan, then the digit parser. Trailing space is allowed.
-    if _slen(rest) >= 3 and (_streq(_substr(rest, 0, 3, TAG_STR), 'inf') or _streq(_substr(rest, 0, 3, TAG_STR), 'nan') or _streq(_substr(rest, 0, 3, TAG_STR), 'INF') or _streq(_substr(rest, 0, 3, TAG_STR), 'NaN')):
-        word = _substr(rest, 0, 3, TAG_STR)
-        j = 3
-        if _slen(rest) >= 8 and (_streq(_substr(rest, 0, 8, TAG_STR), 'infinity') or _streq(_substr(rest, 0, 8, TAG_STR), 'INFINITY')):
-            j = 8
-            word = 'inf'
-        k = _skip_ws(rest, j)
-        if k != _slen(rest):
+    # inf / nan, case-insensitive, then the digit parser. Trailing space is allowed.
+    if _has_prefix(rest, 'inf'):
+        j = 8 if _has_prefix(rest, 'infinity') else 3
+        if _skip_ws(rest, j) != _slen(rest):
             raise ValueError('invalid syntax for number')
-        if _byte(word, 0) == 110 or _byte(word, 0) == 78:
-            return _frombits(2143289344)
         return _frombits(4286578688 if neg else 2139095040)
+    if _has_prefix(rest, 'nan'):
+        if _skip_ws(rest, 3) != _slen(rest):
+            raise ValueError('invalid syntax for number')
+        return _frombits(4290772992 if neg else 2143289344)
     v = _ff_parse(_substr(s, i, n, TAG_STR))
-    # _ff_parse stops at the first bad byte; reject if leftover is not space.
-    # Re-scan digits the same way and require only trailing space.
+    # _ff_parse stops at the first bad byte. Require one number and only
+    # trailing space: a single dot, an exponent digit when e is present,
+    # and underscores ignored the way parsenum.c ignores them.
     j = i
     saw = False
     exp = False
-    if j < n and (_byte(s, j) == 43 or _byte(s, j) == 45):
-        j += 1
+    exp_digit = False
+    dot = False
     while j < n:
         c = _byte(s, j)
-        if 48 <= c <= 57 or c == 46 or c == 101 or c == 69 or c == 43 or c == 45:
-            if 48 <= c <= 57 or c == 46:
+        if c == 95:
+            j += 1
+            continue
+        if not exp and (c == 101 or c == 69):
+            exp = True
+            j += 1
+            continue
+        if c == 43 or c == 45:
+            if exp and not exp_digit:
+                p = j - 1
+                while p >= i and _byte(s, p) == 95:
+                    p -= 1
+                if p >= i and (_byte(s, p) == 101 or _byte(s, p) == 69):
+                    j += 1
+                    continue
+            break
+        if 48 <= c <= 57:
+            if exp:
+                exp_digit = True
+            else:
                 saw = True
             j += 1
-        else:
-            break
-    if not saw or _skip_ws(s, j) != n:
+            continue
+        if c == 46 and not exp and not dot:
+            dot = True
+            j += 1
+            continue
+        break
+    if not saw or (exp and not exp_digit) or _skip_ws(s, j) != n:
         raise ValueError('invalid syntax for number')
     if neg:
         return -v
@@ -479,9 +533,15 @@ def _parse_complex(s):
     if j > i and (_byte(s, j - 1) == 106 or _byte(s, j - 1) == 74):
         j -= 1
         body = _substr(s, i, j, TAG_STR)
+        # "j" is 1j. A sign alone is that sign on 1.
+        blen = _slen(body)
+        if blen == 0:
+            return _complex(0.0, 1.0)
+        if blen == 1 and (_byte(body, 0) == 43 or _byte(body, 0) == 45):
+            return _complex(0.0, -1.0 if _byte(body, 0) == 45 else 1.0)
         # real+imag without the trailing j. Split at the last + or - that
         # isn't the leading sign and isn't the exponent sign.
-        k = _slen(body) - 1
+        k = blen - 1
         split = -1
         while k > 0:
             c = _byte(body, k)
