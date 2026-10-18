@@ -73,36 +73,94 @@ reserve and installs the callee. A return fills the caller. A suspended
 generator cannot stay in the reserve: the caller keeps running and will
 reuse the slot.
 
-The generator object is the suspended copy. While the body runs it
-occupies one ordinary frame, the same as any other call. On `yield`,
+The suspended copy is a frame block hung off a fixed generator object,
+the same shape as a list header and its item array. While the body runs
+it occupies one ordinary frame, the same as any other call. On `yield`,
 return, or an exception that escapes the body, the hart writes the
-registers back to the object and fills the caller. Nested calls the
-body makes use the existing spill. They do not write the heap object.
-The heap copy is updated only when the generator stops being the live
-frame.
+registers back to the frame block and fills the caller. Nested calls
+the body makes use the existing spill. They do not write the block.
+The block is updated only when the generator stops being the live frame.
 
 Creation reuses the binder. `S_CF_CHK` stops raising on the flag. The
 call still spills the caller, installs a frame, and runs `S_BF` / `S_BS`
 / `S_CELLS`. Argument errors propagate and no object is returned. After
 the cells exist, `pc` is the first opcode and `sp` is 0. Allocate the
-object, copy the frame into it, fill the caller, and deliver the
-object. Do not fetch.
+header and the frame block, copy the frame into the block, fill the
+caller, and deliver the header. Do not fetch.
+
+### Where it sits in the tables
+
+Object kinds, type ids, and the frame header are one table each.
+`upycore/tools/mpy_abi.py` is the source. Regenerate with
+`python3 upycore/tools/mpy_abi.py --sv`. Do not hand-edit
+`upycore/rtl/mpy_abi.svh` or `upycore/firmware/_abi.py`. Kind numbers
+are internal. Call sites use the names. Rewrite the lists below in
+full so the groups stay dense. `NOTIMPL` stays the last object kind.
+`NotImplementedType` stays the last type before the exceptions.
+
+`OB_ITEROBJ` is kind 20 today, declared as a stray `const` in
+`upycore/firmware/base.py`, past `NOTIMPL`. That is the same hole this
+change has to close. Move it into `OB` and delete the stray const.
+
+```python
+OB = {
+    # Instances.
+    "INSTANCE": 1,
+    "TYPE": 2,
+    "EXCEPTION": 3,
+    # Code. A generator is the suspended frame of a function.
+    "CELL": 4,
+    "FUNCTION": 5,
+    "GENERATOR": 6,
+    "BOUND_METHOD": 7,
+    "BUILTIN": 8,
+    # Namespaces and descriptors.
+    "MODULE": 9,
+    "SUPER": 10,
+    "PROPERTY": 11,
+    "STATICMETHOD": 12,
+    "CLASSMETHOD": 13,
+    # Views and the iterator objects firmware builds
+    # (enumerate, zip, map, filter, reversed, str iterators).
+    "SLICE": 14,
+    "DICT_VIEW": 15,
+    "ITEROBJ": 16,
+    # Singletons. A new kind is inserted above this pair.
+    "ELLIPSIS": 17,
+    "NOTIMPL": 18,
+}
+```
+
+`OBJ_WORDS["GENERATOR"]` is 6, the same kind of fixed header every
+other object has. The frame image is a second allocation, the way a
+list's items are a second allocation. It is not a tail hanging off
+the header.
+
+The non-exception prefix of `TYPES` becomes:
+
+```text
+object, type,
+NoneType, bool, int, float, complex,
+str, bytes, bytearray,
+tuple, list, dict, set, frozenset,
+range, slice,
+iterator, enumerate, zip, map, filter, reversed,
+function, generator, bound_method, builtin_function,
+closure, cell,
+module,
+property, staticmethod, classmethod,
+dict_view, super,
+ellipsis, NotImplementedType
+```
+
+The exception names stay in their current order after that.
+`generator` stays out of `PUBLIC_TYPES`. Nothing constructs it except
+a call of a generator function. `FIRST_EXC_TYPE` follows the new
+index. `_gresume` goes in `NATIVES` immediately after `_inext`.
+`_yfrom` goes in `HOOKS` immediately after `_getiter`. The four oracle
+messages go in `MSGS` immediately after `STOP_ITER`.
 
 ### Object layout
-
-`OB_GENERATOR` is kind 20, the next free kind after `NOTIMPL`. Edit
-`upycore/tools/mpy_abi.py` and regenerate with
-`python3 upycore/tools/mpy_abi.py --sv`. Do not hand-edit
-`upycore/rtl/mpy_abi.svh` or `upycore/firmware/_abi.py`. Do not add an
-`OBJ_WORDS` entry. The size depends on the function.
-
-The type id `generator` already exists (`T_GENERATOR`). It stays out of
-`PUBLIC_TYPES`. Nothing constructs it except a call of a generator
-function.
-
-Word count is `8 + 16 + n_state + 3 * n_exc_stack`. The linker already
-refuses `n_state > 64` and `n_exc_stack > 16`, so the copy fits the
-register file and the exception arrays.
 
 | Word | Contents |
 | --- | --- |
@@ -111,40 +169,44 @@ register file and the exception arrays.
 | 2 | the function object |
 | 3 | status integer. Bit 0 set means running. Clear otherwise |
 | 4 | `pend_exc`. `None`, or the exception `pend_throw` stored |
-| 5–7 | zero |
-| 8–23 | frame-header image, 16 words. Words 0–13 match today's `hdr_word`. Word 14 is this object. Word 15 is zero |
-| 24 … | `n_state` tagged values, the register file |
-| after that | exception records, three words each, capacity `n_exc_stack` |
+| 5 | the frame image, a `CONT` pointer |
 
-Header word 14 of every frame, which today is padding inside the 16-word
-reservation (`(16 + n_state + 3 * n_exc) << 2` bytes, state at byte 64),
-holds the generator object, or `VNULL` for an ordinary frame. Extend the
-spill and fill loops from 14 words to 15. Initialize the register at
-reset and in `S_CF_SW`. Word 15 stays padding so the state does not move.
+The image is `FRAME_HDR_WORDS + n_state + FRAME_EXC_WORDS * n_exc_stack`
+tagged words. The linker already refuses `n_state > 64` and
+`n_exc_stack > 16`, so the copy fits the register file and the
+exception arrays. Its header is the `FR` record. Its state words are
+the register file. Its exception records are the three-word blocks the
+spill already writes.
+
+`FR["GEN"]` is header word 14. It holds this generator object, or
+`VNULL` on an ordinary frame. `FRAME_HDR_WORDS` stays 16, so the state
+still starts at byte 64. Word 15 stays unused. Extend spill and fill
+through `FR_GEN`. Initialize the register at reset and in `S_CF_SW`.
 
 Saved `pc == 0` means finished. Flash code is never at address 0. Set
 that word when the body returns or an exception escapes. A later resume
 does not run the body again.
 
-Counts and saved program counters are `INT` or `CONTROL`. Python values
-keep their tags. `mpy_gc.sv` follows every pointer-tagged word of the
-allocation (`G_OBJ`). That is what keeps locals alive. Do not switch the
-scanner to the fixed field list in `upycore/docs/mpy_gc.md` as part of
-this work. Do add a generator row to that doc that describes this
-object, so the next person does not "complete" the doc by dropping the
-tail.
+Counts and saved program counters in the image are `INT` or `CONTROL`.
+Python values keep their tags. The collector follows word 5 the way it
+follows a list's item pointer, then the tagged words of that block.
+Add the generator row to the kind table in `upycore/docs/mpy_gc.md`
+with these six fields, and name the frame block next to the list item
+array. A local lives because it is a tagged word in that block.
 
 `pend_throw` is firmware over words 3 and 4 (`_ld` / `_st`). If word 3
 bit 0 is set, raise `ValueError: generator already executing`. Otherwise
 store the new exception and return the previous word 4. Match
 `gen_instance_pend_throw`: a finished generator still accepts the store.
 The next resume notices `pc == 0` first and raises `StopIteration`
-without injecting the pending exception.
+without injecting the pending exception. The repr case in
+`upycore/firmware/fmt.py` sits with the `OB_FUNCTION` case.
 
 ### Resume
 
-One native, `_gen_resume(gen, send, throw)`, implements
-`mp_obj_gen_resume`. Firmware methods on the type are thin wrappers.
+One native, `_gresume(gen, send, throw)`, implements
+`mp_obj_gen_resume`. It sits next to `_inext`. Firmware methods on the
+type are thin wrappers.
 The linker binds `generator____next__`, `generator__send`,
 `generator__throw`, and `generator__close` the same way it binds
 `enumerate____next__`.
@@ -167,7 +229,7 @@ Check order, which is the oracle's order:
    yield stores `None` in that slot after the yielded value has been
    captured. The next resume overwrites it.
 6. Set the running bit. Spill the caller, install the image as the live
-   frame, set header word 14 to the object.
+   frame, set `FR_GEN` to the object.
 7. If there is a throw value and the byte at `pc` is not `YIELD_FROM`,
    raise it inside the generator as `RAISE_OBJ` would, including
    `mp_make_raise_obj` (a type is instantiated, a non-exception becomes
@@ -196,7 +258,7 @@ distinguishes the three outcomes:
 ```python
 def generator__close(self):
     try:
-        _gen_resume(self, None, GeneratorExit())
+        _gresume(self, None, GeneratorExit())
     except GeneratorExit:
         return None
     except StopIteration:
@@ -232,7 +294,7 @@ usual shape is the delegated iterable, then `None`, then `YIELD_FROM`.
 `YIELD_FROM` pops the send value. The top of stack is the sub-iterator.
 It calls the same rules as `mp_resume`:
 
-- A generator object goes through `_gen_resume`.
+- A generator object goes through `_gresume`.
 - Anything else with `send is None` and no throw uses the iterator
   protocol (`__next__`, or the native `ITER` step the `for` loop uses).
 - A non-`None` send with no throw loads `send` and calls it.
@@ -243,8 +305,8 @@ It calls the same rules as `mp_resume`:
   `StopIteration` in that position becomes
   `RuntimeError: generator raised StopIteration`.
 
-Implement that policy once, in firmware (`_yield_from_step`), and call
-it from the opcode the way `GET_ITER` calls its hook. The generator
+Implement that policy once, as the `_yfrom` hook next to `_getiter`,
+and call it from the opcode the way `GET_ITER` calls `_getiter`. The generator
 frame is spilled to the reserve for the call and filled on return. The
 heap image is written only if this opcode then yields.
 
@@ -348,10 +410,11 @@ inside `gen_yield` rather than as a second program.
 | File | Change |
 | --- | --- |
 | `upycore/rtl/mpy_core.sv` | Stop rejecting the flag. Snapshot, resume, `YIELD_VALUE`, then `YIELD_FROM`. Finish on return and on an escaping exception |
-| `upycore/tools/mpy_abi.py` | Kind, messages, native id, appended qstrs |
-| `upycore/firmware/iters.py` | `__next__`, `send`, `throw`, `close`, `_yield_from_step` |
+| `upycore/tools/mpy_abi.py` | Rewritten `OB` and the `TYPES` prefix, `FR_GEN`, `_gresume`, `_yfrom`, messages |
+| `upycore/firmware/iters.py` | `__next__`, `send`, `throw`, `close`, the `_yfrom` hook. `OB_ITEROBJ` comes from the ABI |
 | `upycore/firmware/fmt.py` | repr |
-| `upycore/firmware/errors.py` | The old `ERR_GENERATOR` text remains the guard for a `yield` in a frame whose header word 14 is `VNULL` |
+| `upycore/firmware/base.py` | Delete the stray `OB_ITEROBJ` const |
+| `upycore/firmware/errors.py` | The old `ERR_GENERATOR` text remains the guard for a `yield` in a frame whose `FR_GEN` is `VNULL` |
 | `upycore/targets/upycore.json` | Phase of the two opcodes, via `upycore/tools/mpy_gen_catalog.py` |
 | `upycore/docs/mpy_bytecode.md`, `upycore/docs/mpy_gc.md` | The object and the two opcodes, after the code matches |
 | `upycore/programs/hw/generators/` | The programs and goldens |
@@ -397,11 +460,12 @@ exit is green.
 - **Snapshot before the frame is reused.** An escaping exception that
   pops the frame without setting `pc` to 0 leaves a generator that can
   be resumed into a dead stack.
-- **GC of the tail.** Header integers tagged as pointers, or a scanner
-  that walks only known fixed sizes, collects a local that the next
-  `yield` still needs. `gen_gc` is the test.
-- **Spill of header word 14.** Forgetting to fill it on an ordinary
-  call drops a nested generator's identity, or leaves `X` on a normal
-  frame so a stray path thinks it is a generator.
+- **The frame block.** The header is six words. Locals live in the
+  block word 5 points at. A scanner that follows the header and stops,
+  or a pointer tagged as an integer, collects a local the next `yield`
+  still needs. `gen_gc` is the test.
+- **Spill of `FR_GEN`.** Forgetting to fill it on an ordinary call
+  drops a nested generator's identity, or leaves a stale value on a
+  normal frame so a stray path thinks it is a generator.
 - **`mpyc`.** Landing the programs without `mpyc = false` turns
   `make test` red for a compiler that is supposed to reject `yield`.
