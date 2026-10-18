@@ -8,8 +8,10 @@
 // deep expression walks fewer links. A stack that has been popping spills
 // 16, which is cheap to pull back. The block header holds the previous
 // chunk address and the count. The slot just after the copied values
-// becomes a CONTROL/RF_LINK back to the block. A call snapshots the
-// resident ring into the caller's frame and a return copies it back.
+// becomes a CONTROL/RF_LINK back to the block. A few hot locals sit in a
+// side cache so LOAD_FAST and STORE_FAST do not touch SRAM on every use.
+// A call snapshots the resident ring into the caller's frame and a return
+// copies it back. The local cache is flushed into the frame first.
 //
 // The core handles the common shapes of every opcode itself: small and
 // long-long ints and binary32 floats, str/qstr equality and hashing, list,
@@ -44,7 +46,11 @@ module mpy_core
     // Values copied by one spill while the stack has only been growing.
     // 16 is the shrink chunk. +GROW= and +ADAPT= override these in sim.
     parameter int GROW_CHUNK = 36,
-    parameter int GROW_ADAPT = 1
+    parameter int GROW_ADAPT = 1,
+    // Hot locals kept beside the operand stack. 0 disables the cache.
+    // +LC= +LCWB= +LCDM= override these in simulation.
+    parameter int LC_N = 8,
+    parameter int LC_WB = 1
 ) (
     input  logic        clk_i,
     input  logic        rst_n_i,
@@ -594,6 +600,8 @@ module mpy_core
         S_LDEL,
         S_LDREF,
         S_LDF,
+        S_LC_EV,
+        S_LC_FL,
         S_DDREF,
         S_STREF,
         S_BF_P,
@@ -672,6 +680,26 @@ module mpy_core
     logic [6:0]  sp_d;
     logic [5:0]  cfg_grow;
     logic        cfg_adapt;
+    // Hot-local cache. Ages are 7 for the newest line. A dirty line is
+    // ahead of its SRAM word until the frame is spilled.
+    logic        lc_v [0:7];
+    logic        lc_dirty [0:7];
+    logic [2:0]  lc_age [0:7];
+    logic [7:0]  lc_ix [0:7];
+    val_t        lc_d [0:7];
+    logic [3:0]  cfg_lc_n;
+    logic        cfg_lc_wb, cfg_lc_dm;
+    logic [2:0]  lc_ev_way;
+    logic [7:0]  lc_ev_idx;
+    val_t        lc_ev_val;
+    logic        lc_ev_dirty;
+    logic [3:0]  lc_fi;
+    logic        lc_dirty_any;
+    always_comb begin
+        lc_dirty_any = 1'b0;
+        for (int k = 0; k < 8; k++)
+            if (k < cfg_lc_n && lc_dirty[k]) lc_dirty_any = 1'b1;
+    end
     logic [31:0] exc_base, stack_base;
     logic [15:0] srd_g, srd_off, stk_from;
     logic [31:0] srd_addr;
@@ -800,22 +828,104 @@ module mpy_core
     function automatic logic [31:0] loc_ptr(input logic [7:0] idx);
         loc_ptr = fbase + 32'h40 + {22'd0, idx, 2'b00};
     endfunction
+    function automatic logic lc_is_hit(input logic [7:0] idx);
+        lc_is_hit = 1'b0;
+        for (int k = 0; k < 8; k++)
+            if (k < cfg_lc_n && lc_v[k] && lc_ix[k] == idx) lc_is_hit = 1'b1;
+    endfunction
+    function automatic logic [2:0] lc_hit_way(input logic [7:0] idx);
+        lc_hit_way = 3'd0;
+        for (int k = 0; k < 8; k++)
+            if (k < cfg_lc_n && lc_v[k] && lc_ix[k] == idx) lc_hit_way = k[2:0];
+    endfunction
+    function automatic logic [2:0] lc_pick(input logic [7:0] idx);
+        logic [2:0] best;
+        logic any_inv;
+        best = 3'd0;
+        any_inv = 1'b0;
+        if (cfg_lc_dm && cfg_lc_n != 4'd0) begin
+            lc_pick = idx[2:0] & (cfg_lc_n[2:0] - 3'd1);
+        end else begin
+            for (int k = 0; k < 8; k++) begin
+                if (k < cfg_lc_n && !lc_v[k] && !any_inv) begin
+                    best = k[2:0];
+                    any_inv = 1'b1;
+                end
+            end
+            if (!any_inv) begin
+                for (int k = 1; k < 8; k++)
+                    if (k < cfg_lc_n && lc_age[k] < lc_age[best]) best = k[2:0];
+            end
+            lc_pick = best;
+        end
+    endfunction
+    task automatic lc_note(input logic [2:0] w);
+        for (int k = 0; k < 8; k++) begin
+            if (k[2:0] == w) lc_age[k] <= 3'd7;
+            else if (lc_age[k] > lc_age[w]) lc_age[k] <= lc_age[k] - 3'd1;
+        end
+    endtask
+    task automatic lc_inval();
+        for (int k = 0; k < 8; k++) begin
+            lc_v[k] <= 1'b0;
+            lc_dirty[k] <= 1'b0;
+        end
+    endtask
+    // Install idx=v. A dirty victim is written first and S_LC_EV finishes
+    // the install. set_st is clear when the caller already started a memory op.
+    task automatic lc_fill(input logic [7:0] idx, input val_t v, input logic dirty,
+                           input logic set_st, input state_e done);
+        logic [2:0] w;
+        logic hit;
+        hit = lc_is_hit(idx);
+        w = hit ? lc_hit_way(idx) : lc_pick(idx);
+        if (cfg_lc_n == 4'd0) begin
+            if (set_st) st <= done;
+        end else if (hit || !lc_v[w] || !lc_dirty[w] || !cfg_lc_wb || lc_ix[w] == idx) begin
+            lc_v[w] <= 1'b1;
+            lc_ix[w] <= idx;
+            lc_d[w] <= v;
+            lc_dirty[w] <= dirty && cfg_lc_wb;
+            lc_note(w);
+            if (set_st) st <= done;
+        end else begin
+            lc_ev_way <= w;
+            lc_ev_idx <= idx;
+            lc_ev_val <= v;
+            lc_ev_dirty <= dirty && cfg_lc_wb;
+            wr(loc_ptr(lc_ix[w]), lc_d[w], S_LC_EV);
+        end
+    endtask
 `ifndef SYNTHESIS
     initial begin
-        int grow_v, adapt_v;
+        int grow_v, adapt_v, lc_n_v, lc_wb_v, lc_dm_v;
         grow_v = GROW_CHUNK;
         adapt_v = GROW_ADAPT;
+        lc_n_v = LC_N;
+        lc_wb_v = LC_WB;
+        lc_dm_v = 0;
         if (!$value$plusargs("GROW=%d", grow_v)) grow_v = GROW_CHUNK;
         if (!$value$plusargs("ADAPT=%d", adapt_v)) adapt_v = GROW_ADAPT;
+        if (!$value$plusargs("LC=%d", lc_n_v)) lc_n_v = LC_N;
+        if (!$value$plusargs("LCWB=%d", lc_wb_v)) lc_wb_v = LC_WB;
+        if (!$value$plusargs("LCDM=%d", lc_dm_v)) lc_dm_v = 0;
         if (grow_v < MPY_RF_CHUNK_MIN) grow_v = MPY_RF_CHUNK_MIN;
         if (grow_v > MPY_RF_CHUNK_MAX) grow_v = MPY_RF_CHUNK_MAX;
+        if (lc_n_v < 0) lc_n_v = 0;
+        if (lc_n_v > 8) lc_n_v = 8;
         cfg_grow = grow_v[5:0];
         cfg_adapt = (adapt_v != 0);
+        cfg_lc_n = lc_n_v[3:0];
+        cfg_lc_wb = (lc_wb_v != 0);
+        cfg_lc_dm = (lc_dm_v != 0);
     end
 `else
     initial begin
         cfg_grow = GROW_CHUNK[5:0];
         cfg_adapt = (GROW_ADAPT != 0);
+        cfg_lc_n = LC_N[3:0];
+        cfg_lc_wb = (LC_WB != 0);
+        cfg_lc_dm = 1'b0;
     end
 `endif
 
@@ -987,6 +1097,12 @@ module mpy_core
             for (int k = 0; k < 8; k++) t[k] <= VNULL;
             xc <= VNULL;
             for (int k = 0; k < 64; k++) rf[k] <= VNULL;
+            for (int k = 0; k < 8; k++) begin
+                lc_v[k] <= 1'b0;
+                lc_dirty[k] <= 1'b0;
+                lc_age[k] <= 3'd0;
+            end
+            lc_fi <= 4'd0;
         end else begin
             m_req <= 1'b0;
             gc_alloc_req <= 1'b0;
@@ -1180,6 +1296,7 @@ module mpy_core
                 fun <= c_ismod ? VNULL : ab[0];
                 aux <= VNULL; aux2 <= VNULL; aux3 <= VNULL;
                 for (int k = 0; k < 64; k++) rf[k] <= VNULL;
+                lc_inval();
                 st <= S_LCLR;
             end
             S_LCLR: if (i0 == nloc) rd(c_rc + 4 * ABI_RC_OP_START, S_CF_PC);
@@ -1252,7 +1369,8 @@ module mpy_core
             S_CNS: begin c_rc <= md; c_defs <= VNULL; c_clos <= VNULL; st <= S_CF_SIG; end
 
             // ---------------- frames ----------------
-            S_SPILL: begin sw_i <= 32'd0; st <= S_SP_H; end
+            S_SPILL: if (lc_dirty_any) begin lc_fi <= 4'd0; st <= S_LC_FL; end
+                     else begin sw_i <= 32'd0; st <= S_SP_H; end
             S_SP_H: if (sw_i == 32'd16) begin sw_i <= 32'd0; sw_k <= 2'd0; st <= S_SP_X; end
                     else begin wr(fbase + (sw_i << 2), hdr_word(sw_i), S_SP_H); sw_i <= sw_i + 32'd1; end
             S_SP_X: if (sw_i == xsp) begin sw_i <= 32'd0; st <= S_SP_R; end
@@ -1272,7 +1390,7 @@ module mpy_core
                         sw_i <= sw_i + 32'd1;
                     end
 
-            S_FILL: begin fl_i <= 32'd0; fbase <= fl_base; rd(fl_base, S_FL_H); end
+            S_FILL: begin fl_i <= 32'd0; fbase <= fl_base; lc_inval(); rd(fl_base, S_FL_H); end
             S_FL_H: begin
                 case (fl_i[3:0])
                     4'd0: fprev <= md;
@@ -1463,12 +1581,51 @@ module mpy_core
 
             // ---------------- execute ----------------
             S_EXEC: begin
-                if (op >= 8'h70 && op < 8'hb0) begin push(vint(32'(op) - 32'h80)); st <= S_FETCH; end
-                else if (op >= 8'hb0 && op < 8'hc0) begin
-                    i0 <= op - 8'hb0; rd(loc_ptr(op - 8'hb0), S_LDF);
-                end else if (op >= 8'hc0 && op < 8'hd0) begin
-                    wr(loc_ptr(op - 8'hc0), rf[`SX(6'(sp - 7'd1))], S_FETCH); sp <= sp - 7'd1;
-                end else if (op >= 8'hd0 && op < 8'hd7) begin
+                if ((op >= 8'hb0 && op < 8'hc0) || op == 8'h24) begin
+                    vi = (op == 8'h24) ? arg[7:0] : (op - 8'hb0);
+                    if (lc_is_hit(vi)) begin
+                        vs0 = {4'd0, lc_hit_way(vi)};
+                        if (lc_d[vs0[2:0]] == VNULL && !(fflags & FF_FW)) raise_msg(ABI_MSG_LOCAL_UNBOUND);
+                        else begin push(lc_d[vs0[2:0]]); lc_note(vs0[2:0]); st <= S_FETCH; end
+                    end else begin
+                        i0 <= vi; rd(loc_ptr(vi), S_LDF);
+                    end
+                end else if ((op >= 8'hc0 && op < 8'hd0) || op == 8'h26) begin
+                    vi = (op == 8'h26) ? arg[7:0] : (op - 8'hc0);
+                    if (cfg_lc_n != 4'd0 && cfg_lc_wb) begin
+                        sp <= sp - 7'd1;
+                        lc_fill(vi, rf[`SX(6'(sp - 7'd1))], 1'b1, 1'b1, S_FETCH);
+                    end else begin
+                        wr(loc_ptr(vi), rf[`SX(6'(sp - 7'd1))], S_FETCH);
+                        sp <= sp - 7'd1;
+                        if (cfg_lc_n != 4'd0) lc_fill(vi, rf[`SX(6'(sp - 7'd1))], 1'b0, 1'b0, S_FETCH);
+                    end
+                end else if (op == 8'h25 || op == 8'h27 || op == 8'h29 || op == 8'h28) begin
+                    vi = arg[7:0];
+                    if (lc_is_hit(vi)) begin
+                        vs0 = {4'd0, lc_hit_way(vi)};
+                        lc_note(vs0[2:0]);
+                        if (lc_d[vs0[2:0]] == VNULL && (op == 8'h28 || !(fflags & FF_FW)))
+                            raise_msg(ABI_MSG_LOCAL_UNBOUND);
+                        else if (op == 8'h25) rd(adr(lc_d[vs0[2:0]]) + 8, S_DEREF);
+                        else if (op == 8'h27) begin
+                            wr(adr(lc_d[vs0[2:0]]) + 8, rf[`SX(6'(sp - 7'd1))], S_FETCH);
+                            sp <= sp - 7'd1;
+                        end else if (op == 8'h29) rd(adr(lc_d[vs0[2:0]]) + 8, S_DELDEREF);
+                        else begin
+                            wr(loc_ptr(vi), VNULL, S_FETCH);
+                            lc_v[vs0[2:0]] <= 1'b0;
+                            lc_dirty[vs0[2:0]] <= 1'b0;
+                        end
+                    end else begin
+                        i0 <= vi;
+                        if (op == 8'h25) rd(loc_ptr(vi), S_LDREF);
+                        else if (op == 8'h27) rd(loc_ptr(vi), S_STREF);
+                        else if (op == 8'h29) rd(loc_ptr(vi), S_DDREF);
+                        else rd(loc_ptr(vi), S_LDEL);
+                    end
+                end else if (op >= 8'h70 && op < 8'hb0) begin push(vint(32'(op) - 32'h80)); st <= S_FETCH; end
+                else if (op >= 8'hd0 && op < 8'hd7) begin
                     n_o <= op - 8'hd0; st <= S_UN;
                 end else if (op >= 8'hd7 && op < 8'hfa) begin
                     n_o <= op - 8'hd7; st <= S_BIN;
@@ -1480,12 +1637,7 @@ module mpy_core
                 8'h51: begin push(VNONE); st <= S_FETCH; end
                 8'h52: begin push(VTRUE); st <= S_FETCH; end
                 8'h53: begin push(VNULL); st <= S_FETCH; end
-                8'h24: begin i0 <= arg[7:0]; rd(loc_ptr(arg[7:0]), S_LDF); end
-                8'h26: begin wr(loc_ptr(arg[7:0]), rf[`SX(6'(sp - 7'd1))], S_FETCH); sp <= sp - 7'd1; end
-                8'h28: begin i0 <= arg[7:0]; rd(loc_ptr(arg[7:0]), S_LDEL); end
-                8'h25: begin i0 <= arg[7:0]; rd(loc_ptr(arg[7:0]), S_LDREF); end
-                8'h27: begin i0 <= arg[7:0]; rd(loc_ptr(arg[7:0]), S_STREF); end
-                8'h29: begin i0 <= arg[7:0]; rd(loc_ptr(arg[7:0]), S_DDREF); end
+                8'h24, 8'h25, 8'h26, 8'h27, 8'h28, 8'h29: halt(ABI_HALT_INTERNAL, 32'h0000_10CA);
                 8'h11, 8'h12, 8'h16, 8'h17, 8'h19, 8'h1a, 8'h13, 8'h14, 8'h18, 8'h15,
                 8'h1b, 8'h1c:
                     rd(qbase + 4 * arg, S_QOP);
@@ -1650,11 +1802,33 @@ module mpy_core
             S_LCS: begin push({ABI_TAG_QSTR, md}); st <= S_FETCH; end
             S_LCO: begin push(mv); st <= S_FETCH; end
             S_LDF: if (mv == VNULL && !(fflags & FF_FW)) raise_msg(ABI_MSG_LOCAL_UNBOUND);
-                   else begin push(mv); st <= S_FETCH; end
+                   else begin push(mv); lc_fill(i0, mv, 1'b0, 1'b1, S_FETCH); end
+            S_LC_EV: begin
+                lc_v[lc_ev_way] <= 1'b1;
+                lc_ix[lc_ev_way] <= lc_ev_idx;
+                lc_d[lc_ev_way] <= lc_ev_val;
+                lc_dirty[lc_ev_way] <= lc_ev_dirty;
+                lc_note(lc_ev_way);
+                st <= S_FETCH;
+            end
+            S_LC_FL: if (lc_fi >= cfg_lc_n) begin
+                    lc_fi <= 4'd0; st <= S_SPILL;
+                end else if (lc_v[lc_fi[2:0]] && lc_dirty[lc_fi[2:0]]) begin
+                    lc_dirty[lc_fi[2:0]] <= 1'b0;
+                    wr(loc_ptr(lc_ix[lc_fi[2:0]]), lc_d[lc_fi[2:0]], S_LC_FL);
+                    lc_fi <= lc_fi + 4'd1;
+                end else lc_fi <= lc_fi + 4'd1;
             S_LDEL: if (mv == VNULL) raise_msg(ABI_MSG_LOCAL_UNBOUND);
                     else wr(loc_ptr(i0), VNULL, S_FETCH);
             S_LDREF: if (mv == VNULL && !(fflags & FF_FW)) raise_msg(ABI_MSG_LOCAL_UNBOUND);
-                     else rd(adr(mv) + 8, S_DEREF);
+                     else begin
+                         rd(adr(mv) + 8, S_DEREF);
+                         if (cfg_lc_n != 4'd0) begin
+                             vs0 = {4'd0, lc_pick(i0)};
+                             if (!lc_v[vs0[2:0]] || !lc_dirty[vs0[2:0]])
+                                 lc_fill(i0, mv, 1'b0, 1'b0, S_DEREF);
+                         end
+                     end
             S_STREF: if (mv == VNULL) raise_msg(ABI_MSG_LOCAL_UNBOUND);
                      else begin wr(adr(mv) + 8, rf[`SX(6'(sp - 7'd1))], S_FETCH); sp <= sp - 7'd1; end
             S_DDREF: if (mv == VNULL) raise_msg(ABI_MSG_LOCAL_UNBOUND);

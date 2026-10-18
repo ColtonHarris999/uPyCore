@@ -13,6 +13,11 @@ is the word at `data_base + 4*i`, and nibble `i` of a side array. Eight
 tags fill one 32-bit word. Lane 0 is bits `[3:0]`. A store that does not
 ask for the tag leaves the nibble as it was.
 
+The eight most recently used locals sit in a side cache next to the
+register file. A hit reads or writes that register instead of SRAM. A
+displaced line is written back, and every dirty line is written back
+when the frame is spilled for a call or a collection.
+
 The register file is a ring of the newest stack values. Logical slot 0 is
 the oldest resident slot; the stack pointer is the count of resident
 slots. Appending past the end of the 64 copies the oldest values into a

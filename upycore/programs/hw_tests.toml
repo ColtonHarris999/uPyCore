@@ -352,6 +352,7 @@ builtins_fallback = { file = "hw/variables/builtins_fallback.py" }
 builtins_shadow = { file = "hw/variables/builtins_shadow.py" }
 builtins_null_bit = { file = "hw/variables/builtins_null_bit.py" }
 load_name_builtin = { file = "hw/variables/load_name_builtin.py" }
+local_hot = { file = "hw/variables/local_hot.py" }
 
 # Deep frames and many locals. Register-file spill counters are not portable.
 [memory]
