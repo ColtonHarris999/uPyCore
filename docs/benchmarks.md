@@ -49,9 +49,8 @@ programs in Figure 6 of Lowther, Jacob, Trevor, and Singer, "Secure Scripting
 with CHERIoT MicroPython", CC '25. That paper reports a geometric-mean
 overhead of 48% on a CHERIoT-Ibex (RV32EMCB) soft core clocked at 30 MHz,
 with the interpreter built for a 64 KiB heap. `bm_fft` waits until a complex
-run is worth timing. `bm_nqueens` and `core_yield_from` are in the integer
-set and do not run yet: the hart raises `NotImplementedError: generators
-aren't supported` at `YIELD_VALUE` / `YIELD_FROM`.
+run is worth timing. `bm_nqueens` and `core_yield_from` run; both matched
+CPython after generator support landed.
 
 Scores are comparable only at the same `bm_params` entry. `norm` is only
 roughly the work. `bm_fannkuch` sets `norm = n` while the permutation work
@@ -104,8 +103,9 @@ result) are `sim_cycles - cycles`.
 | `bm_wordcount` | (27, 10) | niter = 2 | pass | 1,614,874 | 2 | 1.2385 | `(2, 20, 16)` |
 | `core_str` | (27, 10) | niter = 2 | pass | 13,189,246 | 2 | 0.1516 | matches CPython |
 | `core_qstr` | (27, 10) | 400 loops | pass | 703,103 | 4 | 5.689 | result `None` |
-| `bm_nqueens` | (27, 10) | (1, 5) | crash |  |  |  | generators |
-| `core_yield_from` | (84, 10) | 2000 | crash |  |  |  | generators |
+| `bm_nqueens` | (27, 10) | 5 queens | pass | 28,994,791 | 100 | 3.449 | result `10` |
+| `bm_nqueens` | (100, 100) | 6 queens | pass | 189,937,870 | 1000 | 5.265 | result `4` |
+| `core_yield_from` | (84, 10) | 2000 | pass | 36,732,891 | 20 | 0.5445 | `1999000` |
 | `bm_pidigits` | (27, 10) | 20 digits | skip |  |  |  | script prints `SKIP` |
 | `core_locals` | (27, 10) | niter = 2 | does not link |  |  |  | 141 state slots, frame holds 64 |
 
@@ -169,7 +169,26 @@ The two are close. String split, join, replace, `ord`, and `chr` are
 firmware on this hart, so a bytecode datapath does not show up the way it
 does on `core_qstr`.
 
-Do not read the other passing scores against those tables:
+`core_yield_from` at this `(N, M)` is the `N=100` workload: 2000 steps through
+a 10-deep `yield from`, norm 20, result `1999000`. This image took 36,732,891
+cycles (0.544 per MHz). Derived the same way, the PYBv1.0 score 354.50 is
+about 9.48 million cycles at 168 MHz (2.11 per MHz) and the RP2040 score
+211.72 is about 11.8 million cycles at 125 MHz (1.69 per MHz). The hart used
+about 3.9× and 3.1× more cycles than those two figures.
+
+`bm_nqueens` at `N=100 M=100` is one search of 6 queens, norm 1000, result
+`4` (the 5-queen run above is the smaller key, result `10`). This image took
+189,937,870 cycles (5.26 per MHz). Derived: about 37.7 million cycles on the
+PYBv1.0 figure (4459.94 at 168 MHz), 55.3 million on the RP2040 figure
+(2259.78 at 125 MHz), and 67.4 million on the ESP32 figure (2372.87 at 160
+MHz). The hart used about 5.0×, 3.4×, and 2.8× more cycles than those three.
+
+Across the five RP2040 comparisons whose work matches (`core_qstr` 5.0×,
+pystone 1.9×, `core_str` 1.0×, `core_yield_from` 0.32×, `bm_nqueens` 0.29×)
+the geometric mean is 0.99×. The largest single figure is still `core_qstr`
+at 5.0× versus that board, or 15× versus the PYBv1.0 figure.
+
+These passing scores are a different workload from the `N=100` tables:
 
 - `bm_fannkuch` here is n = 3 (result 2). The `N=100` key is n = 6. The
   score of 16.3 per MHz against a published ~0.46 per MHz is the factorial
@@ -213,5 +232,5 @@ make bench
 
 `make bench` is not part of `make test`. Tier B and tier C are not in the
 default run. A truth mismatch, a timeout, or a tick wrap exits nonzero.
-`bm_nqueens`, `core_yield_from`, and `core_locals` exit nonzero today because
-they crash or fail to link; that is the measurement, not a harness failure.
+`core_locals` still fails to link (141 state slots). `bm_pidigits` still
+prints `SKIP`.
