@@ -23,14 +23,14 @@ Usage::
     python3 upycore/tools/hw_tests.py --compiler mpyc  # same suite, uPy2 compiler
 
 A test with ``disabled`` set is part of the manifest and keeps its golden,
-but the device run and the uPy2 byte compare skip it. Compiler programs
-ported from pycore use that until the on-device compiler can run them.
-``--include-disabled`` runs them anyway.
+but the device run and the uPy2 byte compare skip it.
+``--include-disabled`` runs them anyway. The compiler area calls
+``compile``, ``exec``, and ``eval`` on the hart, so those programs use a
+much larger cycle budget than the rest of the suite.
 
-A test with ``mpyc = false`` is still booted from ``mpy-cross``. The uPy2
-compiler does not accept it (generator programs set this, because ``mpyc``
-rejects ``yield``). ``--compiler mpyc`` prints ``SKIP`` and does not build
-the image. ``compiler_suite.py`` leaves the file out of its compare.
+A test with ``mpyc = false`` is still booted from ``mpy-cross``.
+``--compiler mpyc`` prints ``SKIP`` and does not build the image.
+``compiler_suite.py`` leaves the file out of its compare.
 """
 
 from __future__ import annotations
@@ -159,6 +159,12 @@ def load_manifest(path: Path = MANIFEST) -> list[Test]:
             if "modules" in fields:
                 fields["modules"] = tuple(fields["modules"])
             rel = fields.pop("file", f"hw/{area}/{name}.py")
+            if area == "compiler":
+                # A small expression is already past 50e6 cycles. The large
+                # programs need the headroom below; the 20e6 default stops
+                # them during the parse.
+                fields.setdefault("cycles", 4_000_000_000)
+                fields.setdefault("timeout", 3600)
             try:
                 tests.append(Test(name=name, area=area, file=rel, **fields))
             except TypeError as exc:

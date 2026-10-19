@@ -545,18 +545,6 @@ def classmethod____new__(cls, fn):
     return o
 
 
-def eval(*args, **kw):
-    raise NotImplementedError('eval')
-
-
-def exec(*args, **kw):
-    raise NotImplementedError('exec')
-
-
-def compile(*args, **kw):
-    raise NotImplementedError('compile')
-
-
 def open(*args, **kw):
     raise OSError('open')
 

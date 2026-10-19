@@ -47,7 +47,7 @@ MPY_CROSS_FLAGS = ["-msmall-int-bits=31", "-O0"]
 FW_ORDER = [
     "_abi.py", "base.py", "errors.py", "fmt.py", "floatfmt.py", "ops.py",
     "attrs.py", "calls.py", "iters.py", "strs.py", "seqs.py", "dicts.py",
-    "builtins.py", "modules.py", "boot.py",
+    "builtins.py", "modules.py", "boot.py", "load.py",
 ]
 
 RTL = [
@@ -237,6 +237,34 @@ def run_image(image: Path, max_cycles: int = 50_000_000, trace: bool = False,
     return SimResult(stdout, stderr, "NO_RESULT", 0, 0, 0, 0, log)
 
 
+def _cached_mpy(src: Path, source_name: str) -> Path:
+    """Compile a frozen runtime module once. Later images reuse the .mpy."""
+
+    cache = BUILD / "frozen"
+    cache.mkdir(parents=True, exist_ok=True)
+    out = cache / (source_name.replace("/", "_") + ".mpy")
+    if _newer(out, [src, MPY_CROSS]):
+        mpy_cross(src, out, source_name)
+    return out
+
+
+def frozen_runtime_specs() -> list[str]:
+    """array, plus the patched uPy2 compiler, frozen into every image."""
+
+    comp = ROOT / "upycore" / "compiler"
+    if str(comp) not in sys.path:
+        sys.path.insert(0, str(comp))
+    import prepare
+
+    rows = [("array", ROOT / "upycore" / "runtime" / "array.py", False, "array.py")]
+    rows.extend(prepare.module_list(prepare.prepare()))
+    specs = []
+    for dotted, path, is_pkg, source_name in rows:
+        mm = _cached_mpy(path, source_name)
+        specs.append(f"{dotted}={mm}" + (":package" if is_pkg else ""))
+    return specs
+
+
 def build_program(src: Path, work: Path, source_name: str | None = None,
                   modules: dict[str, Path] | None = None,
                   compiler: str = "mpy-cross") -> Path:
@@ -251,7 +279,8 @@ def build_program(src: Path, work: Path, source_name: str | None = None,
     name = source_name or src.name
     main_mpy = work / "main.mpy"
     compile_user(src, main_mpy, name, compiler)
-    specs = []
+    # The compiler is frozen bytecode. It is not compiled by itself.
+    specs = frozen_runtime_specs()
     for mname, mpath in (modules or {}).items():
         mm = work / (mname.replace(".", "_") + ".mpy")
         mod_name = mpath.name if mpath.name != "__init__.py" else f"{mname.replace('.', '/')}/__init__.py"

@@ -60,29 +60,45 @@ class ManifestTest(unittest.TestCase):
         picked = hw_tests.select(tests, [], ["use_*"])
         self.assertEqual(sorted(t.name for t in picked), ["use_helper", "use_pkg", "use_rel"])
 
-    def test_disabled_tests_stay_in_the_manifest_and_off_the_device(self) -> None:
-        tests = hw_tests.load_manifest()
-        disabled = [t for t in tests if t.disabled]
-        self.assertTrue(disabled)
-        self.assertTrue(all(t.area == "compiler" for t in disabled))
-        booted = {t.name for t in hw_tests.for_device(tests)}
-        self.assertTrue(disabled)
-        self.assertTrue(all(t.name not in booted for t in disabled))
+    def test_area_matches_the_program_directory(self) -> None:
+        for t in hw_tests.load_manifest():
+            self.assertEqual(Path(t.file).parts[1], t.area, t.name)
 
-    def test_mpyc_false_boots_on_device_and_leaves_the_compiler_suite(self) -> None:
+    def test_compiler_area_is_enabled_with_a_long_budget(self) -> None:
+        tests = hw_tests.load_manifest()
+        compiler = [t for t in tests if t.area == "compiler"]
+        self.assertGreater(len(compiler), 10)
+        self.assertTrue(all(not t.disabled for t in compiler))
+        self.assertTrue(all(t.cycles >= 1_000_000_000 for t in compiler))
+        self.assertTrue(all(t.timeout >= 1800 for t in compiler))
+        booted = {t.name for t in hw_tests.for_device(tests)}
+        self.assertTrue(all(t.name in booted for t in compiler))
+
+    def test_disabled_entries_stay_off_the_device(self) -> None:
+        sample = hw_tests.Test(
+            name="x", area="compiler", file="hw/compiler/compile_eval_expr.py",
+            disabled="later",
+        )
+        self.assertEqual(hw_tests.for_device([sample]), [])
+
+    def test_generator_programs_are_in_the_byte_compare(self) -> None:
         import compiler_suite
 
         tests = hw_tests.load_manifest()
-        opted = [t for t in tests if not t.mpyc]
         gens = [t for t in tests if t.area == "generators"]
         self.assertTrue(gens)
-        self.assertEqual({t.name for t in opted}, {t.name for t in gens})
-        self.assertFalse(any(t.disabled for t in opted))
-        booted = {t.name for t in hw_tests.for_device(tests)}
-        self.assertTrue(all(t.name in booted for t in opted))
+        self.assertTrue(all(t.mpyc and not t.disabled for t in gens))
         compiled = {name for name, _path in compiler_suite.suite_sources()}
-        for t in opted:
-            self.assertNotIn(t.source.name, compiled)
+        for t in gens:
+            self.assertIn(t.source.name, compiled)
+
+    def test_mpyc_false_stays_on_the_device(self) -> None:
+        sample = hw_tests.Test(
+            name="skip_me", area="generators", file="hw/generators/gen_yield.py",
+            mpyc=False,
+        )
+        self.assertEqual(hw_tests.for_device([sample]), [sample])
+        self.assertFalse(any(not t.mpyc for t in hw_tests.load_manifest()))
 
     def test_compare_ignores_addresses_only(self) -> None:
         detail = hw_tests.compare_streams(

@@ -104,6 +104,14 @@ def _special_attr(obj, name):
         return NULL
     if k == OB_SUPER:
         return _super_attr(_ld(obj, 2), _ld(obj, 3), name)
+    if k == OB_SLICE:
+        if _streq(name, 'start'):
+            return _ld(obj, 2)
+        if _streq(name, 'stop'):
+            return _ld(obj, 3)
+        if _streq(name, 'step'):
+            return _ld(obj, 4)
+        return NULL
     if k == OB_MODULE:
         return NULL
     typ = obj if _istype(obj) else (_ld(obj, 1) if _tag(obj) == TAG_OBJECT else NULL)

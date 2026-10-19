@@ -622,6 +622,7 @@ def link(main: Path, modules: list[tuple[str, Path, bool]], fw: Path, out: Path,
                 v.addr = img.emit_words([
                     (T["INT"], abi.OB["FUNCTION"]), fun_type,
                     (T["INT"], fw_mod.rc_addr[id(v.rc)]), NULL, defaults, kwd, fw_globals,
+                    NULL,  # word 7: root bag copied into nested functions
                 ])
             return (T["OBJECT"], v.addr)
         if isinstance(v, tuple) and len(v) == 2 and v == NULL:
