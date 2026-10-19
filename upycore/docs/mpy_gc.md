@@ -144,6 +144,11 @@ the stack pointer (MicroPython's `fastn` sits at `state[n_state - 1]`):
 - the pending-exception slot
 - the emergency exception object (also forced from `emergency_addr_i`)
 
+A `CONTROL` word whose kind is `RF_LINK` is not a pool pointer. The
+collector reads the packed register chunk it names. Word 0 of that chunk
+holds the value count and the previous-chunk address. The collector marks
+the pointer payloads, then follows that address.
+
 The function object on the frame is what keeps a heap function alive.
 Flash bytecode is not a root.
 

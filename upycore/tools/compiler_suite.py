@@ -128,7 +128,6 @@ def report_nstate() -> int:
     """Compile every mpyc module with mpy-cross and report the widest n_state."""
 
     root = build.ROOT / "vendor" / "upy2" / "mpyc"
-    over = []
     widest = (0, "")
     for path in sorted(root.glob("*.py")):
         with tempfile.TemporaryDirectory() as tmp:
@@ -140,16 +139,10 @@ def report_nstate() -> int:
                 return 1
             n, where = max_n_state(out.read_bytes())
         mark = ""
-        if n > 64:
-            over.append((path.name, n, where))
-            mark = "  OVER"
         if n > widest[0]:
             widest = (n, path.name)
         print(f"NSTATE  {path.name:<20} {n:>3}{mark}")
     print(f"n_state widest: {widest[0]} in {widest[1]}")
-    if over:
-        print(f"{len(over)} compiler module(s) have a function past the 64-entry register file")
-        return 1
     return 0
 
 

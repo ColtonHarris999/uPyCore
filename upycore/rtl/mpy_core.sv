@@ -1,10 +1,17 @@
 // uPyCore execution core: runs MicroPython v1.29.0 bytecode from a linked
 // flash image (upycore/tools/mpy_link.py) against the ABI in mpy_abi.svh.
 //
-// One frame is live in registers: the value stack and locals (rf), the
-// exception-block stack (xh/xv/xf/xp), and the frame header fields. A call
-// spills the caller to its frame record in SRAM and builds the callee's
-// record above it; a return or an unwinding exception refills the caller.
+// One frame is live. Locals sit in the frame record in SRAM (up to 255).
+// The operand stack is the 64-entry register file, used as a ring of the
+// newest values. When it is full, the oldest values are copied to a packed
+// SRAM block. A stack that has only been growing spills a wide block so a
+// deep expression walks fewer links. A stack that has been popping spills
+// 16, which is cheap to pull back. The block header holds the previous
+// chunk address and the count. The slot just after the copied values
+// becomes a CONTROL/RF_LINK back to the block. A few hot locals sit in a
+// side cache so LOAD_FAST and STORE_FAST do not touch SRAM on every use.
+// A call snapshots the resident ring into the caller's frame and a return
+// copies it back. The local cache is flushed into the frame first.
 //
 // The core handles the common shapes of every opcode itself: small and
 // long-long ints and binary32 floats, str/qstr equality and hashing, list,
@@ -35,7 +42,15 @@ module mpy_core
     import mpy_dec::*;
     import mpy_alu_pkg::*;
 #(
-    parameter int RSTK_DEPTH = 16
+    parameter int RSTK_DEPTH = 16,
+    // Values copied by one spill while the stack has only been growing.
+    // 16 is the shrink chunk. +GROW= and +ADAPT= override these in sim.
+    parameter int GROW_CHUNK = 36,
+    parameter int GROW_ADAPT = 1,
+    // Hot locals kept beside the operand stack. 0 disables the cache.
+    // +LC= +LCWB= +LCDM= override these in simulation.
+    parameter int LC_N = 8,
+    parameter int LC_WB = 1
 ) (
     input  logic        clk_i,
     input  logic        rst_n_i,
@@ -237,6 +252,7 @@ module mpy_core
         S_BS1,
         S_BS2,
         S_BSET_R,
+        S_BSET_H,
         S_BT_R,
         S_CALL,
         S_CALL_BF,
@@ -312,6 +328,7 @@ module mpy_core
         S_FW,
         S_GSAVE,
         S_GSAVE1,
+        S_GSAVE1B,
         S_GSAVE2,
         S_GN_AL,
         S_GN_AL2,
@@ -597,6 +614,8 @@ module mpy_core
         S_SN_R,
         S_SPILL,
         S_SP_H,
+        S_SP_L,
+        S_SP_L2,
         S_SP_R,
         S_SP_X,
         S_SSUB,
@@ -629,10 +648,48 @@ module mpy_core
         S_UPS_P,
         S_UPS_V,
         S_UR,
+        S_UR_SLOW,
         S_WB,
         S_WC,
         S_WC_T,
-        S_WC_TR
+        S_WC_TR,
+        S_LCLR,
+        S_LCLR2,
+        S_LDEL,
+        S_LDREF,
+        S_LDF,
+        S_LC_EV,
+        S_LC_FL,
+        S_DDREF,
+        S_STREF,
+        S_BF_P,
+        S_BF_P2,
+        S_BF_KW3,
+        S_CELL_RD,
+        S_CELL_B,
+        S_RF_SPILL,
+        S_RF_SPILL_W,
+        S_RF_RELOAD,
+        S_RF_RELOAD_R,
+        S_RF_RELOAD_G,
+        S_SRD,
+        S_SRD_T0,
+        S_SRD_T1,
+        S_SRD_GOT,
+        S_CC_FUN,
+        S_CC_FUN2,
+        S_CC_SELF,
+        S_CC_SELF2,
+        S_CC_ARG,
+        S_CC_ARG2,
+        S_CC_DONE,
+        S_DROP,
+        S_BL_W,
+        S_TUP_W,
+        S_FL_L,
+        S_FL_L2,
+        S_FL_S,
+        S_FL_S2
     } state_e;
 
     state_e st, wret;
@@ -654,18 +711,68 @@ module mpy_core
 
     // live frame
     logic [31:0] fbase, fprev, rc, pc, op_pc, qbase, cbase;
-    logic [6:0]  sp, nst;
+    logic [6:0]  sp;
+    logic [7:0]  nloc;
+    logic [5:0]  rf_base;
+    logic [15:0] spilled_reals;
+    logic [31:0] spill_hp;
     logic [4:0]  xsp, nexc;
     logic [7:0]  fflags, fcont;
     logic [3:0]  frk;
     val_t glb, loc, fun, aux, aux2, aux3;
     val_t rf [0:63];
     logic [31:0] xh [0:15];
-    logic [6:0]  xv [0:15];
+    logic [15:0] xv [0:15];
     logic        xf [0:15];
     val_t        xp [0:15];
     logic        noframe;
-    val_t        gen;          // FR_GEN: this generator, or VNULL
+    logic        rf_pend;
+    val_t        rf_pend_v;
+    state_e      rf_resume;
+    logic [31:0] spill_addr;
+    logic [5:0]  spill_n, spill_ntag;
+    logic [31:0] spill_words;
+    logic        spill_had_link;
+    logic [31:0] spill_prev;
+    val_t        rld [0:47];
+    // 1 while the last change to sp was a push. Spill and reload do not count.
+    logic        rf_mono, sp_hold, rf_reload_miss;
+    logic [6:0]  sp_d;
+    logic [5:0]  cfg_grow;
+    logic        cfg_adapt;
+    logic        spill_to_img;
+    // Hot-local cache. Ages are 7 for the newest line. A dirty line is
+    // ahead of its SRAM word until the frame is spilled.
+    logic        lc_v [0:7];
+    logic        lc_dirty [0:7];
+    logic [2:0]  lc_age [0:7];
+    logic [7:0]  lc_ix [0:7];
+    val_t        lc_d [0:7];
+    logic [3:0]  cfg_lc_n;
+    logic        cfg_lc_wb, cfg_lc_dm;
+    logic [2:0]  lc_ev_way;
+    logic [7:0]  lc_ev_idx;
+    val_t        lc_ev_val;
+    logic        lc_ev_dirty;
+    logic [3:0]  lc_fi;
+    logic        lc_dirty_any;
+    state_e      lc_fl_ret;
+    always_comb begin
+        lc_dirty_any = 1'b0;
+        for (int k = 0; k < 8; k++)
+            if (k < cfg_lc_n && lc_dirty[k]) lc_dirty_any = 1'b1;
+    end
+    logic [31:0] exc_base, stack_base;
+    logic [15:0] srd_g, srd_off, stk_from;
+    logic [31:0] srd_addr;
+    val_t        srd_v;
+    logic [31:0] srd_p0;
+    logic [7:0]  srd_hops;
+    logic [15:0] drop_left, ur_target;
+    logic        drop_push_en;
+    val_t        drop_push_v, ur_val;
+    state_e      drop_then;
+    val_t        gen;          // this generator, or VNULL
     val_t        inj;          // throw deferred into YIELD_FROM; VNONE if none
     logic        fl_img;       // fill from a heap image; keep fbase and fprev
 
@@ -778,16 +885,124 @@ module mpy_core
 
     // frame geometry
     logic [31:0] ftop;
-    assign ftop = fbase + ((32'd16 + nst + 32'd3 * nexc) << 2);
-`define LI(n) (6'(nst - 7'd1 - 7'(n)))
+    // 17 header words: gen, spill_hp, and the ring metadata sit after the
+    // original 14, and locals begin at byte 0x44.
+    assign ftop = fbase + ((32'd17 + 32'(nloc) + 32'd3 * {27'd0, nexc}) << 2);
+
+    // A function call in an NBA index trips a Verilator bug, so this is a macro.
+    // Logical stack slot -> physical register. Wraps at 64.
+    `define SX(L) (6'(rf_base + 6'(L)))
+    function automatic logic [31:0] loc_ptr(input logic [7:0] idx);
+        loc_ptr = fbase + 32'h44 + {22'd0, idx, 2'b00};
+    endfunction
+    function automatic logic lc_is_hit(input logic [7:0] idx);
+        lc_is_hit = 1'b0;
+        for (int k = 0; k < 8; k++)
+            if (k < cfg_lc_n && lc_v[k] && lc_ix[k] == idx) lc_is_hit = 1'b1;
+    endfunction
+    function automatic logic [2:0] lc_hit_way(input logic [7:0] idx);
+        lc_hit_way = 3'd0;
+        for (int k = 0; k < 8; k++)
+            if (k < cfg_lc_n && lc_v[k] && lc_ix[k] == idx) lc_hit_way = k[2:0];
+    endfunction
+    function automatic logic [2:0] lc_pick(input logic [7:0] idx);
+        logic [2:0] best;
+        logic any_inv;
+        best = 3'd0;
+        any_inv = 1'b0;
+        if (cfg_lc_dm && cfg_lc_n != 4'd0) begin
+            lc_pick = idx[2:0] & (cfg_lc_n[2:0] - 3'd1);
+        end else begin
+            for (int k = 0; k < 8; k++) begin
+                if (k < cfg_lc_n && !lc_v[k] && !any_inv) begin
+                    best = k[2:0];
+                    any_inv = 1'b1;
+                end
+            end
+            if (!any_inv) begin
+                for (int k = 1; k < 8; k++)
+                    if (k < cfg_lc_n && lc_age[k] < lc_age[best]) best = k[2:0];
+            end
+            lc_pick = best;
+        end
+    endfunction
+    task automatic lc_note(input logic [2:0] w);
+        for (int k = 0; k < 8; k++) begin
+            if (k[2:0] == w) lc_age[k] <= 3'd7;
+            else if (lc_age[k] > lc_age[w]) lc_age[k] <= lc_age[k] - 3'd1;
+        end
+    endtask
+    task automatic lc_inval();
+        for (int k = 0; k < 8; k++) begin
+            lc_v[k] <= 1'b0;
+            lc_dirty[k] <= 1'b0;
+        end
+    endtask
+    // Install idx=v. A dirty victim is written first and S_LC_EV finishes
+    // the install. set_st is clear when the caller already started a memory op.
+    task automatic lc_fill(input logic [7:0] idx, input val_t v, input logic dirty,
+                           input logic set_st, input state_e done);
+        logic [2:0] w;
+        logic hit;
+        hit = lc_is_hit(idx);
+        w = hit ? lc_hit_way(idx) : lc_pick(idx);
+        if (cfg_lc_n == 4'd0) begin
+            if (set_st) st <= done;
+        end else if (hit || !lc_v[w] || !lc_dirty[w] || !cfg_lc_wb || lc_ix[w] == idx) begin
+            lc_v[w] <= 1'b1;
+            lc_ix[w] <= idx;
+            lc_d[w] <= v;
+            lc_dirty[w] <= dirty && cfg_lc_wb;
+            lc_note(w);
+            if (set_st) st <= done;
+        end else begin
+            lc_ev_way <= w;
+            lc_ev_idx <= idx;
+            lc_ev_val <= v;
+            lc_ev_dirty <= dirty && cfg_lc_wb;
+            wr(loc_ptr(lc_ix[w]), lc_d[w], S_LC_EV);
+        end
+    endtask
+`ifndef SYNTHESIS
+    initial begin
+        int grow_v, adapt_v, lc_n_v, lc_wb_v, lc_dm_v;
+        grow_v = GROW_CHUNK;
+        adapt_v = GROW_ADAPT;
+        lc_n_v = LC_N;
+        lc_wb_v = LC_WB;
+        lc_dm_v = 0;
+        if (!$value$plusargs("GROW=%d", grow_v)) grow_v = GROW_CHUNK;
+        if (!$value$plusargs("ADAPT=%d", adapt_v)) adapt_v = GROW_ADAPT;
+        if (!$value$plusargs("LC=%d", lc_n_v)) lc_n_v = LC_N;
+        if (!$value$plusargs("LCWB=%d", lc_wb_v)) lc_wb_v = LC_WB;
+        if (!$value$plusargs("LCDM=%d", lc_dm_v)) lc_dm_v = 0;
+        if (grow_v < MPY_RF_CHUNK_MIN) grow_v = MPY_RF_CHUNK_MIN;
+        if (grow_v > MPY_RF_CHUNK_MAX) grow_v = MPY_RF_CHUNK_MAX;
+        if (lc_n_v < 0) lc_n_v = 0;
+        if (lc_n_v > 8) lc_n_v = 8;
+        cfg_grow = grow_v[5:0];
+        cfg_adapt = (adapt_v != 0);
+        cfg_lc_n = lc_n_v[3:0];
+        cfg_lc_wb = (lc_wb_v != 0);
+        cfg_lc_dm = (lc_dm_v != 0);
+    end
+`else
+    initial begin
+        cfg_grow = GROW_CHUNK[5:0];
+        cfg_adapt = (GROW_ADAPT != 0);
+        cfg_lc_n = LC_N[3:0];
+        cfg_lc_wb = (LC_WB != 0);
+        cfg_lc_dm = 1'b0;
+    end
+`endif
 
     function automatic val_t hdr_word(input logic [31:0] i);
-        case (i[3:0])
+        case (i)
             4'd0: hdr_word = {4'd0, fprev};
             4'd1: hdr_word = {4'd0, rc};
             4'd2: hdr_word = {4'd0, pc};
             4'd3: hdr_word = {4'd0, op_pc};
-            4'd4: hdr_word = {4'd0, fflags, 1'b0, nst, 3'b000, xsp, 1'b0, sp};
+            4'd4: hdr_word = {4'd0, fflags, 1'b0, nloc[6:0], 3'b000, xsp, 1'b0, sp};
             4'd5: hdr_word = {4'd0, 11'd0, nexc, fcont, 4'd0, frk};
             4'd6: hdr_word = glb;
             4'd7: hdr_word = loc;
@@ -798,8 +1013,27 @@ module mpy_core
             4'd12: hdr_word = {4'd0, qbase};
             4'd13: hdr_word = {4'd0, cbase};
             4'd14: hdr_word = gen;
+            4'd15: hdr_word = {4'd0, spill_hp};
+            32'd16: hdr_word = {4'd0, 2'b00, spilled_reals, nloc, rf_base};
             default: hdr_word = VNULL;
         endcase
+    endfunction
+
+    logic        has_link;
+    logic [15:0] resident_reals;
+    logic [15:0] stk_depth;
+    assign has_link = (sp != 7'd0) && mpy_is_rf_link(rf[`SX(7'd0)]);
+    assign resident_reals = has_link ? (16'(sp) - 16'd1) : 16'(sp);
+    assign stk_depth = spilled_reals + resident_reals;
+
+    function automatic logic stk_hit(input logic [15:0] g);
+        stk_hit = (g >= spilled_reals) && (g < stk_depth);
+    endfunction
+    function automatic logic [6:0] stk_slot(input logic [15:0] g);
+        stk_slot = 7'(g - spilled_reals) + (has_link ? 7'd1 : 7'd0);
+    endfunction
+    function automatic val_t stk_val(input logic [15:0] g);
+        stk_val = rf[`SX(stk_slot(g))];
     endfunction
 
     assign m_req_o = m_req;
@@ -811,7 +1045,8 @@ module mpy_core
     assign m_wtag_o = m_wtag;
     assign gc_alloc_nbytes_o = al_n << 2;
     assign gc_root0_lo_o = ABI_FRAME_BASE;
-    assign gc_root0_hi_o = noframe ? ABI_FRAME_BASE : ftop;
+    // The resident ring is snapshotted at ftop before a collection.
+    assign gc_root0_hi_o = noframe ? ABI_FRAME_BASE : (ftop + {23'd0, sp, 2'b00});
     assign gc_root1_lo_o = ABI_SCHED_BASE;
     assign gc_root1_hi_o = ABI_GC_POOL_BASE;
     assign halted_o = halted;
@@ -855,7 +1090,13 @@ module mpy_core
         halted <= 1'b1; hcode <= code; hval <= value; st <= S_HALT;
     endtask
     task automatic push(input val_t v);
-        rf[sp[5:0]] <= v; sp <= sp + 7'd1;
+        if (sp >= 7'd64) begin
+            rf_pend <= 1'b1;
+            rf_pend_v <= v;
+        end else begin
+            rf[`SX(sp)] <= v;
+            sp <= sp + 7'd1;
+        end
     endtask
     task automatic raise_msg(input logic [7:0] id);
         rm_id <= id; rsp <= 5'd0; st <= S_RMSG;
@@ -890,7 +1131,7 @@ module mpy_core
     task automatic alloc(input logic [31:0] n, input state_e back);
         al_n <= (n == 32'd0) ? 32'd1 : n; gosub(S_AL, back);
     endtask
-    task automatic exc_push(input logic [31:0] handler, input logic fin, input logic [6:0] vsp);
+    task automatic exc_push(input logic [31:0] handler, input logic fin, input logic [15:0] vsp);
         xh[xsp[3:0]] <= handler; xv[xsp[3:0]] <= vsp; xf[xsp[3:0]] <= fin; xp[xsp[3:0]] <= VNULL;
         xsp <= xsp + 5'd1;
     endtask
@@ -913,15 +1154,25 @@ module mpy_core
             halted <= 1'b0; hcode <= 4'd0; hval <= 32'd0;
             cyc <= 32'd0; nops <= 32'd0; trace <= 1'b0;
             fw_ok <= 1'b0; fw_base <= 32'd0;
-            sp <= 7'd0; nst <= 7'd0; xsp <= 5'd0; nexc <= 5'd0;
+            sp <= 7'd0; nloc <= 8'd0; rf_base <= 6'd0; spilled_reals <= 16'd0;
+            spill_hp <= ABI_FRAME_END; rf_pend <= 1'b0;
+            rf_mono <= 1'b1; sp_hold <= 1'b0; sp_d <= 7'd0; rf_reload_miss <= 1'b0;
+            xsp <= 5'd0; nexc <= 5'd0;
             noframe <= 1'b1; ovr <= ABI_OVR_NONE;
             cl_loc <= VNULL; al_soft <= 1'b0;
             fflags <= 8'd0; fcont <= 8'd0; frk <= ABI_RK_HALT;
             fbase <= ABI_FRAME_BASE; fprev <= 32'd0;
-            gen <= VNULL; inj <= VNONE; fl_img <= 1'b0;
+            gen <= VNULL; inj <= VNONE; fl_img <= 1'b0; spill_to_img <= 1'b0;
+            lc_fl_ret <= S_SPILL;
             for (int k = 0; k < 8; k++) t[k] <= VNULL;
             xc <= VNULL;
             for (int k = 0; k < 64; k++) rf[k] <= VNULL;
+            for (int k = 0; k < 8; k++) begin
+                lc_v[k] <= 1'b0;
+                lc_dirty[k] <= 1'b0;
+                lc_age[k] <= 3'd0;
+            end
+            lc_fi <= 4'd0;
         end else begin
             m_req <= 1'b0;
             gc_alloc_req <= 1'b0;
@@ -929,8 +1180,23 @@ module mpy_core
             alu_start <= 1'b0;
             trace <= 1'b0;
             if (!halted) cyc <= cyc + 32'd1;
+            // A spill or a reload moves sp without a push or a pop.
+            if (sp_hold) sp_hold <= 1'b0;
+            else if (sp < sp_d) rf_mono <= 1'b0;
+            else if (sp > sp_d) rf_mono <= 1'b1;
+            sp_d <= sp;
 
-            case (st)
+            if (rf_pend && st != S_MWAIT && st != S_RF_SPILL && st != S_RF_SPILL_W &&
+                st != S_RF_RELOAD && st != S_RF_RELOAD_R && st != S_RF_RELOAD_G) begin
+                if (sp >= 7'd64) begin
+                    rf_resume <= st;
+                    st <= S_RF_SPILL;
+                end else begin
+                    rf[`SX(sp)] <= rf_pend_v;
+                    sp <= sp + 7'd1;
+                    rf_pend <= 1'b0;
+                end
+            end else case (st)
             S_HALT: ;
 
             S_MWAIT: if (m_ack_i) begin
@@ -1073,14 +1339,14 @@ module mpy_core
             end
             S_CF_CHK: begin
                 c_cells <= md;
-                v0 = noframe ? ABI_FRAME_BASE : ftop;
-                v1 = v0 + ((32'd16 + c_nst + 32'd3 * c_nexc) << 2);
+                v0 = noframe ? ABI_FRAME_BASE : (ftop + {23'd0, sp, 2'b00});
+                v1 = v0 + ((32'd17 + c_nst + 32'd3 * c_nexc) << 2);
                 v2 = ab_pe - ab_lo;
                 c_fast <= (ab_nkw == 8'd0) && (c_nkwo == 8'd0) &&
                           (v2 + c_ndef >= c_npos) &&
                           ((v2 <= c_npos) || (c_scope & ABI_SCOPE_VARARGS));
                 x3 <= v0;
-                if (v1 > ABI_FRAME_END)
+                if (v1 > spill_hp)
                     raise_msg(ABI_MSG_RECURSION);
                 else if (noframe) st <= S_CF_SW;
                 else gosub(S_SPILL, S_CF_SW);
@@ -1088,8 +1354,9 @@ module mpy_core
             S_CF_SW: begin
                 fprev <= noframe ? 32'd0 : fbase;
                 fbase <= x3; noframe <= 1'b0;
-                rc <= c_rc; nst <= c_nst[6:0]; nexc <= c_nexc[4:0];
-                sp <= 7'd0; xsp <= 5'd0;
+                rc <= c_rc; nloc <= c_nst; nexc <= c_nexc[4:0];
+                sp <= 7'd0; rf_base <= 6'd0; spilled_reals <= 16'd0; rf_pend <= 1'b0;
+                xsp <= 5'd0; i0 <= 8'd0;
                 fflags <= ((c_rcf & ABI_RC_FLAG_FIRMWARE) ? FF_FW : 8'd0) |
                           ((c_rcf & ABI_RC_FLAG_GENERATOR) ? FF_GEN : 8'd0);
                 frk <= crk; fcont <= 8'd0;
@@ -1099,8 +1366,12 @@ module mpy_core
                 fun <= c_ismod ? VNULL : ab[0];
                 aux <= VNULL; aux2 <= VNULL; aux3 <= VNULL;
                 for (int k = 0; k < 64; k++) rf[k] <= VNULL;
-                rd(c_rc + 4 * ABI_RC_OP_START, S_CF_PC);
+                lc_inval();
+                st <= S_LCLR;
             end
+            S_LCLR: if (i0 == nloc) rd(c_rc + 4 * ABI_RC_OP_START, S_CF_PC);
+                    else wr(loc_ptr(i0), VNULL, S_LCLR2);
+            S_LCLR2: begin i0 <= i0 + 8'd1; st <= S_LCLR; end
             S_CF_PC: begin pc <= md; op_pc <= md; rd(c_rc + 4 * ABI_RC_MODULE, S_CF_MD); end
             S_CF_MD: begin c_md <= md; rd(md + 4 * ABI_MD_QSTRS, S_CF_Q); end
             S_CF_Q: begin qbase <= md; rd(c_md + 4 * ABI_MD_CONSTS, S_CF_C); end
@@ -1111,22 +1382,23 @@ module mpy_core
             end
             // fast positional binding
             S_BF: begin
-                v2 = ab_pe - ab_lo;
-                for (int k = 0; k < 64; k++)
-                    if (k < v2 && k < c_npos) rf[6'(nst - 7'd1 - 7'(k))] <= ab[8'(ab_lo + 8'(k))];
-                i0 <= v2[7:0];
-                st <= S_BF_DEF;
+                i0 <= 8'(ab_pe - ab_lo);
+                i1 <= 8'd0;
+                st <= S_BF_P;
             end
+            S_BF_P: if (i1 >= c_npos || i1 >= i0) st <= S_BF_DEF;
+                    else wr(loc_ptr(i1), ab[8'(ab_lo + i1)], S_BF_P2);
+            S_BF_P2: begin i1 <= i1 + 8'd1; st <= S_BF_P; end
             S_BF_DEF: if (i0 >= c_npos) st <= S_BF_VA;
                       else rd(adr(c_defs) + 4 + 4 * (i0 - (c_npos - c_ndef)), S_BF_DEF2);
-            S_BF_DEF2: begin rf[`LI(i0)] <= mv; i0 <= i0 + 8'd1; st <= S_BF_DEF; end
+            S_BF_DEF2: begin wr(loc_ptr(i0), mv, S_BF_DEF); i0 <= i0 + 8'd1; end
             S_BF_VA: if (c_scope & ABI_SCOPE_VARARGS) begin
                     tb_src <= 1'b0; tb_nz <= 1'b0;
                     tb_from <= ab_lo + c_npos;
                     tb_n <= (ab_pe - ab_lo > c_npos) ? (ab_pe - ab_lo - c_npos) : 8'd0;
                     gosub(S_TUP, S_BF_VA2);
                 end else st <= S_BF_KW;
-            S_BF_VA2: begin rf[`LI(c_npos + c_nkwo)] <= tb_v; st <= S_BF_KW; end
+            S_BF_VA2: begin wr(loc_ptr(c_npos + c_nkwo), tb_v, S_BF_KW); end
             // **kwargs of a call without keywords: a fresh empty dict
             S_BF_KW: begin
                 c_ci <= 32'd0;
@@ -1135,21 +1407,23 @@ module mpy_core
             end
             S_BF_KW2: begin
                 wb_v[0] <= vint(32'd0); wb_v[1] <= vint(32'd0); wb_v[2] <= VNULL; wb_v[3] <= vint(32'd0);
-                rf[`LI(c_npos + c_nkwo + ((c_scope & ABI_SCOPE_VARARGS) ? 8'd1 : 8'd0))] <= vmut(al_a, ABI_MUT_DICT);
-                wblock(al_a, 4'd4, S_CELLS);
+                i1 <= c_npos + c_nkwo + ((c_scope & ABI_SCOPE_VARARGS) ? 8'd1 : 8'd0);
+                wblock(al_a, 4'd4, S_BF_KW3);
             end
+            S_BF_KW3: wr(loc_ptr(i1), vmut(al_a, ABI_MUT_DICT), S_CELLS);
             S_CELLS: if (c_ci == c_ncell) begin
                     fflags <= fflags & ~FF_NOTB;
                     if (fflags & FF_GEN) st <= S_GN_AL;
                     else st <= S_FETCH;
                 end else rd(c_cells + 4 * c_ci, S_CELL_I);
-            S_CELL_I: begin i1 <= md[7:0]; alloc(32'd3, S_CELL_A); end
+            S_CELL_I: begin i1 <= md[7:0]; rd(loc_ptr(md[7:0]), S_CELL_RD); end
+            S_CELL_RD: begin t[3] <= mv; alloc(32'd3, S_CELL_A); end
             S_CELL_A: begin
-                wb_v[0] <= vint(ABI_OB_CELL); wb_v[1] <= ty_cell; wb_v[2] <= rf[`LI(i1)];
-                rf[`LI(i1)] <= vobj(al_a);
+                wb_v[0] <= vint(ABI_OB_CELL); wb_v[1] <= ty_cell; wb_v[2] <= t[3];
                 c_ci <= c_ci + 32'd1;
-                wblock(al_a, 4'd3, S_CELLS);
+                wblock(al_a, 4'd3, S_CELL_B);
             end
+            S_CELL_B: wr(loc_ptr(i1), vobj(al_a), S_CELLS);
             // firmware binding: _bind(fun, args, kw) returns the locals
             S_BS: begin
                 fflags <= fflags | FF_NOTB; fcont <= ABI_CONT_BIND;
@@ -1167,35 +1441,46 @@ module mpy_core
             S_CNS: begin c_rc <= md; c_defs <= VNULL; c_clos <= VNULL; st <= S_CF_SIG; end
 
             // ---------------- frames ----------------
-            S_SPILL: begin sw_i <= 32'd0; st <= S_SP_H; end
-            S_SP_H: if (sw_i == 32'd15) begin sw_i <= 32'd0; st <= S_SP_R; end
+            S_SPILL: if (lc_dirty_any) begin lc_fi <= 4'd0; lc_fl_ret <= S_SPILL; st <= S_LC_FL; end
+                     else begin sw_i <= 32'd0; st <= S_SP_H; end
+            S_SP_H: if (sw_i == 32'd17) begin
+                        sw_i <= 32'd0; sw_k <= 2'd0;
+                        st <= spill_to_img ? S_SP_L : S_SP_X;
+                    end
                     else begin wr(fbase + (sw_i << 2), hdr_word(sw_i), S_SP_H); sw_i <= sw_i + 32'd1; end
-            S_SP_R: if (sw_i == nst) begin sw_i <= 32'd0; sw_k <= 2'd0; st <= S_SP_X; end
-                    else begin wr(fbase + 64 + (sw_i << 2), rf[sw_i[5:0]], S_SP_R); sw_i <= sw_i + 32'd1; end
-            S_SP_X: if (sw_i == xsp) ret();
+            // Generator image: locals still sit in the reserve frame at x4.
+            S_SP_L: if (sw_i == nloc) begin sw_i <= 32'd0; sw_k <= 2'd0; st <= S_SP_X; end
+                    else rd(x4 + 32'h44 + (sw_i << 2), S_SP_L2);
+            S_SP_L2: begin wr(fbase + 32'h44 + (sw_i << 2), mv, S_SP_L); sw_i <= sw_i + 32'd1; end
+            S_SP_X: if (sw_i == xsp) begin sw_i <= 32'd0; st <= S_SP_R; end
                     else begin
-                        v0 = fbase + 64 + (nst << 2) + 12 * sw_i + (sw_k << 2);
+                        v0 = fbase + 32'h44 + ({24'd0, nloc} << 2) + 12 * sw_i + (sw_k << 2);
                         case (sw_k)
                             2'd0: wr(v0, {4'd0, xh[sw_i[3:0]]}, S_SP_X);
-                            2'd1: wr(v0, {4'd0, xf[sw_i[3:0]], 24'd0, xv[sw_i[3:0]]}, S_SP_X);
+                            2'd1: wr(v0, {4'd0, xf[sw_i[3:0]], 15'd0, xv[sw_i[3:0]]}, S_SP_X);
                             default: wr(v0, xp[sw_i[3:0]], S_SP_X);
                         endcase
                         if (sw_k == 2'd2) begin sw_k <= 2'd0; sw_i <= sw_i + 32'd1; end
                         else sw_k <= sw_k + 2'd1;
                     end
+            S_SP_R: if (sw_i == sp) ret();
+                    else begin
+                        wr(ftop + (sw_i << 2), rf[`SX(sw_i[6:0])], S_SP_R);
+                        sw_i <= sw_i + 32'd1;
+                    end
 
             S_FILL: begin
-                fl_i <= 32'd0; fw_ok <= 1'b0;
+                fl_i <= 32'd0; fw_ok <= 1'b0; lc_inval();
                 if (!fl_img) fbase <= fl_base;
                 rd(fl_base, S_FL_H);
             end
             S_FL_H: begin
-                case (fl_i[3:0])
+                case (fl_i)
                     4'd0: if (!fl_img) fprev <= md;
                     4'd1: rc <= md;
                     4'd2: pc <= md;
                     4'd3: op_pc <= md;
-                    4'd4: begin sp <= md[6:0]; xsp <= md[12:8]; nst <= md[22:16]; fflags <= md[31:24]; end
+                    4'd4: begin sp <= md[6:0]; xsp <= md[12:8]; fflags <= md[31:24]; end
                     4'd5: begin frk <= md[3:0]; fcont <= md[15:8]; nexc <= md[20:16]; end
                     4'd6: glb <= mv;
                     4'd7: loc <= mv;
@@ -1206,32 +1491,44 @@ module mpy_core
                     4'd12: qbase <= md;
                     4'd13: cbase <= md;
                     4'd14: gen <= mv;
+                    4'd15: spill_hp <= md;
+                    default: if (fl_i == 32'd16) begin
+                        rf_base <= md[5:0];
+                        nloc <= md[13:6];
+                        spilled_reals <= md[29:14];
+                        exc_base <= fl_base + 32'h44 + ({24'd0, md[13:6]} << 2);
+                        stack_base <= fl_base + ((32'd17 + {24'd0, md[13:6]} + 32'd3 * {27'd0, nexc}) << 2);
+                    end
                 endcase
-                if (fl_i == 32'd14) begin
-                    fl_i <= 32'd0;
-                    if (nst == 7'd0) begin fl_k <= 2'd0; st <= S_FL_X0; end
-                    else rd(fl_base + 64, S_FL_R);
+                if (fl_i == 32'd16) begin
+                    fl_i <= 32'd0; fl_k <= 2'd0;
+                    st <= fl_img ? S_FL_L : S_FL_X0;
                 end else begin
                     fl_i <= fl_i + 32'd1;
                     rd(fl_base + ((fl_i + 32'd1) << 2), S_FL_H);
                 end
             end
-            S_FL_R: begin
-                rf[fl_i[5:0]] <= mv;
-                if (fl_i + 32'd1 == nst) begin fl_i <= 32'd0; fl_k <= 2'd0; st <= S_FL_X0; end
-                else begin fl_i <= fl_i + 32'd1; rd(fl_base + 64 + ((fl_i + 32'd1) << 2), S_FL_R); end
-            end
-            S_FL_X0: if (fl_i == xsp) begin fl_img <= 1'b0; ret(); end
-                     else rd(fl_base + 64 + (nst << 2) + 12 * fl_i + (fl_k << 2), S_FL_X);
+            S_FL_L: if (fl_i == nloc) begin fl_i <= 32'd0; fl_k <= 2'd0; st <= S_FL_X0; end
+                    else rd(fl_base + 32'h44 + (fl_i << 2), S_FL_L2);
+            S_FL_L2: begin wr(fbase + 32'h44 + (fl_i << 2), mv, S_FL_L); fl_i <= fl_i + 32'd1; end
+            S_FL_X0: if (fl_i == xsp) begin fl_i <= 32'd0; fl_img <= 1'b0; st <= S_FL_S; end
+                     else rd(exc_base + 12 * fl_i + (fl_k << 2), S_FL_X);
             S_FL_X: begin
                 case (fl_k)
                     2'd0: xh[fl_i[3:0]] <= md;
-                    2'd1: begin xv[fl_i[3:0]] <= md[6:0]; xf[fl_i[3:0]] <= md[31]; end
+                    2'd1: begin xv[fl_i[3:0]] <= md[15:0]; xf[fl_i[3:0]] <= md[31]; end
                     default: xp[fl_i[3:0]] <= mv;
                 endcase
                 if (fl_k == 2'd2) begin fl_k <= 2'd0; fl_i <= fl_i + 32'd1; end
                 else fl_k <= fl_k + 2'd1;
                 st <= S_FL_X0;
+            end
+            S_FL_S: if (fl_i == sp) ret();
+                    else rd(stack_base + (fl_i << 2), S_FL_S2);
+            S_FL_S2: begin
+                rf[`SX(fl_i[6:0])] <= mv;
+                fl_i <= fl_i + 32'd1;
+                st <= S_FL_S;
             end
 
             S_RET: if (frk == ABI_RK_HALT) halt(ABI_HALT_CLEAN, 32'd0);
@@ -1242,7 +1539,7 @@ module mpy_core
                 ABI_RK_PUSH: begin push(t[7]); st <= S_FETCH; end
                 ABI_RK_DISCARD: st <= S_FETCH;
                 ABI_RK_PUSH_NULL: begin
-                    rf[sp[5:0]] <= t[7]; rf[6'(sp + 7'd1)] <= VNULL; sp <= sp + 7'd2; st <= S_FETCH;
+                    rf[`SX(sp)] <= t[7]; rf[`SX(6'(sp + 7'd1))] <= VNULL; sp <= sp + 7'd2; st <= S_FETCH;
                 end
                 ABI_RK_CONT: st <= S_CONT;
                 default: halt(ABI_HALT_CLEAN, 32'd0);
@@ -1254,12 +1551,12 @@ module mpy_core
                 ABI_CONT_INIT: if (t[7] != VNONE) raise_err(ABI_ERR_INIT_NONE, t[7], VNULL);
                                else begin fcont <= aux3[7:0]; deliver(aux, aux2[3:0]); end
                 ABI_CONT_WITH_ENTER: begin
-                    exc_push(aux[31:0], 1'b1, sp);
+                    exc_push(aux[31:0], 1'b1, stk_depth);
                     push(t[7]); st <= S_FETCH;
                 end
                 ABI_CONT_WITH_NONE: begin push(VNONE); st <= S_FETCH; end
                 ABI_CONT_WITH_UNWIND: begin
-                    rf[sp[5:0]] <= aux; rf[6'(sp + 7'd1)] <= aux2; sp <= sp + 7'd2; st <= S_FETCH;
+                    rf[`SX(sp)] <= aux; rf[`SX(6'(sp + 7'd1))] <= aux2; sp <= sp + 7'd2; st <= S_FETCH;
                 end
                 ABI_CONT_WITH_EXC: begin tr_v <= t[7]; gosub(S_TR, S_WC_TR); end
                 ABI_CONT_UNPACK: rd(adr(t[7]), S_UPK_N);
@@ -1271,7 +1568,7 @@ module mpy_core
                 ABI_CONT_FOR_NEXT: if (t[7] == VSTOP) begin sp <= sp - 7'd4; pc <= aux[31:0]; st <= S_FETCH; end
                                    else begin push(t[7]); st <= S_FETCH; end
                 ABI_CONT_GETITER: begin
-                    rf[6'(sp - 7'd1)] <= t[7]; ovr <= ABI_OVR_PYOBJ; pc <= op_pc; st <= S_FETCH;
+                    rf[`SX(6'(sp - 7'd1))] <= t[7]; ovr <= ABI_OVR_PYOBJ; pc <= op_pc; st <= S_FETCH;
                 end
                 ABI_CONT_BIND: rd(adr(t[7]), S_CB_N);
                 // Fast path: t[7] is the bare yielded value. The tuple arm stays
@@ -1288,16 +1585,14 @@ module mpy_core
                 push((tr_x || tr_r) ? VNONE : aux);
                 st <= S_FETCH;
             end
-            S_UPK_N: begin x1 <= md; i0 <= 8'd0; st <= S_UPK_L; end
-            S_UPK_L: if (i0 == x1[7:0]) begin sp <= sp + x1[6:0]; st <= S_FETCH; end
-                     else rd(adr(t[7]) + 4 + 4 * i0, S_UPK_V);
-            S_UPK_V: begin
-                rf[6'(sp + x1[6:0] - 7'd1 - i0[6:0])] <= mv; i0 <= i0 + 8'd1; st <= S_UPK_L;
-            end
+            S_UPK_N: begin x1 <= md; st <= S_UPK_L; end
+            S_UPK_L: if (x1 == 32'd0) st <= S_FETCH;
+                     else rd(adr(t[7]) + (x1 << 2), S_UPK_V);
+            S_UPK_V: begin x1 <= x1 - 32'd1; push(mv); st <= S_UPK_L; end
             S_CB_N: begin x1 <= md; i0 <= 8'd0; st <= S_CB_L; end
             S_CB_L: if (i0 == x1[7:0]) rd(rc + 4 * ABI_RC_ARGS, S_CB_A);
                     else rd(adr(t[7]) + 4 + 4 * i0, S_CB_V);
-            S_CB_V: begin rf[`LI(i0)] <= mv; i0 <= i0 + 8'd1; st <= S_CB_L; end
+            S_CB_V: begin wr(loc_ptr(i0), mv, S_CB_L); i0 <= i0 + 8'd1; end
             S_CB_A: begin c_ncell <= md[31:24]; rd(rc + 4 * ABI_RC_CELLS, S_CB_C); end
             S_CB_C: begin c_cells <= md; c_ci <= 32'd0; fcont <= 8'd0; st <= S_CELLS; end
 
@@ -1342,10 +1637,12 @@ module mpy_core
             S_RX_H: if (xsp != 5'd0 && xh[xsp - 5'd1] <= op_pc) xsp <= xsp - 5'd1;
                     else if (xsp != 5'd0) begin
                         pc <= xh[xsp - 5'd1];
-                        rf[xv[xsp - 5'd1][5:0]] <= xc;
-                        sp <= xv[xsp - 5'd1] + 7'd1;
                         xp[xsp - 5'd1] <= xc;
-                        st <= S_FETCH;
+                        drop_left <= (stk_depth > xv[xsp - 5'd1]) ? (stk_depth - xv[xsp - 5'd1]) : 16'd0;
+                        drop_push_en <= 1'b1;
+                        drop_push_v <= xc;
+                        drop_then <= S_FETCH;
+                        st <= S_DROP;
                     end else if (gen != VNULL && fprev != 32'd0) begin
                         pc <= 32'd0;
                         st <= S_GN_ESC;
@@ -1357,7 +1654,11 @@ module mpy_core
             S_RX_POP: begin rx_from <= 1'b1; st <= S_RAISE; end
 
             // ---------------- fetch / decode ----------------
-            S_FETCH: if (in_win) st <= S_DEC;
+            S_FETCH: if (sp >= 7'd61) begin
+                         rf_resume <= S_FETCH; st <= S_RF_SPILL;
+                     end else if (has_link && sp <= 7'd16) begin
+                         rf_resume <= S_FETCH; st <= S_RF_RELOAD;
+                     end else if (in_win) st <= S_DEC;
                      else begin
                          fw_base <= {pc[31:2], 2'b00}; fw_i <= 2'd0; fw_ok <= 1'b0;
                          rd({pc[31:2], 2'b00}, S_FW);
@@ -1381,13 +1682,51 @@ module mpy_core
 
             // ---------------- execute ----------------
             S_EXEC: begin
-                if (op >= 8'h70 && op < 8'hb0) begin push(vint(32'(op) - 32'h80)); st <= S_FETCH; end
-                else if (op >= 8'hb0 && op < 8'hc0) begin
-                    if (rf[`LI(op - 8'hb0)] == VNULL && !(fflags & FF_FW)) raise_msg(ABI_MSG_LOCAL_UNBOUND);
-                    else begin push(rf[`LI(op - 8'hb0)]); st <= S_FETCH; end
-                end else if (op >= 8'hc0 && op < 8'hd0) begin
-                    rf[`LI(op - 8'hc0)] <= rf[6'(sp - 7'd1)]; sp <= sp - 7'd1; st <= S_FETCH;
-                end else if (op >= 8'hd0 && op < 8'hd7) begin
+                if ((op >= 8'hb0 && op < 8'hc0) || op == 8'h24) begin
+                    vi = (op == 8'h24) ? arg[7:0] : (op - 8'hb0);
+                    if (lc_is_hit(vi)) begin
+                        vs0 = {4'd0, lc_hit_way(vi)};
+                        if (lc_d[vs0[2:0]] == VNULL && !(fflags & FF_FW)) raise_msg(ABI_MSG_LOCAL_UNBOUND);
+                        else begin push(lc_d[vs0[2:0]]); lc_note(vs0[2:0]); st <= S_FETCH; end
+                    end else begin
+                        i0 <= vi; rd(loc_ptr(vi), S_LDF);
+                    end
+                end else if ((op >= 8'hc0 && op < 8'hd0) || op == 8'h26) begin
+                    vi = (op == 8'h26) ? arg[7:0] : (op - 8'hc0);
+                    if (cfg_lc_n != 4'd0 && cfg_lc_wb) begin
+                        sp <= sp - 7'd1;
+                        lc_fill(vi, rf[`SX(6'(sp - 7'd1))], 1'b1, 1'b1, S_FETCH);
+                    end else begin
+                        wr(loc_ptr(vi), rf[`SX(6'(sp - 7'd1))], S_FETCH);
+                        sp <= sp - 7'd1;
+                        if (cfg_lc_n != 4'd0) lc_fill(vi, rf[`SX(6'(sp - 7'd1))], 1'b0, 1'b0, S_FETCH);
+                    end
+                end else if (op == 8'h25 || op == 8'h27 || op == 8'h29 || op == 8'h28) begin
+                    vi = arg[7:0];
+                    if (lc_is_hit(vi)) begin
+                        vs0 = {4'd0, lc_hit_way(vi)};
+                        lc_note(vs0[2:0]);
+                        if (lc_d[vs0[2:0]] == VNULL && (op == 8'h28 || !(fflags & FF_FW)))
+                            raise_msg(ABI_MSG_LOCAL_UNBOUND);
+                        else if (op == 8'h25) rd(adr(lc_d[vs0[2:0]]) + 8, S_DEREF);
+                        else if (op == 8'h27) begin
+                            wr(adr(lc_d[vs0[2:0]]) + 8, rf[`SX(6'(sp - 7'd1))], S_FETCH);
+                            sp <= sp - 7'd1;
+                        end else if (op == 8'h29) rd(adr(lc_d[vs0[2:0]]) + 8, S_DELDEREF);
+                        else begin
+                            wr(loc_ptr(vi), VNULL, S_FETCH);
+                            lc_v[vs0[2:0]] <= 1'b0;
+                            lc_dirty[vs0[2:0]] <= 1'b0;
+                        end
+                    end else begin
+                        i0 <= vi;
+                        if (op == 8'h25) rd(loc_ptr(vi), S_LDREF);
+                        else if (op == 8'h27) rd(loc_ptr(vi), S_STREF);
+                        else if (op == 8'h29) rd(loc_ptr(vi), S_DDREF);
+                        else rd(loc_ptr(vi), S_LDEL);
+                    end
+                end else if (op >= 8'h70 && op < 8'hb0) begin push(vint(32'(op) - 32'h80)); st <= S_FETCH; end
+                else if (op >= 8'hd0 && op < 8'hd7) begin
                     n_o <= op - 8'hd0; st <= S_UN;
                 end else if (op >= 8'hd7 && op < 8'hfa) begin
                     n_o <= op - 8'hd7; st <= S_BIN;
@@ -1399,59 +1738,52 @@ module mpy_core
                 8'h51: begin push(VNONE); st <= S_FETCH; end
                 8'h52: begin push(VTRUE); st <= S_FETCH; end
                 8'h53: begin push(VNULL); st <= S_FETCH; end
-                8'h24: if (rf[`LI(arg)] == VNULL && !(fflags & FF_FW)) raise_msg(ABI_MSG_LOCAL_UNBOUND);
-                       else begin push(rf[`LI(arg)]); st <= S_FETCH; end
-                8'h26: begin rf[`LI(arg)] <= rf[6'(sp - 7'd1)]; sp <= sp - 7'd1; st <= S_FETCH; end
-                8'h28: if (rf[`LI(arg)] == VNULL) raise_msg(ABI_MSG_LOCAL_UNBOUND);
-                       else begin rf[`LI(arg)] <= VNULL; st <= S_FETCH; end
-                8'h25: rd(adr(rf[`LI(arg)]) + 8, S_DEREF);
-                8'h27: begin wr(adr(rf[`LI(arg)]) + 8, rf[6'(sp - 7'd1)], S_FETCH); sp <= sp - 7'd1; end
-                8'h29: rd(adr(rf[`LI(arg)]) + 8, S_DELDEREF);
+                8'h24, 8'h25, 8'h26, 8'h27, 8'h28, 8'h29: halt(ABI_HALT_INTERNAL, 32'h0000_10CA);
                 8'h11, 8'h12, 8'h16, 8'h17, 8'h19, 8'h1a, 8'h13, 8'h14, 8'h18, 8'h15,
                 8'h1b, 8'h1c:
                     rd(qbase + 4 * arg, S_QOP);
                 8'h54: rd(h_hooks + 4 * ABI_HOOK_BUILD_CLASS, S_LCO);
-                8'h55: begin t[0] <= rf[6'(sp - 7'd2)]; t[1] <= rf[6'(sp - 7'd1)]; st <= S_LSUB; end
+                8'h55: begin t[0] <= rf[`SX(6'(sp - 7'd2))]; t[1] <= rf[`SX(6'(sp - 7'd1))]; st <= S_LSUB; end
                 8'h56: begin
-                    t[0] <= rf[6'(sp - 7'd2)]; t[1] <= rf[6'(sp - 7'd1)]; t[6] <= rf[6'(sp - 7'd3)];
+                    t[0] <= rf[`SX(6'(sp - 7'd2))]; t[1] <= rf[`SX(6'(sp - 7'd1))]; t[6] <= rf[`SX(6'(sp - 7'd3))];
                     st <= S_SSUB;
                 end
-                8'h57: begin push(rf[6'(sp - 7'd1)]); st <= S_FETCH; end
+                8'h57: begin push(rf[`SX(6'(sp - 7'd1))]); st <= S_FETCH; end
                 8'h58: begin
-                    rf[sp[5:0]] <= rf[6'(sp - 7'd2)]; rf[6'(sp + 7'd1)] <= rf[6'(sp - 7'd1)];
+                    rf[`SX(sp)] <= rf[`SX(6'(sp - 7'd2))]; rf[`SX(6'(sp + 7'd1))] <= rf[`SX(6'(sp - 7'd1))];
                     sp <= sp + 7'd2; st <= S_FETCH;
                 end
                 8'h59: begin sp <= sp - 7'd1; st <= S_FETCH; end
                 8'h5a: begin
-                    rf[6'(sp - 7'd1)] <= rf[6'(sp - 7'd2)]; rf[6'(sp - 7'd2)] <= rf[6'(sp - 7'd1)];
+                    rf[`SX(6'(sp - 7'd1))] <= rf[`SX(6'(sp - 7'd2))]; rf[`SX(6'(sp - 7'd2))] <= rf[`SX(6'(sp - 7'd1))];
                     st <= S_FETCH;
                 end
                 8'h5b: begin
-                    rf[6'(sp - 7'd3)] <= rf[6'(sp - 7'd1)];
-                    rf[6'(sp - 7'd2)] <= rf[6'(sp - 7'd3)];
-                    rf[6'(sp - 7'd1)] <= rf[6'(sp - 7'd2)];
+                    rf[`SX(6'(sp - 7'd3))] <= rf[`SX(6'(sp - 7'd1))];
+                    rf[`SX(6'(sp - 7'd2))] <= rf[`SX(6'(sp - 7'd3))];
+                    rf[`SX(6'(sp - 7'd1))] <= rf[`SX(6'(sp - 7'd2))];
                     st <= S_FETCH;
                 end
                 8'h42: begin pc <= jt; st <= S_FETCH; end
-                8'h43, 8'h44, 8'h45, 8'h46: begin tr_v <= rf[6'(sp - 7'd1)]; gosub(S_TR, S_JT); end
-                8'h47: begin t[0] <= rf[6'(sp - 7'd1)]; at_q <= ABI_Q_EXIT_D; gosub(S_AT, S_SW_X); end
+                8'h43, 8'h44, 8'h45, 8'h46: begin tr_v <= rf[`SX(6'(sp - 7'd1))]; gosub(S_TR, S_JT); end
+                8'h47: begin t[0] <= rf[`SX(6'(sp - 7'd1))]; at_q <= ABI_Q_EXIT_D; gosub(S_AT, S_SW_X); end
                 8'h48, 8'h49: begin
                     if (xsp >= nexc) halt(ABI_HALT_INTERNAL, op_pc);
-                    else begin exc_push(jt, op == 8'h49, sp); st <= S_FETCH; end
+                    else begin exc_push(jt, op == 8'h49, stk_depth); st <= S_FETCH; end
                 end
                 8'h4a: begin xsp <= xsp - 5'd1; pc <= jt; st <= S_FETCH; end
                 8'h40: begin
-                    rf[sp[5:0]] <= vint(jt); rf[6'(sp + 7'd1)] <= vint({24'd0, ext});
+                    rf[`SX(sp)] <= vint(jt); rf[`SX(6'(sp + 7'd1))] <= vint({24'd0, ext});
                     sp <= sp + 7'd2; st <= S_UJ;
                 end
                 8'h5c: st <= S_WC;
                 8'h5d: begin
                     xsp <= xsp - 5'd1;
-                    if (rf[6'(sp - 7'd1)] == VNONE) begin sp <= sp - 7'd1; st <= S_FETCH; end
-                    else if (tg(rf[6'(sp - 7'd1)]) == ABI_TAG_INT) begin
-                        if (rf[6'(sp - 7'd1)][31]) begin sp <= sp - 7'd1; st <= S_UR; end
+                    if (rf[`SX(6'(sp - 7'd1))] == VNONE) begin sp <= sp - 7'd1; st <= S_FETCH; end
+                    else if (tg(rf[`SX(6'(sp - 7'd1))]) == ABI_TAG_INT) begin
+                        if (rf[`SX(6'(sp - 7'd1))][31]) begin sp <= sp - 7'd1; st <= S_UR; end
                         else st <= S_UJ;
-                    end else raise_val(rf[6'(sp - 7'd1)]);
+                    end else raise_val(rf[`SX(6'(sp - 7'd1))]);
                 end
                 8'h63: st <= S_UR;
                 8'h64: begin
@@ -1461,90 +1793,116 @@ module mpy_core
                     if (!vb) raise_msg(ABI_MSG_NO_ACTIVE_EXC);
                     else begin rx_from <= 1'b0; rsp <= 5'd0; st <= S_RAISE; end
                 end
-                8'h65: begin t[0] <= rf[6'(sp - 7'd1)]; sp <= sp - 7'd1; st <= S_ROBJ; end
-                8'h66: if (rf[6'(sp - 7'd1)] != VNONE) begin
+                8'h65: begin t[0] <= rf[`SX(6'(sp - 7'd1))]; sp <= sp - 7'd1; st <= S_ROBJ; end
+                8'h66: if (rf[`SX(6'(sp - 7'd1))] != VNONE) begin
                            sp <= sp - 7'd1; aux <= vint(32'h65); fcont <= ABI_CONT_REDISPATCH;
                            hook(ABI_HOOK_WARN, ABI_RK_CONT, 8'd1, vint(32'd0), VNULL, VNULL, VNULL);
                        end else begin op <= 8'h65; sp <= sp - 7'd1; end
-                8'h5e: begin sp <= sp - 7'd1; hook(ABI_HOOK_GETITER, ABI_RK_PUSH, 8'd1, rf[6'(sp - 7'd1)], VNULL, VNULL, VNULL); end
-                8'h5f: begin t[0] <= rf[6'(sp - 7'd1)]; b1 <= (ovr == ABI_OVR_PYOBJ); ovr <= ABI_OVR_NONE; st <= S_GI; end
+                8'h5e: begin sp <= sp - 7'd1; hook(ABI_HOOK_GETITER, ABI_RK_PUSH, 8'd1, rf[`SX(6'(sp - 7'd1))], VNULL, VNULL, VNULL); end
+                8'h5f: begin t[0] <= rf[`SX(6'(sp - 7'd1))]; b1 <= (ovr == ABI_OVR_PYOBJ); ovr <= ABI_OVR_NONE; st <= S_GI; end
                 8'h4b: begin
                     // Slot 0 NULL means the iterator object lives in slot 1
                     // (the form a generator expression emits). Otherwise the
                     // four slots are an inline buffer, or slot 0 is a heap ITER.
-                    for (int k = 0; k < 4; k++) iv[k] <= rf[6'(sp - 7'd4 + 7'(k))];
-                    if (rf[6'(sp - 7'd4)] == VNULL) begin
-                        if (tg(rf[6'(sp - 7'd3)]) == ABI_TAG_ITER) begin
-                            it_h <= 1'b1; t[3] <= rf[6'(sp - 7'd3)]; i0 <= 8'd0; st <= S_FI_LD;
+                    for (int k = 0; k < 4; k++) iv[k] <= rf[`SX(6'(sp - 7'd4 + 7'(k)))];
+                    if (rf[`SX(6'(sp - 7'd4))] == VNULL) begin
+                        if (tg(rf[`SX(6'(sp - 7'd3))]) == ABI_TAG_ITER) begin
+                            it_h <= 1'b1; t[3] <= rf[`SX(6'(sp - 7'd3))]; i0 <= 8'd0; st <= S_FI_LD;
                         end else begin
                             // About to look up __next__. A generator resumes
                             // at S_GR0; anything else is the attribute call.
-                            t[0] <= rf[6'(sp - 7'd3)];
-                            if (tg(rf[6'(sp - 7'd3)]) == ABI_TAG_OBJECT)
-                                rd(adr(rf[6'(sp - 7'd3)]), S_FI_GK);
+                            t[0] <= rf[`SX(6'(sp - 7'd3))];
+                            if (tg(rf[`SX(6'(sp - 7'd3))]) == ABI_TAG_OBJECT)
+                                rd(adr(rf[`SX(6'(sp - 7'd3))]), S_FI_GK);
                             else begin
                                 at_q <= ABI_Q_NEXT_D; gosub(S_AT, S_FI_AT);
                             end
                         end
-                    end else if (rf[6'(sp - 7'd1)] == vint(ABI_IT_HEAPITER)) begin
-                        it_h <= 1'b1; t[3] <= rf[6'(sp - 7'd4)]; i0 <= 8'd0; st <= S_FI_LD;
+                    end else if (rf[`SX(6'(sp - 7'd1))] == vint(ABI_IT_HEAPITER)) begin
+                        it_h <= 1'b1; t[3] <= rf[`SX(6'(sp - 7'd4))]; i0 <= 8'd0; st <= S_FI_LD;
                     end else begin it_h <= 1'b0; gosub(S_IT, S_FI_R); end
                 end
                 8'h2a: begin
-                    tb_src <= 1'b1; tb_nz <= 1'b0; tb_from <= 8'(sp - 7'(arg)); tb_n <= arg[7:0];
+                    tb_src <= 1'b1; tb_nz <= 1'b0; tb_from <= 8'(sp - 7'(arg));
+                    stk_from <= stk_depth - 16'(arg); tb_n <= arg[7:0];
                     gosub(S_TUP, S_BT_R);
                 end
                 8'h2b: alloc(32'd3 + ((arg < 32'd4) ? 32'd4 : arg), S_BL_A);
                 8'h2c: alloc(32'd4 + 2 * arg, S_BM_A);
                 8'h2d: begin
-                    tb_src <= 1'b1; tb_nz <= 1'b0; tb_from <= 8'(sp - 7'(arg)); tb_n <= arg[7:0];
+                    tb_src <= 1'b1; tb_nz <= 1'b0; tb_from <= 8'(sp - 7'(arg));
+                    stk_from <= stk_depth - 16'(arg); tb_n <= arg[7:0];
                     gosub(S_TUP, S_BSET_R);
                 end
                 8'h2e: alloc(32'd5, S_SLICE_A);
                 8'h2f: begin
                     vs0 = 7'(sp - 7'd1 - 7'(arg >> 2));
                     case (arg[1:0])
-                        2'd0: begin t[2] <= rf[vs0[5:0]]; t[3] <= rf[6'(sp - 7'd1)]; gosub(S_LA, S_SC_L); end
-                        2'd1: lookup(rf[vs0[5:0]], rf[6'(sp - 7'd1)], rf[6'(sp - 7'd2)], LK_ADD, 1'b0, S_SC_D);
-                        default: lookup(rf[vs0[5:0]], rf[6'(sp - 7'd1)], VNULL, LK_ADD, 1'b1, S_SC_S);
+                        2'd0: begin t[2] <= rf[`SX(vs0)]; t[3] <= rf[`SX(6'(sp - 7'd1))]; gosub(S_LA, S_SC_L); end
+                        2'd1: lookup(rf[`SX(vs0)], rf[`SX(6'(sp - 7'd1))], rf[`SX(6'(sp - 7'd2))], LK_ADD, 1'b0, S_SC_D);
+                        default: lookup(rf[`SX(vs0)], rf[`SX(6'(sp - 7'd1))], VNULL, LK_ADD, 1'b1, S_SC_S);
                     endcase
                 end
-                8'h62: lookup(rf[6'(sp - 7'd3)], rf[6'(sp - 7'd1)], rf[6'(sp - 7'd2)], LK_ADD, 1'b0, S_STM_R);
+                8'h62: lookup(rf[`SX(6'(sp - 7'd3))], rf[`SX(6'(sp - 7'd1))], rf[`SX(6'(sp - 7'd2))], LK_ADD, 1'b0, S_STM_R);
                 8'h30: begin
-                    t[0] <= rf[6'(sp - 7'd1)];
-                    if (tg(rf[6'(sp - 7'd1)]) == ABI_TAG_TUPLE || is_mut(rf[6'(sp - 7'd1)], ABI_MUT_LIST))
-                        rd(adr(rf[6'(sp - 7'd1)]), S_UPS_N);
+                    t[0] <= rf[`SX(6'(sp - 7'd1))];
+                    if (tg(rf[`SX(6'(sp - 7'd1))]) == ABI_TAG_TUPLE || is_mut(rf[`SX(6'(sp - 7'd1))], ABI_MUT_LIST))
+                        rd(adr(rf[`SX(6'(sp - 7'd1))]), S_UPS_N);
                     else begin
                         sp <= sp - 7'd1; fcont <= ABI_CONT_UNPACK;
-                        hook(ABI_HOOK_UNPACK, ABI_RK_CONT, 8'd3, rf[6'(sp - 7'd1)], vint(arg), vint(32'd0), VNULL);
+                        hook(ABI_HOOK_UNPACK, ABI_RK_CONT, 8'd3, rf[`SX(6'(sp - 7'd1))], vint(arg), vint(32'd0), VNULL);
                     end
                 end
                 8'h31: begin
                     sp <= sp - 7'd1; fcont <= ABI_CONT_UNPACK;
-                    hook(ABI_HOOK_UNPACK, ABI_RK_CONT, 8'd3, rf[6'(sp - 7'd1)], vint(arg), vint(32'd1), VNULL);
+                    hook(ABI_HOOK_UNPACK, ABI_RK_CONT, 8'd3, rf[`SX(6'(sp - 7'd1))], vint(arg), vint(32'd1), VNULL);
                 end
                 8'h32, 8'h33, 8'h20, 8'h21: rd(rc + 4 * ABI_RC_CHILDREN, S_MF_C);
                 8'h34, 8'h36: begin
                     v0 = {24'd0, arg[7:0]};
                     v1 = {24'd0, arg[15:8]};
-                    vs0 = 7'(sp - 7'(v0) - 7'(2 * v1));      // first argument
-                    vs1 = 7'(vs0 - ((op == 8'h36) ? 7'd2 : 7'd1));  // callable
-                    ab[0] <= rf[vs1[5:0]];
-                    for (int k = 0; k < 64; k++)
-                        if (k < v0 + 2 * v1) ab[32 + k] <= rf[6'(vs0 + 7'(k))];
-                    if (op == 8'h36 && rf[6'(vs1 + 7'd1)] != VNULL) begin
-                        ab[31] <= rf[6'(vs1 + 7'd1)]; ab_lo <= 8'd31;
-                    end else ab_lo <= 8'd32;
-                    ab_pe <= 8'd32 + v0[7:0]; ab_nkw <= v1[7:0];
-                    sp <= vs1; crk <= ABI_RK_PUSH;
-                    st <= S_CALL;
+                    // need = positional words + keyword pairs + callable (+ self)
+                    v2 = v0 + (v1 << 1) + ((op == 8'h36) ? 32'd2 : 32'd1);
+                    if (v2 <= 32'(resident_reals)) begin
+                        rf_reload_miss <= 1'b0;
+                        vs0 = 7'(sp - 7'(v0) - 7'(2 * v1));      // first argument
+                        vs1 = 7'(vs0 - ((op == 8'h36) ? 7'd2 : 7'd1));  // callable
+                        ab[0] <= rf[`SX(vs1)];
+                        for (int k = 0; k < 64; k++)
+                            if (k < v0 + 2 * v1) ab[32 + k] <= rf[`SX(6'(vs0 + 7'(k)))];
+                        if (op == 8'h36 && rf[`SX(6'(vs1 + 7'd1))] != VNULL) begin
+                            ab[31] <= rf[`SX(6'(vs1 + 7'd1))]; ab_lo <= 8'd31;
+                        end else ab_lo <= 8'd32;
+                        ab_pe <= 8'd32 + v0[7:0]; ab_nkw <= v1[7:0];
+                        sp <= vs1; crk <= ABI_RK_PUSH;
+                        st <= S_CALL;
+                    end else if (has_link && !rf_reload_miss && (v2 <= 32'd64)) begin
+                        // The window fits in the ring. Pull chunks back and retry.
+                        // A chunk that does not fit sets rf_reload_miss and comes back here.
+                        rf_resume <= S_EXEC;
+                        st <= S_RF_RELOAD;
+                    end else if (v0 + (v1 << 1) > 32'd224) begin
+                        raise_err(ABI_ERR_STAR_ARGS, VNULL, VNULL);
+                    end else begin
+                        rf_reload_miss <= 1'b0;
+                        // Wider than the ring: copy one stack value at a time.
+                        b0 <= (op == 8'h36);
+                        x4 <= v0;
+                        x1 <= v0 + (v1 << 1);
+                        ab_nkw <= v1[7:0];
+                        x0 <= 32'(stk_depth) - v2;
+                        x2 <= 32'(stk_depth) - v2 + ((op == 8'h36) ? 32'd2 : 32'd1);
+                        x3 <= v2;
+                        gi <= 32'd0;
+                        st <= S_CC_FUN;
+                    end
                 end
                 8'h35, 8'h37: begin
                     v0 = {24'd0, arg[7:0]};
                     v1 = {24'd0, arg[15:8]};
                     cv_base <= 7'(sp - 7'd1 - 7'(v0) - 7'(2 * v1));
                     cv_fidx <= 7'(sp - 7'd1 - 7'(v0) - 7'(2 * v1) - ((op == 8'h37) ? 7'd2 : 7'd1));
-                    cv_bm <= rf[6'(sp - 7'd1)][31:0];
+                    cv_bm <= rf[`SX(6'(sp - 7'd1))][31:0];
                     cv_n <= v0[7:0]; cv_j <= v1[7:0]; cv_i <= 8'd0;
                     st <= S_CVK_P;
                 end
@@ -1557,14 +1915,14 @@ module mpy_core
                     // sub-iterator stays. inj is a throw this resume deferred;
                     // VNONE means use the popped send.
                     fflags <= fflags & ~FF_YFAST;
-                    if (inj == VNONE && rf[6'(sp - 7'd1)] == VNONE &&
-                        tg(rf[6'(sp - 7'd2)]) == ABI_TAG_OBJECT)
-                        rd(adr(rf[6'(sp - 7'd2)]), S_YF_K);
+                    if (inj == VNONE && rf[`SX(6'(sp - 7'd1))] == VNONE &&
+                        tg(rf[`SX(6'(sp - 7'd2))]) == ABI_TAG_OBJECT)
+                        rd(adr(rf[`SX(6'(sp - 7'd2))]), S_YF_K);
                     else begin
                         aux <= inj;
                         fcont <= ABI_CONT_YFROM;
-                        hook(ABI_HOOK_YFROM, ABI_RK_CONT, 8'd3, rf[6'(sp - 7'd2)],
-                             (inj != VNONE) ? VNONE : rf[6'(sp - 7'd1)],
+                        hook(ABI_HOOK_YFROM, ABI_RK_CONT, 8'd3, rf[`SX(6'(sp - 7'd2))],
+                             (inj != VNONE) ? VNONE : rf[`SX(6'(sp - 7'd1))],
                              (inj != VNONE) ? inj : VNONE, VNULL);
                         inj <= VNONE;
                         sp <= sp - 7'd1;
@@ -1572,7 +1930,7 @@ module mpy_core
                 end
                 8'h69: begin
                     sp <= sp - 7'd1;
-                    hook(ABI_HOOK_IMPORT_STAR, ABI_RK_DISCARD, 8'd2, rf[6'(sp - 7'd1)],
+                    hook(ABI_HOOK_IMPORT_STAR, ABI_RK_DISCARD, 8'd2, rf[`SX(6'(sp - 7'd1))],
                          (loc == VNULL) ? glb : loc, VNULL, VNULL);
                 end
                 default: halt(ABI_HALT_BAD_OPCODE, op_pc);
@@ -1581,6 +1939,38 @@ module mpy_core
 
             S_LCS: begin push({ABI_TAG_QSTR, md}); st <= S_FETCH; end
             S_LCO: begin push(mv); st <= S_FETCH; end
+            S_LDF: if (mv == VNULL && !(fflags & FF_FW)) raise_msg(ABI_MSG_LOCAL_UNBOUND);
+                   else begin push(mv); lc_fill(i0, mv, 1'b0, 1'b1, S_FETCH); end
+            S_LC_EV: begin
+                lc_v[lc_ev_way] <= 1'b1;
+                lc_ix[lc_ev_way] <= lc_ev_idx;
+                lc_d[lc_ev_way] <= lc_ev_val;
+                lc_dirty[lc_ev_way] <= lc_ev_dirty;
+                lc_note(lc_ev_way);
+                st <= S_FETCH;
+            end
+            S_LC_FL: if (lc_fi >= cfg_lc_n) begin
+                    lc_fi <= 4'd0; st <= lc_fl_ret;
+                end else if (lc_v[lc_fi[2:0]] && lc_dirty[lc_fi[2:0]]) begin
+                    lc_dirty[lc_fi[2:0]] <= 1'b0;
+                    wr(loc_ptr(lc_ix[lc_fi[2:0]]), lc_d[lc_fi[2:0]], S_LC_FL);
+                    lc_fi <= lc_fi + 4'd1;
+                end else lc_fi <= lc_fi + 4'd1;
+            S_LDEL: if (mv == VNULL) raise_msg(ABI_MSG_LOCAL_UNBOUND);
+                    else wr(loc_ptr(i0), VNULL, S_FETCH);
+            S_LDREF: if (mv == VNULL && !(fflags & FF_FW)) raise_msg(ABI_MSG_LOCAL_UNBOUND);
+                     else begin
+                         rd(adr(mv) + 8, S_DEREF);
+                         if (cfg_lc_n != 4'd0) begin
+                             vs0 = {4'd0, lc_pick(i0)};
+                             if (!lc_v[vs0[2:0]] || !lc_dirty[vs0[2:0]])
+                                 lc_fill(i0, mv, 1'b0, 1'b0, S_DEREF);
+                         end
+                     end
+            S_STREF: if (mv == VNULL) raise_msg(ABI_MSG_LOCAL_UNBOUND);
+                     else begin wr(adr(mv) + 8, rf[`SX(6'(sp - 7'd1))], S_FETCH); sp <= sp - 7'd1; end
+            S_DDREF: if (mv == VNULL) raise_msg(ABI_MSG_LOCAL_UNBOUND);
+                     else rd(adr(mv) + 8, S_DELDEREF);
             S_DEREF: if (mv == VNULL) raise_msg(ABI_MSG_LOCAL_UNBOUND);
                      else begin push(mv); st <= S_FETCH; end
             S_DELDEREF: if (mv == VNULL) raise_msg(ABI_MSG_LOCAL_UNBOUND);
@@ -1597,23 +1987,23 @@ module mpy_core
                     end
                     8'h16, 8'h17:
                         lookup((op == 8'h16 && loc != VNULL) ? loc : glb, {ABI_TAG_QSTR, md},
-                               rf[6'(sp - 7'd1)], LK_ADD, 1'b0, S_SN_R);
+                               rf[`SX(6'(sp - 7'd1))], LK_ADD, 1'b0, S_SN_R);
                     8'h19, 8'h1a:
                         lookup((op == 8'h19 && loc != VNULL) ? loc : glb, {ABI_TAG_QSTR, md},
                                VNULL, LK_REMOVE, 1'b0, S_DN_R);
-                    8'h13, 8'h14: begin t[0] <= rf[6'(sp - 7'd1)]; gosub(S_AT, S_LA_R); end
-                    8'h18: begin t[0] <= rf[6'(sp - 7'd1)]; t[6] <= rf[6'(sp - 7'd2)]; st <= S_SA; end
+                    8'h13, 8'h14: begin t[0] <= rf[`SX(6'(sp - 7'd1))]; gosub(S_AT, S_LA_R); end
+                    8'h18: begin t[0] <= rf[`SX(6'(sp - 7'd1))]; t[6] <= rf[`SX(6'(sp - 7'd2))]; st <= S_SA; end
                     8'h15: begin
                         sp <= sp - 7'd3;
-                        hook(ABI_HOOK_SUPER_METHOD, ABI_RK_PUSH_NULL, 8'd3, rf[6'(sp - 7'd2)], rf[6'(sp - 7'd1)],
+                        hook(ABI_HOOK_SUPER_METHOD, ABI_RK_PUSH_NULL, 8'd3, rf[`SX(6'(sp - 7'd2))], rf[`SX(6'(sp - 7'd1))],
                              {ABI_TAG_QSTR, md}, VNULL);
                     end
                     8'h1b: begin
                         sp <= sp - 7'd2;
-                        hook(ABI_HOOK_IMPORT, ABI_RK_PUSH, 8'd4, {ABI_TAG_QSTR, md}, rf[6'(sp - 7'd1)],
-                             rf[6'(sp - 7'd2)], glb);
+                        hook(ABI_HOOK_IMPORT, ABI_RK_PUSH, 8'd4, {ABI_TAG_QSTR, md}, rf[`SX(6'(sp - 7'd1))],
+                             rf[`SX(6'(sp - 7'd2))], glb);
                     end
-                    8'h1c: hook(ABI_HOOK_IMPORT_FROM, ABI_RK_PUSH, 8'd2, rf[6'(sp - 7'd1)], {ABI_TAG_QSTR, md},
+                    8'h1c: hook(ABI_HOOK_IMPORT_FROM, ABI_RK_PUSH, 8'd2, rf[`SX(6'(sp - 7'd1))], {ABI_TAG_QSTR, md},
                                 VNULL, VNULL);
                     default: halt(ABI_HALT_BAD_OPCODE, op_pc);
                 endcase
@@ -1631,12 +2021,12 @@ module mpy_core
             // ---- LOAD_ATTR / LOAD_METHOD ----
             S_LA_R: case (at_kind)
                 2'd1: begin
-                    rf[6'(sp - 7'd1)] <= at_v;
+                    rf[`SX(6'(sp - 7'd1))] <= at_v;
                     if (op == 8'h14) push(VNULL);
                     st <= S_FETCH;
                 end
                 2'd2: if (op == 8'h14) begin
-                        rf[6'(sp - 7'd1)] <= at_v; push(t[0]); st <= S_FETCH;
+                        rf[`SX(6'(sp - 7'd1))] <= at_v; push(t[0]); st <= S_FETCH;
                     end else begin t[1] <= at_v; alloc(32'd4, S_LA_BM); end
                 default: begin
                     sp <= sp - 7'd1;
@@ -1646,7 +2036,7 @@ module mpy_core
             endcase
             S_LA_BM: begin
                 wb_v[0] <= vint(ABI_OB_BOUND_METHOD); wb_v[1] <= ty_bm; wb_v[2] <= t[1]; wb_v[3] <= t[0];
-                rf[6'(sp - 7'd1)] <= vobj(al_a);
+                rf[`SX(6'(sp - 7'd1))] <= vobj(al_a);
                 wblock(al_a, 4'd4, S_FETCH);
             end
 
@@ -1698,9 +2088,9 @@ module mpy_core
                 else rd(adr(t[0]) + 8, S_LS_IT);
             end
             S_LS_IT: rd(md + (x1 << 2), S_LS_PUT);
-            S_LS_PUT: begin rf[6'(sp - 7'd2)] <= mv; sp <= sp - 7'd1; st <= S_FETCH; end
+            S_LS_PUT: begin rf[`SX(6'(sp - 7'd2))] <= mv; sp <= sp - 7'd1; st <= S_FETCH; end
             S_LS_D: if (lk_cx) st <= S_LS_FB;
-                    else if (lk_found) begin rf[6'(sp - 7'd2)] <= lk_res; sp <= sp - 7'd1; st <= S_FETCH; end
+                    else if (lk_found) begin rf[`SX(6'(sp - 7'd2))] <= lk_res; sp <= sp - 7'd1; st <= S_FETCH; end
                     else raise_err(ABI_ERR_KEY, t[1], VNULL);
             S_LS_S: begin
                 v0 = ival(t[1]);
@@ -1712,9 +2102,9 @@ module mpy_core
                 else rd(si_addr + {v0[31:2], 2'b00}, S_LS_SB);
             end
             S_LS_SB: if (tg(t[0]) == ABI_TAG_BYTES) begin
-                         rf[6'(sp - 7'd2)] <= vint({24'd0, byte_of(md, x1[1:0])}); sp <= sp - 7'd1; st <= S_FETCH;
+                         rf[`SX(6'(sp - 7'd2))] <= vint({24'd0, byte_of(md, x1[1:0])}); sp <= sp - 7'd1; st <= S_FETCH;
                      end else rd(h_chars + 4 * byte_of(md, x1[1:0]), S_LS_SC);
-            S_LS_SC: begin rf[6'(sp - 7'd2)] <= {ABI_TAG_QSTR, md}; sp <= sp - 7'd1; st <= S_FETCH; end
+            S_LS_SC: begin rf[`SX(6'(sp - 7'd2))] <= {ABI_TAG_QSTR, md}; sp <= sp - 7'd1; st <= S_FETCH; end
             S_LS_FB: begin
                 sp <= sp - 7'd2;
                 hook(ABI_HOOK_SUBSCR, ABI_RK_PUSH, 8'd2, t[0], t[1], VNULL, VNULL);
@@ -1743,22 +2133,22 @@ module mpy_core
             // ---- conditional jumps ----
             S_JT: if (tr_x) begin
                     fcont <= ABI_CONT_TRUTH; pc <= op_pc;
-                    hook(ABI_HOOK_TRUTH, ABI_RK_CONT, 8'd1, rf[6'(sp - 7'd1)], VNULL, VNULL, VNULL);
+                    hook(ABI_HOOK_TRUTH, ABI_RK_CONT, 8'd1, rf[`SX(6'(sp - 7'd1))], VNULL, VNULL, VNULL);
                 end else begin
                     case (op)
                         8'h43: begin sp <= sp - 7'd1; if (tr_r) pc <= jt; end
                         8'h44: begin sp <= sp - 7'd1; if (!tr_r) pc <= jt; end
                         8'h45: if (tr_r) pc <= jt; else sp <= sp - 7'd1;
                         8'h46: if (!tr_r) pc <= jt; else sp <= sp - 7'd1;
-                        default: rf[6'(sp - 7'd1)] <= vbool(!tr_r);   // UNARY_OP NOT
+                        default: rf[`SX(6'(sp - 7'd1))] <= vbool(!tr_r);   // UNARY_OP NOT
                     endcase
                     st <= S_FETCH;
                 end
 
             // ---- with ----
             S_SW_X: begin
-                if (at_kind == 2'd2) begin rf[6'(sp - 7'd1)] <= at_v; rf[sp[5:0]] <= t[0]; sp <= sp + 7'd1; end
-                else if (at_kind == 2'd1) begin rf[6'(sp - 7'd1)] <= at_v; rf[sp[5:0]] <= VNULL; sp <= sp + 7'd1; end
+                if (at_kind == 2'd2) begin rf[`SX(6'(sp - 7'd1))] <= at_v; rf[`SX(sp)] <= t[0]; sp <= sp + 7'd1; end
+                else if (at_kind == 2'd1) begin rf[`SX(6'(sp - 7'd1))] <= at_v; rf[`SX(sp)] <= VNULL; sp <= sp + 7'd1; end
                 if (at_kind == 2'd1 || at_kind == 2'd2) begin
                     at_q <= ABI_Q_ENTER_D; gosub(S_AT, S_SW_E);
                 end else raise_err(ABI_ERR_ATTR, t[0], {ABI_TAG_QSTR, ABI_Q_EXIT_D});
@@ -1772,53 +2162,62 @@ module mpy_core
             S_WC: begin
                 ab_nkw <= 8'd0; crk <= ABI_RK_CONT;
                 ab[32] <= VNONE; ab[33] <= VNONE; ab[34] <= VNONE; ab_pe <= 8'd35;
-                if (rf[6'(sp - 7'd1)] == VNONE) begin
-                    ab[0] <= rf[6'(sp - 7'd3)]; ab[31] <= rf[6'(sp - 7'd2)];
-                    ab_lo <= (rf[6'(sp - 7'd2)] != VNULL) ? 8'd31 : 8'd32;
+                if (rf[`SX(6'(sp - 7'd1))] == VNONE) begin
+                    ab[0] <= rf[`SX(6'(sp - 7'd3))]; ab[31] <= rf[`SX(6'(sp - 7'd2))];
+                    ab_lo <= (rf[`SX(6'(sp - 7'd2))] != VNULL) ? 8'd31 : 8'd32;
                     sp <= sp - 7'd3; fcont <= ABI_CONT_WITH_NONE; st <= S_CALL;
-                end else if (tg(rf[6'(sp - 7'd1)]) == ABI_TAG_INT) begin
-                    ab[0] <= rf[6'(sp - 7'd4)]; ab[31] <= rf[6'(sp - 7'd3)];
-                    ab_lo <= (rf[6'(sp - 7'd3)] != VNULL) ? 8'd31 : 8'd32;
-                    aux <= rf[6'(sp - 7'd2)]; aux2 <= rf[6'(sp - 7'd1)];
+                end else if (tg(rf[`SX(6'(sp - 7'd1))]) == ABI_TAG_INT) begin
+                    ab[0] <= rf[`SX(6'(sp - 7'd4))]; ab[31] <= rf[`SX(6'(sp - 7'd3))];
+                    ab_lo <= (rf[`SX(6'(sp - 7'd3))] != VNULL) ? 8'd31 : 8'd32;
+                    aux <= rf[`SX(6'(sp - 7'd2))]; aux2 <= rf[`SX(6'(sp - 7'd1))];
                     sp <= sp - 7'd4; fcont <= ABI_CONT_WITH_UNWIND; st <= S_CALL;
                 end else begin
-                    ab[0] <= rf[6'(sp - 7'd3)]; ab[31] <= rf[6'(sp - 7'd2)];
-                    ab_lo <= (rf[6'(sp - 7'd2)] != VNULL) ? 8'd31 : 8'd32;
-                    aux <= rf[6'(sp - 7'd1)]; ab[33] <= rf[6'(sp - 7'd1)];
+                    ab[0] <= rf[`SX(6'(sp - 7'd3))]; ab[31] <= rf[`SX(6'(sp - 7'd2))];
+                    ab_lo <= (rf[`SX(6'(sp - 7'd2))] != VNULL) ? 8'd31 : 8'd32;
+                    aux <= rf[`SX(6'(sp - 7'd1))]; ab[33] <= rf[`SX(6'(sp - 7'd1))];
                     sp <= sp - 7'd3; fcont <= ABI_CONT_WITH_EXC;
-                    rd(adr(rf[6'(sp - 7'd1)]) + 4, S_WC_T);
+                    rd(adr(rf[`SX(6'(sp - 7'd1))]) + 4, S_WC_T);
                 end
             end
             S_WC_T: begin ab[32] <= mv; st <= S_CALL; end
 
             // ---- unwinding for return and jumps out of finally/with/for ----
-            S_UR: if (xsp == 5'd0) begin
-                      t[7] <= rf[6'(sp - 7'd1)];
+            S_UR: if (has_link && sp <= 7'd16) begin
+                      rf_resume <= S_UR; st <= S_RF_RELOAD;
+                  end else if (xsp == 5'd0) begin
+                      t[7] <= rf[`SX(sp - 7'd1)];
                       if (gen != VNULL) begin pc <= 32'd0; st <= S_GN_RET; end
                       else st <= S_RET;
                   end
                   else begin
                       vi = 8'(xsp - 5'd1);
                       if (xf[vi[3:0]] && xh[vi[3:0]] >= pc) begin
-                          rf[xv[vi[3:0]][5:0]] <= rf[6'(sp - 7'd1)];
-                          rf[6'(xv[vi[3:0]] + 7'd1)] <= vint(32'hFFFF_FFFF);
-                          sp <= xv[vi[3:0]] + 7'd2;
-                          pc <= xh[vi[3:0]];
-                          st <= S_FETCH;
+                          if (spilled_reals != 16'd0 || has_link || rf_base != 6'd0) begin
+                              ur_target <= xv[vi[3:0]];
+                              ur_val <= rf[`SX(sp - 7'd1)];
+                              pc <= xh[vi[3:0]];
+                              st <= S_UR_SLOW;
+                          end else begin
+                              rf[`SX(xv[vi[3:0]][6:0])] <= rf[`SX(sp - 7'd1)];
+                              rf[`SX(6'(xv[vi[3:0]][6:0] + 7'd1))] <= vint(32'hFFFF_FFFF);
+                              sp <= xv[vi[3:0]][6:0] + 7'd2;
+                              pc <= xh[vi[3:0]];
+                              st <= S_FETCH;
+                          end
                       end else begin
                           if (xf[vi[3:0]]) begin
-                              if (tg(rf[6'(sp - 7'd2)]) == ABI_TAG_INT) begin
-                                  rf[6'(sp - 7'd3)] <= rf[6'(sp - 7'd1)]; sp <= sp - 7'd2;
+                              if (tg(rf[`SX(6'(sp - 7'd2))]) == ABI_TAG_INT) begin
+                                  rf[`SX(6'(sp - 7'd3))] <= rf[`SX(6'(sp - 7'd1))]; sp <= sp - 7'd2;
                               end else begin
-                                  rf[6'(sp - 7'd2)] <= rf[6'(sp - 7'd1)]; sp <= sp - 7'd1;
+                                  rf[`SX(6'(sp - 7'd2))] <= rf[`SX(6'(sp - 7'd1))]; sp <= sp - 7'd1;
                               end
                           end
                           xsp <= xsp - 5'd1;
                       end
                   end
-            S_UJ: begin uj <= rf[6'(sp - 7'd1)][31:0]; sp <= sp - 7'd1; st <= S_UJ_L; end
+            S_UJ: begin uj <= rf[`SX(6'(sp - 7'd1))][31:0]; sp <= sp - 7'd1; st <= S_UJ_L; end
             S_UJ_L: if (uj[6:0] == 7'd0) begin
-                        pc <= rf[6'(sp - 7'd1)][31:0];
+                        pc <= rf[`SX(6'(sp - 7'd1))][31:0];
                         sp <= sp - 7'd1 - (uj[7] ? 7'd4 : 7'd0);
                         st <= S_FETCH;
                     end else begin
@@ -1828,10 +2227,10 @@ module mpy_core
                             push(vint(uj - 32'd1)); pc <= xh[vi[3:0]]; st <= S_FETCH;
                         end else begin
                             if (xf[vi[3:0]]) begin
-                                if (tg(rf[6'(sp - 7'd2)]) == ABI_TAG_INT) begin
-                                    rf[6'(sp - 7'd3)] <= rf[6'(sp - 7'd1)]; sp <= sp - 7'd2;
+                                if (tg(rf[`SX(6'(sp - 7'd2))]) == ABI_TAG_INT) begin
+                                    rf[`SX(6'(sp - 7'd3))] <= rf[`SX(6'(sp - 7'd1))]; sp <= sp - 7'd2;
                                 end else begin
-                                    rf[6'(sp - 7'd2)] <= rf[6'(sp - 7'd1)]; sp <= sp - 7'd1;
+                                    rf[`SX(6'(sp - 7'd2))] <= rf[`SX(6'(sp - 7'd1))]; sp <= sp - 7'd1;
                                 end
                             end
                             xsp <= xsp - 5'd1;
@@ -1855,8 +2254,8 @@ module mpy_core
                 if (tg(t[0]) == ABI_TAG_TUPLE || tg(t[0]) == ABI_TAG_BYTES || is_mut(t[0], ABI_MUT_LIST) ||
                     is_mut(t[0], ABI_MUT_DICT) || is_mut(t[0], ABI_MUT_SET) || is_mut(t[0], ABI_MUT_BYTEARRAY) ||
                     tg(t[0]) == ABI_TAG_ITER || (tg(t[0]) == ABI_TAG_OBJECT && b1)) begin
-                    rf[6'(vs0 + 7'd1)] <= vint(32'd0); rf[6'(vs0 + 7'd2)] <= vint(32'd0);
-                    rf[6'(vs0 + 7'd3)] <= vint(
+                    rf[`SX(6'(vs0 + 7'd1))] <= vint(32'd0); rf[`SX(6'(vs0 + 7'd2))] <= vint(32'd0);
+                    rf[`SX(6'(vs0 + 7'd3))] <= vint(
                         (tg(t[0]) == ABI_TAG_ITER) ? ABI_IT_HEAPITER :
                         (tg(t[0]) == ABI_TAG_OBJECT) ? ABI_IT_PYOBJ :
                         is_mut(t[0], ABI_MUT_DICT) ? ABI_IT_DICT :
@@ -1867,23 +2266,23 @@ module mpy_core
                 else if (tg(t[0]) == ABI_TAG_OBJECT) rd(adr(t[0]), S_GI_K);
                 else st <= S_GI_FB;
             end
-            S_GI_R0: begin rf[6'(sp - 7'd1)] <= mv; rd(adr(t[0]) + 4, S_GI_R1); end
-            S_GI_R1: begin rf[sp[5:0]] <= mv; rd(adr(t[0]) + 8, S_GI_R2); end
+            S_GI_R0: begin rf[`SX(6'(sp - 7'd1))] <= mv; rd(adr(t[0]) + 4, S_GI_R1); end
+            S_GI_R1: begin rf[`SX(sp)] <= mv; rd(adr(t[0]) + 8, S_GI_R2); end
             S_GI_R2: begin
-                rf[6'(sp + 7'd1)] <= mv; rf[6'(sp + 7'd2)] <= vint(ABI_IT_RANGE);
+                rf[`SX(6'(sp + 7'd1))] <= mv; rf[`SX(6'(sp + 7'd2))] <= vint(ABI_IT_RANGE);
                 sp <= sp + 7'd3; st <= S_FETCH;
             end
             S_GI_S: if (si_na) st <= S_GI_FB;
                     else begin
-                        rf[sp[5:0]] <= vint(32'd0); rf[6'(sp + 7'd1)] <= vint(32'd0);
-                        rf[6'(sp + 7'd2)] <= vint(ABI_IT_STR);
+                        rf[`SX(sp)] <= vint(32'd0); rf[`SX(6'(sp + 7'd1))] <= vint(32'd0);
+                        rf[`SX(6'(sp + 7'd2))] <= vint(ABI_IT_STR);
                         sp <= sp + 7'd3; st <= S_FETCH;
                     end
             S_GI_K: if (md == ABI_OB_DICT_VIEW) rd(adr(t[0]) + 8, S_GI_V0);
                     else begin at_q <= ABI_Q_ITER_D; gosub(S_AT, S_GI_AT); end
-            S_GI_V0: begin rf[6'(sp - 7'd1)] <= mv; rd(adr(t[0]) + 12, S_GI_V1); end
+            S_GI_V0: begin rf[`SX(6'(sp - 7'd1))] <= mv; rd(adr(t[0]) + 12, S_GI_V1); end
             S_GI_V1: begin
-                rf[sp[5:0]] <= vint(32'd0); rf[6'(sp + 7'd1)] <= mv; rf[6'(sp + 7'd2)] <= vint(ABI_IT_DICT);
+                rf[`SX(sp)] <= vint(32'd0); rf[`SX(6'(sp + 7'd1))] <= mv; rf[`SX(6'(sp + 7'd2))] <= vint(ABI_IT_DICT);
                 sp <= sp + 7'd3; st <= S_FETCH;
             end
             S_GI_AT: if (at_kind == 2'd2 || at_kind == 2'd1) begin
@@ -1907,7 +2306,7 @@ module mpy_core
                     else begin at_q <= ABI_Q_NEXT_D; gosub(S_AT, S_FI_AT); end
                 end else if (it_h) wr(adr(t[3]), iv[0], S_FI_W1);
                 else begin
-                    rf[6'(sp - 7'd4)] <= iv[0]; rf[6'(sp - 7'd3)] <= iv[1];
+                    rf[`SX(6'(sp - 7'd4))] <= iv[0]; rf[`SX(6'(sp - 7'd3))] <= iv[1];
                     st <= S_FI_DONE;
                 end
             S_FI_W1: wr(adr(t[3]) + 4, iv[1], S_FI_DONE);
@@ -1934,7 +2333,11 @@ module mpy_core
 
             // ---- containers ----
             S_BT_R: begin
-                rf[6'(sp - 7'(tb_n))] <= tb_v; sp <= sp - 7'(tb_n) + 7'd1; st <= S_FETCH;
+                drop_left <= {8'd0, tb_n};
+                drop_push_en <= 1'b1;
+                drop_push_v <= tb_v;
+                drop_then <= S_FETCH;
+                st <= S_DROP;
             end
             S_BL_A: begin
                 v0 = (arg < 32'd4) ? 32'd4 : arg;
@@ -1944,30 +2347,47 @@ module mpy_core
                 wblock(al_a, 4'd3, S_BL_L);
             end
             S_BL_L: if (i0 == arg[7:0]) begin
-                        rf[6'(sp - 7'(arg))] <= t[0]; sp <= sp - 7'(arg) + 7'd1; st <= S_FETCH;
+                        drop_left <= {8'd0, arg[7:0]};
+                        drop_push_en <= 1'b1;
+                        drop_push_v <= t[0];
+                        drop_then <= S_FETCH;
+                        st <= S_DROP;
                     end else begin
-                        wr(adr(t[0]) + 12 + 4 * i0, rf[6'(sp - 7'(arg) + 7'(i0))], S_BL_L);
-                        i0 <= i0 + 8'd1;
+                        v0 = 32'(stk_depth) - arg + 32'(i0);
+                        if (stk_hit(v0[15:0])) begin
+                            wr(adr(t[0]) + 12 + 4 * i0, stk_val(v0[15:0]), S_BL_L);
+                            i0 <= i0 + 8'd1;
+                        end else begin
+                            srd_g <= v0[15:0];
+                            gosub(S_SRD, S_BL_W);
+                        end
                     end
+            S_BL_W: begin wr(adr(t[0]) + 12 + 4 * i0, srd_v, S_BL_L); i0 <= i0 + 8'd1; end
             S_BM_A: begin
                 wb_v[0] <= vint(32'd0); wb_v[1] <= vint(arg);
                 wb_v[2] <= (arg == 32'd0) ? VNULL : {ABI_TAG_CONT, al_a + 32'd16};
                 wb_v[3] <= vint(32'd0);
-                rf[sp[5:0]] <= vmut(al_a, ABI_MUT_DICT); sp <= sp + 7'd1;
+                rf[`SX(sp)] <= vmut(al_a, ABI_MUT_DICT); sp <= sp + 7'd1;
                 wblock(al_a, 4'd4, S_FETCH);
             end
-            S_BSET_R: begin
-                sp <= sp - 7'(tb_n);
-                hook(ABI_HOOK_DICTOP, ABI_RK_PUSH, 8'd4, vint(32'd0), tb_v, VNULL, VNULL);
-            end
+            S_BSET_R: if ({8'd0, tb_n} > resident_reals) begin
+                    drop_left <= {8'd0, tb_n};
+                    drop_push_en <= 1'b0;
+                    drop_then <= S_BSET_H;
+                    st <= S_DROP;
+                end else begin
+                    sp <= sp - 7'(tb_n);
+                    hook(ABI_HOOK_DICTOP, ABI_RK_PUSH, 8'd4, vint(32'd0), tb_v, VNULL, VNULL);
+                end
+            S_BSET_H: hook(ABI_HOOK_DICTOP, ABI_RK_PUSH, 8'd4, vint(32'd0), tb_v, VNULL, VNULL);
             S_SLICE_A: begin
                 wb_v[0] <= vint(ABI_OB_SLICE); wb_v[1] <= ty_slice;
                 if (arg == 32'd3) begin
-                    wb_v[2] <= rf[6'(sp - 7'd3)]; wb_v[3] <= rf[6'(sp - 7'd2)]; wb_v[4] <= rf[6'(sp - 7'd1)];
+                    wb_v[2] <= rf[`SX(6'(sp - 7'd3))]; wb_v[3] <= rf[`SX(6'(sp - 7'd2))]; wb_v[4] <= rf[`SX(6'(sp - 7'd1))];
                 end else begin
-                    wb_v[2] <= rf[6'(sp - 7'd2)]; wb_v[3] <= rf[6'(sp - 7'd1)]; wb_v[4] <= VNONE;
+                    wb_v[2] <= rf[`SX(6'(sp - 7'd2))]; wb_v[3] <= rf[`SX(6'(sp - 7'd1))]; wb_v[4] <= VNONE;
                 end
-                rf[6'(sp - 7'(arg))] <= vobj(al_a); sp <= sp - 7'(arg) + 7'd1;
+                rf[`SX(6'(sp - 7'(arg)))] <= vobj(al_a); sp <= sp - 7'(arg) + 7'd1;
                 wblock(al_a, 4'd5, S_FETCH);
             end
             S_SC_L: begin sp <= sp - 7'd1; st <= S_FETCH; end
@@ -1987,21 +2407,20 @@ module mpy_core
                         sp <= sp - 7'd1; fcont <= ABI_CONT_UNPACK;
                         hook(ABI_HOOK_UNPACK, ABI_RK_CONT, 8'd3, t[0], vint(arg), vint(32'd0), VNULL);
                     end else if (tg(t[0]) == ABI_TAG_TUPLE) begin
-                        x2 <= adr(t[0]) + 4; i0 <= 8'd0; sp <= sp - 7'd1; st <= S_UPS_L;
+                        x2 <= adr(t[0]) + 4; x1 <= arg; sp <= sp - 7'd1; st <= S_UPS_L;
                     end else rd(adr(t[0]) + 8, S_UPS_P);
-            S_UPS_P: begin x2 <= md; i0 <= 8'd0; sp <= sp - 7'd1; st <= S_UPS_L; end
-            S_UPS_L: if (i0 == arg[7:0]) begin sp <= sp + 7'(arg); st <= S_FETCH; end
-                     else rd(x2 + 4 * i0, S_UPS_V);
-            S_UPS_V: begin
-                rf[6'(sp + 7'(arg) - 7'd1 - 7'(i0))] <= mv; i0 <= i0 + 8'd1; st <= S_UPS_L;
-            end
+            S_UPS_P: begin x2 <= md; x1 <= arg; sp <= sp - 7'd1; st <= S_UPS_L; end
+            S_UPS_L: if (x1 == 32'd0) st <= S_FETCH;
+                     else rd(x2 + (x1 << 2) - 32'd4, S_UPS_V);
+            S_UPS_V: begin x1 <= x1 - 32'd1; push(mv); st <= S_UPS_L; end
 
             // ---- MAKE_FUNCTION / MAKE_CLOSURE ----
             S_MF_C: rd(md + 4 * arg, S_MF_R);
             S_MF_R: begin
                 c_rc <= md;
                 if (op == 8'h20 || op == 8'h21) begin
-                    tb_src <= 1'b1; tb_nz <= 1'b0; tb_from <= 8'(sp - 7'(ext)); tb_n <= ext;
+                    tb_src <= 1'b1; tb_nz <= 1'b0; tb_from <= 8'(sp - 7'(ext));
+                    stk_from <= stk_depth - 16'(ext); tb_n <= ext;
                     gosub(S_TUP, S_MF_CL);
                 end else begin t[0] <= VNULL; alloc(32'd7, S_MF_A); end
             end
@@ -2011,39 +2430,39 @@ module mpy_core
                 wb_v[0] <= vint(ABI_OB_FUNCTION); wb_v[1] <= ty_fun; wb_v[2] <= vint(c_rc);
                 wb_v[3] <= t[0]; wb_v[6] <= glb;
                 if (op == 8'h33 || op == 8'h21) begin
-                    wb_v[4] <= rf[6'(sp - 7'(v0) - 7'd2)]; wb_v[5] <= rf[6'(sp - 7'(v0) - 7'd1)];
+                    wb_v[4] <= rf[`SX(6'(sp - 7'(v0) - 7'd2))]; wb_v[5] <= rf[`SX(6'(sp - 7'(v0) - 7'd1))];
                     v0 = v0 + 32'd2;
                 end else begin wb_v[4] <= VNULL; wb_v[5] <= VNULL; end
-                rf[6'(sp - 7'(v0))] <= vobj(al_a); sp <= sp - 7'(v0) + 7'd1;
+                rf[`SX(6'(sp - 7'(v0)))] <= vobj(al_a); sp <= sp - 7'(v0) + 7'd1;
                 wblock(al_a, 4'd7, S_FETCH);
             end
 
             // ---- CALL_*_VAR_KW: star-arg expansion ----
             S_CVK_P: if (cv_i == cv_n) begin
-                    ab[0] <= rf[cv_fidx[5:0]];
-                    if (op == 8'h37 && rf[6'(cv_fidx + 7'd1)] != VNULL) begin
-                        ab[31] <= rf[6'(cv_fidx + 7'd1)]; ab_lo <= 8'd31;
+                    ab[0] <= rf[`SX(cv_fidx)];
+                    if (op == 8'h37 && rf[`SX(6'(cv_fidx + 7'd1))] != VNULL) begin
+                        ab[31] <= rf[`SX(6'(cv_fidx + 7'd1))]; ab_lo <= 8'd31;
                     end else ab_lo <= 8'd32;
                     ab_pe <= 8'd32; cv_i <= 8'd0;
                     st <= S_CVK_E;
                 end else begin
-                    t[0] <= rf[6'(cv_base + 7'(cv_i))];
-                    if (cv_bm[cv_i[4:0]] && !(tg(rf[6'(cv_base + 7'(cv_i))]) == ABI_TAG_TUPLE ||
-                                             is_mut(rf[6'(cv_base + 7'(cv_i))], ABI_MUT_LIST))) begin
+                    t[0] <= rf[`SX(6'(cv_base + 7'(cv_i)))];
+                    if (cv_bm[cv_i[4:0]] && !(tg(rf[`SX(6'(cv_base + 7'(cv_i)))]) == ABI_TAG_TUPLE ||
+                                             is_mut(rf[`SX(6'(cv_base + 7'(cv_i)))], ABI_MUT_LIST))) begin
                         aux <= vint({25'd0, 7'(cv_base + 7'(cv_i))}); fcont <= ABI_CONT_REPLACE; pc <= op_pc;
-                        hook(ABI_HOOK_TUPLE, ABI_RK_CONT, 8'd1, rf[6'(cv_base + 7'(cv_i))], VNULL, VNULL, VNULL);
+                        hook(ABI_HOOK_TUPLE, ABI_RK_CONT, 8'd1, rf[`SX(6'(cv_base + 7'(cv_i)))], VNULL, VNULL, VNULL);
                     end else cv_i <= cv_i + 8'd1;
                 end
             S_CVK_E: if (cv_i == cv_n) begin
                     for (int k = 0; k < 64; k++)
-                        if (k < 2 * cv_j) ab[8'(ab_pe + 8'(k))] <= rf[6'(cv_base + 7'(cv_n) + 7'(k))];
+                        if (k < 2 * cv_j) ab[8'(ab_pe + 8'(k))] <= rf[`SX(6'(cv_base + 7'(cv_n) + 7'(k)))];
                     ab_nkw <= cv_j; sp <= cv_fidx; crk <= ABI_RK_PUSH;
                     st <= S_CALL;
                 end else if (!cv_bm[cv_i[4:0]]) begin
-                    ab[ab_pe] <= rf[6'(cv_base + 7'(cv_i))]; ab_pe <= ab_pe + 8'd1; cv_i <= cv_i + 8'd1;
+                    ab[ab_pe] <= rf[`SX(6'(cv_base + 7'(cv_i)))]; ab_pe <= ab_pe + 8'd1; cv_i <= cv_i + 8'd1;
                 end else begin
-                    t[0] <= rf[6'(cv_base + 7'(cv_i))];
-                    rd(adr(rf[6'(cv_base + 7'(cv_i))]), S_CVK_N);
+                    t[0] <= rf[`SX(6'(cv_base + 7'(cv_i)))];
+                    rd(adr(rf[`SX(6'(cv_base + 7'(cv_i)))]), S_CVK_N);
                 end
             S_CVK_N: begin
                 x4 <= md; gi <= 32'd0;
@@ -2059,27 +2478,27 @@ module mpy_core
             // ---------------- unary / binary ----------------
             S_UN: begin
                 v0 = 32'(n_o);
-                if (v0 == ABI_UNOP_NOT) begin tr_v <= rf[6'(sp - 7'd1)]; gosub(S_TR, S_JT); end
-                else if (numlike(rf[6'(sp - 7'd1)]) && v0 <= ABI_UNOP_INVERT) begin
+                if (v0 == ABI_UNOP_NOT) begin tr_v <= rf[`SX(6'(sp - 7'd1))]; gosub(S_TR, S_JT); end
+                else if (numlike(rf[`SX(6'(sp - 7'd1))]) && v0 <= ABI_UNOP_INVERT) begin
                     n_un <= 1'b1;
                     alu_op <= (v0 == ABI_UNOP_POSITIVE) ? ALU_POS : (v0 == ABI_UNOP_NEGATIVE) ? ALU_NEG : ALU_INVERT;
-                    t[0] <= rf[6'(sp - 7'd1)]; t[1] <= vint(32'd0);
+                    t[0] <= rf[`SX(6'(sp - 7'd1))]; t[1] <= vint(32'd0);
                     st <= S_NUM;
                 end else begin
                     sp <= sp - 7'd1;
-                    hook(ABI_HOOK_UNOP, ABI_RK_PUSH, 8'd2, vint(v0), rf[6'(sp - 7'd1)], VNULL, VNULL);
+                    hook(ABI_HOOK_UNOP, ABI_RK_PUSH, 8'd2, vint(v0), rf[`SX(6'(sp - 7'd1))], VNULL, VNULL);
                 end
             end
             S_BIN: begin
                 v0 = 32'(n_o);
-                t[0] <= rf[6'(sp - 7'd2)]; t[1] <= rf[6'(sp - 7'd1)];
+                t[0] <= rf[`SX(6'(sp - 7'd2))]; t[1] <= rf[`SX(6'(sp - 7'd1))];
                 n_un <= 1'b0;
                 if (v0 == ABI_BINOP_IS) begin
-                    rf[6'(sp - 7'd2)] <= vbool(rf[6'(sp - 7'd2)] == rf[6'(sp - 7'd1)]);
+                    rf[`SX(6'(sp - 7'd2))] <= vbool(rf[`SX(6'(sp - 7'd2))] == rf[`SX(6'(sp - 7'd1))]);
                     sp <= sp - 7'd1; st <= S_FETCH;
                 end else if (v0 == ABI_BINOP_EXCEPTION_MATCH) st <= S_EXM;
                 else if (v0 == ABI_BINOP_IN) st <= S_IN;
-                else if (numlike(rf[6'(sp - 7'd2)]) && numlike(rf[6'(sp - 7'd1)]) &&
+                else if (numlike(rf[`SX(6'(sp - 7'd2))]) && numlike(rf[`SX(6'(sp - 7'd1))]) &&
                          (v0 <= ABI_BINOP_NOT_EQUAL || (v0 >= ABI_BINOP_INPLACE_OR && v0 <= ABI_BINOP_POWER))) begin
                     alu_op <= (v0 >= ABI_BINOP_INPLACE_OR && v0 < ABI_BINOP_OR) ? 6'(v0 + 32'd13) : 6'(v0);
                     st <= S_NUM;
@@ -2093,24 +2512,24 @@ module mpy_core
             S_EQ: begin
                 vb = (32'(n_o) == ABI_BINOP_NOT_EQUAL);
                 if (t[0] == t[1] && tg(t[0]) != ABI_TAG_OBJECT) begin
-                    rf[6'(sp - 7'd2)] <= vbool(!vb); sp <= sp - 7'd1; st <= S_FETCH;
+                    rf[`SX(6'(sp - 7'd2))] <= vbool(!vb); sp <= sp - 7'd1; st <= S_FETCH;
                 end else if (strlike(t[0]) && strlike(t[1])) begin
                     se_a <= t[0]; se_b <= t[1]; gosub(S_STREQ, S_EQ_S);
                 end else if (strlike(t[0]) || strlike(t[1]) ||
                              (tg(t[0]) == ABI_TAG_CONTROL && tg(t[1]) != ABI_TAG_OBJECT) ||
                              (tg(t[1]) == ABI_TAG_CONTROL && tg(t[0]) != ABI_TAG_OBJECT)) begin
-                    rf[6'(sp - 7'd2)] <= vbool(vb); sp <= sp - 7'd1; st <= S_FETCH;
+                    rf[`SX(6'(sp - 7'd2))] <= vbool(vb); sp <= sp - 7'd1; st <= S_FETCH;
                 end else st <= S_BIN_FB;
             end
             S_EQ_S: begin
-                rf[6'(sp - 7'd2)] <= vbool(se_eq ^ (32'(n_o) == ABI_BINOP_NOT_EQUAL));
+                rf[`SX(6'(sp - 7'd2))] <= vbool(se_eq ^ (32'(n_o) == ABI_BINOP_NOT_EQUAL));
                 sp <= sp - 7'd1; st <= S_FETCH;
             end
             S_IN: if ((is_mut(t[1], ABI_MUT_DICT) || is_mut(t[1], ABI_MUT_SET)))
                       lookup(t[1], t[0], VNULL, LK_FIND, is_mut(t[1], ABI_MUT_SET), S_IN_R);
                   else st <= S_BIN_FB;
             S_IN_R: if (lk_cx) st <= S_BIN_FB;
-                    else begin rf[6'(sp - 7'd2)] <= vbool(lk_found); sp <= sp - 7'd1; st <= S_FETCH; end
+                    else begin rf[`SX(6'(sp - 7'd2))] <= vbool(lk_found); sp <= sp - 7'd1; st <= S_FETCH; end
 
             S_EXM: if (tg(t[0]) != ABI_TAG_OBJECT) st <= S_BIN_FB;
                    else rd(adr(t[0]) + 4, S_EXM_T);
@@ -2120,12 +2539,12 @@ module mpy_core
                 else if (tg(t[1]) == ABI_TAG_TUPLE) rd(adr(t[1]), S_EXM_TN);
                 else st <= S_BIN_FB;
             end
-            S_EXM_R: begin rf[6'(sp - 7'd2)] <= vbool(is_r); sp <= sp - 7'd1; st <= S_FETCH; end
+            S_EXM_R: begin rf[`SX(6'(sp - 7'd2))] <= vbool(is_r); sp <= sp - 7'd1; st <= S_FETCH; end
             S_EXM_TN: begin x4 <= md; gi <= 32'd0; st <= S_EXM_TL; end
-            S_EXM_TL: if (gi == x4) begin rf[6'(sp - 7'd2)] <= VFALSE; sp <= sp - 7'd1; st <= S_FETCH; end
+            S_EXM_TL: if (gi == x4) begin rf[`SX(6'(sp - 7'd2))] <= VFALSE; sp <= sp - 7'd1; st <= S_FETCH; end
                       else rd(adr(t[1]) + 4 + (gi << 2), S_EXM_TI);
             S_EXM_TI: begin is_c <= mv; gosub(S_ISSUB, S_EXM_TR); end
-            S_EXM_TR: if (is_r) begin rf[6'(sp - 7'd2)] <= VTRUE; sp <= sp - 7'd1; st <= S_FETCH; end
+            S_EXM_TR: if (is_r) begin rf[`SX(6'(sp - 7'd2))] <= VTRUE; sp <= sp - 7'd1; st <= S_FETCH; end
                       else begin gi <= gi + 32'd1; st <= S_EXM_TL; end
 
             // numeric datapath: t[0] op t[1]
@@ -2170,8 +2589,8 @@ module mpy_core
                 wblock(al_a, 4'd2, S_NUM_PUT);
             end
             S_NUM_PUT: begin
-                if (n_un) rf[6'(sp - 7'd1)] <= t[2];
-                else begin rf[6'(sp - 7'd2)] <= t[2]; sp <= sp - 7'd1; end
+                if (n_un) rf[`SX(6'(sp - 7'd1))] <= t[2];
+                else begin rf[`SX(6'(sp - 7'd2))] <= t[2]; sp <= sp - 7'd1; end
                 st <= S_FETCH;
             end
 
@@ -2403,16 +2822,22 @@ module mpy_core
             S_GSAVE: rd(adr(gen) + 20, S_GSAVE1);
             S_GSAVE1: begin
                 x4 <= fbase;
-                fbase <= md;
+                x0 <= md;
+                spill_to_img <= 1'b1;
+                if (lc_dirty_any) begin lc_fi <= 4'd0; lc_fl_ret <= S_GSAVE1B; st <= S_LC_FL; end
+                else st <= S_GSAVE1B;
+            end
+            S_GSAVE1B: begin
+                fbase <= x0;
                 gosub(S_SPILL, S_GSAVE2);
             end
-            S_GSAVE2: begin fbase <= x4; ret(); end
+            S_GSAVE2: begin fbase <= x4; spill_to_img <= 1'b0; ret(); end
 
             S_GN_AL: rd(TT + 4 * ABI_T_GENERATOR, S_GN_AL2);
             S_GN_AL2: begin t[3] <= mv; alloc(32'd6, S_GN_AL3); end
             S_GN_AL3: begin
                 t[0] <= vobj(al_a);
-                alloc(32'd16 + nst + 32'd3 * nexc, S_GN_AL4);
+                alloc(32'd17 + 32'(nloc) + 32'd3 * {27'd0, nexc} + 32'd64, S_GN_AL4);
             end
             S_GN_AL4: begin
                 wb_v[0] <= vint(ABI_OB_GENERATOR);
@@ -2436,7 +2861,7 @@ module mpy_core
                            // VNONE stays VNONE. Do not build StopIteration
                            // and do not clobber fcont.
                            fflags <= fflags & ~FF_YFAST;
-                           rf[6'(sp - 7'd1)] <= t[7];
+                           rf[`SX(6'(sp - 7'd1))] <= t[7];
                            st <= S_FETCH;
                        end else if (fcont == ABI_CONT_FOR_NEXT) begin
                            // FOR_ITER's frame is the parent, so op is the
@@ -2481,7 +2906,7 @@ module mpy_core
                        // parent is still the live frame; the result is None.
                        if (fflags & FF_YFAST) begin
                            fflags <= fflags & ~FF_YFAST;
-                           rf[6'(sp - 7'd1)] <= VNONE;
+                           rf[`SX(6'(sp - 7'd1))] <= VNONE;
                            st <= S_FETCH;
                        end else raise_msg(ABI_MSG_STOP_ITER);
                    end else rd(adr(t[0]) + 12, S_GR3);
@@ -2495,16 +2920,18 @@ module mpy_core
             end
             S_GR5: begin x1 <= md; rd(x4 + 20, S_GR6); end
             S_GR6: begin
-                v0 = noframe ? ABI_FRAME_BASE : ftop;
-                v1 = v0 + ((32'd16 + {25'd0, x1[22:16]} + 32'd3 * {27'd0, md[20:16]}) << 2);
+                // Past the caller's spilled operand stack, same as a call.
+                // The stack sits at ftop; planting the frame on ftop itself
+                // overwrites it when this generator later spills.
+                v0 = noframe ? ABI_FRAME_BASE : (ftop + {23'd0, sp, 2'b00});
+                v1 = v0 + ((32'd17 + {25'd0, x1[22:16]} + 32'd3 * {27'd0, md[20:16]}) << 2);
                 if (x1[6:0] == 7'd0 && t[1] != VNONE) begin
                     fflags <= fflags & ~FF_YFAST;
                     raise_msg(ABI_MSG_GEN_SEND);
-                end else if (v1 > ABI_FRAME_END) begin
+                end else if (v1 > spill_hp) begin
                     fflags <= fflags & ~FF_YFAST;
                     raise_msg(ABI_MSG_RECURSION);
-                end
-                else begin
+                end else begin
                     x3 <= v0;
                     b1 <= (x1[6:0] != 7'd0);
                     wr(adr(t[0]) + 16, VNONE, S_GR_CLR);
@@ -2524,7 +2951,7 @@ module mpy_core
             S_GR_GO: begin
                 frk <= r_rk;
                 gen <= t[0];
-                if (b1) rf[6'(sp - 7'd1)] <= t[1];
+                if (b1) rf[`SX(6'(sp - 7'd1))] <= t[1];
                 if (t[2] != VNONE) st <= S_GR_OPC;
                 else begin inj <= VNONE; st <= S_FETCH; end
             end
@@ -2542,8 +2969,8 @@ module mpy_core
 
             // YIELD_VALUE. pc already addresses the opcode after this one.
             S_YLD: begin
-                t[7] <= rf[6'(sp - 7'd1)];
-                rf[6'(sp - 7'd1)] <= VNONE;
+                t[7] <= rf[`SX(6'(sp - 7'd1))];
+                rf[`SX(6'(sp - 7'd1))] <= VNONE;
                 wr(adr(gen) + 12, vint(32'd0), S_YLD2);
             end
             S_YLD2: gosub(S_GSAVE, S_YLD3);
@@ -2556,7 +2983,7 @@ module mpy_core
             // Word 0 of a YIELD_FROM sub-iterator whose send and inj are None.
             S_YF_K: if (md == ABI_OB_GENERATOR) begin
                     fflags <= fflags | FF_YFAST;
-                    t[0] <= rf[6'(sp - 7'd2)];
+                    t[0] <= rf[`SX(6'(sp - 7'd2))];
                     t[1] <= VNONE; t[2] <= VNONE;
                     r_rk <= ABI_RK_CONT; fcont <= ABI_CONT_YFROM;
                     sp <= sp - 7'd1;
@@ -2564,8 +2991,8 @@ module mpy_core
                 end else begin
                     aux <= inj;
                     fcont <= ABI_CONT_YFROM;
-                    hook(ABI_HOOK_YFROM, ABI_RK_CONT, 8'd3, rf[6'(sp - 7'd2)],
-                         (inj != VNONE) ? VNONE : rf[6'(sp - 7'd1)],
+                    hook(ABI_HOOK_YFROM, ABI_RK_CONT, 8'd3, rf[`SX(6'(sp - 7'd2))],
+                         (inj != VNONE) ? VNONE : rf[`SX(6'(sp - 7'd1))],
                          (inj != VNONE) ? inj : VNONE, VNULL);
                     inj <= VNONE;
                     sp <= sp - 7'd1;
@@ -2579,7 +3006,7 @@ module mpy_core
                     pc <= op_pc;
                     st <= S_YLD;
                 end else begin
-                    rf[6'(sp - 7'd1)] <= mv;
+                    rf[`SX(6'(sp - 7'd1))] <= mv;
                     if (aux != VNONE) st <= S_YF_GE;
                     else st <= S_FETCH;
                 end
@@ -2607,9 +3034,9 @@ module mpy_core
             S_YF_SI2: if (is_r) rd(adr(xc) + 8, S_YF_SV);
                       else begin sp <= sp - 7'd1; st <= S_RX_TB; end
             S_YF_SV: begin t[6] <= mv; rd(adr(mv), S_YF_SL); end
-            S_YF_SL: if (md == 32'd0) begin rf[6'(sp - 7'd1)] <= VNONE; st <= S_FETCH; end
+            S_YF_SL: if (md == 32'd0) begin rf[`SX(6'(sp - 7'd1))] <= VNONE; st <= S_FETCH; end
                      else rd(adr(t[6]) + 4, S_YF_SA);
-            S_YF_SA: begin rf[6'(sp - 7'd1)] <= mv; st <= S_FETCH; end
+            S_YF_SA: begin rf[`SX(6'(sp - 7'd1))] <= mv; st <= S_FETCH; end
 
             // =================================================================
             // Subroutines
@@ -2894,12 +3321,22 @@ module mpy_core
                    else alloc(32'd1 + tb_n, S_TUP_A);
             S_TUP_A: begin tb_a <= al_a; tb_i <= 8'd0; wr(al_a, vint(32'(tb_n)), S_TUP_L); end
             S_TUP_L: if (tb_i == tb_n) begin tb_v <= {ABI_TAG_TUPLE, tb_a}; ret(); end
-                     else begin
-                         if (tb_src) wr(tb_a + 4 + 4 * tb_i, rf[6'(tb_from + tb_i)], S_TUP_L);
-                         else if (tb_nz && ab[8'(tb_from + tb_i)] == VNULL) wr(tb_a + 4 + 4 * tb_i, vint(32'd0), S_TUP_L);
+                     else if (!tb_src) begin
+                         if (tb_nz && ab[8'(tb_from + tb_i)] == VNULL)
+                             wr(tb_a + 4 + 4 * tb_i, vint(32'd0), S_TUP_L);
                          else wr(tb_a + 4 + 4 * tb_i, ab[8'(tb_from + tb_i)], S_TUP_L);
                          tb_i <= tb_i + 8'd1;
+                     end else begin
+                         v0 = {16'd0, stk_from} + 32'(tb_i);
+                         if (stk_hit(v0[15:0])) begin
+                             wr(tb_a + 4 + 4 * tb_i, stk_val(v0[15:0]), S_TUP_L);
+                             tb_i <= tb_i + 8'd1;
+                         end else begin
+                             srd_g <= v0[15:0];
+                             gosub(S_SRD, S_TUP_W);
+                         end
                      end
+            S_TUP_W: begin wr(tb_a + 4 + 4 * tb_i, srd_v, S_TUP_L); tb_i <= tb_i + 8'd1; end
 
             // is_t a subclass of is_c?
             S_ISSUB: if (is_c == ty_obj || is_c == is_t) begin is_r <= 1'b1; ret(); end
@@ -3025,6 +3462,244 @@ module mpy_core
                 wblock(al_a, 4'd3, S_LA_RET);
             end
 
+            // ---- register-stack spill / reload / chain walk ----
+            // Word 0 packs the previous address and the value count. Tag
+            // words follow, then payloads, oldest first. A growth spill
+            // copies cfg_grow values (clamped so the ring stays above the
+            // eager-reload line). After a pop, the chunk is 16. A spill
+            // that already has a link moves that link into the header and
+            // frees `n` registers. The first spill frees `n - 1`.
+            S_RF_SPILL: begin
+                v0 = (cfg_adapt && !rf_mono) ? 32'd16 : 32'(cfg_grow);
+                if (v0 < 32'(MPY_RF_CHUNK_MIN)) v0 = 32'(MPY_RF_CHUNK_MIN);
+                if (v0 > 32'(MPY_RF_CHUNK_MAX)) v0 = 32'(MPY_RF_CHUNK_MAX);
+                // Leave sp >= 17 so the next fetch does not reload at once.
+                v1 = has_link ? ((sp > 7'd17) ? 32'(sp - 7'd17) : 32'd0)
+                              : ((sp > 7'd16) ? 32'(sp - 7'd16) : 32'd0);
+                if (v0 > v1) v0 = v1;
+                v2 = mpy_rf_block_bytes(v0[5:0]);
+                if (v0 < 32'(MPY_RF_CHUNK_MIN)) st <= rf_resume;
+                else if (spill_hp < ftop + v2) raise_msg(ABI_MSG_RECURSION);
+                else begin
+                    spill_n <= v0[5:0];
+                    spill_ntag <= 6'((v0[5:0] + 6'd7) >> 3);
+                    spill_words <= 32'd1 + 32'((v0[5:0] + 6'd7) >> 3) + v0;
+                    spill_addr <= spill_hp - v2;
+                    spill_had_link <= has_link;
+                    spill_prev <= has_link ? mpy_rf_link_addr(rf[`SX(7'd0)]) : 32'd0;
+                    sw_i <= 32'd0;
+                    st <= S_RF_SPILL_W;
+                end
+            end
+            S_RF_SPILL_W: if (sw_i == spill_words) begin
+                if (spill_had_link) begin
+                    rf[`SX(spill_n)] <= mpy_make_rf_link(spill_addr);
+                    rf_base <= rf_base + spill_n;
+                    sp <= sp - {1'b0, spill_n};
+                end else begin
+                    rf[`SX(spill_n - 6'd1)] <= mpy_make_rf_link(spill_addr);
+                    rf_base <= rf_base + spill_n - 6'd1;
+                    sp <= (sp - {1'b0, spill_n}) + 7'd1;
+                end
+                spill_hp <= spill_addr;
+                spilled_reals <= spilled_reals + {10'd0, spill_n};
+                sp_hold <= 1'b1;
+                st <= rf_resume;
+            end else if (sw_i == 32'd0) begin
+                wr(spill_addr, mpy_rf_chunk_hdr(spill_prev, spill_n), S_RF_SPILL_W);
+                sw_i <= 32'd1;
+            end else if (sw_i <= 32'(spill_ntag)) begin
+                v3 = 32'd0;
+                for (int k = 0; k < 8; k++) begin
+                    vs0 = 7'((sw_i[5:0] - 6'd1) << 3) + 7'(k);
+                    if (vs0 < {1'b0, spill_n})
+                        v3[4*k +: 4] = rf[`SX(spill_had_link ? (vs0 + 7'd1) : vs0)][35:32];
+                end
+                wr(spill_addr + (sw_i << 2), {4'd0, v3}, S_RF_SPILL_W);
+                sw_i <= sw_i + 32'd1;
+            end else begin
+                vs0 = spill_had_link ? (sw_i[6:0] - {1'b0, spill_ntag})
+                                     : (sw_i[6:0] - 7'd1 - {1'b0, spill_ntag});
+                wr(spill_addr + (sw_i << 2), rf[`SX(vs0)], S_RF_SPILL_W);
+                sw_i <= sw_i + 32'd1;
+            end
+
+            S_RF_RELOAD: begin
+                if (!has_link) st <= rf_resume;
+                else begin
+                    spill_addr <= mpy_rf_link_addr(rf[`SX(7'd0)]);
+                    sw_i <= 32'd0;
+                    st <= S_RF_RELOAD_R;
+                end
+            end
+            S_RF_RELOAD_R: if (sw_i != 32'd0 && sw_i == spill_words) begin
+                spilled_reals <= (spilled_reals >= {10'd0, spill_n}) ? (spilled_reals - {10'd0, spill_n}) : 16'd0;
+                if (spill_prev != 32'd0) begin
+                    rf[6'(rf_base - spill_n)] <= mpy_make_rf_link(spill_prev);
+                    for (int i = 0; i < MPY_RF_CHUNK_MAX; i++)
+                        if (i < spill_n) rf[6'(rf_base - spill_n + 6'(i) + 6'd1)] <= rld[i];
+                    rf_base <= rf_base - spill_n;
+                    sp <= sp + {1'b0, spill_n};
+                end else begin
+                    for (int i = 0; i < MPY_RF_CHUNK_MAX; i++)
+                        if (i < spill_n) rf[6'(rf_base - spill_n + 6'(i) + 6'd1)] <= rld[i];
+                    rf_base <= rf_base - (spill_n - 6'd1);
+                    sp <= (sp + {1'b0, spill_n}) - 7'd1;
+                end
+                rf_reload_miss <= 1'b0;
+                sp_hold <= 1'b1;
+                st <= rf_resume;
+            end else rd(spill_addr + (sw_i << 2), S_RF_RELOAD_G);
+            S_RF_RELOAD_G: begin
+                if (sw_i == 32'd0) begin
+                    v0 = 32'(mpy_rf_chunk_count(mt, md));
+                    v1 = mpy_rf_chunk_prev(md);
+                    // With a previous link the reload occupies `count` slots.
+                    // The oldest chunk occupies `count - 1` (no link to restore).
+                    v2 = 32'(sp) + ((v1 != 32'd0) ? v0 : (v0 - 32'd1));
+                    spill_n <= v0[5:0];
+                    spill_prev <= v1;
+                    spill_ntag <= 6'((v0[5:0] + 6'd7) >> 3);
+                    spill_words <= 32'd1 + 32'((v0[5:0] + 6'd7) >> 3) + v0;
+                    if (v0 < 32'(MPY_RF_CHUNK_MIN) || v0 > 32'(MPY_RF_CHUNK_MAX) || v2 > 32'd64) begin
+                        if (rf_resume == S_EXEC) begin
+                            rf_reload_miss <= 1'b1;
+                            st <= S_EXEC;
+                        end else halt(ABI_HALT_INTERNAL, 32'h0000_5F01);
+                    end else begin
+                        // Payloads carry their tags in the side array. Skip the tag words.
+                        sw_i <= 32'd1 + 32'((v0[5:0] + 6'd7) >> 3);
+                        st <= S_RF_RELOAD_R;
+                    end
+                end else begin
+                    v0 = sw_i - 32'd1 - 32'(spill_ntag);
+                    rld[v0[5:0]] <= mv;
+                    sw_i <= sw_i + 32'd1;
+                    st <= S_RF_RELOAD_R;
+                end
+            end
+
+            S_SRD: if (stk_hit(srd_g)) begin
+                srd_v <= stk_val(srd_g);
+                ret();
+            end else if (!has_link) begin
+                srd_v <= VNULL;
+                ret();
+            end else begin
+                srd_addr <= mpy_rf_link_addr(rf[`SX(7'd0)]);
+                srd_off <= spilled_reals - 16'd1 - srd_g;
+                srd_hops <= 8'd0;
+                st <= S_SRD_T0;
+            end
+            S_SRD_T0: rd(srd_addr, S_SRD_T1);
+            S_SRD_T1: begin
+                v0 = 32'(mpy_rf_chunk_count(mt, md));
+                v1 = mpy_rf_chunk_prev(md);
+                if (v0 != 32'd0 && srd_off < v0[15:0])
+                    rd(srd_addr + 32'd4 + (32'((v0[5:0] + 6'd7) >> 3) << 2)
+                       + ((v0 - 32'd1 - 32'(srd_off)) << 2), S_SRD_GOT);
+                else if (v1 == 32'd0 || srd_hops == 8'd64) begin
+                    srd_v <= VNULL;
+                    ret();
+                end else begin
+                    srd_off <= srd_off - v0[15:0];
+                    srd_addr <= v1;
+                    srd_hops <= srd_hops + 8'd1;
+                    st <= S_SRD_T0;
+                end
+            end
+            S_SRD_GOT: begin srd_v <= mv; ret(); end
+
+            // Call window wider than the ring. x0 is the callable's global
+            // index, x2 the first argument word, x1 how many argument words,
+            // x3 the slots to drop (callable, optional self, arguments),
+            // x4 the positional count. b0 means CALL_METHOD.
+            S_CC_FUN: if (stk_hit(x0[15:0])) begin
+                    ab[0] <= stk_val(x0[15:0]);
+                    st <= S_CC_SELF;
+                end else begin
+                    srd_g <= x0[15:0];
+                    gosub(S_SRD, S_CC_FUN2);
+                end
+            S_CC_FUN2: begin ab[0] <= srd_v; st <= S_CC_SELF; end
+            S_CC_SELF: if (!b0) begin
+                    ab_lo <= 8'd32; st <= S_CC_ARG;
+                end else if (stk_hit(x0[15:0] + 16'd1)) begin
+                    if (stk_val(x0[15:0] + 16'd1) != VNULL) begin
+                        ab[31] <= stk_val(x0[15:0] + 16'd1); ab_lo <= 8'd31;
+                    end else ab_lo <= 8'd32;
+                    st <= S_CC_ARG;
+                end else begin
+                    srd_g <= x0[15:0] + 16'd1;
+                    gosub(S_SRD, S_CC_SELF2);
+                end
+            S_CC_SELF2: begin
+                    if (srd_v != VNULL) begin ab[31] <= srd_v; ab_lo <= 8'd31; end
+                    else ab_lo <= 8'd32;
+                    st <= S_CC_ARG;
+                end
+            S_CC_ARG: if (gi == x1) st <= S_CC_DONE;
+                else if (stk_hit(x2[15:0] + gi[15:0])) begin
+                    ab[8'(32 + gi)] <= stk_val(x2[15:0] + gi[15:0]);
+                    gi <= gi + 32'd1;
+                end else begin
+                    srd_g <= x2[15:0] + gi[15:0];
+                    gosub(S_SRD, S_CC_ARG2);
+                end
+            S_CC_ARG2: begin
+                    ab[8'(32 + gi)] <= srd_v;
+                    gi <= gi + 32'd1;
+                    st <= S_CC_ARG;
+                end
+            S_CC_DONE: begin
+                    ab_pe <= 8'(32 + x4);
+                    crk <= ABI_RK_PUSH;
+                    drop_left <= x3[15:0];
+                    drop_push_en <= 1'b0;
+                    drop_then <= S_CALL;
+                    st <= S_DROP;
+                end
+
+            S_DROP: if (drop_left == 16'd0) begin
+                if (drop_push_en) begin
+                    if (sp >= 7'd64) begin
+                        rf_pend <= 1'b1;
+                        rf_pend_v <= drop_push_v;
+                        rf_resume <= drop_then;
+                        st <= S_RF_SPILL;
+                    end else begin
+                        rf[`SX(sp)] <= drop_push_v;
+                        sp <= sp + 7'd1;
+                        st <= drop_then;
+                    end
+                end else st <= drop_then;
+            end else if (has_link && sp <= 7'd1) begin
+                rf_resume <= S_DROP;
+                st <= S_RF_RELOAD;
+            end else if (sp == 7'd0) begin
+                drop_left <= 16'd0;
+            end else begin
+                sp <= sp - 7'd1;
+                drop_left <= drop_left - 16'd1;
+            end
+
+            S_UR_SLOW: if (stk_depth <= ur_target) begin
+                if (sp >= 7'd62) begin
+                    rf_resume <= S_UR_SLOW;
+                    st <= S_RF_SPILL;
+                end else begin
+                    rf[`SX(sp)] <= ur_val;
+                    rf[`SX(sp + 7'd1)] <= vint(32'hFFFF_FFFF);
+                    sp <= sp + 7'd2;
+                    st <= S_FETCH;
+                end
+            end else if (has_link && sp <= 7'd1) begin
+                rf_resume <= S_UR_SLOW;
+                st <= S_RF_RELOAD;
+            end else if (sp != 7'd0) begin
+                sp <= sp - 7'd1;
+            end else st <= S_FETCH;
+
             default: halt(ABI_HALT_INTERNAL, 32'hDEAD_0000 | 32'(st));
             endcase
         end
@@ -3035,4 +3710,3 @@ endmodule
 /* verilator lint_on UNUSEDPARAM */
 /* verilator lint_on UNUSEDSIGNAL */
 /* verilator lint_on WIDTH */
-`undef LI
