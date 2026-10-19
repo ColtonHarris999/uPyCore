@@ -1,0 +1,4 @@
+a 1
+caught ValueError generator already executing
+b 3
+c StopIteration  None

@@ -497,3 +497,13 @@ gen_yield_from_stop_type = { file = "hw/generators/gen_yield_from_stop_type.py",
 gen_async = { file = "hw/generators/gen_async.py", mpyc = false }
 gen_with = { file = "hw/generators/gen_with.py", mpyc = false }
 gen_trace = { file = "hw/generators/gen_trace.py", mpyc = false, uncaught = true }
+gen_for_return = { file = "hw/generators/gen_for_return.py", mpyc = false }
+gen_for_raise_stop = { file = "hw/generators/gen_for_raise_stop.py", mpyc = false }
+gen_for_pend = { file = "hw/generators/gen_for_pend.py", mpyc = false }
+gen_for_self = { file = "hw/generators/gen_for_self.py", mpyc = false }
+gen_yield_from_deep = { file = "hw/generators/gen_yield_from_deep.py", mpyc = false }
+gen_yield_from_finally = { file = "hw/generators/gen_yield_from_finally.py", mpyc = false }
+gen_yield_from_send = { file = "hw/generators/gen_yield_from_send.py", mpyc = false }
+gen_yield_from_range = { file = "hw/generators/gen_yield_from_range.py", mpyc = false }
+gen_genexp_collect = { file = "hw/generators/gen_genexp_collect.py", mpyc = false }
+gen_user_next = { file = "hw/generators/gen_user_next.py", mpyc = false }

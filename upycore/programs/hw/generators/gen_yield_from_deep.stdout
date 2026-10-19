@@ -1,0 +1,8 @@
+n0 i
+mid 5
+outer 6
+n1 o
+n2 StopIteration  None
+mid 5
+outer 6
+for ['i', 'o']

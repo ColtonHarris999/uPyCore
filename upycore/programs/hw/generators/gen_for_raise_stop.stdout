@@ -1,0 +1,3 @@
+body 1
+body RuntimeError generator raised StopIteration
+imm RuntimeError generator raised StopIteration
