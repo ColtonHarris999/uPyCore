@@ -276,3 +276,18 @@ No findings.
 - The non-generator `_yfrom` hook arguments are written twice: the `else` of opcode `8'h68`, and the `else` of `S_YF_K`.
 - `S_GN_RET3` stores `8'h4b` into `op` so a bare `StopIteration` takes the `FOR_ITER` arm of `S_RAISE`. `aux` still holds the loop exit, which is why the return value is not built into the exception.
 - `FF_YFAST` is a bit in the spilled `fflags` byte. Each early exit from `S_GR2`, `S_GR3`, and `S_GR6` clears it before raising, and `S_GN_ESC5` clears it before the parent sees the exception.
+
+## Benchmarks
+
+Same programs, both RTLs, simulator cycles. Per-item figures are the difference between two sizes, so boot and definition cost cancels. `range` is the control: that opcode arm was not edited. Stdout matched across both RTLs (`19900` / `79800`, `780` / `3160`, `120` / `240`).
+
+| Loop | Main, cycles/item | Fast path, cycles/item | Speedup |
+| --- | ---: | ---: | ---: |
+| `for` over `range` | 238 | 238 | 1.00× |
+| `for` over a generator | 1341 | 896 | 1.50× |
+| `yield from`, depth 10 | 18370 | 5315 | 3.46× |
+| `tuple` + `set` of a 6-wide generator expression | 156995 | 150801 | 1.04× |
+
+Against `range`, a generator `for` moved from 0.18× to 0.27×. Depth-10 `yield from` moved from about 77× a `range` step to about 22×. The expression loop that `bm_nqueens` is made of moved 4%.
+
+Keep both shortcuts. They add no register file and they do not change the `range` loop's cycle count. They are not enough to treat generators as caught up: the remaining cost is the frame copy on every resume, which this change does not touch.
