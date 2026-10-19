@@ -92,6 +92,7 @@ module mpy_core
     localparam logic [31:0] HASH_NONE = 32'd6;
     localparam logic [7:0]  FF_FW = 8'h01;
     localparam logic [7:0]  FF_GEN = 8'h02;   // this frame is a generator being bound
+    localparam logic [7:0]  FF_YFAST = 8'h04; // YIELD_FROM resumed a generator child directly
     localparam logic [7:0]  FF_NOTB = 8'h80;
 
     localparam logic [1:0] LK_FIND = 2'd0;
@@ -299,6 +300,7 @@ module mpy_core
         S_FILL,
         S_FI_AT,
         S_FI_DONE,
+        S_FI_GK,
         S_FI_LD,
         S_FI_LD2,
         S_FI_R,
@@ -344,6 +346,7 @@ module mpy_core
         S_YLD2,
         S_YLD3,
         S_YF_F,
+        S_YF_K,
         S_YF_V,
         S_YF_GE,
         S_YF_GK,
@@ -1271,7 +1274,14 @@ module mpy_core
                     rf[6'(sp - 7'd1)] <= t[7]; ovr <= ABI_OVR_PYOBJ; pc <= op_pc; st <= S_FETCH;
                 end
                 ABI_CONT_BIND: rd(adr(t[7]), S_CB_N);
-                ABI_CONT_YFROM: rd(adr(t[7]) + 4, S_YF_F);
+                // Fast path: t[7] is the bare yielded value. The tuple arm stays
+                // for a firmware _yfrom result (FF_YFAST clear).
+                ABI_CONT_YFROM: if (fflags & FF_YFAST) begin
+                                    fflags <= fflags & ~FF_YFAST;
+                                    push(t[7]);
+                                    pc <= op_pc;
+                                    st <= S_YLD;
+                                end else rd(adr(t[7]) + 4, S_YF_F);
                 default: halt(ABI_HALT_INTERNAL, {24'd0, fcont});
             endcase
             S_WC_TR: begin
@@ -1467,7 +1477,14 @@ module mpy_core
                         if (tg(rf[6'(sp - 7'd3)]) == ABI_TAG_ITER) begin
                             it_h <= 1'b1; t[3] <= rf[6'(sp - 7'd3)]; i0 <= 8'd0; st <= S_FI_LD;
                         end else begin
-                            t[0] <= rf[6'(sp - 7'd3)]; at_q <= ABI_Q_NEXT_D; gosub(S_AT, S_FI_AT);
+                            // About to look up __next__. A generator resumes
+                            // at S_GR0; anything else is the attribute call.
+                            t[0] <= rf[6'(sp - 7'd3)];
+                            if (tg(rf[6'(sp - 7'd3)]) == ABI_TAG_OBJECT)
+                                rd(adr(rf[6'(sp - 7'd3)]), S_FI_GK);
+                            else begin
+                                at_q <= ABI_Q_NEXT_D; gosub(S_AT, S_FI_AT);
+                            end
                         end
                     end else if (rf[6'(sp - 7'd1)] == vint(ABI_IT_HEAPITER)) begin
                         it_h <= 1'b1; t[3] <= rf[6'(sp - 7'd4)]; i0 <= 8'd0; st <= S_FI_LD;
@@ -1534,15 +1551,24 @@ module mpy_core
                 8'h67: if (gen == VNULL) raise_err(ABI_ERR_GENERATOR, VNULL, VNULL);
                        else st <= S_YLD;
                 8'h68: begin
-                    // Pop the send value. The sub-iterator stays. inj is a throw
-                    // this resume deferred; VNONE means use the popped send.
-                    aux <= inj;
-                    fcont <= ABI_CONT_YFROM;
-                    hook(ABI_HOOK_YFROM, ABI_RK_CONT, 8'd3, rf[6'(sp - 7'd2)],
-                         (inj != VNONE) ? VNONE : rf[6'(sp - 7'd1)],
-                         (inj != VNONE) ? inj : VNONE, VNULL);
-                    inj <= VNONE;
-                    sp <= sp - 7'd1;
+                    // Drop a stale fast bit before the kind check so a resume
+                    // that takes the hook cannot later treat a tuple as a value.
+                    // Pop the send value only on the path that runs. The
+                    // sub-iterator stays. inj is a throw this resume deferred;
+                    // VNONE means use the popped send.
+                    fflags <= fflags & ~FF_YFAST;
+                    if (inj == VNONE && rf[6'(sp - 7'd1)] == VNONE &&
+                        tg(rf[6'(sp - 7'd2)]) == ABI_TAG_OBJECT)
+                        rd(adr(rf[6'(sp - 7'd2)]), S_YF_K);
+                    else begin
+                        aux <= inj;
+                        fcont <= ABI_CONT_YFROM;
+                        hook(ABI_HOOK_YFROM, ABI_RK_CONT, 8'd3, rf[6'(sp - 7'd2)],
+                             (inj != VNONE) ? VNONE : rf[6'(sp - 7'd1)],
+                             (inj != VNONE) ? inj : VNONE, VNULL);
+                        inj <= VNONE;
+                        sp <= sp - 7'd1;
+                    end
                 end
                 8'h69: begin
                     sp <= sp - 7'd1;
@@ -1876,7 +1902,9 @@ module mpy_core
                      else rd(adr(t[3]) + 4 * i0, S_FI_LD2);
             S_FI_LD2: begin iv[i0[1:0]] <= mv; i0 <= i0 + 8'd1; st <= S_FI_LD; end
             S_FI_R: if (it_py) begin
-                    t[0] <= iv[0]; at_q <= ABI_Q_NEXT_D; gosub(S_AT, S_FI_AT);
+                    t[0] <= iv[0];
+                    if (tg(iv[0]) == ABI_TAG_OBJECT) rd(adr(iv[0]), S_FI_GK);
+                    else begin at_q <= ABI_Q_NEXT_D; gosub(S_AT, S_FI_AT); end
                 end else if (it_h) wr(adr(t[3]), iv[0], S_FI_W1);
                 else begin
                     rf[6'(sp - 7'd4)] <= iv[0]; rf[6'(sp - 7'd3)] <= iv[1];
@@ -1894,6 +1922,15 @@ module mpy_core
                     crk <= ABI_RK_CONT; fcont <= ABI_CONT_FOR_NEXT; aux <= vint(jt);
                     st <= S_CALL;
                 end else raise_err(ABI_ERR_NOT_ITERATOR, t[0], VNULL);
+            // Word 0 of the object FOR_ITER was about to call __next__ on.
+            // A generator enters the same resume __next__ would have called.
+            S_FI_GK: if (md == ABI_OB_GENERATOR) begin
+                    t[1] <= VNONE; t[2] <= VNONE;
+                    r_rk <= ABI_RK_CONT; fcont <= ABI_CONT_FOR_NEXT; aux <= vint(jt);
+                    st <= S_GR0;
+                end else begin
+                    at_q <= ABI_Q_NEXT_D; gosub(S_AT, S_FI_AT);
+                end
 
             // ---- containers ----
             S_BT_R: begin
@@ -2360,6 +2397,8 @@ module mpy_core
             // Generators. The suspended frame is a heap block, not the reserve.
             // Resume order: finished, running, pend_throw, just-started send.
             // Word 4 is cleared only once the body actually starts.
+            // FOR_ITER and the None/None YIELD_FROM case enter at S_GR0.
+            // FF_YFAST marks that one yield-from parent; it spills with fflags.
             // =================================================================
             S_GSAVE: rd(adr(gen) + 20, S_GSAVE1);
             S_GSAVE1: begin
@@ -2391,7 +2430,23 @@ module mpy_core
             S_GN_RET: wr(adr(gen) + 12, vint(32'd0), S_GN_RET1);
             S_GN_RET1: gosub(S_GSAVE, S_GN_RET2);
             S_GN_RET2: begin fl_base <= fprev; gosub(S_FILL, S_GN_RET3); end
-            S_GN_RET3: if (t[7] == VNONE) raise_msg(ABI_MSG_STOP_ITER);
+            S_GN_RET3: if (fflags & FF_YFAST) begin
+                           // Child returned into yield from. TOS is the
+                           // sub-iterator; the return value replaces it.
+                           // VNONE stays VNONE. Do not build StopIteration
+                           // and do not clobber fcont.
+                           fflags <= fflags & ~FF_YFAST;
+                           rf[6'(sp - 7'd1)] <= t[7];
+                           st <= S_FETCH;
+                       end else if (fcont == ABI_CONT_FOR_NEXT) begin
+                           // FOR_ITER's frame is the parent, so op is the
+                           // child's return opcode and building StopIteration
+                           // would clobber aux (the exit pc). A bare
+                           // StopIteration keeps aux; S_RX_SI ends the loop.
+                           // The return value is not a for-loop item.
+                           op <= 8'h4b;
+                           raise_msg(ABI_MSG_STOP_ITER);
+                       end else if (t[7] == VNONE) raise_msg(ABI_MSG_STOP_ITER);
                        else begin
                            ab[0] <= ty_stop; ab[32] <= t[7];
                            ab_lo <= 8'd32; ab_pe <= 8'd33; ab_nkw <= 8'd0;
@@ -2409,16 +2464,31 @@ module mpy_core
                 fl_base <= fprev;
                 gosub(S_FILL, S_GN_ESC5);
             end
-            S_GN_ESC5: if (b0) raise_msg(ABI_MSG_GEN_STOP);
-                       else begin rx_from <= 1'b1; st <= S_RAISE; end
+            S_GN_ESC5: begin
+                // The parent is filled, so finally/with around yield from
+                // still run. Drop the fast bit before propagating so a later
+                // throw takes the firmware hook.
+                fflags <= fflags & ~FF_YFAST;
+                if (b0) raise_msg(ABI_MSG_GEN_STOP);
+                else begin rx_from <= 1'b1; st <= S_RAISE; end
+            end
 
             // _gresume. t0 gen, t1 send, t2 throw, r_rk deliver kind, x4 image.
             S_GR0: rd(adr(t[0]) + 20, S_GR1);
             S_GR1: begin x4 <= md; rd(md + 8, S_GR2); end
-            S_GR2: if (md == 32'd0) raise_msg(ABI_MSG_STOP_ITER);
-                   else rd(adr(t[0]) + 12, S_GR3);
-            S_GR3: if (md[0]) raise_msg(ABI_MSG_GEN_RUNNING);
-                   else rd(adr(t[0]) + 16, S_GR4);
+            S_GR2: if (md == 32'd0) begin
+                       // Yield-from of an already-finished generator. The
+                       // parent is still the live frame; the result is None.
+                       if (fflags & FF_YFAST) begin
+                           fflags <= fflags & ~FF_YFAST;
+                           rf[6'(sp - 7'd1)] <= VNONE;
+                           st <= S_FETCH;
+                       end else raise_msg(ABI_MSG_STOP_ITER);
+                   end else rd(adr(t[0]) + 12, S_GR3);
+            S_GR3: if (md[0]) begin
+                       fflags <= fflags & ~FF_YFAST;
+                       raise_msg(ABI_MSG_GEN_RUNNING);
+                   end else rd(adr(t[0]) + 16, S_GR4);
             S_GR4: begin
                 if (mv != VNONE) t[2] <= mv;
                 rd(x4 + 16, S_GR5);
@@ -2427,10 +2497,13 @@ module mpy_core
             S_GR6: begin
                 v0 = noframe ? ABI_FRAME_BASE : ftop;
                 v1 = v0 + ((32'd16 + {25'd0, x1[22:16]} + 32'd3 * {27'd0, md[20:16]}) << 2);
-                if (x1[6:0] == 7'd0 && t[1] != VNONE)
+                if (x1[6:0] == 7'd0 && t[1] != VNONE) begin
+                    fflags <= fflags & ~FF_YFAST;
                     raise_msg(ABI_MSG_GEN_SEND);
-                else if (v1 > ABI_FRAME_END)
+                end else if (v1 > ABI_FRAME_END) begin
+                    fflags <= fflags & ~FF_YFAST;
                     raise_msg(ABI_MSG_RECURSION);
+                end
                 else begin
                     x3 <= v0;
                     b1 <= (x1[6:0] != 7'd0);
@@ -2480,6 +2553,23 @@ module mpy_core
             // is still the top of stack. A yield suspends on the YIELD_VALUE
             // path with pc put back on this opcode. The running bit stays set
             // until that suspend.
+            // Word 0 of a YIELD_FROM sub-iterator whose send and inj are None.
+            S_YF_K: if (md == ABI_OB_GENERATOR) begin
+                    fflags <= fflags | FF_YFAST;
+                    t[0] <= rf[6'(sp - 7'd2)];
+                    t[1] <= VNONE; t[2] <= VNONE;
+                    r_rk <= ABI_RK_CONT; fcont <= ABI_CONT_YFROM;
+                    sp <= sp - 7'd1;
+                    st <= S_GR0;
+                end else begin
+                    aux <= inj;
+                    fcont <= ABI_CONT_YFROM;
+                    hook(ABI_HOOK_YFROM, ABI_RK_CONT, 8'd3, rf[6'(sp - 7'd2)],
+                         (inj != VNONE) ? VNONE : rf[6'(sp - 7'd1)],
+                         (inj != VNONE) ? inj : VNONE, VNULL);
+                    inj <= VNONE;
+                    sp <= sp - 7'd1;
+                end
             S_YF_F: begin b0 <= (mv == VTRUE); rd(adr(t[7]) + 8, S_YF_V); end
             S_YF_V: begin
                 fcont <= 8'd0;
