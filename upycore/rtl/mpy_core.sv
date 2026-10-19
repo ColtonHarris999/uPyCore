@@ -825,36 +825,26 @@ module mpy_core
     val_t        ty_v, ty_t;                       // TYPEOF
     val_t        hk; logic [31:0] hh; logic hok;   // HASH
     val_t        si_v; logic [31:0] si_len, si_hash, si_addr; logic si_na;  // SINFO
-    val_t        se_a, se_b; logic se_eq;
-    val_t        ke_a, ke_b; logic ke_eq, ke_cx;
+    val_t        se_a, se_b; logic se_eq; logic [31:0] se_len, se_hash, se_pa, se_pb, se_i, se_w;
+    val_t        ke_a, ke_b; logic ke_eq, ke_cx; logic [31:0] ke_w0, ke_w1;
     logic [1:0]  lk_mode; logic lk_set, lk_found, lk_cx, lk_ro;
     val_t        lk_res;
+    logic [31:0] lk_alloc, lk_tab, lk_pos, lk_start, lk_avail, lk_slot;
     logic        lk_hasav;
+    logic [31:0] rh_alloc, rh_tab, rh_i, rh_p, rh_used;
+    val_t        rh_k;
     logic [31:0] al_n, al_a; logic al_ok, al_soft, al_gc;
+    logic [31:0] la_len, la_alloc, la_items, la_new, la_i;
     logic [31:0] sw_i; logic [1:0] sw_k;
     logic [31:0] fl_base, fl_i; logic [1:0] fl_k;
     logic [31:0] gi;
     val_t        is_t, is_c; logic is_r; logic [31:0] is_m, is_n, is_i;
-    logic [31:0] at_q; logic [1:0] at_kind; logic at_ty, at_objd;
-    val_t        at_v;
+    logic [31:0] at_q, at_m, at_n, at_i; logic [1:0] at_kind; logic at_ty, at_objd;
+    val_t        at_v, at_t; logic [31:0] at_k;
     val_t        tr_v; logic tr_r, tr_x;
     logic        tb_src, tb_nz; logic [7:0] tb_from, tb_n, tb_i; logic [31:0] tb_a; val_t tb_v;
     val_t        wb_v [0:7]; logic [31:0] wb_a; logic [3:0] wb_n, wb_i;
-    logic it_stop, it_py, it_h; val_t it_val;
-    // One resident microcode image. Word maps are in planning/core_sram_shrink.md.
-    localparam logic [3:0] SCR_NONE = 4'd0;
-    localparam logic [3:0] SCR_LK   = 4'd1;
-    localparam logic [3:0] SCR_RH   = 4'd2;
-    localparam logic [3:0] SCR_SE   = 4'd3;
-    localparam logic [3:0] SCR_AT   = 4'd4;
-    localparam logic [3:0] SCR_IT   = 4'd5;
-    localparam logic [3:0] SCR_LA   = 4'd6;
-    localparam logic [3:0] SCR_KE   = 4'd7;
-    logic [3:0]  scr_id, scr_cmd, scr_i;
-    logic        scr_storing, scr_gosub_p;
-    state_e      scr_ret, scr_gt, scr_gb;
-    val_t        sV [0:7];
-    logic [31:0] sA [0:7];
+    val_t        iv [0:3]; logic it_stop, it_py, it_h; val_t it_val; logic [31:0] it_i, it_alloc, it_tab;
     logic [31:0] c_rc, c_md, c_cells, c_tflags;
     val_t        c_clos, c_defs, c_glob;
     logic [7:0]  c_nst, c_nexc, c_scope, c_rcf, c_npos, c_nkwo, c_ndef, c_ncell, c_cn;
@@ -1180,8 +1170,6 @@ module mpy_core
             fw_ok <= 1'b0; fw_base <= 32'd0;
             sp <= 7'd0; nloc <= 8'd0; rf_base <= 6'd0; spilled_reals <= 16'd0;
             spill_hp <= ABI_FRAME_END; rf_pend <= 1'b0;
-            scr_id <= SCR_NONE; scr_i <= 4'd0; scr_storing <= 1'b0; scr_gosub_p <= 1'b0;
-            for (int k = 0; k < 8; k++) begin sA[k] <= 32'd0; sV[k] <= VNULL; end
             rf_mono <= 1'b1; sp_hold <= 1'b0; sp_d <= 7'd0; rf_reload_miss <= 1'b0;
             xsp <= 5'd0; nexc <= 5'd0;
             xh <= 32'd0; xv <= 16'd0; xf <= 1'b0; xp <= VNULL;
