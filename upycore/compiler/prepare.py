@@ -248,6 +248,7 @@ def prepare(dest: Path | None = None) -> Path:
             text = _patched_emitbc(text)
         elif src.name == "scope.py":
             text = _patched_scope(text)
+        text = _use_lists(text)
         _put(out / src.name, text)
     _put(out / "stages.py", STAGES.read_text(encoding="utf-8"))
     return out
@@ -286,6 +287,28 @@ _LEX_NEW = '''    def to_next(self):
 def _patched_lexer(text: str) -> str:
     _require(text, _LEX_OLD, "lexer")
     return text.replace(_LEX_OLD, _LEX_NEW, 1)
+
+
+# The integer tables are lists. A list slot is already a core subscript.
+# array('H') values are small integers, so the halfword packing is not
+# required for the grammar tables either.
+_LIST_SWAPS = (
+    ("array('i', [0] * 32)", "[0] * 32"),
+    ("self.arena = array('i')", "self.arena = []"),
+    ("self.ids = array('i')", "self.ids = []"),
+    ("self._work = array('i')", "self._work = []"),
+    ("self.limbs = array('i')", "self.limbs = []"),
+    ("= array('i')", "= []"),
+    ("_OFFSETS = array('I')", "_OFFSETS = []"),
+    ("array('H', (", "list(("),
+    ("from array import array\n", ""),
+)
+
+
+def _use_lists(text: str) -> str:
+    for old, new in _LIST_SWAPS:
+        text = text.replace(old, new)
+    return text
 
 
 def _patched_walk(text: str) -> str:
