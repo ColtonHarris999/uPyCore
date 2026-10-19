@@ -758,7 +758,6 @@ module mpy_core
         S_SA_K2,
         S_N_BCMP_W,
         S_N_BCMP_W2,
-        S_N_BCI,
         S_N_BCF
     } state_e;
 
@@ -3215,9 +3214,12 @@ module mpy_core
             S_N_IN_W: wr(adr(t[3]) + 4, `iv[1], S_N_IN_D);
             S_N_IN_D: deliver(it_stop ? VSTOP : it_val, crk);
             // SE stays resident. `la_len/`la_i alias sA[0]/sA[4], so the
-            // compare index lives in SE pads sA[6]/sA[7] and is mirrored
-            // into the LA image (words 0 and 4). The second operand is read
-            // from ARGBUF; si_len/si_addr survive the scratch switch.
+            // compare index lives in SE pads sA[6]/sA[7]. The length and the
+            // final index are mirrored into the LA image (words 0 and 4).
+            // Matching bytes do not write that index: nothing reads the LA
+            // image until the compare returns, and S_N_BCF publishes it.
+            // The second operand is read from ARGBUF; si_len/si_addr survive
+            // the scratch switch.
             S_N_BCMP1: if (scr_id != SCR_SE) scr_ensure(SCR_SE, S_N_BCMP1);
                        else begin
                            `se_len <= si_len; `se_pa <= si_addr;
@@ -3236,8 +3238,7 @@ module mpy_core
             S_N_BCB: if (byte_of(sA[5], sA[7][1:0]) != byte_of(md, sA[7][1:0])) begin
                          t[7] <= vint({24'd0, byte_of(sA[5], sA[7][1:0])} - {24'd0, byte_of(md, sA[7][1:0])});
                          d_rk <= crk; st <= S_N_BCF;
-                     end else begin sA[7] <= sA[7] + 32'd1; st <= S_N_BCI; end
-            S_N_BCI: wr(scr_addr(SCR_LA, 4'd4), {4'd0, sA[7]}, S_N_BCL);
+                     end else begin sA[7] <= sA[7] + 32'd1; st <= S_N_BCL; end
             S_N_BCF: wr(scr_addr(SCR_LA, 4'd4), {4'd0, sA[7]}, S_DELIVER);
             S_N_HASH: deliver(hok ? vint(hh) : VSTOP, crk);
             S_N_DATA: deliver(vint(si_addr), crk);
