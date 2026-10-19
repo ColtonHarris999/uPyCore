@@ -414,4 +414,10 @@ function automatic logic [31:0] mpy_short_str_word(
     end
 endfunction
 
+// Microcode working images, at the top of the frame reserve. Reset parks
+// spill_hp here so register-stack chunks grow down and stop at this window.
+localparam logic [31:0] MPY_CORE_SCRATCH_BYTES = 32'd512;
+localparam logic [31:0] MPY_CORE_SCRATCH_BASE =
+    MPY_FRAME_RESERVE_BASE + MPY_FRAME_RESERVE_BYTES - MPY_CORE_SCRATCH_BYTES;
+
 `endif
