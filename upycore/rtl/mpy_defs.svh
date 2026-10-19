@@ -16,6 +16,14 @@ localparam int MPY_TAG_LSB     = MPY_VAL_WIDTH;                 // 32
 // Architectural register file (upycore/docs/mpy_memory_map.md).
 localparam int MPY_RF_DEPTH  = 64;
 localparam int MPY_RF_ADDR_W = 6; // $clog2(MPY_RF_DEPTH)
+// A spill chunk holds 16 to 48 values. Word 0 packs the previous chunk
+// address (0 if this is the oldest) and the value count. Tag nibbles
+// follow, eight per word, then the payloads, oldest first. The byte
+// length is padded to 16 so a CONTROL link can keep its kind in
+// address[3:0]. 16 values is 80 bytes. 48 values is 224 bytes.
+localparam int MPY_RF_CHUNK_MIN = 16;
+localparam int MPY_RF_CHUNK_MAX = 48;
+localparam int MPY_RF_BLOCK_MAX = 224;
 
 // Locked tag table. 0101 stays unassigned.
 localparam logic [3:0] MPY_TAG_CONTROL    = 4'b0000;
@@ -44,6 +52,8 @@ localparam logic [3:0] MPY_CTL_NULL      = 4'd2; // end of iteration
 localparam logic [3:0] MPY_CTL_TOMBSTONE = 4'd3;
 localparam logic [3:0] MPY_CTL_FALSE     = 4'd4;
 localparam logic [3:0] MPY_CTL_TRUE      = 4'd5;
+// Stack-chunk link. Payload[31:4] is the SRAM block address >> 4.
+localparam logic [3:0] MPY_CTL_RF_LINK   = 4'd6;
 
 // MUT_COLLEC kind is the pointer's low 2 bits. The address clears them.
 localparam logic [1:0] MPY_MUT_LIST      = 2'd0;
@@ -191,6 +201,57 @@ function automatic logic [MPY_ENTRY_WIDTH-1:0] mpy_make_control(
     input logic [3:0] kind
 );
     mpy_make_control = mpy_make_entry(MPY_TAG_CONTROL, {28'b0, kind});
+endfunction
+
+function automatic logic [MPY_ENTRY_WIDTH-1:0] mpy_make_rf_link(
+    input logic [31:0] addr
+);
+    mpy_make_rf_link = mpy_make_entry(MPY_TAG_CONTROL, {addr[31:4], MPY_CTL_RF_LINK});
+endfunction
+
+function automatic logic mpy_is_rf_link(
+    input logic [MPY_ENTRY_WIDTH-1:0] entry
+);
+    mpy_is_rf_link = (mpy_entry_tag(entry) == MPY_TAG_CONTROL) &&
+                     (mpy_entry_payload(entry)[3:0] == MPY_CTL_RF_LINK);
+endfunction
+
+function automatic logic [31:0] mpy_rf_link_addr(
+    input logic [MPY_ENTRY_WIDTH-1:0] entry
+);
+    mpy_rf_link_addr = {mpy_entry_payload(entry)[31:4], 4'b0000};
+endfunction
+
+// Chunk word 0: tag holds count[5:4], payload[3:0] holds count[3:0],
+// payload[31:4] is the previous block address. One read is one hop.
+function automatic logic [35:0] mpy_rf_chunk_hdr(
+    input logic [31:0] prev,
+    input logic [5:0]  n
+);
+    mpy_rf_chunk_hdr = {2'b00, n[5:4], prev[31:4], n[3:0]};
+endfunction
+
+function automatic logic [7:0] mpy_rf_chunk_count(
+    input logic [3:0]  tag,
+    input logic [31:0] word
+);
+    mpy_rf_chunk_count = {tag, word[3:0]};
+endfunction
+
+function automatic logic [31:0] mpy_rf_chunk_prev(
+    input logic [31:0] word
+);
+    mpy_rf_chunk_prev = {word[31:4], 4'b0000};
+endfunction
+
+function automatic logic [31:0] mpy_rf_block_bytes(
+    input logic [5:0] n
+);
+    logic [31:0] ntag;
+    logic [31:0] raw;
+    ntag = 32'((n + 6'd7) >> 3);
+    raw = 32'd4 + (ntag << 2) + (32'(n) << 2);
+    mpy_rf_block_bytes = (raw + 32'd15) & 32'hFFFF_FFF0;
 endfunction
 
 // Physical registers occupied by a head tag. Reserved occupies none.
