@@ -1186,6 +1186,13 @@ module mpy_core
         if (scr_id != SCR_NONE) scr_go_store(scr_id, back);
         else scr_go_load(id, back);
     endtask
+    // Own `id` without reading SRAM. A different resident image is stored
+    // first. Callers write every field before reading it.
+    task automatic scr_adopt(input logic [3:0] id, input state_e back);
+        if (scr_id != SCR_NONE && scr_id != id) scr_go_store(scr_id, back);
+        else if (scr_id != id) begin scr_id <= id; st <= back; end
+        else st <= back;
+    endtask
     // Store the caller before entering a different scratch subsystem.
     task automatic gosub_scr(input logic [3:0] dest, input state_e target, input state_e back);
         if (scr_id != SCR_NONE && scr_id != dest) scr_go_store_gosub(scr_id, target, back);
@@ -1326,11 +1333,11 @@ module mpy_core
                 else st <= scr_ret;
             end else if (scr_storing) begin
                 if (scr_tag(scr_cmd, scr_i))
-                    wr(scr_addr(scr_cmd, scr_i), sV[scr_i[2:0]], S_SCR_ADV);
+                    wr(scr_addr(scr_cmd, scr_i), sV[scr_i[2:0]], S_SCR);
                 else
-                    wr(scr_addr(scr_cmd, scr_i), {4'd0, sA[scr_i[2:0]]}, S_SCR_ADV);
+                    wr(scr_addr(scr_cmd, scr_i), {4'd0, sA[scr_i[2:0]]}, S_SCR);
+                scr_i <= scr_i + 4'd1;
             end else rd(scr_addr(scr_cmd, scr_i), S_SCR_CAP);
-            S_SCR_ADV: begin scr_i <= scr_i + 4'd1; st <= S_SCR; end
             S_SCR_CAP: begin
                 if (scr_tag(scr_cmd, scr_i)) sV[scr_i[2:0]] <= mv;
                 else sA[scr_i[2:0]] <= md;
@@ -2859,7 +2866,7 @@ module mpy_core
             S_N_PEEK8: deliver(vint({24'd0, byte_of(md, x3[1:0])}), crk);
             S_N_ALLOC: deliver({ab[ab_lo + 8'd1][3:0], al_a | ab[ab_lo + 8'd2][31:0]}, crk);
             S_N_TYPEOF: deliver(ty_t, crk);
-            S_N_WC_PRE: if (scr_id != SCR_LA) scr_ensure(SCR_LA, S_N_WC_PRE);
+            S_N_WC_PRE: if (scr_id != SCR_LA) scr_adopt(SCR_LA, S_N_WC_PRE);
                         else begin
                             v2 = padr(ab[ab_lo]) + (ab[ab_lo + 8'd1][31:0] << 2);
                             v3 = padr(ab[ab_lo + 8'd2]) + (ab[ab_lo + 8'd3][31:0] << 2);
@@ -2873,7 +2880,7 @@ module mpy_core
                 wr(b1 ? (`la_new + ((`la_len - 32'd1 - `la_i) << 2)) : (`la_new + (`la_i << 2)), mv, S_N_WC);
                 `la_i <= `la_i + 32'd1;
             end
-            S_N_BC1: if (scr_id != SCR_LA) scr_ensure(SCR_LA, S_N_BC1);
+            S_N_BC1: if (scr_id != SCR_LA) scr_adopt(SCR_LA, S_N_BC1);
                      else begin
                          `la_items <= si_addr + ab[ab_lo + 8'd3][31:0];
                          si_v <= ab[ab_lo]; gosub(S_DADDR, S_N_BC2);
@@ -3324,7 +3331,7 @@ module mpy_core
             S_DADDR_R: ret();
 
             // string equality: se_a, se_b -> se_eq
-            S_STREQ: if (scr_id != SCR_SE) scr_ensure(SCR_SE, S_STREQ);
+            S_STREQ: if (scr_id != SCR_SE) scr_adopt(SCR_SE, S_STREQ);
                      else if (se_a == se_b) begin se_eq <= 1'b1; ret(); end
                      else begin si_v <= se_a; gosub(S_SINFO, S_SE1); end
             S_SE1: begin `se_len <= si_len; `se_hash <= si_hash; `se_pa <= si_addr; si_v <= se_b; gosub(S_SINFO, S_SE2); end
@@ -3341,16 +3348,22 @@ module mpy_core
             end
 
             // key equality for dict probing: ke_a (slot) vs ke_b (lookup key)
-            S_KEYEQ: if (scr_id != SCR_KE) scr_ensure(SCR_KE, S_KEYEQ);
-                     else begin
+            // Integer and qstr probes only use the argument flops. The KE
+            // image is adopted only when the int64 path writes ke_w0/ke_w1.
+            S_KEYEQ: begin
                 ke_cx <= 1'b0;
                 if (ke_a == ke_b) begin ke_eq <= 1'b1; ret(); end
+                // Qstrs are interned, so a different id is a different key.
+                else if (tg(ke_a) == ABI_TAG_QSTR && tg(ke_b) == ABI_TAG_QSTR) begin ke_eq <= 1'b0; ret(); end
                 else if (strlike(ke_a) && strlike(ke_b)) begin se_a <= ke_a; se_b <= ke_b; gosub_scr(SCR_SE, S_STREQ, S_KE_S); end
                 else if (tg(ke_a) == ABI_TAG_BYTES && tg(ke_b) == ABI_TAG_BYTES) begin
                     se_a <= ke_a; se_b <= ke_b; gosub_scr(SCR_SE, S_STREQ, S_KE_S);
                 end else if (strlike(ke_a) || strlike(ke_b)) begin ke_eq <= 1'b0; ret(); end
                 else if (intlike(ke_a) && intlike(ke_b)) begin ke_eq <= (ival(ke_a) == ival(ke_b)); ret(); end
-                else if (tg(ke_a) == ABI_TAG_INT64 && tg(ke_b) == ABI_TAG_INT64) rd(adr(ke_a), S_KE_A0);
+                else if (tg(ke_a) == ABI_TAG_INT64 && tg(ke_b) == ABI_TAG_INT64) begin
+                    if (scr_id != SCR_KE) scr_adopt(SCR_KE, S_KEYEQ);
+                    else rd(adr(ke_a), S_KE_A0);
+                end
                 else if (tg(ke_a) == ABI_TAG_FLOAT || tg(ke_a) == ABI_TAG_COMPLEX) begin
                     ke_eq <= 1'b0; ke_cx <= numlike(ke_b); ret();
                 end else if (tg(ke_a) == ABI_TAG_OBJECT || tg(ke_a) == ABI_TAG_TUPLE) rd(adr(ke_a), S_KE_OBJ);
@@ -3370,7 +3383,7 @@ module mpy_core
             end
 
             // dict/set probe: t4 container, t5 key, t6 value; lk_mode, lk_set
-            S_LK: if (scr_id != SCR_LK) scr_ensure(SCR_LK, S_LK);
+            S_LK: if (scr_id != SCR_LK) scr_adopt(SCR_LK, S_LK);
                   else begin lk_found <= 1'b0; lk_cx <= 1'b0; lk_ro <= 1'b0; lk_res <= VNULL; rd(adr(t[4]) + 12, S_LK_FL); end
             S_LK_FL: if (lk_mode != LK_FIND && (md & ABI_DICT_FLAG_ROM)) begin lk_ro <= 1'b1; ret(); end
                      else rd(adr(t[4]) + 4, S_LK_AL);
@@ -3401,7 +3414,7 @@ module mpy_core
                         if (!lk_hasav) begin lk_hasav <= 1'b1; `lk_avail <= `lk_slot; end
                         st <= S_LK_NX;
                     end else if (mv == t[5]) st <= S_LK_HIT;
-                    else begin ke_a <= mv; ke_b <= t[5]; gosub_scr(SCR_KE, S_KEYEQ, S_LK_KE); end
+                    else begin ke_a <= mv; ke_b <= t[5]; gosub(S_KEYEQ, S_LK_KE); end
             S_LK_KE: if (ke_cx) begin lk_cx <= 1'b1; ret(); end
                      else if (scr_id != SCR_LK) scr_ensure(SCR_LK, S_LK_KE);
                      else if (ke_eq) st <= S_LK_HIT;
@@ -3448,9 +3461,8 @@ module mpy_core
             // Grow t4. The caller's LK image is in SRAM. Pads sA[5]/sA[6] hold
             // the re-read alloc and table for the copy loop. The new sizes are
             // written back to LK words 0 and 1 before returning.
-            S_RH: if (scr_id == SCR_RH) st <= S_RH_LKA;
-                  else if (scr_id != SCR_NONE) scr_go_store(scr_id, S_RH);
-                  else scr_go_load(SCR_RH, S_RH_LKA);
+            S_RH: if (scr_id != SCR_RH) scr_adopt(SCR_RH, S_RH);
+                  else st <= S_RH_LKA;
             S_RH_LKA: rd(scr_addr(SCR_LK, 4'd0), S_RH_LKB);
             S_RH_LKB: begin
                 `rh_alloc <= next_alloc(md + 32'd1);
@@ -3478,7 +3490,7 @@ module mpy_core
             S_RH_F3B: wr(scr_addr(SCR_LK, 4'd1), {4'd0, `rh_tab}, S_LK_RET);
 
             // list append: t2 list, t3 value
-            S_LA: if (scr_id != SCR_LA) scr_ensure(SCR_LA, S_LA);
+            S_LA: if (scr_id != SCR_LA) scr_adopt(SCR_LA, S_LA);
                   else rd(adr(t[2]), S_LA_N);
             S_LA_N: begin `la_len <= md; rd(adr(t[2]) + 4, S_LA_A); end
             S_LA_A: begin `la_alloc <= md; rd(adr(t[2]) + 8, S_LA_I); end
@@ -3555,7 +3567,7 @@ module mpy_core
             end
 
             // attribute lookup: t0 object, at_q name -> at_kind (0 miss, 1 value, 2 method, 3 descriptor), at_v
-            S_AT: if (scr_id != SCR_AT) scr_ensure(SCR_AT, S_AT);
+            S_AT: if (scr_id != SCR_AT) scr_adopt(SCR_AT, S_AT);
                   else begin
                 at_ty <= 1'b0; at_objd <= 1'b0;
                 if (tg(t[0]) == ABI_TAG_OBJECT) rd(adr(t[0]), S_AT_K);
