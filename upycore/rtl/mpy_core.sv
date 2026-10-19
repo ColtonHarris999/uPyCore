@@ -691,7 +691,6 @@ module mpy_core
         S_FL_S,
         S_FL_S2,
         S_SCR,
-        S_SCR_ADV,
         S_SCR_CAP,
         S_RH_LKA,
         S_RH_LKB,
