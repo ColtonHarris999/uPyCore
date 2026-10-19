@@ -1,0 +1,12 @@
+for
+call 0
+v 0
+call 1
+v 1
+call 2
+from
+call 0
+w 0
+call 1
+w 1
+call 2
