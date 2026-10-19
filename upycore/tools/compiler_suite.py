@@ -88,10 +88,16 @@ def _float_spelling_only(MPY, mine: bytes, ref: bytes) -> bool:
 
 
 def suite_sources() -> list[tuple[str, Path]]:
-    """Unique ``(source name, path)`` pairs the hardware suite compiles."""
+    """Unique ``(source name, path)`` pairs the hardware suite compiles.
+
+    Entries with ``mpyc = false`` are booted from ``mpy-cross`` and left
+    out of this compare. ``mpyc`` is not expected to accept them.
+    """
 
     seen: dict[str, Path] = {}
     for t in hw_tests.for_device(hw_tests.load_manifest()):
+        if not t.mpyc:
+            continue
         seen.setdefault(t.source.name, t.source)
         for spec in t.modules:
             name, rel = spec.split("=", 1)

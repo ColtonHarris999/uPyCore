@@ -56,11 +56,16 @@ review. Each one that does not gets a finding.
 - `close` swallows `GeneratorExit` and a normal return, raises
   `RuntimeError: generator ignored GeneratorExit` when the body yields,
   and propagates any other exception. `throw(GeneratorExit)` propagates.
-- Header word 14 is `VNULL` on an ordinary frame and is restored across
-  a nested call. `calls` and `exceptions` passing is the witness. A
+- `FR_GEN` is `VNULL` on an ordinary frame and is restored across a
+  nested call. `calls` and `exceptions` passing is the witness. A
   generator that calls a normal function that calls back into a second
   generator is the case to run if those areas pass and you still doubt
   the spill.
+- `OB` in `upycore/tools/mpy_abi.py` matches the groups in the plan.
+  `NOTIMPL` is the last kind. `NotImplementedType` is the last type
+  before the exceptions. `OB_ITEROBJ` is not a stray const in
+  `upycore/firmware/base.py`. `generator` sits with `function` in
+  `TYPES`.
 - `pc` saved by `yield from` is the opcode byte. The instruction after
   it runs once, after the delegation finishes.
 - `StopIteration` from a sub-iterator completes `yield from`.
@@ -73,9 +78,9 @@ review. Each one that does not gets a finding.
   filled. A later `next` is `StopIteration`, not a second run of the
   body.
 - `gen_gc` still passes, and check 3 above keeps the innermost list.
-  Look at `G_OBJ` in `upycore/rtl/mpy_gc.sv`: pointer-tagged words in
-  the tail are followed. A scanner change that walks only a fixed field
-  count is a finding.
+  The generator header is six words. The locals live in the frame block
+  word 5 points at, traced the way a list's item array is traced. A
+  scanner that follows the header and stops is a finding.
 - Repr matches `<generator object 'name' at 0x...>` aside from the
   address mask.
 - `mpyc = false` is set on every generators entry. `compiler_suite.py`

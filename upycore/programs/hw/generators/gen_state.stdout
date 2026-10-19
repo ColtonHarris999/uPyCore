@@ -1,0 +1,8 @@
+local 1 2
+cell 6 16
+y 1
+finally
+ret StopIteration 4 4
+pep-y 1
+pep RuntimeError generator raised StopIteration
+pep-after StopIteration  None

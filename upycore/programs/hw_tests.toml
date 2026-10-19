@@ -19,6 +19,8 @@
 # compiler. Goldens still come from the unix oracle.
 # oracle = false: the unix port cannot import a filesystem module, so the
 # golden is the frozen-module result and regen leaves it alone.
+# mpyc = false: mpy-cross still boots the program. The uPy2 compiler
+# skips it. Generator programs set this because mpyc rejects yield.
 
 [smoke]
 hello = { file = "hw/smoke/hello.py" }
@@ -481,3 +483,21 @@ gc_bench_wide = { file = "hw/gc/gc_bench_wide.py", cycles = 40_000_000, timeout 
 gc_deep_live_chain = { file = "hw/gc/gc_deep_live_chain.py", cycles = 40_000_000, timeout = 240 }
 gc_leak_check = { file = "hw/gc/gc_leak_check.py", cycles = 40_000_000, timeout = 240 }
 gc_bench_churn = { file = "hw/gc/gc_bench_churn.py", cycles = 40_000_000, timeout = 240 }
+
+[generators]
+gen_yield = { file = "hw/generators/gen_yield.py", mpyc = false }
+gen_send = { file = "hw/generators/gen_send.py", mpyc = false }
+gen_return = { file = "hw/generators/gen_return.py", mpyc = false }
+gen_throw = { file = "hw/generators/gen_throw.py", mpyc = false }
+gen_close = { file = "hw/generators/gen_close.py", mpyc = false }
+gen_pend = { file = "hw/generators/gen_pend.py", mpyc = false }
+gen_state = { file = "hw/generators/gen_state.py", mpyc = false }
+gen_repr = { file = "hw/generators/gen_repr.py", mpyc = false }
+gen_gc = { file = "hw/generators/gen_gc.py", mpyc = false, cycles = 40_000_000, timeout = 240 }
+gen_yield_from = { file = "hw/generators/gen_yield_from.py", mpyc = false }
+gen_yield_from_iter = { file = "hw/generators/gen_yield_from_iter.py", mpyc = false }
+gen_yield_from_throw = { file = "hw/generators/gen_yield_from_throw.py", mpyc = false }
+gen_yield_from_stop_type = { file = "hw/generators/gen_yield_from_stop_type.py", mpyc = false }
+gen_async = { file = "hw/generators/gen_async.py", mpyc = false }
+gen_with = { file = "hw/generators/gen_with.py", mpyc = false }
+gen_trace = { file = "hw/generators/gen_trace.py", mpyc = false, uncaught = true }

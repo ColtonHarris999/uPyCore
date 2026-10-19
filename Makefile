@@ -26,7 +26,7 @@ ORACLE := build/oracle/src/ports/unix/build-upycore/micropython
 # stays out of this list: those programs are disabled until the on-device
 # compiler can run them, and `test-compiler` is the uPy2 run of the suite.
 HW_AREAS := smoke alu control calls containers strings exceptions objects \
-	builtins modules integ variables memory gc
+	builtins modules integ variables memory gc generators
 
 .PHONY: test sim fw run oracle oracle-header oracle-variant oracle-smoke mpy-cross \
 	docker-build docker-test test-hw test-host test-compiler regen-goldens check-goldens \

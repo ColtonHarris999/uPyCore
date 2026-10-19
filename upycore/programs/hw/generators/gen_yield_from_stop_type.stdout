@@ -1,0 +1,6 @@
+y 1
+throw RuntimeError generator raised StopIteration
+next StopIteration  None
+y2 1
+sub RuntimeError generator raised StopIteration
+next2 StopIteration  None
