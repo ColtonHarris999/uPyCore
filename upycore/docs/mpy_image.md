@@ -31,8 +31,9 @@ Rejected, and the error names the thing rejected:
 
 Accepted const kinds: `None`, `False`, `True`, ellipsis, `str`, `bytes`,
 an int that fits signed 64-bit, and `tuple` of those. `*args`,
-`**kwargs`, and import are not link errors. A function whose `n_state`
-exceeds the 64-entry register file is a link error.
+`**kwargs`, and import are not link errors. A function with more than
+255 locals is a link error. `n_state` may exceed 64: locals live in the
+frame, and the operand stack spills out of the 64-entry register file.
 
 ## Qstrs
 

@@ -8,6 +8,12 @@
 from ._abi import *
 
 _RC_FLAG_GENERATOR = const(2)
+_SCOPE_VARKW = const(2)
+_SCOPE_VARARGS = const(4)
+# Bytecode format groups, from the v6 encoding. A nibble's two bits are
+# 0 byte, 1 qstr, 2 varuint, 3 offset.
+_FMT_MAGIC = const(932)
+_EXTRA_MASK = const(158)
 
 
 def f32bits(x):
@@ -281,11 +287,64 @@ def _const_base(objs, roots):
     return _pay(t) + 4
 
 
+def _op_step(bc, ip):
+    op = bc[ip]
+    fmt = (_FMT_MAGIC >> (2 * (op >> 4))) & 3
+    cur = ip + 1
+    arg = 0
+    if fmt == 1 or fmt == 2:
+        arg = bc[cur] & 127
+        while bc[cur] & 128:
+            cur += 1
+            arg = (arg << 7) | (bc[cur] & 127)
+        cur += 1
+    elif fmt == 3:
+        if bc[cur] & 128:
+            cur += 2
+        else:
+            cur += 1
+    if (op & _EXTRA_MASK) == 0:
+        cur += 1
+    return [op, arg, cur]
+
+
+def _local_count(bc, pre):
+    # Same count the linker stores in the signature byte. n_state also
+    # includes the compiler's stack budget, and that budget now lives in
+    # the spill stack.
+    n = pre[3] + pre[4]
+    flags = pre[2]
+    if flags & _SCOPE_VARARGS:
+        n += 1
+    if flags & _SCOPE_VARKW:
+        n += 1
+    ip = pre[11]
+    end = len(bc)
+    while ip < end:
+        step = _op_step(bc, ip)
+        op = step[0]
+        idx = -1
+        if op >= 176 and op <= 191:
+            idx = op - 176
+        elif op >= 192 and op <= 207:
+            idx = op - 192
+        elif op >= 36 and op <= 41:
+            idx = step[1]
+        if idx >= 0 and idx + 1 > n:
+            n = idx + 1
+        ip = step[2]
+    off = pre[10]
+    i = 0
+    cells = pre[7]
+    while i < cells:
+        cell = bc[off + i]
+        if cell + 1 > n:
+            n = cell + 1
+        i += 1
+    return n
+
+
 def _finish_rc(bc, pre, children, qids, roots, src_q, md_addr):
-    # n_state lives in one signature byte, the same layout the linker uses.
-    # The register file is 64 slots, so a wider function still loads (the
-    # unix compiler accepts it) and does not run correctly until that file
-    # grows. Calling it is a separate limit from compile().
     base = _data(bc)
     names = pre[8]
     narg = len(names) - 1
@@ -310,10 +369,11 @@ def _finish_rc(bc, pre, children, qids, roots, src_q, md_addr):
             _st(ch, i, children[i])
             i += 1
     flags = _RC_FLAG_GENERATOR if (pre[2] & SCOPE_GENERATOR) else 0
+    nloc = _local_count(bc, pre)
     rc = _alloc(12, TAG_CONT, 0)
     roots.append(rc)
     _st(rc, RC_OP_START, base + pre[11])
-    _st(rc, RC_SIG, pre[0] | (pre[1] << 8) | (pre[2] << 16) | (flags << 24))
+    _st(rc, RC_SIG, nloc | (pre[1] << 8) | (pre[2] << 16) | (flags << 24))
     _st(rc, RC_ARGS, pre[3] | (pre[4] << 8) | (pre[5] << 16) | (pre[7] << 24))
     _st(rc, RC_ARG_NAMES, _pay(nw) if nw != 0 else 0)
     _st(rc, RC_CELLS, _pay(cw) if cw != 0 else 0)

@@ -110,6 +110,7 @@ call_kw_unexpected = { file = "hw/calls/call_kw_unexpected.py" }
 call_function_ex = { file = "hw/calls/call_function_ex.py" }
 call_function_ex_kw = { file = "hw/calls/call_function_ex_kw.py" }
 varargs_basic = { file = "hw/calls/varargs_basic.py" }
+call_wide = { file = "hw/calls/call_wide.py", cycles = 40_000_000, timeout = 240 }
 varargs_empty = { file = "hw/calls/varargs_empty.py" }
 varargs_kwonly = { file = "hw/calls/varargs_kwonly.py" }
 varargs_kwonly2 = { file = "hw/calls/varargs_kwonly2.py" }
@@ -353,6 +354,7 @@ builtins_fallback = { file = "hw/variables/builtins_fallback.py" }
 builtins_shadow = { file = "hw/variables/builtins_shadow.py" }
 builtins_null_bit = { file = "hw/variables/builtins_null_bit.py" }
 load_name_builtin = { file = "hw/variables/load_name_builtin.py" }
+local_hot = { file = "hw/variables/local_hot.py" }
 
 # Deep frames and many locals. Register-file spill counters are not portable.
 [memory]
@@ -361,6 +363,8 @@ locals_40_uninit = { file = "hw/memory/locals_40_uninit.py" }
 rf_deep_recursion = { file = "hw/memory/rf_deep_recursion.py", cycles = 40_000_000, timeout = 240 }
 rf_spill_refill = { file = "hw/memory/rf_spill_refill.py", cycles = 40_000_000, timeout = 240 }
 rf_thrash = { file = "hw/memory/rf_thrash.py", cycles = 40_000_000, timeout = 240 }
+stack_ring = { file = "hw/memory/stack_ring.py", cycles = 40_000_000, timeout = 240 }
+stack_grow = { file = "hw/memory/stack_grow.py", cycles = 40_000_000, timeout = 240 }
 align_mask = { file = "hw/memory/align_mask.py" }
 
 # On-device compile/exec/eval. The loader gives this area a long cycle budget.
@@ -499,3 +503,13 @@ gen_yield_from_stop_type = { file = "hw/generators/gen_yield_from_stop_type.py" 
 gen_async = { file = "hw/generators/gen_async.py" }
 gen_with = { file = "hw/generators/gen_with.py" }
 gen_trace = { file = "hw/generators/gen_trace.py", uncaught = true }
+gen_for_return = { file = "hw/generators/gen_for_return.py" }
+gen_for_raise_stop = { file = "hw/generators/gen_for_raise_stop.py" }
+gen_for_pend = { file = "hw/generators/gen_for_pend.py" }
+gen_for_self = { file = "hw/generators/gen_for_self.py" }
+gen_yield_from_deep = { file = "hw/generators/gen_yield_from_deep.py" }
+gen_yield_from_finally = { file = "hw/generators/gen_yield_from_finally.py" }
+gen_yield_from_send = { file = "hw/generators/gen_yield_from_send.py" }
+gen_yield_from_range = { file = "hw/generators/gen_yield_from_range.py" }
+gen_genexp_collect = { file = "hw/generators/gen_genexp_collect.py" }
+gen_user_next = { file = "hw/generators/gen_user_next.py" }
