@@ -22,11 +22,12 @@ DOCKER_IMAGE ?= upycore-sim:local
 
 ORACLE := build/oracle/src/ports/unix/build-upycore/micropython
 
-# Areas of upycore/programs/hw_tests.toml that boot on the device. `compiler`
-# stays out of this list: those programs are disabled until the on-device
-# compiler can run them, and `test-compiler` is the uPy2 run of the suite.
+# Areas of upycore/programs/hw_tests.toml. `make test-hw-<area>` boots that
+# area from mpy-cross and again from the host uPy2 compiler. The compiler
+# area calls compile/exec/eval on the hart. `test-compiler` is the host
+# uPy2 byte compare plus the whole suite compiled with uPy2.
 HW_AREAS := smoke alu control calls containers strings exceptions objects \
-	builtins modules integ variables memory gc generators
+	builtins modules integ variables memory gc generators compiler
 
 .PHONY: test sim fw run oracle oracle-header oracle-variant oracle-smoke mpy-cross \
 	docker-build docker-test test-hw test-host test-compiler regen-goldens check-goldens \
@@ -50,6 +51,7 @@ test: $(MPY_CROSS)
 	$(PYTHON) upycore/tests/test_mpy_periph_model.py
 	$(PYTHON) upycore/tests/test_hw_manifest.py
 	$(PYTHON) upycore/tests/test_numeric_const.py
+	$(PYTHON) upycore/tests/test_compiler_host.py
 	$(PYTHON) upycore/tools/compiler_suite.py
 	$(PYTHON) $(BUILD_PY) sim
 	$(PYTHON) upycore/tools/hw_tests.py
@@ -70,6 +72,8 @@ test-hw-%: $(MPY_CROSS)
 test-host: $(MPY_CROSS)
 	$(PYTHON) upycore/tests/test_mpy_periph_model.py
 	$(PYTHON) upycore/tests/test_hw_manifest.py
+	$(PYTHON) upycore/tests/test_numeric_const.py
+	$(PYTHON) upycore/tests/test_compiler_host.py
 	$(PYTHON) upycore/tools/compiler_suite.py
 
 test-compiler: $(MPY_CROSS)

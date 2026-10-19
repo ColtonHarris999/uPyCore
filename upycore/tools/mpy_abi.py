@@ -123,6 +123,7 @@ OB = {
     "CELL": 4,           # [2] contents
     "FUNCTION": 5,       # [2] raw code [3] closure tuple [4] defaults tuple
                          # [5] kw defaults dict [6] globals dict
+                         # [7] root tuple; NULL for a function linked into the image
     "GENERATOR": 6,      # [2] function [3] status [4] pend_exc [5] frame block
     "BOUND_METHOD": 7,   # [2] function [3] self
     "BUILTIN": 8,        # [2] native id [3] fallback callable [4] name qstr
@@ -142,7 +143,7 @@ OB = {
     "NOTIMPL": 18,
 }
 OBJ_WORDS = {
-    "INSTANCE": 3, "TYPE": 9, "EXCEPTION": 5, "CELL": 3, "FUNCTION": 7,
+    "INSTANCE": 3, "TYPE": 9, "EXCEPTION": 5, "CELL": 3, "FUNCTION": 8,
     "GENERATOR": 6, "BOUND_METHOD": 4, "BUILTIN": 5, "MODULE": 4, "SUPER": 4,
     "PROPERTY": 5, "STATICMETHOD": 3, "CLASSMETHOD": 3, "SLICE": 5,
     "DICT_VIEW": 4, "ITEROBJ": 5, "ELLIPSIS": 2, "NOTIMPL": 2,
@@ -298,6 +299,7 @@ NATIVES = [
     "_slen",     # _slen(s) -> byte length of a str/bytes/qstr
     "_fget",     # _fget(i) -> caller frame header word i
     "_floc",     # _floc(i) -> caller frame local i
+    "_qxset",    # _qxset(base, count): RAM qstr descriptors past the image pool
     # type methods
     "list.append", "object.__init__", "BaseException.__init__",
     # constructors

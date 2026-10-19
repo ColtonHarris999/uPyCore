@@ -3,7 +3,9 @@
 uPyCore is a microcontroller-class CPU whose instruction set is MicroPython
 bytecode. Programs are MicroPython source. Host `mpy-cross` compiles them to
 `.mpy`, the linker packs firmware and the program into a flash image, and the
-Verilator model of `mpy_soc` runs that image. There is no on-device compiler.
+Verilator model of `mpy_soc` runs that image. `compile`, `exec`, and `eval`
+run the frozen uPy2 compiler on the hart: each stage is its own call, and
+the firmware collects between them.
 
 The unix oracle is MicroPython v1.29.0 built as the `upycore` variant
 (`sys.platform` and `sys.implementation.name` are `upycore`).
@@ -36,7 +38,11 @@ once from `mpy-cross` bytecode and once from the vendored uPy2 compiler
 plus a byte compare of the two compilers.
 `make regen-goldens` rewrites the goldens after `make oracle`. An `xfail`
 entry is a known mismatch: the run is expected to fail, and a pass fails
-the suite so the marker is removed with the fix.
+the suite so the marker is removed with the fix. The `compiler` area calls
+`compile`, `exec`, and `eval` on the hart, including `yield` and `yield from`.
+Those programs take minutes each; `make test-hw-compiler` runs that area
+on its own. The `generators` area is the runtime suite. Host uPy2 matches
+`mpy-cross` on those programs, so they are in the byte compare too.
 
 ```bash
 python3 upycore/tools/hw_tests.py --list

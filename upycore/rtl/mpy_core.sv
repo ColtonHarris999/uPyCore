@@ -243,6 +243,7 @@ module mpy_core
         S_BOOT15,
         S_BOOT16,
         S_BOOT2,
+        S_BOOT2B,
         S_BOOT3,
         S_BOOT4,
         S_BOOT5,
@@ -483,6 +484,8 @@ module mpy_core
         S_MF_C,
         S_MF_CL,
         S_MF_R,
+        S_MF_RT,
+        S_MF_RT2,
         S_NAT,
         S_NAT_FB,
         S_NAT_FB1,
@@ -549,6 +552,7 @@ module mpy_core
         S_N_WR,
         S_N_WRB,
         S_N_WRL,
+        S_QD,
         S_QOP,
         S_RAISE,
         S_RET,
@@ -737,6 +741,7 @@ module mpy_core
         S_NAT_GR1,
         S_NAT_GR2,
         S_NAT_LA,
+        S_NAT_QX,
         S_NAT_RG1,
         S_NAT_RG2,
         S_NAT_RG3,
@@ -777,6 +782,9 @@ module mpy_core
 
     // image constants
     logic [31:0] h_qdesc, h_builtins, h_hooks, h_msgs, h_chars, h_empty;
+    // Image qstr count, plus a RAM descriptor table for ids compiled code invents.
+    logic [31:0] h_nq, h_qext, h_qextn, qid;
+    state_e      qd_nxt;
     val_t ty_fun, ty_bm, ty_cell, ty_obj, ty_stop, ty_mem, ty_slice;
 
     // live frame
@@ -1334,6 +1342,7 @@ module mpy_core
             halted <= 1'b0; hcode <= 4'd0; hval <= 32'd0;
             cyc <= 32'd0; nops <= 32'd0; trace <= 1'b0;
             fw_ok <= 1'b0; fw_base <= 32'd0;
+            h_nq <= 32'd0; h_qext <= 32'd0; h_qextn <= 32'd0; qd_nxt <= S_BOOT;
             sp <= 7'd0; nloc <= 8'd0; rf_base <= 6'd0; spilled_reals <= 16'd0;
             spill_hp <= MPY_CORE_SCRATCH_BASE; rf_pend <= 1'b0;
             scr_id <= SCR_NONE; scr_i <= 4'd0; scr_storing <= 1'b0; scr_gosub_p <= 1'b0;
@@ -1420,7 +1429,11 @@ module mpy_core
             S_BOOT: rd(32'd0, S_BOOT1);
             S_BOOT1: if (md != ABI_IMAGE_MAGIC) halt(ABI_HALT_BAD_IMAGE, md);
                      else rd(4 * ABI_HDR_QSTR_DESC, S_BOOT2);
-            S_BOOT2: begin h_qdesc <= md; rd(4 * ABI_HDR_BUILTINS, S_BOOT3); end
+            S_BOOT2: begin
+                h_qdesc <= md; h_qext <= 32'd0; h_qextn <= 32'd0;
+                rd(4 * ABI_HDR_QSTR_COUNT, S_BOOT2B);
+            end
+            S_BOOT2B: begin h_nq <= md; rd(4 * ABI_HDR_BUILTINS, S_BOOT3); end
             S_BOOT3: begin h_builtins <= md; rd(4 * ABI_HDR_HOOKS, S_BOOT4); end
             S_BOOT4: begin h_hooks <= md; rd(4 * ABI_HDR_MSGS, S_BOOT5); end
             S_BOOT5: begin h_msgs <= md; rd(4 * ABI_HDR_CHARS, S_BOOT6); end
@@ -2775,19 +2788,24 @@ module mpy_core
                     tb_src <= 1'b1; tb_nz <= 1'b0; tb_from <= 8'(sp - 7'(ext));
                     stk_from <= stk_depth - 16'(ext); tb_n <= ext;
                     gosub(S_TUP, S_MF_CL);
-                end else begin t[0] <= VNULL; alloc(32'd7, S_MF_A); end
+                end else begin t[0] <= VNULL; st <= S_MF_RT; end
             end
-            S_MF_CL: begin t[0] <= tb_v; alloc(32'd7, S_MF_A); end
+            S_MF_CL: begin t[0] <= tb_v; st <= S_MF_RT; end
+            // Word 7 is a root tuple. Nested functions copy the caller's so a
+            // heap bytecode buffer stays live after the entry frame returns.
+            S_MF_RT: if (fun == VNULL) begin t[1] <= VNULL; alloc(32'd8, S_MF_A); end
+                     else rd(adr(fun) + 32'd28, S_MF_RT2);
+            S_MF_RT2: begin t[1] <= mv; alloc(32'd8, S_MF_A); end
             S_MF_A: begin
                 v0 = (op == 8'h20 || op == 8'h21) ? {24'd0, ext} : 32'd0;
                 wb_v[0] <= vint(ABI_OB_FUNCTION); wb_v[1] <= ty_fun; wb_v[2] <= vint(c_rc);
-                wb_v[3] <= t[0]; wb_v[6] <= glb;
+                wb_v[3] <= t[0]; wb_v[6] <= glb; wb_v[7] <= t[1];
                 if (op == 8'h33 || op == 8'h21) begin
                     wb_v[4] <= rf[`SX(6'(sp - 7'(v0) - 7'd2))]; wb_v[5] <= rf[`SX(6'(sp - 7'(v0) - 7'd1))];
                     v0 = v0 + 32'd2;
                 end else begin wb_v[4] <= VNULL; wb_v[5] <= VNULL; end
                 rf[`SX(6'(sp - 7'(v0)))] <= vobj(al_a); sp <= sp - 7'(v0) + 7'd1;
-                wblock(al_a, 4'd7, S_FETCH);
+                wblock(al_a, 4'd8, S_FETCH);
             end
 
             // ---- CALL_*_VAR_KW: star-arg expansion ----
@@ -3025,6 +3043,10 @@ module mpy_core
                         else begin x3 <= v1; rd(fprev + (v1 << 2), S_N_FGET); end
                     ABI_N_FLOC: if (fprev == 32'd0) deliver(VNULL, crk);
                         else rd(fprev + 32'd64 + (v1 << 2), S_N_RV);
+                    ABI_N_QXSET: begin
+                        h_qext <= mv[31:0];
+                        rd(ab_ptr(ab_lo + 8'd1), S_NAT_QX);
+                    end
                     ABI_N_SLEN: if (tg(mv) == ABI_TAG_MUT || tg(mv) == ABI_TAG_TUPLE) rd(adr(mv), S_N_RINT);
                         else begin si_v <= mv; gosub(S_SINFO, S_N_LEN_S); end
                     ABI_N_LIST_APPEND: if (v0 != 32'd2 || !is_mut(mv, ABI_MUT_LIST)) st <= S_NAT_FB;
@@ -3086,6 +3108,7 @@ module mpy_core
             S_NAT_GR1: begin t[1] <= mv; rd(ab_ptr(ab_lo + 8'd2), S_NAT_GR2); end
             S_NAT_GR2: begin t[2] <= mv; st <= S_GR0; end
             S_NAT_LA: begin t[3] <= mv; gosub(S_LA, S_N_NONE); end
+            S_NAT_QX: begin h_qextn <= mv[31:0]; deliver(VNONE, crk); end
             S_NAT_RG1: if (!intlike(mv)) st <= S_NAT_FB;
                        else if (x0 == 32'd2) begin
                            wb_v[0] <= vint(32'd0); wb_v[1] <= vint(ival(mv)); wb_v[2] <= vint(32'd1);
@@ -3563,7 +3586,7 @@ module mpy_core
                         else hok <= 1'b0;
                         ret();
                     end
-                    ABI_TAG_QSTR: rd(h_qdesc + (hk[31:0] << 3), S_HASH_W16);
+                    ABI_TAG_QSTR: begin qid <= hk[31:0]; qd_nxt <= S_HASH_W16; st <= S_QD; end
                     ABI_TAG_STR, ABI_TAG_BYTES: rd(adr(hk) + 4, S_HASH_W16);
                     ABI_TAG_INT64: rd(adr(hk), S_HASH_I64);
                     ABI_TAG_OBJECT: rd(adr(hk), S_HASH_OBJ);
@@ -3579,8 +3602,11 @@ module mpy_core
             end
 
             // str/qstr/bytes info: si_v -> si_len, si_hash, si_addr, si_na
-            S_SINFO: if (tg(si_v) == ABI_TAG_QSTR) rd(h_qdesc + (si_v[31:0] << 3), S_SI_Q0);
-                     else rd(adr(si_v), S_SI_S0);
+            S_QD: rd((qid < h_nq) ? (h_qdesc + (qid << 3))
+                               : (h_qext + ((qid - h_nq) << 3)), qd_nxt);
+            S_SINFO: if (tg(si_v) == ABI_TAG_QSTR) begin
+                        qid <= si_v[31:0]; qd_nxt <= S_SI_Q0; st <= S_QD;
+                     end else rd(adr(si_v), S_SI_S0);
             S_SI_Q0: begin si_hash <= {16'd0, md[15:0]}; si_len <= {16'd0, md[31:16]}; rd(m_addr + 4, S_SI_Q1); end
             S_SI_Q1: begin si_addr <= {1'b0, md[30:0]}; si_na <= md[31]; ret(); end
             S_SI_S0: begin si_len <= md; rd(adr(si_v) + 4, S_SI_S1); end
