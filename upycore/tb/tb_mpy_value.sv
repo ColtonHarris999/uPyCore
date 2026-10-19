@@ -348,7 +348,7 @@ module tb_mpy_value;
         spill_pc = '0;
         spill_nstate = '0;
 
-        check(MPY_RF_DEPTH == 64, "register file is 64 entries");
+        check(MPY_RF_DEPTH == 16, "register file is 16 entries");
         check(MPY_ENTRY_WIDTH == 36, "an entry is 36 bits");
         check(MPY_FRAME_DEPTH == 32, "frame stack is 32");
         check(32'(MPY_FRAME_DEPTH * MPY_FRAME_STRIDE) == MPY_FRAME_RESERVE_BYTES,
@@ -401,11 +401,11 @@ module tb_mpy_value;
                      code, tag_name(code), payload, mpy_tag_is_pointer(code));
         end
 
-        write_rf(6'd0, mpy_make_control(MPY_CTL_FALSE));
+        write_rf(MPY_RF_ADDR_W'(0), mpy_make_control(MPY_CTL_FALSE));
         check(!mpy_tag_is_pointer(rs1_tag), "False is not a pointer");
         check(rs1_pay[3:0] == MPY_CTL_FALSE, "False is CONTROL kind 4");
         check(mpy_bool_as_int(rs1_pay) == 32'd0, "False counts as int 0");
-        write_rf(6'd1, mpy_make_control(MPY_CTL_TRUE));
+        write_rf(MPY_RF_ADDR_W'(1), mpy_make_control(MPY_CTL_TRUE));
         check(!mpy_tag_is_pointer(rs1_tag), "True is not a pointer");
         check(rs1_pay[3:0] == MPY_CTL_TRUE, "True is CONTROL kind 5");
         check(mpy_bool_as_int(rs1_pay) == 32'd1, "True counts as int 1");
@@ -415,13 +415,13 @@ module tb_mpy_value;
 
         $display("WIDE INT64 COMPLEX SHORT_STR");
         wide_we = 1'b1;
-        wide_addr = 6'd20;
+        wide_addr = MPY_RF_ADDR_W'(0);
         wide_tag = MPY_TAG_INT64;
         wide_pay = {64'b0, 32'h0000_0001, 32'h0000_0002};
         settle();
-        check(!wide_fault, "INT64 at slot 20 fits");
-        rs1_addr = 6'd20;
-        rs2_addr = 6'd21;
+        check(!wide_fault, "INT64 at slot 0 fits");
+        rs1_addr = MPY_RF_ADDR_W'(0);
+        rs2_addr = MPY_RF_ADDR_W'(1);
         tick();
         wide_we = 1'b0;
         check(rs1_tag == MPY_TAG_INT64, "INT64 head tag");
@@ -431,13 +431,13 @@ module tb_mpy_value;
         check(rs2 == {rs2_tag, rs2_pay}, "CONT read is one 36-bit entry");
 
         wide_we = 1'b1;
-        wide_addr = 6'd24;
+        wide_addr = MPY_RF_ADDR_W'(2);
         wide_tag = MPY_TAG_COMPLEX;
         wide_pay = {64'b0, 32'hBF80_0000, 32'h3F80_0000};
         settle();
-        check(!wide_fault, "COMPLEX at slot 24 fits");
-        rs1_addr = 6'd24;
-        rs2_addr = 6'd25;
+        check(!wide_fault, "COMPLEX at slot 2 fits");
+        rs1_addr = MPY_RF_ADDR_W'(2);
+        rs2_addr = MPY_RF_ADDR_W'(3);
         tick();
         wide_we = 1'b0;
         check(rs1_tag == MPY_TAG_COMPLEX && rs1_pay == 32'h3F80_0000, "COMPLEX real");
@@ -451,7 +451,7 @@ module tb_mpy_value;
             bytes[15:8] = 8'h69;
             word0 = mpy_short_str_word(8'd2, bytes, 2'd0);
             wide_we = 1'b1;
-            wide_addr = 6'd28;
+            wide_addr = MPY_RF_ADDR_W'(4);
             wide_tag = MPY_TAG_SHORT_STR;
             wide_pay = {mpy_short_str_word(8'd2, bytes, 2'd3),
                         mpy_short_str_word(8'd2, bytes, 2'd2),
@@ -459,61 +459,61 @@ module tb_mpy_value;
                         word0};
             settle();
             check(!wide_fault, "SHORT_STR length 2 fits");
-            rs1_addr = 6'd28;
-            rs2_addr = 6'd31;
+            rs1_addr = MPY_RF_ADDR_W'(4);
+            rs2_addr = MPY_RF_ADDR_W'(7);
             tick();
             wide_we = 1'b0;
             check(rs1_tag == MPY_TAG_SHORT_STR, "SHORT_STR head");
             check(rs1_pay == 32'h0069_4802, "SHORT_STR length and first bytes");
-            rs2_addr = 6'd29;
+            rs2_addr = MPY_RF_ADDR_W'(5);
             settle();
             check(rs2_tag == MPY_TAG_CONT && rs2_pay == 32'h0, "SHORT_STR CONT 1");
-            rs2_addr = 6'd30;
+            rs2_addr = MPY_RF_ADDR_W'(6);
             settle();
             check(rs2_tag == MPY_TAG_CONT, "SHORT_STR CONT 2");
-            rs2_addr = 6'd31;
+            rs2_addr = MPY_RF_ADDR_W'(7);
             settle();
             check(rs2_tag == MPY_TAG_CONT, "SHORT_STR CONT 3");
         end
 
-        write_rf(6'd40, mpy_make_entry(MPY_TAG_INT, 32'h1111_1111));
+        write_rf(MPY_RF_ADDR_W'(8), mpy_make_entry(MPY_TAG_INT, 32'h1111_1111));
         wide_we = 1'b1;
-        wide_addr = 6'd40;
+        wide_addr = MPY_RF_ADDR_W'(8);
         wide_tag = MPY_TAG_SHORT_STR;
         wide_pay = 128'd16;
         settle();
         check(wide_fault, "SHORT_STR longer than 15 faults");
         tick();
         wide_we = 1'b0;
-        rs1_addr = 6'd40;
+        rs1_addr = MPY_RF_ADDR_W'(8);
         settle();
         check(rs1 == mpy_make_entry(MPY_TAG_INT, 32'h1111_1111),
               "rejected SHORT_STR does not write");
 
         wide_we = 1'b1;
-        wide_addr = 6'd61;
+        wide_addr = MPY_RF_ADDR_W'(13);
         wide_tag = MPY_TAG_SHORT_STR;
         wide_pay = 128'd1;
         settle();
         check(wide_fault, "SHORT_STR does not cross the file");
-        wide_addr = 6'd63;
+        wide_addr = MPY_RF_ADDR_W'(15);
         wide_tag = MPY_TAG_INT64;
         wide_pay = 128'd1;
         settle();
         check(wide_fault, "INT64 does not cross the file");
-        wide_addr = 6'd0;
+        wide_addr = MPY_RF_ADDR_W'(0);
         wide_tag = MPY_TAG_RESERVED;
         settle();
         check(wide_fault, "reserved tag is not a wide value");
         wide_we = 1'b0;
 
         wide_we = 1'b1;
-        wide_addr = 6'd60;
+        wide_addr = MPY_RF_ADDR_W'(12);
         wide_tag = MPY_TAG_SHORT_STR;
         wide_pay = {96'b0, 32'd4};
         settle();
         check(!wide_fault, "SHORT_STR at the last four entries fits");
-        rs1_addr = 6'd63;
+        rs1_addr = MPY_RF_ADDR_W'(15);
         tick();
         wide_we = 1'b0;
         check(rs1_tag == MPY_TAG_CONT, "last SHORT_STR entry is CONT");
@@ -527,7 +527,7 @@ module tb_mpy_value;
                 kind = 2'(k);
                 payload = mpy_mut_payload(kind, MPY_GC_POOL_BASE);
                 cleared = mpy_mut_addr(payload);
-                write_rf(6'd2, mpy_make_mut(kind, MPY_GC_POOL_BASE));
+                write_rf(MPY_RF_ADDR_W'(2), mpy_make_mut(kind, MPY_GC_POOL_BASE));
                 check(rs1_tag == MPY_TAG_MUT_COLLEC, "MUT_COLLEC tag");
                 check(mpy_mut_kind(rs1_pay) == kind, "MUT_COLLEC kind");
                 check(mpy_pointer_addr(rs1_tag, rs1_pay) == MPY_GC_POOL_BASE,
@@ -605,7 +605,7 @@ module tb_mpy_value;
             logic [2:0]  got_region;
             int          ticks;
             logic [31:0] expect_word;
-            $display("  frame 0: 64 payload words, 8 packed tag words");
+            $display("  frame 0: 16 payload words, 2 packed tag words");
             for (int word = 0; word < (MPY_RF_DEPTH / MPY_TAGS_PER_WORD); word++) begin
                 expect_word = 32'h0;
                 for (int lane = 0; lane < MPY_TAGS_PER_WORD; lane++) begin
@@ -623,7 +623,7 @@ module tb_mpy_value;
             for (int slot = 0; slot < MPY_RF_DEPTH; slot++) begin
                 logic [MPY_ENTRY_WIDTH-1:0] expect_entry;
                 expect_entry = spill_entry_at(slot);
-                bus(1'b0, 1'b1, mpy_frame_payload_addr(5'd0, 6'(slot)), 32'h0, 4'h0,
+                bus(1'b0, 1'b1, mpy_frame_payload_addr(5'd0, MPY_RF_ADDR_W'(slot)), 32'h0, 4'h0,
                     got_data, got_tag, got_word, got_fault, got_reason, got_region, ticks);
                 check(!got_fault, "payload load faulted");
                 check(got_data == mpy_entry_payload(expect_entry), "spilled payload mismatch");
@@ -663,14 +663,14 @@ module tb_mpy_value;
             logic [3:0]  got_reason;
             logic [2:0]  got_region;
             int          ticks;
-            bus(1'b0, 1'b1, mpy_frame_payload_addr(5'd0, 6'd58), 32'h0, 4'h0,
+            bus(1'b0, 1'b1, mpy_frame_payload_addr(5'd0, MPY_RF_ADDR_W'(10)), 32'h0, 4'h0,
                 got_data, got_tag, got_word, got_fault, got_reason, got_region, ticks);
             check(got_tag == MPY_TAG_MUT_COLLEC, "frame 0 survived the full stack");
-            check(mpy_mut_kind(got_data) == MPY_MUT_BYTEARRAY, "frame 0 bytearray kind");
-            check(mpy_mut_addr(got_data) == MPY_GC_POOL_BASE, "frame 0 bytearray address");
-            $display("  MUT_COLLEC bytearray payload=0x%08h addr=0x%08h",
+            check(mpy_mut_kind(got_data) == MPY_MUT_LIST, "frame 0 list kind");
+            check(mpy_mut_addr(got_data) == MPY_GC_POOL_BASE, "frame 0 list address");
+            $display("  MUT_COLLEC list payload=0x%08h addr=0x%08h",
                      got_data, mpy_mut_addr(got_data));
-            bus(1'b0, 1'b1, mpy_frame_payload_addr(5'd31, 6'd0), 32'h0, 4'h0,
+            bus(1'b0, 1'b1, mpy_frame_payload_addr(5'd31, MPY_RF_ADDR_W'(0)), 32'h0, 4'h0,
                 got_data, got_tag, got_word, got_fault, got_reason, got_region, ticks);
             check(got_data == mpy_entry_payload(spill_entry_at(0)), "frame 31 payload");
             check(got_tag == MPY_TAG_CONTROL, "frame 31 tag");

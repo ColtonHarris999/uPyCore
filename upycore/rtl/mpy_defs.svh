@@ -14,16 +14,22 @@ localparam int MPY_ENTRY_WIDTH = MPY_TAG_WIDTH + MPY_VAL_WIDTH; // 36
 localparam int MPY_TAG_LSB     = MPY_VAL_WIDTH;                 // 32
 
 // Architectural register file (upycore/docs/mpy_memory_map.md).
-localparam int MPY_RF_DEPTH  = 64;
-localparam int MPY_RF_ADDR_W = 6; // $clog2(MPY_RF_DEPTH)
-// A spill chunk holds 16 to 48 values. Word 0 packs the previous chunk
+localparam int MPY_RF_DEPTH  = 16;
+localparam int MPY_RF_ADDR_W = 4; // $clog2(MPY_RF_DEPTH)
+// A spill chunk holds 4 to 8 values. Word 0 packs the previous chunk
 // address (0 if this is the oldest) and the value count. Tag nibbles
 // follow, eight per word, then the payloads, oldest first. The byte
 // length is padded to 16 so a CONTROL link can keep its kind in
-// address[3:0]. 16 values is 80 bytes. 48 values is 224 bytes.
-localparam int MPY_RF_CHUNK_MIN = 16;
-localparam int MPY_RF_CHUNK_MAX = 48;
-localparam int MPY_RF_BLOCK_MAX = 224;
+// address[3:0]. 4 values is 32 bytes. 8 values is 48 bytes.
+localparam int MPY_RF_CHUNK_MIN = 4;
+localparam int MPY_RF_CHUNK_MAX = 8;
+localparam int MPY_RF_BLOCK_MAX = 48;
+// Fetch spills at 12 resident slots (4 free, a SHORT_STR) and reloads a
+// linked chunk at 4. A spill leaves at least 5 so the next fetch does
+// not pull the chunk straight back.
+localparam int RF_SPILL_AT  = 12;
+localparam int RF_RELOAD_AT = 4;
+localparam int RF_LEAVE_SP  = 5;
 
 // Locked tag table. 0101 stays unassigned.
 localparam logic [3:0] MPY_TAG_CONTROL    = 4'b0000;

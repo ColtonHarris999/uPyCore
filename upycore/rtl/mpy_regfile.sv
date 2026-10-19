@@ -1,6 +1,6 @@
 `include "mpy_defs.svh"
 
-// 64-entry register file. One 36-bit array: tag[35:32] beside payload[31:0].
+// 16-entry register file. One 36-bit array: tag[35:32] beside payload[31:0].
 // A read of an index returns both. INT64 and COMPLEX occupy two entries,
 // SHORT_STR occupies four, and each extra entry is CONT.
 module mpy_regfile (
@@ -37,8 +37,8 @@ module mpy_regfile (
 
     logic [2:0] span_c;
     logic [6:0] wide_base_c;
-    // 6-bit slots so a wide write indexes the one array directly.
-    // The fault check rejects a span that would pass entry 63.
+    // Address-width slots so a wide write indexes the one array directly.
+    // The fault check rejects a span that would pass the last entry.
     logic [MPY_RF_ADDR_W-1:0] wide_slot0;
     logic [MPY_RF_ADDR_W-1:0] wide_slot1;
     logic [MPY_RF_ADDR_W-1:0] wide_slot2;

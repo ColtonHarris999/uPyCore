@@ -5,7 +5,7 @@ Value layout for the MicroPython hart. The CPython map in
 one later phases read for the GC pool size.
 
 A value is a 4-bit tag beside a 32-bit payload. The register file is one
-36-bit array, 64 entries, and it holds the operand stack only. Locals live
+36-bit array, 16 entries, and it holds the operand stack only. Locals live
 in the frame in SRAM, up to 255 of them. A read of a register returns the
 tag and the payload together. SRAM and flash data words are 32 bits and
 are byte-addressed. The tag does not sit in the word. Slot `i` of a region
@@ -20,12 +20,12 @@ when the frame is spilled for a call or a collection.
 
 The register file is a ring of the newest stack values. Logical slot 0 is
 the oldest resident slot; the stack pointer is the count of resident
-slots. Appending past the end of the 64 copies the oldest values into a
+slots. Appending when 12 slots are resident copies the oldest values into a
 block growing down from the end of the frame reserve (`0x2000_8000`).
-While the stack has only been growing, that block holds 36 values. A
-spill from a full ring then still leaves 25 resident slots, which is
-above the line where the next instruction would pull the chunk back.
-After a pop the block holds 16, which is cheap to pull back. The block is 16-byte
+While the stack has only been growing, that block holds 8 values. At 12
+resident slots with no link, that chunk fits and leaves 5, which is above
+the line where the next instruction would pull the chunk back. After a pop
+the block holds 4, which is cheap to pull back. The block is 16-byte
 aligned, so the link value can keep its kind in the low nibble: tag
 `CONTROL`, kind `RF_LINK` (6), and `payload[31:4]` is the block address
 shifted right by 4. That link is written into the resident slot just
@@ -37,13 +37,12 @@ after the copied values, which becomes logical slot 0.
 | `4` | 4·ceil(count/8) B | Count tags, eight nibbles per word. Lane 0 is bits `[3:0]` |
 | next | 4·count B | Payloads, oldest first |
 
-The byte length is padded out to a multiple of 16. A 16-value chunk is
-80 bytes. A 36-value chunk is 176. A 48-value chunk is 224, which is the
-most that still reloads into the 64-entry ring. Every slot in the chunk
-is a value. The previous link lives in the header, so a later spill frees
-one register per copied value (the first spill of a chain frees one
-fewer, because the new link occupies a freed slot). A walk reads one
-header word per chunk.
+The byte length is padded out to a multiple of 16. A 4-value chunk is
+32 bytes. An 8-value chunk is 48, which is the most that still reloads
+into the 16-entry ring. Every slot in the chunk is a value. The previous
+link lives in the header, so a later spill frees one register per copied
+value (the first spill of a chain frees one fewer, because the new link
+occupies a freed slot). A walk reads one header word per chunk.
 
 There is no DRAM. There is no L1 and no L2. SRAM is one cycle. Flash adds
 `MPY_FLASH_WAIT_STATES` (default 1) on top of that cycle. The 12-byte
@@ -190,7 +189,7 @@ image, flash store, unaligned access, bus fault, stack overflow, step limit.
 
 `upycore/rtl/mpy_defs.svh` holds the tag table, the widths, the register-file
 depth (`MPY_RF_DEPTH` / `MPY_RF_ADDR_W`), and this map.
-`upycore/rtl/mpy_regfile.sv` is the 64-entry array. `upycore/rtl/mpy_mem.sv`
+`upycore/rtl/mpy_regfile.sv` is the 16-entry array. `upycore/rtl/mpy_mem.sv`
 is flash, SRAM, the frame spill, and the other two windows.
 `upycore/rtl/upycore_defs.svh` holds the datapath opcodes.
 `make synth` elaborates these modules with Yosys + yosys-slang.

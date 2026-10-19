@@ -2,11 +2,11 @@
 // flash image (upycore/tools/mpy_link.py) against the ABI in mpy_abi.svh.
 //
 // One frame is live. Locals sit in the frame record in SRAM (up to 255).
-// The operand stack is the 64-entry register file, used as a ring of the
-// newest values. When it is full, the oldest values are copied to a packed
-// SRAM block. A stack that has only been growing spills a wide block so a
+// The operand stack is the 16-entry register file, used as a ring of the
+// newest values. When 12 slots are resident, the oldest values are copied
+// to a packed SRAM block. A stack that has only been growing spills 8 so a
 // deep expression walks fewer links. A stack that has been popping spills
-// 16, which is cheap to pull back. The block header holds the previous
+// 4, which is cheap to pull back. The block header holds the previous
 // chunk address and the count. The slot just after the copied values
 // becomes a CONTROL/RF_LINK back to the block. A few hot locals sit in a
 // side cache so LOAD_FAST and STORE_FAST do not touch SRAM on every use.
@@ -44,8 +44,8 @@ module mpy_core
 #(
     parameter int RSTK_DEPTH = 16,
     // Values copied by one spill while the stack has only been growing.
-    // 16 is the shrink chunk. +GROW= and +ADAPT= override these in sim.
-    parameter int GROW_CHUNK = 36,
+    // MPY_RF_CHUNK_MIN is the shrink chunk. +GROW= and +ADAPT= override these in sim.
+    parameter int GROW_CHUNK = 8,
     parameter int GROW_ADAPT = 1,
     // Hot locals kept beside the operand stack. 0 disables the cache.
     // +LC= +LCWB= +LCDM= override these in simulation.
@@ -720,7 +720,7 @@ module mpy_core
     logic [7:0]  fflags, fcont;
     logic [3:0]  frk;
     val_t glb, loc, fun, aux, aux2, aux3;
-    val_t rf [0:63];
+    val_t rf [0:15];
     logic [31:0] xh [0:15];
     logic [15:0] xv [0:15];
     logic        xf [0:15];
@@ -734,7 +734,6 @@ module mpy_core
     logic [31:0] spill_words;
     logic        spill_had_link;
     logic [31:0] spill_prev;
-    val_t        rld [0:47];
     // 1 while the last change to sp was a push. Spill and reload do not count.
     logic        rf_mono, sp_hold, rf_reload_miss;
     logic [6:0]  sp_d;
@@ -890,8 +889,8 @@ module mpy_core
     assign ftop = fbase + ((32'd17 + 32'(nloc) + 32'd3 * {27'd0, nexc}) << 2);
 
     // A function call in an NBA index trips a Verilator bug, so this is a macro.
-    // Logical stack slot -> physical register. Wraps at 64.
-    `define SX(L) (6'(rf_base + 6'(L)))
+    // Logical stack slot -> physical register. Wraps at 16. rf_base[5:4] stay 0.
+    `define SX(L) (4'(rf_base[3:0] + 4'(L)))
     function automatic logic [31:0] loc_ptr(input logic [7:0] idx);
         loc_ptr = fbase + 32'h44 + {22'd0, idx, 2'b00};
     endfunction
@@ -1090,7 +1089,7 @@ module mpy_core
         halted <= 1'b1; hcode <= code; hval <= value; st <= S_HALT;
     endtask
     task automatic push(input val_t v);
-        if (sp >= 7'd64) begin
+        if (sp >= 7'(MPY_RF_DEPTH)) begin
             rf_pend <= 1'b1;
             rf_pend_v <= v;
         end else begin
@@ -1166,7 +1165,7 @@ module mpy_core
             lc_fl_ret <= S_SPILL;
             for (int k = 0; k < 8; k++) t[k] <= VNULL;
             xc <= VNULL;
-            for (int k = 0; k < 64; k++) rf[k] <= VNULL;
+            for (int k = 0; k < MPY_RF_DEPTH; k++) rf[k] <= VNULL;
             for (int k = 0; k < 8; k++) begin
                 lc_v[k] <= 1'b0;
                 lc_dirty[k] <= 1'b0;
@@ -1188,7 +1187,7 @@ module mpy_core
 
             if (rf_pend && st != S_MWAIT && st != S_RF_SPILL && st != S_RF_SPILL_W &&
                 st != S_RF_RELOAD && st != S_RF_RELOAD_R && st != S_RF_RELOAD_G) begin
-                if (sp >= 7'd64) begin
+                if (sp >= 7'(MPY_RF_DEPTH)) begin
                     rf_resume <= st;
                     st <= S_RF_SPILL;
                 end else begin
@@ -1365,7 +1364,7 @@ module mpy_core
                 loc <= cl_loc; cl_loc <= VNULL;
                 fun <= c_ismod ? VNULL : ab[0];
                 aux <= VNULL; aux2 <= VNULL; aux3 <= VNULL;
-                for (int k = 0; k < 64; k++) rf[k] <= VNULL;
+                for (int k = 0; k < MPY_RF_DEPTH; k++) rf[k] <= VNULL;
                 lc_inval();
                 st <= S_LCLR;
             end
@@ -1547,7 +1546,7 @@ module mpy_core
 
             S_CONT: case (fcont)
                 ABI_CONT_REDISPATCH: begin op <= aux[7:0]; st <= S_EXEC; end
-                ABI_CONT_REPLACE: begin rf[aux[5:0]] <= t[7]; pc <= op_pc; st <= S_FETCH; end
+                ABI_CONT_REPLACE: begin rf[`SX(aux[6:0])] <= t[7]; pc <= op_pc; st <= S_FETCH; end
                 ABI_CONT_INIT: if (t[7] != VNONE) raise_err(ABI_ERR_INIT_NONE, t[7], VNULL);
                                else begin fcont <= aux3[7:0]; deliver(aux, aux2[3:0]); end
                 ABI_CONT_WITH_ENTER: begin
@@ -1654,9 +1653,9 @@ module mpy_core
             S_RX_POP: begin rx_from <= 1'b1; st <= S_RAISE; end
 
             // ---------------- fetch / decode ----------------
-            S_FETCH: if (sp >= 7'd61) begin
+            S_FETCH: if (sp >= 7'(RF_SPILL_AT)) begin
                          rf_resume <= S_FETCH; st <= S_RF_SPILL;
-                     end else if (has_link && sp <= 7'd16) begin
+                     end else if (has_link && sp <= 7'(RF_RELOAD_AT)) begin
                          rf_resume <= S_FETCH; st <= S_RF_RELOAD;
                      end else if (in_win) st <= S_DEC;
                      else begin
@@ -1876,7 +1875,7 @@ module mpy_core
                         ab_pe <= 8'd32 + v0[7:0]; ab_nkw <= v1[7:0];
                         sp <= vs1; crk <= ABI_RK_PUSH;
                         st <= S_CALL;
-                    end else if (has_link && !rf_reload_miss && (v2 <= 32'd64)) begin
+                    end else if (has_link && !rf_reload_miss && (v2 <= 32'(MPY_RF_DEPTH))) begin
                         // The window fits in the ring. Pull chunks back and retry.
                         // A chunk that does not fit sets rf_reload_miss and comes back here.
                         rf_resume <= S_EXEC;
@@ -2182,7 +2181,7 @@ module mpy_core
             S_WC_T: begin ab[32] <= mv; st <= S_CALL; end
 
             // ---- unwinding for return and jumps out of finally/with/for ----
-            S_UR: if (has_link && sp <= 7'd16) begin
+            S_UR: if (has_link && sp <= 7'(RF_RELOAD_AT)) begin
                       rf_resume <= S_UR; st <= S_RF_RELOAD;
                   end else if (xsp == 5'd0) begin
                       t[7] <= rf[`SX(sp - 7'd1)];
@@ -3466,16 +3465,18 @@ module mpy_core
             // Word 0 packs the previous address and the value count. Tag
             // words follow, then payloads, oldest first. A growth spill
             // copies cfg_grow values (clamped so the ring stays above the
-            // eager-reload line). After a pop, the chunk is 16. A spill
-            // that already has a link moves that link into the header and
-            // frees `n` registers. The first spill frees `n - 1`.
+            // eager-reload line). After a pop, the chunk is MPY_RF_CHUNK_MIN.
+            // A spill that already has a link moves that link into the header
+            // and frees `n` registers. The first spill frees `n - 1`.
             S_RF_SPILL: begin
-                v0 = (cfg_adapt && !rf_mono) ? 32'd16 : 32'(cfg_grow);
+                v0 = (cfg_adapt && !rf_mono) ? 32'(MPY_RF_CHUNK_MIN) : 32'(cfg_grow);
                 if (v0 < 32'(MPY_RF_CHUNK_MIN)) v0 = 32'(MPY_RF_CHUNK_MIN);
                 if (v0 > 32'(MPY_RF_CHUNK_MAX)) v0 = 32'(MPY_RF_CHUNK_MAX);
-                // Leave sp >= 17 so the next fetch does not reload at once.
-                v1 = has_link ? ((sp > 7'd17) ? 32'(sp - 7'd17) : 32'd0)
-                              : ((sp > 7'd16) ? 32'(sp - 7'd16) : 32'd0);
+                // Leave sp >= RF_LEAVE_SP so the next fetch does not reload.
+                // No link: sp_new = sp - n + 1, so n <= sp - 4.
+                // Link in slot 0: sp_new = sp - n, so n <= sp - 5.
+                v1 = has_link ? ((sp > 7'(RF_LEAVE_SP)) ? 32'(sp - 7'(RF_LEAVE_SP)) : 32'd0)
+                              : ((sp > 7'(RF_LEAVE_SP - 1)) ? 32'(sp - 7'(RF_LEAVE_SP - 1)) : 32'd0);
                 if (v0 > v1) v0 = v1;
                 v2 = mpy_rf_block_bytes(v0[5:0]);
                 if (v0 < 32'(MPY_RF_CHUNK_MIN)) st <= rf_resume;
@@ -3494,11 +3495,11 @@ module mpy_core
             S_RF_SPILL_W: if (sw_i == spill_words) begin
                 if (spill_had_link) begin
                     rf[`SX(spill_n)] <= mpy_make_rf_link(spill_addr);
-                    rf_base <= rf_base + spill_n;
+                    rf_base <= 6'(4'(rf_base + spill_n));
                     sp <= sp - {1'b0, spill_n};
                 end else begin
                     rf[`SX(spill_n - 6'd1)] <= mpy_make_rf_link(spill_addr);
-                    rf_base <= rf_base + spill_n - 6'd1;
+                    rf_base <= 6'(4'(rf_base + spill_n - 6'd1));
                     sp <= (sp - {1'b0, spill_n}) + 7'd1;
                 end
                 spill_hp <= spill_addr;
@@ -3533,17 +3534,15 @@ module mpy_core
                 end
             end
             S_RF_RELOAD_R: if (sw_i != 32'd0 && sw_i == spill_words) begin
+                // Payloads were written as they arrived. This step only
+                // installs the restored link and moves the ring window.
                 spilled_reals <= (spilled_reals >= {10'd0, spill_n}) ? (spilled_reals - {10'd0, spill_n}) : 16'd0;
                 if (spill_prev != 32'd0) begin
-                    rf[6'(rf_base - spill_n)] <= mpy_make_rf_link(spill_prev);
-                    for (int i = 0; i < MPY_RF_CHUNK_MAX; i++)
-                        if (i < spill_n) rf[6'(rf_base - spill_n + 6'(i) + 6'd1)] <= rld[i];
-                    rf_base <= rf_base - spill_n;
+                    rf[4'(rf_base - spill_n)] <= mpy_make_rf_link(spill_prev);
+                    rf_base <= 6'(4'(rf_base - spill_n));
                     sp <= sp + {1'b0, spill_n};
                 end else begin
-                    for (int i = 0; i < MPY_RF_CHUNK_MAX; i++)
-                        if (i < spill_n) rf[6'(rf_base - spill_n + 6'(i) + 6'd1)] <= rld[i];
-                    rf_base <= rf_base - (spill_n - 6'd1);
+                    rf_base <= 6'(4'(rf_base - (spill_n - 6'd1)));
                     sp <= (sp + {1'b0, spill_n}) - 7'd1;
                 end
                 rf_reload_miss <= 1'b0;
@@ -3561,7 +3560,7 @@ module mpy_core
                     spill_prev <= v1;
                     spill_ntag <= 6'((v0[5:0] + 6'd7) >> 3);
                     spill_words <= 32'd1 + 32'((v0[5:0] + 6'd7) >> 3) + v0;
-                    if (v0 < 32'(MPY_RF_CHUNK_MIN) || v0 > 32'(MPY_RF_CHUNK_MAX) || v2 > 32'd64) begin
+                    if (v0 < 32'(MPY_RF_CHUNK_MIN) || v0 > 32'(MPY_RF_CHUNK_MAX) || v2 > 32'(MPY_RF_DEPTH)) begin
                         if (rf_resume == S_EXEC) begin
                             rf_reload_miss <= 1'b1;
                             st <= S_EXEC;
@@ -3573,7 +3572,7 @@ module mpy_core
                     end
                 end else begin
                     v0 = sw_i - 32'd1 - 32'(spill_ntag);
-                    rld[v0[5:0]] <= mv;
+                    rf[4'(rf_base - spill_n + v0 + 32'd1)] <= mv;
                     sw_i <= sw_i + 32'd1;
                     st <= S_RF_RELOAD_R;
                 end
@@ -3662,7 +3661,7 @@ module mpy_core
 
             S_DROP: if (drop_left == 16'd0) begin
                 if (drop_push_en) begin
-                    if (sp >= 7'd64) begin
+                    if (sp >= 7'(MPY_RF_DEPTH)) begin
                         rf_pend <= 1'b1;
                         rf_pend_v <= drop_push_v;
                         rf_resume <= drop_then;
@@ -3684,7 +3683,7 @@ module mpy_core
             end
 
             S_UR_SLOW: if (stk_depth <= ur_target) begin
-                if (sp >= 7'd62) begin
+                if (sp >= 7'(MPY_RF_DEPTH - 2)) begin
                     rf_resume <= S_UR_SLOW;
                     st <= S_RF_SPILL;
                 end else begin
