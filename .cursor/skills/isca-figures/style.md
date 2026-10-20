@@ -48,19 +48,13 @@ Two to five sentences. Define `$sp$` and `$sb$` in the caption of any figure tha
 
 ## Preamble
 
-The paper preamble already has `graphicx`, `xcolor`, `amsmath`, and `textcomp`. Figures also need:
+The styles live in `docs/paper/figures/iscafig.tex` in this repo. The temp compile may `\input` that file. The user's paper is outside the repo, so the reply never tells them to `\input` it. On the first figure of the conversation, the reply includes the file's full text as a second latex block, labeled as the preamble to paste once. A later revision of the same figure omits that block.
+
+## What the latex block contains
+
+The block they paste into the paper is the figure environment only:
 
 ```latex
-\input{docs/paper/figures/iscafig.tex}
-```
-
-Adjust the path to wherever the paper source lives. Do not copy the color definitions into a figure.
-
-## Output shape of a figure file
-
-```latex
-% Paste this environment into the IEEEtran source.
-% The preamble must already \input the sibling iscafig.tex.
 \begin{figure}[t] % or figure*
 \centering
 \begin{tikzpicture}[iscafig]
@@ -71,4 +65,4 @@ Adjust the path to wherever the paper source lives. Do not copy the color defini
 \end{figure}
 ```
 
-No title, no bibliography, no explanation paragraphs inside the file.
+No `\documentclass`, no `\input`, no comments, no title, no bibliography. The rendered PNG is a separate image in the reply, not a file in the repo.

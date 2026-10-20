@@ -9,8 +9,8 @@ or planning markdown.
 | Path | Topic |
 | --- | --- |
 | `systems/call_fsm.tex` | `S_CALL` FSM, shared argument binder, CPython call shapes |
-| `figures/iscafig.tex` | Shared TikZ style. Paste once into the IEEEtran preamble |
-| `figures/*.tex` | One paste-ready `figure` environment each. See the `isca-figures` skill |
+| `figures/iscafig.tex` | Shared TikZ style used by the progress gallery and by the temp render |
+| `figures/*.tex` | Progress placeholders. The paper is outside this repo; the `isca-figures` skill does not add to this directory |
 
 ## Build
 
@@ -26,8 +26,9 @@ pdflatex build.tex
 Needs a TeX distribution with `IEEEtran`, `tikz`, `booktabs`, `hyperref`,
 `listings`, `geometry`, `microtype`.
 
-The figure files are the environments to `\input` into the conference paper.
-`build.tex` exists only to compile them together.
+`build.tex` compiles the progress gallery. It is not the paper. The
+`isca-figures` skill returns LaTeX in the reply and a rendered image, and
+does not write figures here.
 
 ## Conventions
 
