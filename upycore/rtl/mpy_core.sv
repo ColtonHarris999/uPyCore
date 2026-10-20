@@ -1125,13 +1125,13 @@ module mpy_core
         cfg_lc_dm = (lc_dm_v != 0);
     end
 `else
-    initial begin
-        cfg_grow = GROW_CHUNK[5:0];
-        cfg_adapt = (GROW_ADAPT != 0);
-        cfg_lc_n = LC_N[3:0];
-        cfg_lc_wb = (LC_WB != 0);
-        cfg_lc_dm = 1'b0;
-    end
+    // Continuous assigns, not an initial block: Design Compiler ignores
+    // initial procedures, which would leave these undriven.
+    assign cfg_grow = GROW_CHUNK[5:0];
+    assign cfg_adapt = (GROW_ADAPT != 0);
+    assign cfg_lc_n = LC_N[3:0];
+    assign cfg_lc_wb = (LC_WB != 0);
+    assign cfg_lc_dm = 1'b0;
 `endif
 
     function automatic val_t hdr_word(input logic [31:0] i);

@@ -10,6 +10,7 @@
 #   make oracle        build the 32-bit unix oracle and smoke it
 #   make synth         elaborate every synth top with Yosys+slang (needs yosys)
 #   make synth-gates   map mpy_core and components to gates
+#   make dc-src        write single-file sources for Design Compiler
 
 PYTHON ?= python3
 BUILD_PY := upycore/tools/mpy_build.py
@@ -31,7 +32,7 @@ HW_AREAS := smoke alu control calls containers strings exceptions objects \
 
 .PHONY: test sim fw run oracle oracle-header oracle-variant oracle-smoke mpy-cross \
 	docker-build docker-test test-hw test-host test-compiler regen-goldens check-goldens \
-	synth synth-gates clean
+	synth synth-gates dc-src clean
 
 $(MPY_CROSS):
 	variants/upycore/build.sh mpy-cross
@@ -117,5 +118,11 @@ synth:
 synth-gates:
 	$(PYTHON) $(SYNTH_PY) --synth $(SYNTH_TOP)
 
+# One self-contained .sv per top in build/dc/ for Design Compiler
+# (upycore/synth/dc/README.md).
+DC_TOPS ?= mpy_alu mpy_decode mpy_container mpy_core
+dc-src:
+	$(PYTHON) upycore/tools/mpy_dc_unit.py $(DC_TOPS)
+
 clean:
-	rm -rf build/mpy build/mpy_soc build/synth
+	rm -rf build/mpy build/mpy_soc build/synth build/dc
