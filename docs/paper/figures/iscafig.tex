@@ -1,0 +1,106 @@
+% iscafig.tex — paste once into the IEEEtran preamble, before \begin{document}.
+% Every figure in this directory uses these styles. Do not restyle a single figure.
+\ProvidesFile{iscafig.tex}[2026/10/19 uPyCore ISCA figure style]
+\RequirePackage{textcomp}
+\RequirePackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,calc,backgrounds,decorations.pathreplacing}
+
+\newcommand{\upycore}{\textmu PyCore}
+
+\definecolor{iscaBlue}{RGB}{27,74,122}
+\definecolor{iscaBlueFill}{RGB}{226,236,246}
+\definecolor{iscaGreen}{RGB}{24,92,48}
+\definecolor{iscaGreenFill}{RGB}{226,240,226}
+\definecolor{iscaAmber}{RGB}{140,84,0}
+\definecolor{iscaAmberFill}{RGB}{255,236,208}
+\definecolor{iscaInk}{RGB}{35,40,46}
+\definecolor{iscaSlateFill}{RGB}{241,243,245}
+\definecolor{iscaRose}{RGB}{140,42,42}
+\definecolor{iscaRoseFill}{RGB}{250,228,226}
+\definecolor{iscaFree}{RGB}{120,126,132}
+
+\tikzset{
+  iscafig/.style={
+    font=\footnotesize,
+    line cap=round,
+    line join=round,
+    >={Stealth[length=1.7mm,width=1.25mm]},
+    every node/.style={inner sep=2pt}
+  },
+  unit/.style={
+    draw=iscaInk,
+    line width=0.55pt,
+    align=center,
+    inner sep=3.5pt,
+    font=\footnotesize,
+    fill=white
+  },
+  core/.style={unit, fill=iscaBlueFill, draw=iscaBlue},
+  mem/.style={unit, fill=iscaGreenFill, draw=iscaGreen},
+  accel/.style={unit, fill=iscaAmberFill, draw=iscaAmber},
+  imm/.style={unit, fill=iscaSlateFill, draw=iscaInk},
+  hot/.style={unit, fill=iscaRoseFill, draw=iscaRose},
+  fld/.style={
+    draw=iscaInk,
+    line width=0.45pt,
+    align=center,
+    font=\footnotesize,
+    inner sep=1.5pt,
+    outer sep=0pt,
+    minimum height=4.7mm
+  },
+  fldcore/.style={fld, fill=iscaBlueFill, draw=iscaBlue},
+  fldmem/.style={fld, fill=iscaGreenFill, draw=iscaGreen},
+  fldacc/.style={fld, fill=iscaAmberFill, draw=iscaAmber},
+  fldimm/.style={fld, fill=iscaSlateFill, draw=iscaInk},
+  fldhot/.style={fld, fill=iscaRoseFill, draw=iscaRose},
+  arr/.style={-{Stealth[length=1.7mm]}, draw=iscaInk, line width=0.55pt},
+  thinarr/.style={-{Stealth[length=1.4mm]}, draw=iscaInk, line width=0.4pt},
+  off/.style={font=\scriptsize\ttfamily, inner sep=1pt, text=iscaInk},
+  lbl/.style={font=\scriptsize, align=center, text=iscaInk},
+  slot/.style={
+    draw=iscaInk,
+    line width=0.4pt,
+    minimum width=9.2mm,
+    minimum height=6.4mm,
+    inner sep=0pt,
+    outer sep=0pt,
+    font=\footnotesize,
+    align=center
+  },
+  occ/.style={slot, fill=iscaBlueFill, draw=iscaBlue},
+  lnk/.style={slot, fill=iscaRoseFill, draw=iscaRose},
+  fre/.style={slot, fill=white, draw=iscaFree, dashed},
+  idx/.style={font=\scriptsize\ttfamily, inner sep=0pt, text=black!70},
+  grp/.style={draw=iscaInk, line width=0.6pt, inner sep=5pt},
+  port/.style={
+    draw=iscaInk,
+    line width=0.7pt,
+    fill=white,
+    font=\scriptsize,
+    align=center,
+    inner sep=2pt,
+    minimum height=4.2mm
+  }
+}
+
+% \rfslot{prefix}{physical index}{style}{text}
+% Eight columns. Row 0 is physical 0--7, row 1 is physical 8--15.
+\newcommand{\rfslot}[4]{%
+  \pgfmathtruncatemacro{\rfcol}{mod(#2,8)}%
+  \pgfmathtruncatemacro{\rfrow}{floor(#2/8)}%
+  \node[slot, #3] (#1#2) at ({\rfcol*1.02}, {-\rfrow*1.22}) {#4};%
+}
+\newcommand{\rfnums}{%
+  \foreach \rfi in {0,...,15} {%
+    \pgfmathtruncatemacro{\rfcol}{mod(\rfi,8)}%
+    \pgfmathtruncatemacro{\rfrow}{floor(\rfi/8)}%
+    \node[idx, anchor=south] at ({\rfcol*1.02}, {-\rfrow*1.22+0.36}) {\rfi};%
+  }%
+}
+
+% \rec{y}{offset}{style}{width}{body}
+\newcommand{\rec}[5]{%
+  \node[off, anchor=east] at (-0.08,#1) {#2};%
+  \node[fld, #3, anchor=west, minimum width=#4] at (0,#1) {#5};%
+}
