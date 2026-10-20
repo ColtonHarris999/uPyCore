@@ -1,0 +1,47 @@
+% Paste this environment into the IEEEtran source.
+% The preamble must already \input the sibling iscafig.tex.
+\begin{figure*}[t]
+\centering
+\begin{tikzpicture}[iscafig]
+  \begin{scope}
+    \node[lbl, anchor=west] at (0,0.40) {\textbf{\texttt{QSTR}}, one register};
+    \node[fldacc, anchor=west, minimum width=5.3cm] at (0,0) {interned-string id};
+    \node[lbl, anchor=west] at (0,-0.7) {pool descriptor, two words};
+    \rec{-1.15}{+0}{fldimm}{5.3cm}{length\,[31:16], hash\,[15:0]}
+    \rec{-1.70}{+4}{fldmem}{5.3cm}{byte address\,[30:0]}
+    \node[lbl, anchor=west, align=left] at (0,-2.25)
+      {Bit 31 of the second word is set\\
+       when the bytes are not ASCII.};
+  \end{scope}
+
+  \begin{scope}[xshift=6.35cm]
+    \node[lbl, anchor=west] at (0,0.40) {\textbf{\texttt{SHORT\_STR}}, four registers};
+    \rec{0}{r0}{fldhot}{5.3cm}{byte2, byte1, byte0, length}
+    \rec{-0.55}{r1}{fldacc}{5.3cm}{bytes 6\,:\,3}
+    \rec{-1.10}{r2}{fldacc}{5.3cm}{bytes 10\,:\,7}
+    \rec{-1.65}{r3}{fldacc}{5.3cm}{bytes 14\,:\,11}
+    \node[lbl, anchor=west, align=left] at (0,-2.25)
+      {Length is the low byte of r0.\\
+       Each later register is little-endian.\\
+       A length above 15 is rejected.};
+  \end{scope}
+
+  \begin{scope}[xshift=12.7cm]
+    \node[lbl, anchor=west] at (0,0.40) {\textbf{\texttt{STR}}, one register};
+    \node[fldmem, anchor=west, minimum width=4.6cm] (sp) at (0,0) {pointer};
+    \rec{-0.85}{+0}{fldimm}{4.6cm}{byte length}
+    \rec{-1.40}{+4}{fldimm}{4.6cm}{hash\,[15:0], non-ASCII\,[30]}
+    \rec{-1.95}{+8}{fldmem}{4.6cm}{pointer to bytes}
+    \node[lbl, anchor=west, align=left] at (0,-2.55)
+      {\texttt{BYTES} uses this same header.\\
+       Equality compares length and hash\\
+       before it walks the bytes.};
+  \end{scope}
+\end{tikzpicture}
+\caption{Three string representations.
+A \texttt{QSTR} is an index into the image pool, whose descriptor holds a 16-bit hash, the length, and the byte address.
+A \texttt{SHORT\_STR} keeps up to 15 bytes in the ring and always occupies four registers, so a spill that leaves four free entries can still push one.
+A \texttt{STR} is a three-word heap object.
+The non-ASCII bit sends indexing and iteration of that string to firmware.}
+\label{fig:strings}
+\end{figure*}

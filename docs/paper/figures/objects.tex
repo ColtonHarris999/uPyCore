@@ -1,0 +1,54 @@
+% Paste this environment into the IEEEtran source.
+% The preamble must already \input the sibling iscafig.tex.
+\begin{figure*}[t]
+\centering
+\begin{tikzpicture}[iscafig]
+  \begin{scope}
+    \node[lbl, anchor=west] at (0,0.40) {\textbf{Instance}};
+    \rec{0}{+0}{fldhot}{5.15cm}{kind $= 1$}
+    \rec{-0.55}{+4}{fldmem}{5.15cm}{type}
+    \rec{-1.10}{+8}{fldmem}{5.15cm}{\texttt{\_\_dict\_\_}, or null}
+    \node[lbl, anchor=west] at (0,-1.85) {\textbf{Exception}};
+    \rec{-2.25}{+0}{fldhot}{5.15cm}{kind $= 3$}
+    \rec{-2.80}{+4}{fldmem}{5.15cm}{type}
+    \rec{-3.35}{+8}{fldmem}{5.15cm}{\texttt{args} tuple}
+    \rec{-3.90}{+12}{fldmem}{5.15cm}{traceback}
+    \rec{-4.45}{+16}{fldmem}{5.15cm}{\texttt{\_\_dict\_\_}, or null}
+  \end{scope}
+
+  \begin{scope}[xshift=6.15cm]
+    \node[lbl, anchor=west] at (0,0.40) {\textbf{Type}, nine words};
+    \rec{0}{+0}{fldhot}{5.15cm}{kind $= 2$}
+    \rec{-0.55}{+4}{fldmem}{5.15cm}{metaclass}
+    \rec{-1.10}{+8}{fldmem}{5.15cm}{namespace dict}
+    \rec{-1.65}{+12}{fldmem}{5.15cm}{bases tuple}
+    \rec{-2.20}{+16}{fldmem}{5.15cm}{name}
+    \rec{-2.75}{+20}{fldmem}{5.15cm}{MRO tuple}
+    \rec{-3.30}{+24}{fldimm}{5.15cm}{reserved}
+    \rec{-3.85}{+28}{fldimm}{5.15cm}{flags}
+    \rec{-4.40}{+32}{fldmem}{5.15cm}{\texttt{\_\_new\_\_}, or null}
+  \end{scope}
+
+  \begin{scope}[xshift=12.3cm]
+    \node[lbl, anchor=west] at (0,0.40) {\textbf{Function}, eight words};
+    \rec{0}{+0}{fldhot}{5.15cm}{kind $= 5$}
+    \rec{-0.55}{+4}{fldmem}{5.15cm}{type}
+    \rec{-1.10}{+8}{fldimm}{5.15cm}{raw code, immediate}
+    \rec{-1.65}{+12}{fldmem}{5.15cm}{closure, or null}
+    \rec{-2.20}{+16}{fldmem}{5.15cm}{defaults, or null}
+    \rec{-2.75}{+20}{fldmem}{5.15cm}{keyword defaults}
+    \rec{-3.30}{+24}{fldmem}{5.15cm}{globals}
+    \rec{-3.85}{+28}{fldmem}{5.15cm}{root tuple}
+    \node[lbl, anchor=west, align=left, text width=5.1cm] at (0,-4.55)
+      {A custom \texttt{\_\_hash\_\_} is an entry of the type's namespace dict, not a header slot.};
+  \end{scope}
+\end{tikzpicture}
+\caption{Heap objects under the \texttt{OBJECT} tag.
+Word 0 is the kind and word 1 is the type pointer.
+Fields start at word 2.
+A bound method is four words: kind 7, type, function, and \texttt{self}.
+A generator is six words: kind 6, type, function, status, pending exception, and a pointer to its saved frame.
+Green boxes are pointers.
+The raw-code word is an immediate index into flash, so the collector does not follow it.}
+\label{fig:object}
+\end{figure*}

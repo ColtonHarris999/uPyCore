@@ -1,0 +1,72 @@
+% Paste this environment into the IEEEtran source.
+% The preamble must already \input the sibling iscafig.tex.
+\begin{figure*}[t]
+\centering
+\begin{tikzpicture}[iscafig]
+  \node[mem, minimum width=3.55cm, minimum height=1.15cm, anchor=north west] (flash) at (0,0)
+    {\textbf{Flash}\\[-1pt]\scriptsize 512\,KB bytecode image};
+  \node[core, minimum width=3.7cm, minimum height=1.15cm, anchor=north west] (fetch) at (4.15,0)
+    {\textbf{Fetch window}\\[-1pt]\scriptsize 12 instruction bytes};
+  \node[core, minimum width=2.85cm, minimum height=1.15cm, anchor=north west] (dec) at (8.45,0)
+    {\textbf{Decode}\\[-1pt]\scriptsize MicroPython v1.29};
+  \node[core, minimum width=4.55cm, minimum height=1.15cm, anchor=north west] (ctl) at (11.9,0)
+    {\textbf{Control}\\[-1pt]\scriptsize one bytecode at a time};
+
+  \draw[arr] (flash.east) -- (fetch.west);
+  \draw[arr] (fetch.east) -- (dec.west);
+  \draw[arr] (dec.east) -- (ctl.west);
+
+  \node[font=\scriptsize\bfseries, text=iscaBlue, anchor=west, inner sep=1pt] (coretag) at (0.15,-1.48) {core};
+  \node[core, minimum width=7.15cm, minimum height=1.45cm, anchor=north west] (rf) at (0.2,-1.95)
+    {\textbf{Ring register file}\\[1pt]
+     \scriptsize $16\times 36$ bits \quad tag\,[35:32]\ \ payload\,[31:0]\\[1pt]
+     \scriptsize $sp$ = resident count \quad $sb$ = physical slot of logical 0};
+  \node[core, minimum width=4.15cm, minimum height=1.45cm, anchor=north west] (lc) at (7.6,-1.95)
+    {\textbf{Local cache}\\[1pt]
+     \scriptsize 8 write-back entries\\[1pt]
+     \scriptsize flushed before a call};
+  \node[core, minimum width=4.55cm, minimum height=1.45cm, anchor=north west] (alu) at (12.0,-1.95)
+    {\textbf{ALU}\\[1pt]
+     \scriptsize \texttt{INT}, \texttt{INT64}\\[1pt]
+     \scriptsize IEEE binary32};
+
+  \node[imm, minimum width=16.35cm, minimum height=0.85cm, anchor=north west] (str) at (0.2,-3.60)
+    {\textbf{String walks} on the core \quad
+     \scriptsize equality \quad stored hash \quad \texttt{QSTR} pool \quad \texttt{SHORT\_STR} in the ring};
+
+  \node[draw=iscaBlue, line width=0.7pt, inner sep=3pt, fit={(coretag) (rf) (lc) (alu) (str)}] (corebox) {};
+
+  \node[port, minimum width=4.2cm, anchor=north] (port) at (8.4,-4.90) {one memory port};
+  \draw[arr] (corebox.south) -- (port.north);
+
+  \node[accel, minimum width=5.15cm, minimum height=1.55cm, anchor=north west] (ca) at (0,-6.70)
+    {\textbf{Container accelerator}\\[1pt]
+     \scriptsize list, dict, set, bytearray growth\\[1pt]
+     \scriptsize core waits while it owns the port};
+  \node[mem, minimum width=3.35cm, minimum height=1.55cm, anchor=north west] (gc) at (5.45,-6.70)
+    {\textbf{Collector}\\[1pt]
+     \scriptsize mark from roots\\[1pt]
+     \scriptsize then allocate};
+  \node[mem, minimum width=7.35cm, minimum height=1.55cm, anchor=north west] (sram) at (9.1,-6.70)
+    {\textbf{SRAM, 256\,KB}\\[1pt]
+     \scriptsize frames grow up from \texttt{0x2000\_0000}\\[1pt]
+     \scriptsize spill chunks grow down \quad GC pool at \texttt{0x2000\_8500}};
+
+  \coordinate (bus) at ($(port.south)+(0,-0.38)$);
+  \draw (port.south) -- (bus);
+  \draw (ca.north |- bus) -- (sram.north |- bus);
+  \draw[arr] (ca.north |- bus) -- (ca.north);
+  \draw[arr] (gc.north |- bus) -- (gc.north);
+  \draw[arr] (sram.north |- bus) -- (sram.north);
+
+  \node[imm, minimum width=2.3cm, minimum height=0.72cm, anchor=north east] (mmio) at (16.45,-8.45)
+    {\scriptsize MMIO \texttt{0x4000\_0000}};
+  \draw[thinarr] (sram.south) -- ++(0,-0.15) -| (mmio.north);
+\end{tikzpicture}
+\caption{Organization of \upycore.
+The operand stack is a 16-entry ring of tagged values.
+Collection growth is handed to the container accelerator, which is the only memory master until it finishes.
+String equality and hashing stay multi-cycle walks on the core and use the same port.
+Blue blocks execute bytecode, green blocks hold state, and the amber block is the accelerator.}
+\label{fig:upycore}
+\end{figure*}

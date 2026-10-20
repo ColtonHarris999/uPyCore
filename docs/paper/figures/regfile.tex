@@ -1,0 +1,76 @@
+% Paste this environment into the IEEEtran source.
+% The preamble must already \input the sibling iscafig.tex.
+\begin{figure*}[t]
+\centering
+\begin{tikzpicture}[iscafig]
+  % ----- before: sp = 12, sb = 0, no link -----
+  \begin{scope}[local bounding box=before]
+    \node[lbl, anchor=west] at (-0.15,1.15) {\textbf{Before fetch, $sp=12$, $sb=0$}};
+    \rfnums
+    \foreach \i in {0,...,11} {%
+      \rfslot{b}{\i}{occ}{$v_{\i}$}%
+    }
+    \foreach \i in {12,...,15} {%
+      \rfslot{b}{\i}{fre}{}%
+    }
+    \node[lbl, text=iscaRose, anchor=east] at ([xshift=-1.5mm]b0.west) {$sb$};
+    \node[lbl, anchor=north west, align=left] at (-0.15,-2.55)
+      {physical $0..11$ resident.\ A growth spill copies $v_0$ through $v_7$.};
+  \end{scope}
+
+  % ----- after a growth spill of 8 -----
+  \begin{scope}[yshift=-4.35cm, local bounding box=after]
+    \node[lbl, anchor=west] at (-0.15,1.15)
+      {\textbf{After a growth spill, $sp=5$, $sb=7$}};
+    \rfnums
+    \foreach \i in {0,...,6} {%
+      \rfslot{a}{\i}{fre}{}%
+    }
+    \rfslot{a}{7}{lnk}{link}
+    \rfslot{a}{8}{occ}{$v_{8}$}
+    \rfslot{a}{9}{occ}{$v_{9}$}
+    \rfslot{a}{10}{occ}{$v_{10}$}
+    \rfslot{a}{11}{occ}{$v_{11}$}
+    \foreach \i in {12,...,15} {%
+      \rfslot{a}{\i}{fre}{}%
+    }
+    \node[lbl, text=iscaRose, anchor=west] at ([xshift=1.4mm]a7.east) {$sb$};
+    \node[lbl, anchor=north west] at (-0.15,-2.70)
+      {logical 0 is the link; logical $1..4$ are $v_8..v_{11}$};
+  \end{scope}
+
+  % ----- chunk -----
+  \begin{scope}[xshift=9.15cm, local bounding box=chunk]
+    \node[lbl, anchor=west] at (0,0.55) {\textbf{Spill chunk, 8 values, 48\,B}};
+    \rec{0}{+0}{fldhot}{6.35cm}{previous address\,[31:4] \quad count\,[3:0]$=8$}
+    \rec{-0.58}{+4}{fldacc}{6.35cm}{tags of $v_0..v_7$, eight nibbles}
+    \rec{-1.16}{+8}{fldcore}{6.35cm}{payload $v_0$, oldest}
+    \rec{-1.74}{+12}{fldcore}{6.35cm}{payload $v_1$}
+    \rec{-2.32}{+16}{fldcore}{6.35cm}{payload $v_2$}
+    \rec{-2.90}{+20}{fldcore}{6.35cm}{payload $v_3$}
+    \rec{-3.48}{+24}{fldcore}{6.35cm}{payload $v_4$}
+    \rec{-4.06}{+28}{fldcore}{6.35cm}{payload $v_5$}
+    \rec{-4.64}{+32}{fldcore}{6.35cm}{payload $v_6$}
+    \rec{-5.22}{+36}{fldcore}{6.35cm}{payload $v_7$}
+    \rec{-5.80}{+40}{fldimm}{6.35cm}{pad to a multiple of 16\,B}
+    \node[lbl, anchor=west, align=left] at (0,-6.45)
+      {Side tag of word 0 holds count\,[5:4].\\
+       A later chunk stores the previous block in [31:4].};
+  \end{scope}
+
+  \node[hot, anchor=north west, align=left] (linkenc) at (0,-8.05)
+    {\texttt{RF\_LINK}: tag \texttt{0000}, kind \texttt{6} in payload\,[3:0],\\
+     address $=$ payload\,[31:4]\,$\ll 4$};
+  \node[lbl, anchor=north west, align=left, text width=16.4cm] at (0,-9.15)
+    {Dashed cells are free.
+     A stack that has popped since the previous spill copies 4 values instead of 8.
+     Reload runs only when $sp\le 4$ and logical 0 is a link, so this spill is not undone by the next fetch.};
+\end{tikzpicture}
+\caption{Register-file spill on a stack that has only been growing.
+Fetch spills when $sp\ge 12$, which leaves four free entries, enough for a \texttt{SHORT\_STR}.
+The eight oldest values move into one 16-byte-aligned chunk, and the slot that becomes logical 0 is an \texttt{RF\_LINK}.
+The spill leaves $sp=5$.
+Numbers above the cells are physical indices.
+$v_0$ is the oldest resident value.}
+\label{fig:regfile}
+\end{figure*}

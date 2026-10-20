@@ -9,6 +9,8 @@ or planning markdown.
 | Path | Topic |
 | --- | --- |
 | `systems/call_fsm.tex` | `S_CALL` FSM, shared argument binder, CPython call shapes |
+| `figures/iscafig.tex` | Shared TikZ style. Paste once into the IEEEtran preamble |
+| `figures/*.tex` | One paste-ready `figure` environment each. See the `isca-figures` skill |
 
 ## Build
 
@@ -16,10 +18,16 @@ or planning markdown.
 cd docs/paper/systems
 pdflatex call_fsm.tex
 pdflatex call_fsm.tex   # TOC
+
+cd docs/paper/figures
+pdflatex build.tex
 ```
 
-Needs a TeX distribution with `tikz`, `booktabs`, `hyperref`, `listings`,
-`geometry`, `microtype`.
+Needs a TeX distribution with `IEEEtran`, `tikz`, `booktabs`, `hyperref`,
+`listings`, `geometry`, `microtype`.
+
+The figure files are the environments to `\input` into the conference paper.
+`build.tex` exists only to compile them together.
 
 ## Conventions
 

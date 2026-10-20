@@ -1,0 +1,61 @@
+% Paste this environment into the IEEEtran source.
+% The preamble must already \input the sibling iscafig.tex.
+\begin{figure*}[t]
+\centering
+\begin{tikzpicture}[iscafig]
+  \begin{scope}[local bounding box=map]
+    \node[lbl, anchor=west] at (0,0.42) {\textbf{Caller frame}};
+    \rec{0}{+0x00}{fldimm}{6.5cm}{previous frame}
+    \rec{-0.52}{+0x04}{fldimm}{6.5cm}{raw code}
+    \rec{-1.04}{+0x08}{fldimm}{6.5cm}{return PC}
+    \rec{-1.56}{+0x0C}{fldimm}{6.5cm}{opcode PC}
+    \rec{-2.08}{+0x10}{fldimm}{6.5cm}{flags, $n_{\mathrm{loc}}$, exception depth, $sp$}
+    \rec{-2.60}{+0x14}{fldimm}{6.5cm}{continuation and return kind}
+    \rec{-3.12}{+0x18}{fldmem}{6.5cm}{globals}
+    \rec{-3.64}{+0x1C}{fldmem}{6.5cm}{\texttt{loc}}
+    \rec{-4.16}{+0x20}{fldmem}{6.5cm}{function}
+    \rec{-4.68}{+0x24}{fldimm}{6.5cm}{aux, aux2, aux3, through +0x2C}
+    \rec{-5.20}{+0x30}{fldimm}{6.5cm}{qstr base; const base at +0x34}
+    \rec{-5.72}{+0x38}{fldmem}{6.5cm}{generator}
+    \rec{-6.24}{+0x3C}{fldimm}{6.5cm}{spill pointer}
+    \rec{-6.76}{+0x40}{fldhot}{6.5cm}{spilled count and $sb$}
+    \rec{-7.40}{+0x44}{fldcore}{6.5cm}{locals\,[0\,:\,$n_{\mathrm{loc}}$)}
+    \rec{-8.04}{}{fldacc}{6.5cm}{exception slots, three words each}
+    \rec{-8.68}{ftop}{fldhot}{6.5cm}{resident ring, logical order, $sp$ words}
+    \node[lbl, anchor=west] at (0,-9.25)
+      {callee frame base $=$ end of this snapshot};
+  \end{scope}
+
+  \begin{scope}[xshift=9.35cm]
+    \node[lbl, anchor=west] at (0,0.42) {\textbf{On \texttt{CALL}}};
+    \node[imm, anchor=north west, align=left, text width=7.3cm] (s1) at (0,-0.15)
+      {\textbf{1.}\ Flush the local cache into the caller frame.};
+    \node[imm, anchor=north west, align=left, text width=7.3cm, below=2.2mm of s1] (s2)
+      {\textbf{2.}\ Write the 17-word header.
+       The row at \texttt{+0x24} is three temporaries.
+       The next row is the qstr base and the const base.};
+    \node[imm, anchor=north west, align=left, text width=7.3cm, below=2.2mm of s2] (s3)
+      {\textbf{3.}\ Store the resident ring at \texttt{ftop}, logical slot 0 first.
+       An \texttt{RF\_LINK} in that ring still names the spill chunks.};
+    \node[hot, anchor=north west, align=left, text width=7.3cm, below=2.2mm of s3] (s4)
+      {\textbf{4.}\ The callee frame begins on the next word.
+       Its ring is cleared: $sp=0$, $sb=0$.
+       Locals are filled from the call, not left in the ring.};
+    \node[core, anchor=north west, align=left, text width=7.3cm, below=2.2mm of s4] (s5)
+      {\textbf{5.}\ Return copies that snapshot back into the ring and restores $sp$ and $sb$.};
+
+    \node[mem, anchor=north west, align=left, text width=7.3cm] (bounds) at (0,-7.15)
+      {\textbf{Frame reserve, 32\,KB}\\[1pt]
+       \scriptsize \texttt{0x2000\_0000} frames grow upward\\
+       \scriptsize \texttt{0x2000\_7E00} chunks grow downward\\
+       \scriptsize a frame that would meet the chunks raises recursion};
+  \end{scope}
+\end{tikzpicture}
+\caption{Caller frame written by a call.
+The resident ring is snapshotted at the end of the caller, after the locals and the exception slots, and the callee is allocated immediately past that snapshot.
+Spill chunks stay where they are.
+The header field $sb$ is the physical register that holds logical slot 0.
+Green words are pointers.
+The rose words are the ring metadata the return path reloads.}
+\label{fig:frame}
+\end{figure*}

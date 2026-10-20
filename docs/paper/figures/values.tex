@@ -1,0 +1,40 @@
+% Paste this environment into the IEEEtran source.
+% The preamble must already \input the sibling iscafig.tex.
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[iscafig]
+  \node[lbl, anchor=west] at (0,1.05) {one register, 36 bits};
+  \node[fldacc, anchor=west, minimum width=1.15cm, minimum height=7.2mm] (tag) at (0,0)
+    {tag};
+  \node[fldcore, anchor=west, minimum width=6.55cm, minimum height=7.2mm] (pay) at (1.15,0)
+    {payload};
+  \node[idx, anchor=south] at (0.55,0.42) {35\,:\,32};
+  \node[idx, anchor=south] at (4.4,0.42) {31\,:\,0};
+
+  \node[lbl, anchor=west] at (0,-0.85) {values that occupy more than one register};
+  \node[fldcore, minimum width=3.55cm, minimum height=6.6mm, anchor=west] (i0) at (0,-1.35)
+    {\texttt{INT64} low 32};
+  \node[fldacc, minimum width=3.55cm, minimum height=6.6mm, anchor=west] (i1) at (3.7,-1.35)
+    {\texttt{CONT} high 32};
+  \node[fldcore, minimum width=3.55cm, minimum height=6.6mm, anchor=west] (c0) at (0,-2.15)
+    {\texttt{COMPLEX} real};
+  \node[fldacc, minimum width=3.55cm, minimum height=6.6mm, anchor=west] (c1) at (3.7,-2.15)
+    {\texttt{CONT} imag.\ float};
+  \node[fldhot, minimum width=1.75cm, minimum height=6.6mm, anchor=west] (s0) at (0,-2.95)
+    {\scriptsize\texttt{SHORT\_STR}};
+  \node[fldacc, minimum width=1.75cm, minimum height=6.6mm, anchor=west] (s1) at (1.85,-2.95)
+    {\scriptsize\texttt{CONT}};
+  \node[fldacc, minimum width=1.75cm, minimum height=6.6mm, anchor=west] (s2) at (3.70,-2.95)
+    {\scriptsize\texttt{CONT}};
+  \node[fldacc, minimum width=1.75cm, minimum height=6.6mm, anchor=west] (s3) at (5.55,-2.95)
+    {\scriptsize\texttt{CONT}};
+  \node[lbl, anchor=west, align=left] at (0,-3.7)
+    {\texttt{SHORT\_STR} always uses four registers, at most 15 bytes.\\
+     \texttt{CONT} is not a value on its own.};
+\end{tikzpicture}
+\caption{Tagged register.
+Every other value in the tag table occupies one register.
+A \texttt{MUT\_COLLEC} payload keeps its kind in bits\,[1:0] and the address is those bits cleared.
+Pointer tags are \texttt{STR}, \texttt{TUPLE}, \texttt{MUT\_COLLEC}, \texttt{RANGE}, \texttt{ITER}, \texttt{BYTES}, and \texttt{OBJECT}.}
+\label{fig:value}
+\end{figure}
