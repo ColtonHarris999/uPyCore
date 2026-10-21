@@ -4,16 +4,20 @@
 The EE 477 flow runs every design through Hammer: a folder with a Makefile
 that includes the shared ee477-hammer-cad makefile, a v/ folder of RTL, and
 cfg/<name>_cfg.yml, <name>_src.yml and <name>_tb.yml. Rather than guess the
-class's exact file formats, this script copies a working example (for
-instance ee477-designs-module1/clk_gen_ds), renames it, and changes only
-what differs for uPyCore:
+class's exact file formats, this script copies a working example (pow2 is
+the best one: an ordinary clocked design; clk_gen_ds is a ring oscillator
+with unusual constraints), renames it, and changes only what differs for
+uPyCore:
 
   * v/ holds one generated file per top (mpy_dc_unit.py): every module of
     the top plus its inlined `include headers, with SYNTHESIS defined, so
     the tool compiles it as one unit.
   * synthesis.inputs.top_module is the uPyCore top.
   * synthesis.inputs.input_files lists that file, in the example's path style.
-  * vlsi.inputs.clocks[0] gets the uPyCore clock port and the period you ask for.
+  * cfg/constraints.tcl is rewritten for uPyCore (the class flow sets the
+    clock with create_clock there, not in YAML). The example's file is kept
+    as constraints.tcl.orig. vlsi.inputs.clocks is updated only if the
+    example already sets it.
   * The testbench and trace lists are emptied: run synthesis only.
 
 Everything else (placement constraints, tool and tech settings) stays as
@@ -22,9 +26,11 @@ the example has it.
 Usage (on the lab machine, from the uPyCore repo root)::
 
     python3 upycore/synth/hammer/make_hammer_design.py \\
-        ~/ee477-designs-module1/clk_gen_ds ~/ee477-designs-module1/upycore_ds
+        ~/ee477-designs-module1/pow2 ~/ee477-designs-module1/upycore_ds
 
-    # other options: --top mpy_alu --period 15
+    # other options: --top mpy_alu --period 15 --io-frac 0.3
+    # any other design, pre-flattened: --rtl hazard3.sv --top hazard3_cpu_1port \
+    #     --clock clk --reset rst_n
 """
 
 from __future__ import annotations
@@ -45,7 +51,32 @@ try:
 except ImportError:  # Hammer's own environment always has a YAML library.
     yaml = None
 
-CLOCK_PORT = "clk_i"
+CONSTRAINTS = """\
+# Written by make_hammer_design.py for top {top}. The example's file is
+# constraints.tcl.orig: if it uses a different form for a line below (for
+# instance the driving cell), copy that form.
+set core_clk_period {period}
+set io_frac {io_frac}
+
+create_clock -period $core_clk_period -name core_clk [get_ports {clock}]
+{also_clocks}set_clock_uncertainty {uncertainty} [all_clocks]
+
+# Data I/O: the class recommends max delay = half the period, min = 0.
+# uPyCore's outputs all come from flops. If the worst path in the timing
+# report runs from an input straight to an output, lower io_frac (and use
+# the same value for every core you compare).
+set data_in [remove_from_collection [all_inputs] [get_ports {{{clock} {reset}{also_ports}}}]]
+set_input_delay  -max [expr {{$io_frac * $core_clk_period}}] -clock core_clk $data_in
+set_input_delay  -min 0 -clock core_clk $data_in
+set_output_delay -max [expr {{$io_frac * $core_clk_period}}] -clock core_clk [all_outputs]
+set_output_delay -min 0 -clock core_clk [all_outputs]
+
+set_driving_cell -lib_cell sky130_fd_sc_hd__inv_2 [all_inputs]
+set_load [get_attribute [get_lib_pins */sky130_fd_sc_hd__inv_4/A] pin_capacitance] [all_outputs]
+
+# {reset} is an asynchronous reset: keep it out of the timing paths.
+set_false_path -from [get_ports {reset}]
+"""
 
 
 def _get(doc: dict, dotted: str):
@@ -114,6 +145,15 @@ def main() -> int:
     ap.add_argument("dest", type=Path, help="new design folder to create, e.g. upycore_ds")
     ap.add_argument("--top", default="mpy_core", help="uPyCore top (default mpy_core)")
     ap.add_argument("--period", default="20", help="clock period in ns (default 20 = 50 MHz)")
+    ap.add_argument("--io-frac", default="0.5",
+                    help="I/O max delay as a fraction of the period (class default 0.5)")
+    ap.add_argument("--uncertainty", default="0.1", help="clock uncertainty in ns")
+    ap.add_argument("--rtl", type=Path,
+                    help="use this single RTL file instead of generating one (e.g. Hazard3)")
+    ap.add_argument("--clock", default="clk_i", help="clock port (default clk_i)")
+    ap.add_argument("--reset", default="rst_n_i", help="async reset port (default rst_n_i)")
+    ap.add_argument("--also-clock", action="append", default=[],
+                    help="another clock port at the same period (Hazard3: clk_always_on)")
     ap.add_argument("--force", action="store_true", help="replace dest if it exists")
     args = ap.parse_args()
 
@@ -160,12 +200,17 @@ def main() -> int:
     vdir = dest / "v"
     if vdir.exists():
         shutil.rmtree(vdir)
-    unit = write_unit(args.top, vdir)
+    if args.rtl:
+        vdir.mkdir()
+        unit = vdir / args.rtl.name
+        shutil.copy(args.rtl, unit)
+    else:
+        unit = write_unit(args.top, vdir)
 
     cfg_dir = dest / "cfg"
     cfg = _find_cfg(cfg_dir, "_cfg.yml") or _find_cfg(cfg_dir, "cfg.yml")
-    src = _find_cfg(cfg_dir, "_src.yml")
-    tb = _find_cfg(cfg_dir, "_tb.yml")
+    src = _find_cfg(cfg_dir, "src.yml")
+    tb = _find_cfg(cfg_dir, "tb.yml")
     note = f"Edited by make_hammer_design.py from {old} for uPyCore top {args.top}."
     warnings: list[str] = []
 
@@ -178,16 +223,30 @@ def main() -> int:
     _set(doc, "synthesis.inputs.top_module", args.top)
     clocks = _get(doc, "vlsi.inputs.clocks")
     if isinstance(clocks, list) and clocks and isinstance(clocks[0], dict):
+        # Only if the example already uses it: keep it consistent with the SDC.
         clk = dict(clocks[0])
-        clk["name"] = CLOCK_PORT
+        clk["name"] = args.clock
         unit_m = re.search(r"[a-zA-Z]+\s*$", str(clk.get("period", "")))
         clk["period"] = f"{args.period} {unit_m.group(0).strip() if unit_m else 'ns'}"
         _set(doc, "vlsi.inputs.clocks", [clk] + list(clocks[1:]))
-    else:
-        _set(doc, "vlsi.inputs.clocks",
-             [{"name": CLOCK_PORT, "period": f"{args.period} ns", "uncertainty": "0.1 ns"}])
-        warnings.append("example had no vlsi.inputs.clocks; added one, check its format")
     _dump(cfg, doc, note)
+
+    sdc = cfg_dir / "constraints.tcl"
+    if sdc.exists():
+        shutil.copy(sdc, cfg_dir / "constraints.tcl.orig")
+    else:
+        warnings.append("example had no cfg/constraints.tcl; wrote one, check that "
+                        "cfg.yml lists it the way the class examples do")
+    sdc.write_text(CONSTRAINTS.format(top=args.top, period=args.period, io_frac=args.io_frac,
+                                      uncertainty=args.uncertainty, clock=args.clock,
+                                      reset=args.reset,
+                                      also_clocks="".join(
+                                          f"create_clock -period $core_clk_period -name {c} "
+                                          f"[get_ports {c}]\n" for c in args.also_clock),
+                                      also_ports="".join(f" {c}" for c in args.also_clock)))
+    if "constraints.tcl" not in cfg.read_text() and not any(
+            "constraints.tcl" in f.read_text() for f in cfg_dir.glob("*.yml")):
+        warnings.append("no yml file names constraints.tcl; find how the example loads it")
 
     src_doc = _load(src) if src else {}
     old_files = _get(src_doc, "synthesis.inputs.input_files") or []
@@ -218,11 +277,11 @@ def main() -> int:
     print(f"Created {dest}")
     print(f"  top        {args.top}")
     print(f"  RTL        {unit.relative_to(dest)} ({sum(1 for _ in unit.open())} lines)")
-    print(f"  clock      {CLOCK_PORT} @ {args.period} ns")
+    print(f"  clock      {args.clock} @ {args.period} ns (cfg/constraints.tcl)")
     print(f"  input file {files[0]}")
     for w in warnings:
         print(f"  WARNING: {w}")
-    print("Next: cd into it and run the same synthesis make target you used for the example.")
+    print("Next: cd into it and run: make syn")
     return 0
 
 

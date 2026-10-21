@@ -1,5 +1,9 @@
 # Design Compiler flow
 
+> The EE 477 class flow uses Cadence Genus through Hammer, not Design
+> Compiler: use `../hammer/` first. This flow is a fallback only if the lab
+> also licenses `dc_shell` (unverified).
+
 These scripts produce area, Fmax and power numbers for uPyCore with Synopsys
 Design Compiler (DC), for example with the sky130 `sky130_fd_sc_hd` library
 on the UW ECE lab machines.
