@@ -333,6 +333,7 @@ HOOKS = [
     "_bind",          # _bind(fun, args, kw): locals tuple for a call the RTL cannot bind
     "_super_method",  # _super_method(type, obj, name): super().name
     "_warn",          # _warn(code): print a runtime warning to stderr
+    "_bind_wide",     # _bind_wide(fun, n_pos, directory): bind a chunked star call
 ]
 HOOK_ID = {name: i for i, name in enumerate(HOOKS)}
 

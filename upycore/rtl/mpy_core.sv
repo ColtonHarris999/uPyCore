@@ -716,6 +716,64 @@ module mpy_core
         S_WC_SP,
         S_CVK_P2,
         S_CVK_KW,
+        S_CVK_PW,
+        S_CVK_PF,
+        S_CVK_PS,
+        S_CVK_P2W,
+        S_CVK_PI,
+        S_CVK_RD,
+        S_CVK_RD2,
+        S_CVK_EV,
+        S_CVK_ES,
+        S_CVK_KV,
+        S_CVK_KV2,
+        S_CVK_VC,
+        S_CVK_CH,
+        S_CVK_CH2,
+        S_CVK_CP,
+        S_CVK_CPV,
+        S_CVK_AP,
+        S_CVK_EL,
+        S_CVK_ELD,
+        S_CVK_NB,
+        S_CVK_NBW,
+        S_CVK_NBL,
+        S_CVK_OVP,
+        S_CVK_MIG_A,
+        S_CVK_MIG_C,
+        S_CVK_MIG_W,
+        S_CVK_MIG_D,
+        S_CVK_EXT_A,
+        S_CVK_EXT_C,
+        S_CVK_EXT_W,
+        S_CVK_EXT_D,
+        S_CVK_PACK,
+        S_CVK_PK0,
+        S_CVK_PKA,
+        S_CVK_PKC,
+        S_CVK_PKW,
+        S_CVK_W1,
+        S_CVK_W4,
+        S_CVK_W1B,
+        S_CALL_BSC,
+        S_CALL_BSC2,
+        S_CALL_BSC3,
+        S_CALL_BSC4,
+        S_CALL_BSC5,
+        S_CALL_BSC6,
+        S_CALL_BSC7,
+        S_CALL_BSC8,
+        S_BS_W,
+        S_BS_CL,
+        S_BS_CL2,
+        S_BS_CL3,
+        S_BS_CL4,
+        S_BS_CLP,
+        S_BS_CL5,
+        S_BS_CL6,
+        S_BS_CL7,
+        S_BS_HK,
+        S_BS_HK2,
         S_GN_RET4,
         S_TUP_AB,
         S_NAT_A,
@@ -974,6 +1032,16 @@ module mpy_core
     logic [7:0]  rm_id;
     logic [31:0] uj;
     logic [7:0]  cv_i, cv_n, cv_j; logic [31:0] cv_bm, cv_items; logic [6:0] cv_base, cv_fidx;
+    // Chunked star calls. ab_chunked is not an fflags bit. The directory
+    // tuple lives in t[1] after the pointer slots are wiped. ab_lo/ab_pe/ab_nkw
+    // stay 8 bits; n_pos is the wide counter.
+    logic        ab_chunked, ab_ovf, cv_wide, cv_kw;
+    logic [31:0] ab_npos, ab_nitems, ab_nblk, cv_k;
+    logic [4:0]  ab_fill;
+    logic [7:0]  ab_lo0;
+    logic [15:0] cv_g, cv_pos_g, cv_fun_g;
+    val_t        ab_blk;
+    state_e      cv_ret;
 
     // ALU
     logic        alu_start, alu_done;
@@ -1303,6 +1371,7 @@ module mpy_core
     task automatic raise_err(input logic [7:0] code, input val_t a, input val_t b);
         ab_s[0] <= vint({24'd0, code}); ab_s[1] <= a; ab_s[2] <= b; ab_s[3] <= VNULL;
         ab_lo <= 8'd32; ab_pe <= 8'd35; ab_nkw <= 8'd0; crk <= ABI_RK_PUSH;
+        ab_chunked <= 1'b0;
         hk_id <= ABI_HOOK_RAISE; rsp <= 5'd0; i0 <= 8'd0; st <= S_AB_HW;
     endtask
     // Call hook `id` with n positional args; the result is delivered by rk.
@@ -1311,6 +1380,7 @@ module mpy_core
                         input val_t a, input val_t b, input val_t c, input val_t d);
         ab_s[0] <= a; ab_s[1] <= b; ab_s[2] <= c; ab_s[3] <= d;
         ab_lo <= 8'd32; ab_pe <= 8'd32 + n; ab_nkw <= 8'd0; crk <= rk;
+        ab_chunked <= 1'b0;
         hk_id <= id; i0 <= 8'd0; st <= S_AB_HW;
     endtask
     // Call ARGBUF slot 0 with the prepared args; result by rk.
@@ -1364,6 +1434,10 @@ module mpy_core
             for (int k = 0; k < 8; k++) t[k] <= VNULL;
             xc <= VNULL;
             bov <= VNULL;
+            ab_chunked <= 1'b0; ab_ovf <= 1'b0; cv_wide <= 1'b0; cv_kw <= 1'b0;
+            ab_npos <= 32'd0; ab_nitems <= 32'd0; ab_nblk <= 32'd0; ab_fill <= 5'd0;
+            ab_lo0 <= 8'd0; ab_blk <= VNULL; cv_k <= 32'd0;
+            cv_g <= 16'd0; cv_pos_g <= 16'd0; cv_fun_g <= 16'd0;
             ab_q <= VNULL;
             for (int k = 0; k < 4; k++) ab_s[k] <= VNULL;
             for (int k = 0; k < MPY_RF_DEPTH; k++) rf[k] <= VNULL;
@@ -1487,7 +1561,8 @@ module mpy_core
                     default: st <= S_HCALL;
                 endcase
             end
-            S_CALL_BS: if (ab_lo <= 8'd2) raise_err(ABI_ERR_STAR_ARGS, VNULL, VNULL);
+            S_CALL_BS: if (ab_chunked) st <= S_CALL_BSC;
+                       else if (ab_lo <= 8'd2) raise_err(ABI_ERR_STAR_ARGS, VNULL, VNULL);
                        else begin
                            wr(ab_ptr(ab_lo - 8'd1), mv, S_CALL_BS2);
                            ab_lo <= ab_lo - 8'd1;
@@ -1551,7 +1626,7 @@ module mpy_core
             S_NEW_IR2: wr(ab_ptr(8'd0), at_v, S_CALL);
 
             // ---- bytecode function call ----
-            S_CF: rd(adr(ab_q) + 8, S_CF1);
+            S_CF: begin ab_lo0 <= ab_lo; rd(adr(ab_q) + 8, S_CF1); end
             S_CF1: begin c_rc <= md; rd(adr(ab_q) + 12, S_CF2); end
             S_CF2: begin c_clos <= mv; rd(adr(ab_q) + 16, S_CF3); end
             S_CF3: begin c_defs <= mv; rd(adr(ab_q) + 24, S_CF4); end
@@ -1582,7 +1657,7 @@ module mpy_core
                 v0 = noframe ? ABI_FRAME_BASE : (ftop + {23'd0, sp, 2'b00});
                 v1 = v0 + ((32'd17 + c_nst + 32'd3 * c_nexc) << 2);
                 v2 = ab_pe - ab_lo;
-                c_fast <= (ab_nkw == 8'd0) && (c_nkwo == 8'd0) &&
+                c_fast <= !ab_chunked && (ab_nkw == 8'd0) && (c_nkwo == 8'd0) &&
                           (v2 + c_ndef >= c_npos) &&
                           ((v2 <= c_npos) || (c_scope & ABI_SCOPE_VARARGS));
                 x3 <= v0;
@@ -1666,7 +1741,8 @@ module mpy_core
             end
             S_CELL_B: wr(loc_ptr(i1), vobj(al_a), S_CELLS);
             // firmware binding: _bind(fun, args, kw) returns the locals
-            S_BS: rd(ab_ptr(8'd0), S_BS_Q);
+            S_BS: if (ab_chunked) st <= S_BS_W;
+                  else rd(ab_ptr(8'd0), S_BS_Q);
             S_BS_Q: begin
                 fflags <= fflags | FF_NOTB; fcont <= ABI_CONT_BIND;
                 t[2] <= mv;
@@ -2109,6 +2185,7 @@ module mpy_core
                 end
                 8'h32, 8'h33, 8'h20, 8'h21: rd(rc + 4 * ABI_RC_CHILDREN, S_MF_C);
                 8'h34, 8'h36: begin
+                    ab_chunked <= 1'b0;
                     v0 = {24'd0, arg[7:0]};
                     v1 = {24'd0, arg[15:8]};
                     // need = positional words + keyword pairs + callable (+ self)
@@ -2152,6 +2229,13 @@ module mpy_core
                 8'h35, 8'h37: begin
                     v0 = {24'd0, arg[7:0]};
                     v1 = {24'd0, arg[15:8]};
+                    // fun + positionals + keyword words + bitmap (+ self)
+                    v2 = v0 + (v1 << 1) + 32'd2 + ((op == 8'h37) ? 32'd1 : 32'd0);
+                    ab_chunked <= 1'b0;
+                    cv_wide <= v2 > 32'(resident_reals);
+                    cv_pos_g <= stk_depth - 16'd1 - v0[15:0] - {v1[14:0], 1'b0};
+                    cv_fun_g <= stk_depth - 16'd1 - v0[15:0] - {v1[14:0], 1'b0}
+                                - ((op == 8'h37) ? 16'd2 : 16'd1);
                     cv_base <= 7'(sp - 7'd1 - 7'(v0) - 7'(2 * v1));
                     cv_fidx <= 7'(sp - 7'd1 - 7'(v0) - 7'(2 * v1) - ((op == 8'h37) ? 7'd2 : 7'd1));
                     cv_bm <= rf[`SX(6'(sp - 7'd1))][31:0];
@@ -2855,7 +2939,11 @@ module mpy_core
             end
 
             // ---- CALL_*_VAR_KW: star-arg expansion ----
-            S_CVK_P: if (cv_i == cv_n) begin
+            // Direct mode is today's layout. A call that would pass slot 199
+            // on a star, or whose keyword tail would pass slot 255, switches
+            // to chunked mode: 16-value blocks addressed by i>>4.
+            S_CVK_P: if (cv_wide) st <= S_CVK_PW;
+                     else if (cv_i == cv_n) begin
                     if (op == 8'h37 && rf[`SX(6'(cv_fidx + 7'd1))] != VNULL) begin
                         b1 <= 1'b1; ab_lo <= 8'd31;
                     end else begin
@@ -2873,9 +2961,48 @@ module mpy_core
                 end
             S_CVK_P2: if (b1) wr(ab_ptr(8'd31), rf[`SX(6'(cv_fidx + 7'd1))], S_CVK_E);
                       else st <= S_CVK_E;
+            S_CVK_PW: if (cv_i == cv_n) begin
+                    cv_g <= cv_fun_g; cv_ret <= S_CVK_PF; st <= S_CVK_RD;
+                end else begin
+                    cv_g <= cv_pos_g + {8'd0, cv_i}; cv_ret <= S_CVK_PI; st <= S_CVK_RD;
+                end
+            S_CVK_PF: if (op == 8'h37) begin
+                    t[2] <= t[3]; cv_g <= cv_fun_g + 16'd1; cv_ret <= S_CVK_PS; st <= S_CVK_RD;
+                end else begin
+                    b1 <= 1'b0; ab_lo <= 8'd32; ab_pe <= 8'd32; cv_i <= 8'd0;
+                    wr(ab_ptr(8'd0), t[3], S_CVK_E);
+                end
+            S_CVK_PS: begin
+                    t[6] <= t[3];
+                    if (t[3] != VNULL) begin b1 <= 1'b1; ab_lo <= 8'd31; end
+                    else begin b1 <= 1'b0; ab_lo <= 8'd32; end
+                    ab_pe <= 8'd32; cv_i <= 8'd0;
+                    wr(ab_ptr(8'd0), t[2], S_CVK_P2W);
+                end
+            S_CVK_P2W: if (b1) wr(ab_ptr(8'd31), t[6], S_CVK_E);
+                       else st <= S_CVK_E;
+            S_CVK_PI: begin
+                    t[0] <= t[3];
+                    if (cv_bm[cv_i[4:0]] && !(tg(t[3]) == ABI_TAG_TUPLE ||
+                                             is_mut(t[3], ABI_MUT_LIST))) begin
+                        if (stk_hit(cv_g)) aux <= vint({25'd0, stk_slot(cv_g)});
+                        else aux <= vint(32'd0);
+                        fcont <= ABI_CONT_REPLACE; pc <= op_pc;
+                        hook(ABI_HOOK_TUPLE, ABI_RK_CONT, 8'd1, t[3], VNULL, VNULL, VNULL);
+                    end else begin cv_i <= cv_i + 8'd1; st <= S_CVK_PW; end
+                end
+            S_CVK_RD: if (stk_hit(cv_g)) begin t[3] <= stk_val(cv_g); st <= cv_ret; end
+                      else begin srd_g <= cv_g; gosub(S_SRD, S_CVK_RD2); end
+            S_CVK_RD2: begin t[3] <= srd_v; st <= cv_ret; end
             S_CVK_E: if (cv_i == cv_n) begin
-                    ab_nkw <= cv_j; sp <= cv_fidx; crk <= ABI_RK_PUSH;
-                    gi <= 32'd0; st <= S_CVK_KW;
+                    ab_nkw <= cv_j; crk <= ABI_RK_PUSH; gi <= 32'd0;
+                    if (ab_chunked) ab_npos <= ab_nitems;
+                    if (!cv_wide) sp <= cv_fidx;
+                    st <= S_CVK_KW;
+                end else if (cv_wide) begin
+                    cv_g <= cv_pos_g + {8'd0, cv_i};
+                    cv_ret <= cv_bm[cv_i[4:0]] ? S_CVK_ES : S_CVK_EV;
+                    st <= S_CVK_RD;
                 end else if (!cv_bm[cv_i[4:0]]) begin
                     wr(ab_ptr(ab_pe), rf[`SX(6'(cv_base + 7'(cv_i)))], S_CVK_E);
                     ab_pe <= ab_pe + 8'd1; cv_i <= cv_i + 8'd1;
@@ -2883,6 +3010,13 @@ module mpy_core
                     t[0] <= rf[`SX(6'(cv_base + 7'(cv_i)))];
                     rd(adr(rf[`SX(6'(cv_base + 7'(cv_i)))]), S_CVK_N);
                 end
+            S_CVK_EV: if (ab_chunked) begin
+                    cv_i <= cv_i + 8'd1; cv_ret <= S_CVK_E; st <= S_CVK_AP;
+                end else begin
+                    wr(ab_ptr(ab_pe), t[3], S_CVK_E);
+                    ab_pe <= ab_pe + 8'd1; cv_i <= cv_i + 8'd1;
+                end
+            S_CVK_ES: begin t[0] <= t[3]; rd(adr(t[3]), S_CVK_N); end
             S_CVK_N: begin
                 x4 <= md; gi <= 32'd0;
                 if (tg(t[0]) == ABI_TAG_TUPLE) begin cv_items <= adr(t[0]) + 4; st <= S_CVK_L; end
@@ -2890,17 +3024,203 @@ module mpy_core
             end
             S_CVK_I: begin cv_items <= md; st <= S_CVK_L; end
             S_CVK_L: if (gi == x4) begin cv_i <= cv_i + 8'd1; st <= S_CVK_E; end
-                     else if (ab_pe >= 8'd200) raise_err(ABI_ERR_STAR_ARGS, VNULL, VNULL);
+                     else if (ab_chunked) rd(cv_items + (gi << 2), S_CVK_VC);
+                     else if (ab_pe >= 8'd200) begin cv_kw <= 1'b0; st <= S_CVK_CH; end
                      else rd(cv_items + (gi << 2), S_CVK_V);
-            S_CVK_KW: if (gi == {23'd0, cv_j, 1'b0}) st <= S_CALL;
-                      else begin
-                          wr(ab_ptr(ab_pe + gi[7:0]), rf[`SX(6'(cv_base + 7'(cv_n) + gi[6:0]))], S_CVK_KW);
-                          gi <= gi + 32'd1;
-                      end
+            S_CVK_VC: begin
+                    t[3] <= mv; gi <= gi + 32'd1; cv_ret <= S_CVK_L; st <= S_CVK_AP;
+                end
             S_CVK_V: begin
                 wr(ab_ptr(ab_pe), mv, S_CVK_L);
                 ab_pe <= ab_pe + 8'd1; gi <= gi + 32'd1;
             end
+            S_CVK_KW: if (!ab_chunked && gi == 32'd0 &&
+                          ({24'd0, ab_pe} + {23'd0, cv_j, 1'b0} > 32'd256)) begin
+                    cv_kw <= 1'b1; st <= S_CVK_CH;
+                end else if (gi == {23'd0, cv_j, 1'b0}) begin
+                    if (cv_wide) begin
+                        drop_left <= stk_depth - cv_fun_g;
+                        drop_push_en <= 1'b0;
+                        drop_then <= ab_chunked ? S_CVK_PACK : S_CALL;
+                        st <= S_DROP;
+                    end else st <= ab_chunked ? S_CVK_PACK : S_CALL;
+                end else if (cv_wide) begin
+                    cv_g <= cv_pos_g + {8'd0, cv_n} + gi[15:0];
+                    cv_ret <= S_CVK_KV; st <= S_CVK_RD;
+                end else if (ab_chunked) begin
+                    t[3] <= rf[`SX(6'(cv_base + 7'(cv_n) + gi[6:0]))];
+                    st <= S_CVK_KV;
+                end else begin
+                    wr(ab_ptr(ab_pe + gi[7:0]), rf[`SX(6'(cv_base + 7'(cv_n) + gi[6:0]))], S_CVK_KW);
+                    gi <= gi + 32'd1;
+                end
+            // A NULL keyword key is the ** marker. The direct path turns it
+            // into small int 0 while building the kw tuple.
+            S_CVK_KV: begin
+                    if (t[3] == VNULL && !gi[0]) t[3] <= vint(32'd0);
+                    st <= S_CVK_KV2;
+                end
+            S_CVK_KV2: begin
+                    gi <= gi + 32'd1;
+                    if (ab_chunked) begin cv_ret <= S_CVK_KW; st <= S_CVK_AP; end
+                    else begin wr(ab_ptr(ab_pe + gi[7:0]), t[3], S_CVK_KW); end
+                end
+            // Enter chunked mode and copy the direct positional window.
+            S_CVK_CH: begin
+                    ab_chunked <= 1'b1; ab_ovf <= 1'b0;
+                    ab_npos <= {24'd0, ab_pe} - {24'd0, ab_lo};
+                    ab_nitems <= 32'd0; ab_nblk <= 32'd0; ab_fill <= 5'd0;
+                    ab_blk <= VNULL; t[5] <= VNULL; cv_k <= 32'd0;
+                    wr(ab_ptr(8'd1), vint(32'd1), S_CVK_CH2);
+                end
+            S_CVK_CH2: wr(ab_ptr(8'd4), VNULL, S_CVK_CP);
+            S_CVK_CP: if (cv_k == ab_npos) st <= cv_kw ? S_CVK_KW : S_CVK_L;
+                      else rd(ab_ptr(8'({24'd0, ab_lo} + cv_k)), S_CVK_CPV);
+            S_CVK_CPV: begin
+                    t[3] <= mv; cv_k <= cv_k + 32'd1; cv_ret <= S_CVK_CP; st <= S_CVK_AP;
+                end
+            // Append t[3] to the block stream. cv_ret is where to resume.
+            S_CVK_AP: if (ab_nblk != 32'd0 && ab_fill != 5'd16)
+                    wr(adr(ab_blk) + 32'd4 + {25'd0, ab_fill, 2'b00}, t[3], S_CVK_EL);
+                else alloc(32'd17, S_CVK_NB);
+            S_CVK_EL: begin
+                    wr(adr(ab_blk), vint({27'd0, ab_fill} + 32'd1), S_CVK_ELD);
+                    ab_fill <= ab_fill + 5'd1; ab_nitems <= ab_nitems + 32'd1;
+                end
+            S_CVK_ELD: st <= cv_ret;
+            S_CVK_NB: begin
+                    ab_blk <= {ABI_TAG_TUPLE, al_a}; t[2] <= {ABI_TAG_TUPLE, al_a};
+                    if (ab_ovf || ab_nblk >= 32'd251) st <= S_CVK_OVP;
+                    else begin
+                        wr(ab_ptr(8'(32'd5 + ab_nblk)), {ABI_TAG_TUPLE, al_a}, S_CVK_NBW);
+                        ab_nblk <= ab_nblk + 32'd1; ab_fill <= 5'd0;
+                    end
+                end
+            S_CVK_NBW: wr(adr(ab_blk) + 32'd4, t[3], S_CVK_NBL);
+            S_CVK_NBL: begin
+                    wr(adr(ab_blk), vint(32'd1), S_CVK_ELD);
+                    ab_fill <= 5'd1; ab_nitems <= ab_nitems + 32'd1;
+                end
+            S_CVK_OVP: if (!ab_ovf) alloc(32'd253, S_CVK_MIG_A);
+                       else rd(adr(t[5]), S_CVK_EXT_A);
+            S_CVK_MIG_A: begin
+                    t[4] <= {ABI_TAG_TUPLE, al_a}; cv_k <= 32'd0;
+                    wr(al_a, vint(32'd252), S_CVK_MIG_C);
+                end
+            S_CVK_MIG_C: if (cv_k == 32'd251) begin
+                    x0 <= 32'd252;
+                    wr(adr(t[4]) + 32'd4 + (32'd251 << 2), t[2], S_CVK_MIG_D);
+                end else rd(ab_ptr(8'(32'd5 + cv_k)), S_CVK_MIG_W);
+            S_CVK_MIG_W: begin
+                    wr(adr(t[4]) + 32'd4 + (cv_k << 2), mv, S_CVK_MIG_C);
+                    cv_k <= cv_k + 32'd1;
+                end
+            S_CVK_MIG_D: begin
+                    wr(ab_ptr(8'd4), t[4], S_CVK_NBW);
+                    t[5] <= t[4]; ab_ovf <= 1'b1; ab_nblk <= x0; ab_fill <= 5'd0;
+                end
+            S_CVK_EXT_A: begin x1 <= md; alloc(md + 32'd2, S_CVK_EXT_C); end
+            S_CVK_EXT_C: begin
+                    t[4] <= {ABI_TAG_TUPLE, al_a}; cv_k <= 32'd0;
+                    wr(al_a, vint(x1 + 32'd1), S_CVK_EXT_W);
+                end
+            S_CVK_EXT_W: if (cv_k == x1) begin
+                    x0 <= ab_nblk + 32'd1;
+                    wr(adr(t[4]) + 32'd4 + (x1 << 2), t[2], S_CVK_MIG_D);
+                end else rd(adr(t[5]) + 32'd4 + (cv_k << 2), S_CVK_EXT_D);
+            S_CVK_EXT_D: begin
+                    wr(adr(t[4]) + 32'd4 + (cv_k << 2), mv, S_CVK_EXT_W);
+                    cv_k <= cv_k + 32'd1;
+                end
+            // Copy the block-pointer directory onto the heap, then wipe ARGBUF.
+            S_CVK_PACK: rd(ab_ptr(8'd0), S_CVK_PK0);
+            S_CVK_PK0: begin
+                    t[0] <= mv;
+                    if (ab_ovf) begin t[1] <= t[5]; cv_k <= 32'd5; x1 <= 32'd256; st <= S_CVK_W1; end
+                    else if (ab_nblk == 32'd0) begin
+                        t[1] <= {ABI_TAG_TUPLE, h_empty}; cv_k <= 32'd5; x1 <= 32'd5; st <= S_CVK_W1;
+                    end else alloc(32'd1 + ab_nblk, S_CVK_PKA);
+                end
+            S_CVK_PKA: begin
+                    t[1] <= {ABI_TAG_TUPLE, al_a}; cv_k <= 32'd0;
+                    wr(al_a, vint(ab_nblk), S_CVK_PKC);
+                end
+            S_CVK_PKC: if (cv_k == ab_nblk) begin
+                    cv_k <= 32'd5; x1 <= 32'd5 + ab_nblk; st <= S_CVK_W1;
+                end else rd(ab_ptr(8'(32'd5 + cv_k)), S_CVK_PKW);
+            S_CVK_PKW: begin
+                    wr(adr(t[1]) + 32'd4 + (cv_k << 2), mv, S_CVK_PKC);
+                    cv_k <= cv_k + 32'd1;
+                end
+            S_CVK_W1: if (cv_k == x1) st <= S_CVK_W4;
+                      else begin
+                          wr(ab_ptr(cv_k[7:0]), VNULL, S_CVK_W1);
+                          cv_k <= cv_k + 32'd1;
+                      end
+            S_CVK_W4: if (ab_ovf) wr(ab_ptr(8'd4), VNULL, S_CVK_W1B);
+                      else st <= S_CVK_W1B;
+            S_CVK_W1B: wr(ab_ptr(8'd1), VNULL, S_CALL);
+
+            // Chunked bound-method self: a new one-value block at directory[0].
+            S_CALL_BSC: begin t[2] <= mv; alloc(32'd2, S_CALL_BSC2); end
+            S_CALL_BSC2: begin
+                    t[3] <= {ABI_TAG_TUPLE, al_a};
+                    wr(al_a, vint(32'd1), S_CALL_BSC3);
+                end
+            S_CALL_BSC3: wr(al_a + 32'd4, t[2], S_CALL_BSC4);
+            S_CALL_BSC4: alloc(32'd2 + ab_nblk, S_CALL_BSC5);
+            S_CALL_BSC5: begin
+                    t[4] <= {ABI_TAG_TUPLE, al_a}; x0 <= al_a; cv_k <= 32'd0;
+                    wr(al_a, vint(ab_nblk + 32'd1), S_CALL_BSC6);
+                end
+            S_CALL_BSC6: wr(x0 + 32'd4, t[3], S_CALL_BSC7);
+            S_CALL_BSC7: if (cv_k == ab_nblk) begin
+                    t[1] <= t[4];
+                    ab_npos <= ab_npos + 32'd1; ab_nblk <= ab_nblk + 32'd1;
+                    rd(adr(ab_q) + 8, S_CALL_BF);
+                end else rd(adr(t[1]) + 32'd4 + (cv_k << 2), S_CALL_BSC8);
+            S_CALL_BSC8: begin
+                    wr(x0 + 32'd8 + (cv_k << 2), mv, S_CALL_BSC7);
+                    cv_k <= cv_k + 32'd1;
+                end
+            // Closure cells were written into ARGBUF by S_CF_CLI. Prepend them
+            // as one leading block so _bind_wide sees them as positionals.
+            S_BS_W: if (ab_lo0 != ab_lo) begin
+                    x1 <= {24'd0, ab_lo0} - {24'd0, ab_lo};
+                    cv_k <= 32'd0;
+                    alloc(32'd1 + ({24'd0, ab_lo0} - {24'd0, ab_lo}), S_BS_CL);
+                end else st <= S_BS_HK;
+            S_BS_CL: begin
+                    t[3] <= {ABI_TAG_TUPLE, al_a}; x0 <= al_a;
+                    wr(al_a, vint(x1), S_BS_CL2);
+                end
+            S_BS_CL2: if (cv_k == x1) st <= S_BS_CLP;
+                      else rd(ab_ptr(ab_lo + cv_k[7:0]), S_BS_CL3);
+            S_BS_CL3: begin
+                    wr(x0 + 32'd4 + (cv_k << 2), mv, S_BS_CL2);
+                    cv_k <= cv_k + 32'd1;
+                end
+            S_BS_CLP: begin cv_k <= 32'd0; alloc(32'd2 + ab_nblk, S_BS_CL4); end
+            S_BS_CL4: begin
+                    t[4] <= {ABI_TAG_TUPLE, al_a}; x0 <= al_a;
+                    wr(al_a, vint(ab_nblk + 32'd1), S_BS_CL5);
+                end
+            S_BS_CL5: wr(x0 + 32'd4, t[3], S_BS_CL6);
+            S_BS_CL6: if (cv_k == ab_nblk) begin
+                    t[1] <= t[4];
+                    ab_npos <= ab_npos + x1; ab_nblk <= ab_nblk + 32'd1;
+                    ab_lo <= ab_lo0;
+                    st <= S_BS_HK;
+                end else rd(adr(t[1]) + 32'd4 + (cv_k << 2), S_BS_CL7);
+            S_BS_CL7: begin
+                    wr(x0 + 32'd8 + (cv_k << 2), mv, S_BS_CL6);
+                    cv_k <= cv_k + 32'd1;
+                end
+            S_BS_HK: rd(ab_ptr(8'd0), S_BS_HK2);
+            S_BS_HK2: begin
+                    fflags <= fflags | FF_NOTB; fcont <= ABI_CONT_BIND;
+                    hook(ABI_HOOK_BIND_WIDE, ABI_RK_CONT, 8'd3, mv, vint(ab_npos), t[1], VNULL);
+                end
 
             // ---------------- unary / binary ----------------
             S_UN: begin

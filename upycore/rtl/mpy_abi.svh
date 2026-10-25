@@ -246,6 +246,7 @@ localparam logic [7:0] ABI_HOOK_IRQ_UNCAUGHT = 8'd20;
 localparam logic [7:0] ABI_HOOK_BIND = 8'd21;
 localparam logic [7:0] ABI_HOOK_SUPER_METHOD = 8'd22;
 localparam logic [7:0] ABI_HOOK_WARN = 8'd23;
+localparam logic [7:0] ABI_HOOK_BIND_WIDE = 8'd24;
 
 localparam logic [7:0] ABI_ERR_NAME = 8'd0;
 localparam logic [7:0] ABI_ERR_NOT_CALLABLE = 8'd1;

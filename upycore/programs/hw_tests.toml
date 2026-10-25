@@ -112,6 +112,7 @@ call_function_ex = { file = "hw/calls/call_function_ex.py" }
 call_function_ex_kw = { file = "hw/calls/call_function_ex_kw.py" }
 varargs_basic = { file = "hw/calls/varargs_basic.py" }
 call_wide = { file = "hw/calls/call_wide.py", cycles = 40_000_000, timeout = 240 }
+star_wide = { file = "hw/calls/star_wide.py", cycles = 80_000_000, timeout = 240 }
 varargs_empty = { file = "hw/calls/varargs_empty.py" }
 varargs_kwonly = { file = "hw/calls/varargs_kwonly.py" }
 varargs_kwonly2 = { file = "hw/calls/varargs_kwonly2.py" }
