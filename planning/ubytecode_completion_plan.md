@@ -25,8 +25,8 @@ them does not land, even if a proposal asked for it.
 
 - No new opcode, no new SRAM, no wider argument buffer, no second
   power unit in the FPU, no filesystem walker in the FSM. A star call
-  that does not fit ARGBUF allocates a heap tuple (W7). ARGBUF stays
-  256 words.
+  that does not fit ARGBUF switches that buffer to chunked mode (W7).
+  ARGBUF stays 256 words.
 - The integer and ASCII subscript fast path stays in `S_LSUB` /
   `S_LS_S`. The list, tuple, dict, set, range, bytes, and ASCII-str
   arms of `S_GI` stay in the hart. `S_JT` and `ABI_CONT_TRUTH` stay
@@ -68,7 +68,7 @@ was raised by two and is wrong for this pin.
 | `c == c` is true for a complex NaN | C | **Do.** One tag compare in `S_EQ`. `_equal` already has the right answer and is skipped by the identity shortcut. |
 | Replace `_flog` / `_fexp` / `_fatan2` / `_fsin` / `_fcos` with libm | A, C (C says measure first) | **Do not land.** B is right that this is the shared float formatter, not a missing opcode. The negative-base case already reaches `_cpow`. A libm import grows ROM and changes formatting. |
 | `RAISE_FROM` chains exceptions | none (all three say leave) | **Leave.** `py/vm.c` warns and drops the cause. The hart already warns. |
-| `CALL_*_VAR_KW` past the argument buffer | none of the three; added after review | **Do, as one heap argument array with 32-bit counts.** Do not widen ARGBUF. Calls that fit stay on the SRAM path. See W7. |
+| `CALL_*_VAR_KW` past the argument buffer | none of the three; added after review | **Do, as chunked mode.** Slot 1 of ARGBUF is the mode word. Direct mode is today's layout. Chunked mode stores pointers to 16-value blocks and reads a block only when bind needs an index in it. See W7. |
 | Host directory importer | none | **Leave.** `MICROPY_VFS_POSIX` is 0. `'.'` and `'.frozen'` are `_FROZEN`. |
 
 ## Work items
@@ -488,8 +488,8 @@ That SRAM buffer stays 256 words (`ABI_ARGBUF_WORDS`,
 `ABI_ARGBUF_BASE`). Do not add slots. A wider ARGBUF is powered on
 every call, including a call of two arguments. The pin does not have
 this buffer. `mp_call_prepare_args_n_kw_var` in `py/runtime.c`
-allocates a heap array and passes the pointer to the code state. The
-heap tuple is that array.
+allocates one heap array and walks it at bind time. Chunked mode is
+that array split into blocks, with the same order and the same counts.
 
 Calls that fit do not allocate. The compare in `S_CVK_L` is already
 there. When it is false, the next state is the one there today. Do not
@@ -509,66 +509,83 @@ pairs do not fit even if the reserved head is removed, and a star has
 no SRAM-sized bound. A wider ARGBUF would be powered on every call and
 would still not hold a long star.
 
-The wide representation is one items tuple, the pin's `args2` array in
-`mp_call_prepare_args_n_kw_var`, plus a 32-bit split point:
+The two modes share the existing 256 words. Slot 1 is the mode word.
+Prepends stop at slot 2 (`ab_lo <= 2` raises before the write), so
+slot 1 is never an argument today.
 
-- Word 0 of the tuple is the length, a full payload, not `tb_n`. The
-  GC traces a tuple from that length (`upycore/docs/mpy_gc.md`).
-- `items[0 .. n_pos)` are the positionals. `self` is item 0 when the
-  call has one.
-- `items[n_pos ..)` are the keyword pairs, in the order `S_CVK_KW`
-  walks them. A null key followed by a mapping stays a pair.
-  `_flat_kw` expands the mapping, so a `**` dict of any heap size does
-  not have to be unpacked in the hart.
-- `n_pos` lives in a new 32-bit hart register `ab_npos`. Do not widen
-  `ab_lo`, `ab_pe`, or `ab_nkw`. Those stay the 8-bit indexes `S_BF`
-  already uses.
+- **Direct.** Slot 1 is `VNULL`. Slots 0 and 31..255 mean what they
+  mean now. `S_BF` does not read slot 1.
+- **Chunked.** Slot 1 is the small int `1`. Slot 0 is still the
+  callable. Slot 2 is `n_pos` and slot 3 is the number of item words,
+  both full integer payloads. Slot 4 is `VNULL` while the block
+  pointers fit, or a tuple of pointers when they do not. Slots 5..255
+  are those pointers: 251 of them.
 
-Build it only when the next positional would make `ab_pe >= 200`, or
-the last keyword word would land past slot 255
-(`ab_pe + 2 * cv_j > 256`). Stars are tuples or lists by `S_CVK_L`
-(`S_CVK_P` has run `ABI_HOOK_TUPLE`), and `S_CVK_N` has the length in
-`x4`, so the items tuple is one exact `alloc`. Do not call `S_TUP`.
-Do not grow a list one append at a time.
+A block is a tuple of at most 16 values. 16 is a power of two, so item
+`i` is block `i >> 4`, element `i & 15`. The tuple's length word is the
+number of values in that block, and the collector already traces a
+tuple from that length. The last block may be short. 251 blocks cover
+4016 values. Past that, copy the pointers into the tuple in slot 4 and
+keep extending that tuple. That is the heap limit, which is the pin's
+limit. Do not widen the 32-bit star bitmap.
 
-1. Fill the items tuple from what ARGBUF already holds, then the rest
-   of this star, later positionals, and the keyword pairs.
-2. Park the tuple in ARGBUF slot 32, leave the callable in slot 0, set
-   `ab_npos`, and set a hart bit `ab_wide`. Enter `S_CALL`. Do not hook
-   the binder from `S_CVK_*`. That would run in the caller's frame.
-   `ab_wide` and `ab_npos` survive `S_CF_SW` the way `ab_lo` does.
-   Neither is a bit in `fflags`.
-3. `S_CF_CHK` is `c_fast <= !ab_wide &&` the condition already there.
-   The bit is clear on every call that fits, so `S_BF` does not gain a
-   state. When it is set, `S_BS` calls a new hook appended at the end
-   of `HOOKS`, `_bind_wide(fun, items, n_pos)`. Do not renumber the
-   existing hooks. `_bind_wide` is `_bind` reading positionals from
-   `items[0 .. n_pos)` and pairs from the tail, then `_flat_kw`. Clear
-   `ab_wide` before the hook so the firmware's own calls stay narrow.
-4. `S_CALL_BS` prepends a bound-method `self` at `ab_lo - 1` on the
-   narrow path, and that raise at `ab_lo <= 2` stays. On the wide path,
-   allocate a new items tuple one longer, write `self` at index 0, copy
-   the old items after it, add 1 to `ab_npos`, and store the tuple back
-   in slot 32.
+The GC pool is SRAM (`ABI_GC_POOL_BASE`, the same region as ARGBUF).
+A block is already in SRAM once it has been allocated. The binder reads
+the one value it needs from that block. It does not copy the block into
+the direct-mode slots first. That copy would spend the memory port
+twice on a word that is already in SRAM.
 
-`S_BF` stays an 8-bit walk of a contiguous ARGBUF span.
+Blocks are allocated as expansion crosses each group of 16, not up
+front as one array. Bind then reads a block only when an index falls in
+it. MicroPython still materializes the call before the callee body:
+positionals are stored, `*args` is a real tuple of the tail, and
+`**kwargs` is a real dict. A signature with `*args` or `**kwargs`
+therefore reads every block. A fixed signature that raises
+`TypeError` for too many positionals reads far enough to know the count
+and then stops. A `**` dict stays one pair. `_flat_kw` expands it when
+keyword binding reaches that pair, which is the same helper the slow
+path already uses.
+
+Switch to chunked only when the next positional would make
+`ab_pe >= 200`, or the last keyword word would land past slot 255
+(`ab_pe + 2 * cv_j > 256`). Copy the values already stored in direct
+slots into the first blocks, then continue the star and the keyword
+pairs into new blocks. Stars are tuples or lists by `S_CVK_L`. Do not
+call `S_TUP` for the whole argument list.
+
+A hart bit `ab_chunked` mirrors slot 1. Direct calls leave it clear and
+do not store a mode word. `S_BF` does not test it. The first chunked
+call writes slot 1. The bind clears the bit and stores `VNULL` back to
+slot 1 before any firmware hook, so a nested call is direct and the
+collector does not keep the previous call's blocks through a stale
+pointer. `ab_chunked` survives `S_CF_SW` the way `ab_lo` does. It is
+not a bit in `fflags`. `S_CF_CHK` is `c_fast <= !ab_chunked &&` the
+condition already there.
+
+`S_BS` then calls `_bind_wide`, appended at the end of `HOOKS`. Do not
+renumber the existing hooks. The hook receives the callable, `n_pos`,
+and a tuple of the block pointers. Build that tuple from slots 5..255,
+or pass slot 4 when the directory has already spilled, before the hook.
+`hook()` reuses ARGBUF. The directory tuple and the callable sit in
+`t[]` across that call. `_bind_wide` is `_bind` with item `i` loaded
+from block `i >> 4`. Clear `ab_chunked` before the hook.
+
+`S_CALL_BS` still prepends a bound-method `self` at `ab_lo - 1` in
+direct mode, and the `ab_lo <= 2` raise stays there. In chunked mode,
+`self` is a new first item: allocate a one-value block, shift the
+directory up, and add 1 to `n_pos`.
 
 A failure to allocate is `MemoryError`. Delete the
 `RuntimeError("too many arguments")` result on this path. The other
-`ABI_ERR_STAR_ARGS` sites stay: the non-wide prepends, and the `> 224`
-check on plain `CALL_FUNCTION` / `CALL_METHOD` in `S_EXEC`.
+`ABI_ERR_STAR_ARGS` sites stay: the direct-mode prepends, and the
+`> 224` check on plain `CALL_FUNCTION` / `CALL_METHOD` in `S_EXEC`.
 
-The items pointer is a GC root only in `t[]` or ARGBUF. Do not leave it
-only in a scratch register across `alloc`.
-
-Exit: `def f(*a): return len(a)` starred with 300 ones returns `300`
-(past both ARGBUF and an 8-bit count). A method and a bound method of
-that star return `300` and see the instance as `self`.
-`def f(**k): return len(k)` with a dict of 200 keys returns `200`.
-`def f(**k)` with 113 explicit pairs returns `113`, which is the first
-explicit tail that would have wrapped slot 255. `call_function_ex`,
-`call_function_ex_kw`, `varargs`, `print_star`, and `call_wide` keep
-their stdout and their `cycles=` numbers.
+Exit: `def f(*a): return len(a)` starred with 300 ones returns `300`.
+A method and a bound method of that star return `300` and see the
+instance as `self`. `def f(**k): return len(k)` with a dict of 200
+keys returns `200`. `def f(**k)` with 113 explicit pairs returns `113`.
+`call_function_ex`, `call_function_ex_kw`, `varargs`, `print_star`, and
+`call_wide` keep their stdout and their `cycles=` numbers.
 
 ## Tests
 
@@ -732,4 +749,4 @@ numbers or bit masks out of them into a new table.
 | W4 | `py/builtinimport.c` `evaluate_relative_import`, `process_import_at_level`; `py/runtime.c` `mp_import_name`, `mp_import_from`, `mp_import_all`, `mp_load_global`; `py/objmodule.c` `mp_module_get_builtin` | `_import`, `_rel_name`, `_load_mod`, `_import_from`, `_import_star` |
 | W5 | `py/objtype.c` `mp_obj_class_lookup`, `super_attr` | `_c3`, `_super_attr`, `S_AT_MRO` |
 | W6 | `py/objcomplex.c` `MP_BINARY_OP_EQUAL`; `py/vm.c` `MP_BC_RAISE_FROM` is the leave-alone check | `S_EQ`, `S_SW_X`, `S_SW_E`, `S_WC_TR`, `S_CONT`, `S_LN_L` |
-| W7 | `py/runtime.c` `mp_call_prepare_args_n_kw_var` (`args2`, `n_args`, `n_kw`) | `S_CVK_L`, `S_CVK_KW`, `_bind_wide` |
+| W7 | `py/runtime.c` `mp_call_prepare_args_n_kw_var` (order and counts; the pin uses one array, this core uses 16-value blocks) | `S_CVK_L`, `S_CVK_KW`, slot 1, `_bind_wide` |
