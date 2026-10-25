@@ -257,6 +257,8 @@ raise_after_call_loop = { file = "hw/exceptions/raise_after_call_loop.py" }
 [objects]
 classes = { file = "hw/objects/classes.py" }
 inherit = { file = "hw/objects/inherit.py" }
+mro_diamond = { file = "hw/objects/mro_diamond.py", oracle = true }
+mro_repeat = { file = "hw/objects/mro_repeat.py", oracle = true }
 props = { file = "hw/objects/props.py" }
 
 attr_basic = { file = "hw/objects/attr_basic.py" }
