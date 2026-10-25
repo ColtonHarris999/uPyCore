@@ -867,6 +867,9 @@ module mpy_core
     val_t ab_q;
     val_t ab_s [0:3];
     logic [7:0] ab_lo, ab_pe, ab_nkw;
+    // Builtins override dict. Mirrors the sysroot word firmware stores with
+    // _sysset(SR_FW7, dict). Not a frame-header field and not an fflags bit.
+    val_t bov;
     logic [3:0] crk, d_rk, r_rk;
     val_t cl_loc;
     logic [7:0] hk_id, nid;
@@ -1211,6 +1214,8 @@ module mpy_core
     task automatic wr(input logic [31:0] a, input val_t v, input state_e nxt);
         m_addr <= a; m_wdata <= v[31:0]; m_wtag <= v[35:32];
         m_we <= 1'b1; m_tag_we <= 1'b1; m_be <= 4'hF; m_req <= 1'b1;
+        // The same store that publishes the override dict keeps the probe flop.
+        if (a == ABI_SYSROOT_BASE + 4 * ABI_SR_FW7) bov <= v;
         wret <= nxt; st <= S_MWAIT;
     endtask
     task automatic wrb(input logic [31:0] a, input logic [7:0] b, input state_e nxt);
@@ -1358,6 +1363,7 @@ module mpy_core
             lc_fl_ret <= S_SPILL;
             for (int k = 0; k < 8; k++) t[k] <= VNULL;
             xc <= VNULL;
+            bov <= VNULL;
             ab_q <= VNULL;
             for (int k = 0; k < 4; k++) ab_s[k] <= VNULL;
             for (int k = 0; k < MPY_RF_DEPTH; k++) rf[k] <= VNULL;
@@ -1804,6 +1810,28 @@ module mpy_core
                     ovr <= (t[7] == VTRUE) ? ABI_OVR_TRUE : ABI_OVR_FALSE;
                     pc <= op_pc; st <= S_FETCH;
                 end
+                // __exit__'s result was not decided in S_TR. None swallows.
+                ABI_CONT_WITH_TRUTH: begin
+                    push((t[7] == VTRUE) ? VNONE : aux);
+                    st <= S_FETCH;
+                end
+                // Kind-3 __exit__ (aux2 == 0) still looks up __enter__.
+                // Kind-3 __enter__ (aux2 != 0) is already bound; call it as kind 1.
+                ABI_CONT_WITH_ATTR: begin
+                    t[0] <= aux3;
+                    jt <= aux[31:0];
+                    if (aux2 == vint(32'd0)) begin
+                        rf[`SX(6'(sp - 7'd1))] <= t[7];
+                        rf[`SX(sp)] <= VNULL;
+                        sp <= sp + 7'd1;
+                        at_q <= ABI_Q_ENTER_D;
+                        gosub_scr(SCR_AT, S_AT, S_SW_E);
+                    end else begin
+                        at_v <= t[7];
+                        at_kind <= 2'd1;
+                        st <= S_SW_E;
+                    end
+                end
                 ABI_CONT_FOR_NEXT: if (t[7] == VSTOP) begin sp <= sp - 7'd4; pc <= aux[31:0]; st <= S_FETCH; end
                                    else begin push(t[7]); st <= S_FETCH; end
                 ABI_CONT_GETITER: begin
@@ -1821,8 +1849,13 @@ module mpy_core
                 default: halt(ABI_HALT_INTERNAL, {24'd0, fcont});
             endcase
             S_WC_TR: begin
-                push((tr_x || tr_r) ? VNONE : aux);
-                st <= S_FETCH;
+                if (tr_x) begin
+                    fcont <= ABI_CONT_WITH_TRUTH;
+                    hook(ABI_HOOK_TRUTH, ABI_RK_CONT, 8'd1, tr_v, VNULL, VNULL, VNULL);
+                end else begin
+                    push(tr_r ? VNONE : aux);
+                    st <= S_FETCH;
+                end
             end
             S_UPK_N: begin x1 <= md; st <= S_UPK_L; end
             S_UPK_L: if (x1 == 32'd0) st <= S_FETCH;
@@ -2227,10 +2260,15 @@ module mpy_core
                     default: halt(ABI_HALT_BAD_OPCODE, op_pc);
                 endcase
             end
-            S_LN_L: lookup((i2 == 8'd0) ? loc : (i2 == 8'd1) ? glb : vmut(h_builtins, ABI_MUT_DICT),
-                           {ABI_TAG_QSTR, at_q}, VNULL, LK_FIND, 1'b0, S_LN_R);
+            S_LN_L: if (i2 == 8'd2 && bov != VNULL)
+                        lookup(bov, {ABI_TAG_QSTR, at_q}, VNULL, LK_FIND, 1'b0, S_LN_R);
+                    else lookup((i2 == 8'd0) ? loc : (i2 == 8'd1) ? glb : vmut(h_builtins, ABI_MUT_DICT),
+                                {ABI_TAG_QSTR, at_q}, VNULL, LK_FIND, 1'b0, S_LN_R);
             S_LN_R: if (lk_found) begin push(lk_res); st <= S_FETCH; end
-                    else if (i2 == 8'd2) raise_err(ABI_ERR_NAME, {ABI_TAG_QSTR, at_q}, VNULL);
+                    else if (i2 == 8'd2 && bov != VNULL) begin
+                        i2 <= 8'd3;
+                        lookup(vmut(h_builtins, ABI_MUT_DICT), {ABI_TAG_QSTR, at_q}, VNULL, LK_FIND, 1'b0, S_LN_R);
+                    end else if (i2 >= 8'd2) raise_err(ABI_ERR_NAME, {ABI_TAG_QSTR, at_q}, VNULL);
                     else begin i2 <= i2 + 8'd1; st <= S_LN_L; end
             S_SN_R: if (lk_ro || lk_cx) raise_err(ABI_ERR_INTERNAL, t[4], VNULL);
                     else begin sp <= sp - 7'd1; st <= S_FETCH; end
@@ -2377,12 +2415,20 @@ module mpy_core
                 else if (at_kind == 2'd1) begin rf[`SX(6'(sp - 7'd1))] <= at_v; rf[`SX(sp)] <= VNULL; sp <= sp + 7'd1; end
                 if (at_kind == 2'd1 || at_kind == 2'd2) begin
                     at_q <= ABI_Q_ENTER_D; gosub_scr(SCR_AT, S_AT, S_SW_E);
+                end else if (at_kind == 2'd3) begin
+                    aux <= vint(jt); aux2 <= vint(32'd0); aux3 <= t[0];
+                    fcont <= ABI_CONT_WITH_ATTR;
+                    hook(ABI_HOOK_GETATTR, ABI_RK_CONT, 8'd2, t[0], {ABI_TAG_QSTR, ABI_Q_EXIT_D}, VNULL, VNULL);
                 end else raise_err(ABI_ERR_ATTR, t[0], {ABI_TAG_QSTR, ABI_Q_EXIT_D});
             end
             S_SW_E: if (at_kind == 2'd2 || at_kind == 2'd1) begin
                     ab_lo <= (at_kind == 2'd2) ? 8'd31 : 8'd32; ab_pe <= 8'd32; ab_nkw <= 8'd0;
                     crk <= ABI_RK_CONT; fcont <= ABI_CONT_WITH_ENTER; aux <= vint(jt);
                     wr(ab_ptr(8'd0), at_v, S_AB_31);
+                end else if (at_kind == 2'd3) begin
+                    aux <= vint(jt); aux2 <= vint(32'd1); aux3 <= t[0];
+                    fcont <= ABI_CONT_WITH_ATTR;
+                    hook(ABI_HOOK_GETATTR, ABI_RK_CONT, 8'd2, t[0], {ABI_TAG_QSTR, ABI_Q_ENTER_D}, VNULL, VNULL);
                 end else raise_err(ABI_ERR_ATTR, t[0], {ABI_TAG_QSTR, ABI_Q_ENTER_D});
             S_AB_31: wr(ab_ptr(8'd31), t[0], S_CALL);
             S_WC: begin
@@ -2892,7 +2938,7 @@ module mpy_core
             end
             S_EQ: begin
                 vb = (32'(n_o) == ABI_BINOP_NOT_EQUAL);
-                if (t[0] == t[1] && tg(t[0]) != ABI_TAG_OBJECT) begin
+                if (t[0] == t[1] && tg(t[0]) != ABI_TAG_OBJECT && tg(t[0]) != ABI_TAG_COMPLEX) begin
                     rf[`SX(6'(sp - 7'd2))] <= vbool(!vb); sp <= sp - 7'd1; st <= S_FETCH;
                 end else if (strlike(t[0]) && strlike(t[1])) begin
                     se_a <= t[0]; se_b <= t[1]; gosub_scr(SCR_SE, S_STREQ, S_EQ_S);

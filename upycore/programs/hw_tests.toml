@@ -39,6 +39,7 @@ complex = { file = "hw/alu/complex.py", cycles = 30_000_000 }
 
 bitwise_calls = { file = "hw/alu/bitwise_calls.py" }
 complex_ops = { file = "hw/alu/complex_ops.py" }
+complex_nan_eq = { file = "hw/alu/complex_nan_eq.py" }
 complex_type_trap = { file = "hw/alu/complex_type_trap.py", xfail = "device rejects complex(1, 1j); the unix port returns 0j" }
 unary_invert_float_trap = { file = "hw/alu/unary_invert_float_trap.py" }
 compare_op_type_trap = { file = "hw/alu/compare_op_type_trap.py" }
@@ -226,6 +227,7 @@ str_p5e_batch3 = { file = "hw/strings/str_p5e_batch3.py" }
 handling = { file = "hw/exceptions/handling.py" }
 custom = { file = "hw/exceptions/custom.py" }
 with_stmt = { file = "hw/exceptions/with_stmt.py" }
+with_prop = { file = "hw/exceptions/with_prop.py" }
 
 try_syntaxerror = { file = "hw/exceptions/try_syntaxerror.py" }
 try_exc_types = { file = "hw/exceptions/try_exc_types.py" }
@@ -353,6 +355,7 @@ load_fast_check_unbound = { file = "hw/variables/load_fast_check_unbound.py" }
 builtins_fallback = { file = "hw/variables/builtins_fallback.py" }
 builtins_shadow = { file = "hw/variables/builtins_shadow.py" }
 builtins_null_bit = { file = "hw/variables/builtins_null_bit.py" }
+builtins_override_name = { file = "hw/variables/builtins_override_name.py" }
 load_name_builtin = { file = "hw/variables/load_name_builtin.py" }
 local_hot = { file = "hw/variables/local_hot.py" }
 

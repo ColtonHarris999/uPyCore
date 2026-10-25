@@ -387,6 +387,7 @@ localparam logic [7:0] ABI_CONT_GETITER = 8'd13;
 localparam logic [7:0] ABI_CONT_INIT_ARGS = 8'd14;
 localparam logic [7:0] ABI_CONT_BIND = 8'd15;
 localparam logic [7:0] ABI_CONT_YFROM = 8'd16;
+localparam logic [7:0] ABI_CONT_WITH_ATTR = 8'd17;
 
 localparam logic [7:0] ABI_SIM_HALT = 8'd0;
 localparam logic [7:0] ABI_SIM_STDERR = 8'd1;
