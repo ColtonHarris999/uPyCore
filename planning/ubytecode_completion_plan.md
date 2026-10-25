@@ -554,26 +554,36 @@ pairs into new blocks. Stars are tuples or lists by `S_CVK_L`. Do not
 call `S_TUP` for the whole argument list.
 
 A hart bit `ab_chunked` mirrors slot 1. Direct calls leave it clear and
-do not store a mode word. `S_BF` does not test it. The first chunked
-call writes slot 1. The bind clears the bit and stores `VNULL` back to
-slot 1 before any firmware hook, so a nested call is direct and the
-collector does not keep the previous call's blocks through a stale
-pointer. `ab_chunked` survives `S_CF_SW` the way `ab_lo` does. It is
-not a bit in `fflags`. `S_CF_CHK` is `c_fast <= !ab_chunked &&` the
-condition already there.
+do not store a mode word. `S_BF` does not test it. `ab_chunked`
+survives `S_CF_SW` the way `ab_lo` does. It is not a bit in `fflags`.
+`S_CF_CHK` is `c_fast <= !ab_chunked &&` the condition already there.
 
-`S_BS` then calls `_bind_wide`, appended at the end of `HOOKS`. Do not
+The pointer slots cannot stay occupied through `S_CALL`. `S_CF_CLI`
+writes closure cells downward from slot 31, and a function can have
+more cells than the gap between slot 31 and slot 5. `hook()` then
+reuses the whole buffer. Before `S_CALL`:
+
+1. Copy slots 5..255, or the tuple already in slot 4, into one heap
+   tuple of block pointers. Hold that tuple and the callable in `t[]`.
+2. Store `VNULL` over every pointer slot that this call wrote, and
+   store `VNULL` in slot 1. The collector scans all of ARGBUF, not the
+   slots the mode word names (`mpy_core.sv` keeps ARGBUF in the root
+   window). A stale pointer in slot 5 keeps that block alive for as
+   long as later direct calls leave the slot untouched.
+3. Leave `ab_chunked`, `n_pos`, and the directory pointer in registers.
+
+`S_BS` calls `_bind_wide`, appended at the end of `HOOKS`. Do not
 renumber the existing hooks. The hook receives the callable, `n_pos`,
-and a tuple of the block pointers. Build that tuple from slots 5..255,
-or pass slot 4 when the directory has already spilled, before the hook.
-`hook()` reuses ARGBUF. The directory tuple and the callable sit in
-`t[]` across that call. `_bind_wide` is `_bind` with item `i` loaded
-from block `i >> 4`. Clear `ab_chunked` before the hook.
+and the directory tuple. `_bind_wide` is `_bind` with item `i` loaded
+from block `i >> 4`. Clear `ab_chunked` before the hook so the
+firmware's own calls are direct.
 
 `S_CALL_BS` still prepends a bound-method `self` at `ab_lo - 1` in
-direct mode, and the `ab_lo <= 2` raise stays there. In chunked mode,
-`self` is a new first item: allocate a one-value block, shift the
-directory up, and add 1 to `n_pos`.
+direct mode, and the `ab_lo <= 2` raise stays there. In chunked mode
+that prepend happens after the directory has left ARGBUF. `self` is a
+new first block of one value, the directory tuple gains that pointer at
+index 0, and `n_pos` increases by 1. Do not shift pointers that still
+sit in ARGBUF.
 
 A failure to allocate is `MemoryError`. Delete the
 `RuntimeError("too many arguments")` result on this path. The other
