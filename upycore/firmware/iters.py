@@ -47,6 +47,11 @@ def _getiter(x):
         sub = _subobj(x)
         if sub is not NULL:
             return _getiter(sub)
+        # After __iter__ and __next__ miss. Same load as __iter__:
+        # _tlookup, then _call_member when the iterator steps.
+        f = _tlookup(typ, '__getitem__')
+        if f is not NULL:
+            return _getitem_iter(x)
     _not_iterable(x)
 
 
@@ -108,7 +113,31 @@ def _str_iter(s):
     return o
 
 
+def _getitem_iter(obj):
+    # Word 4 is the mode: 0 UTF-8, 1 sentinel, 2 __getitem__.
+    o = _alloc(5, TAG_OBJECT, 0)
+    _st(o, 0, OB_ITEROBJ)
+    _st(o, 1, _ntype(T_ITERATOR))
+    _st(o, 2, obj)
+    _st(o, 3, 0)
+    _st(o, 4, 2)
+    return o
+
+
 def iterator____next__(self):
+    if _ld(self, 4) == 2:
+        obj = _ld(self, 2)
+        i = _ld(self, 3)
+        f = _tlookup(_ld(obj, 1), '__getitem__')
+        try:
+            v = _call_member(f, obj, (i,))
+        except Exception as e:
+            # py/objgetitemiter.c: exact IndexError or StopIteration ends it.
+            if _typeof(e) is IndexError or _typeof(e) is StopIteration:
+                raise StopIteration()
+            raise
+        _st(self, 3, i + 1)
+        return v
     if _ld(self, 4) == 1:
         v = _ld(self, 2)()
         if v == _ld(self, 3):
