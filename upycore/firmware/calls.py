@@ -234,45 +234,35 @@ def _mro_list(t):
 
 
 def _c3(cls, bases):
-    seqs = []
-    for b in bases:
-        seqs.append(_mro_list(b))
-    base_list = []
-    for b in bases:
-        base_list.append(b)
-    seqs.append(base_list)
+    # First visit, depth-first, left to right. A class already recorded is
+    # dropped, object stays last, and a repeated base is not an error.
     out = [cls]
-    guard = 0
-    while guard < 64:
-        guard += 1
-        nonempty = []
-        for s in seqs:
-            if s:
-                nonempty.append(s)
-        if not nonempty:
-            break
-        cand = NULL
-        for s in nonempty:
-            c = s[0]
-            bad = False
-            for t in nonempty:
-                j = 1
-                while j < len(t):
-                    if t[j] is c:
-                        bad = True
-                        break
-                    j += 1
-                if bad:
-                    break
-            if not bad:
-                cand = c
+    stack = []
+    i = len(bases)
+    while i > 0:
+        i -= 1
+        stack.append(bases[i])
+    while len(stack) > 0:
+        t = stack.pop()
+        if t is object:
+            continue
+        seen = False
+        j = 0
+        n = len(out)
+        while j < n:
+            if out[j] is t:
+                seen = True
                 break
-        if cand is NULL:
-            raise TypeError('Cannot create consistent method resolution order (MRO)')
-        out.append(cand)
-        for s in seqs:
-            if s and s[0] is cand:
-                s.pop(0)
+            j += 1
+        if seen:
+            continue
+        out.append(t)
+        bt = _ld(t, 3)
+        k = _ld(bt, 0)
+        while k > 0:
+            k -= 1
+            stack.append(_ld(bt, 1 + k))
+    out.append(object)
     return out
 
 
