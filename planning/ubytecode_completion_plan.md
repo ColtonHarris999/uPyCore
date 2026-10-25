@@ -24,7 +24,9 @@ These bounds are the point of the pass. A change that breaks one of
 them does not land, even if a proposal asked for it.
 
 - No new opcode, no new SRAM, no wider argument buffer, no second
-  power unit in the FPU, no filesystem walker in the FSM.
+  power unit in the FPU, no filesystem walker in the FSM. A star call
+  that does not fit ARGBUF allocates a heap tuple (W7). ARGBUF stays
+  256 words.
 - The integer and ASCII subscript fast path stays in `S_LSUB` /
   `S_LS_S`. The list, tuple, dict, set, range, bytes, and ASCII-str
   arms of `S_GI` stay in the hart. `S_JT` and `ABI_CONT_TRUTH` stay
@@ -66,14 +68,16 @@ was raised by two and is wrong for this pin.
 | `c == c` is true for a complex NaN | C | **Do.** One tag compare in `S_EQ`. `_equal` already has the right answer and is skipped by the identity shortcut. |
 | Replace `_flog` / `_fexp` / `_fatan2` / `_fsin` / `_fcos` with libm | A, C (C says measure first) | **Do not land.** B is right that this is the shared float formatter, not a missing opcode. The negative-base case already reaches `_cpow`. A libm import grows ROM and changes formatting. |
 | `RAISE_FROM` chains exceptions | none (all three say leave) | **Leave.** `py/vm.c` warns and drops the cause. The hart already warns. |
-| Widen `CALL_*_VAR_KW` past the argument buffer | none | **Leave.** `ABI_ERR_STAR_ARGS` is the ceiling. |
+| `CALL_*_VAR_KW` past the argument buffer | none of the three; added after review | **Do, as a heap tuple.** Do not widen ARGBUF. Calls that fit stay on the SRAM path. See W7. |
 | Host directory importer | none | **Leave.** `MICROPY_VFS_POSIX` is 0. `'.'` and `'.frozen'` are `_FROZEN`. |
 
 ## Work items
 
 Land W1, W2, and W5 in any order. They do not share files. W4 starts
-once `_module_attr` exists. W6 is the only RTL change and lands last,
-after its cycle baseline is recorded.
+once `_module_attr` exists. W6 and W7 both edit `mpy_core.sv`. W7
+touches only `S_CVK_*`. Land it after W6, or in the same RTL change
+with the W6 cycle numbers already recorded. Do not edit `S_CVK_*` and
+`S_LN_L` / `S_EQ` / `S_SW_*` in two branches at once.
 
 | Id | Files | RTL |
 | --- | --- | --- |
@@ -83,6 +87,7 @@ after its cycle baseline is recorded.
 | W4 | `upycore/firmware/modules.py` | no |
 | W5 | `upycore/firmware/calls.py` (`_c3` only) | no |
 | W6 | `upycore/rtl/mpy_core.sv`, `upycore/rtl/mpy_abi.svh` | yes |
+| W7 | `upycore/rtl/mpy_core.sv` (`S_CVK_*` only) | yes |
 
 ### W1 — slices
 
@@ -469,6 +474,90 @@ The existing fall-through to `S_BIN_FB` then calls `_binop`, which uses
 comparator. Float equality stays on the ALU. Integer equality stays on
 the identity arm.
 
+### W7 — star calls that do not fit in ARGBUF
+
+`CALL_FUNCTION_VAR_KW` (`0x35`) and `CALL_METHOD_VAR_KW` (`0x37`) expand
+`*` sequences into ARGBUF. Slot 0 is the callable. A method with a real
+`self` uses slot 31 and sets `ab_lo` to 31. Positionals are written at
+`ab_pe`, which starts at 32. `S_CVK_L` raises `ABI_ERR_STAR_ARGS` when
+`ab_pe >= 200`, so the positional span is slots 32..199. Keywords are
+then written at `ab_pe + gi` with no ceiling. The index is 8 bits, so a
+long keyword tail wraps into slot 0.
+
+That SRAM buffer stays 256 words (`ABI_ARGBUF_WORDS`,
+`ABI_ARGBUF_BASE`). Do not add slots. A wider ARGBUF is powered on
+every call, including a call of two arguments. The pin does not have
+this buffer. `mp_call_prepare_args_n_kw_var` in `py/runtime.c`
+allocates a heap array and passes the pointer to the code state. The
+heap tuple is that array.
+
+Calls that fit do not allocate. The compare in `S_CVK_L` is already
+there. When it is false, the next state is the one there today. Do not
+add a check on `S_CALL`, `S_BF`, or plain `CALL_FUNCTION` /
+`CALL_METHOD`. `call_wide.py` (70 explicit arguments, not a star call)
+copies through `S_CC_FUN` and must keep its cycle count.
+
+When the next positional would make `ab_pe >= 200`, or the last
+keyword word would be stored past slot 255
+(`ab_pe + 2 * cv_j > 256`), stop filling ARGBUF. Build two heap tuples
+and hand them to `_bind`, which already walks a tuple of whatever
+length the heap can hold (`calls.py` `_bind`: `n = len(args)`, then
+`args[i]`).
+
+1. Positional tuple. Include slot 31 when `ab_lo` is 31, then every
+   positional already stored, then the rest of this star and any later
+   positionals. By `S_CVK_L` a star is a tuple or a list: `S_CVK_P`
+   has already run `ABI_HOOK_TUPLE` for anything else, and `S_CVK_N`
+   has the length in `x4`. Allocate once (`alloc(1 + n)` and the same
+   header `S_TUP` writes). Do not grow a list one append at a time, and
+   do not call `S_TUP` for this tuple. `tb_n` is 8 bits, so `S_TUP`
+   cannot hold the overflow that this path exists for.
+2. Keyword tuple. The pairs `S_CVK_KW` would have copied, in the same
+   order, including a null key that `_flat_kw` treats as a dict. One
+   allocation, same header.
+3. Park the tuples in ARGBUF slots 32 and 33, leave the callable in
+   slot 0, and set a hart bit `ab_wide`. Then enter `S_CALL` as usual.
+   Do not hook `_bind` from `S_CVK_*`. That hook would run in the
+   caller's frame. `_bind` runs from `S_BS`, after `S_CF` has opened
+   the callee frame, and `ABI_CONT_BIND` writes the locals into that
+   frame. `ab_lo`, `ab_pe`, and `ab_nkw` are hart registers and already
+   survive `S_CF_SW`. `ab_wide` is the same kind of register. It is not
+   a bit in `fflags`.
+4. `S_CF_CHK` is `c_fast <= !ab_wide &&` the condition already there.
+   `ab_wide` is clear on every call that fits, so the fast binder does
+   not gain a state. When the bit is set, `S_BS` reads slots 32 and 33
+   and hooks `_bind` with those tuples, skipping `S_TUP`. Clear
+   `ab_wide` before that hook. The firmware `_bind` makes its own
+   calls, and those must see the bit clear.
+5. `S_CALL_BS` prepends a bound-method `self` by writing `ab_lo - 1`.
+   When `ab_wide` is set, that write is the wrong shape: `self` has to
+   be the first item of the positional tuple. Allocate one new tuple,
+   write `self` at index 0 and copy the old tuple after it, store it
+   back in slot 32, then continue to the underlying function. The
+   `ab_lo <= 2` raise on that arm stays for the non-wide path.
+
+`S_BF` does not learn a second representation. It stays an 8-bit walk
+of a contiguous ARGBUF span.
+
+A failure to allocate is `MemoryError`, from the existing allocator.
+Delete the `RuntimeError("too many arguments")` result on this path.
+The other `ABI_ERR_STAR_ARGS` sites stay: `ab_lo <= 2` while prepending
+`self`, a closure cell, or `__new__` on the non-wide path, and the
+`> 224` check on plain `CALL_FUNCTION` / `CALL_METHOD` in `S_EXEC`.
+Those are not this opcode.
+
+The tuple pointers are GC roots only while they sit in `t[]` or ARGBUF.
+Do not leave one only in a scratch register across `alloc`.
+
+Exit: a function `def f(*a): return len(a)` called with a star of 200
+ones returns `200`. A method `def m(self, *a)` called the same way
+returns `200` and sees the instance as `self`. `def f(**k): return len(k)`
+with 113 explicit keyword pairs returns `113` (no positionals: the last
+pair would be stored past slot 255). A bound method `obj.m(*star)` of
+that length still receives `obj` as `self`. `call_function_ex`,
+`call_function_ex_kw`, `varargs`, `print_star`, and `call_wide` keep
+their stdout and their `cycles=` numbers.
+
 ## Tests
 
 New programs live under `upycore/programs/hw/` and get a row in
@@ -556,6 +645,16 @@ bytecode.
 
 `with_stmt` stdout stays as quoted in W6.
 
+W7. `star_wide` is the 200-ones function, the method, the bound
+method, and the 113-keyword call, from the W7 exit. `oracle = true`.
+
+```text
+python3 upycore/tools/hw_tests.py star_wide call_function_ex call_function_ex_kw varargs print_star call_wide
+```
+
+The last five must print the same `cycles=` as they did before the
+`S_CVK_*` edit.
+
 ### Cycle gate
 
 Run this before editing `mpy_core.sv`, and again after W6. The
@@ -584,7 +683,7 @@ python3 upycore/tools/hw_tests.py --compiler mpyc --area alu --area strings --ar
 make test-hw
 ```
 
-`make test-hw` is required because W6 edits the core. The area runs
+`make test-hw` is required because W6 and W7 edit the core. The area runs
 are the ones that contain the new programs. A failure outside those
 areas, found by `make test-hw`, is a regression of a fast path and
 blocks the RTL change.
@@ -592,8 +691,8 @@ blocks the RTL change.
 ## Left alone
 
 - `RAISE_FROM`. The warning string is already `_warn` in `boot.py`.
-- `CALL_FUNCTION_VAR_KW` and `CALL_METHOD_VAR_KW` past the argument
-  buffer.
+- Plain `CALL_FUNCTION` and `CALL_METHOD` above 224 explicit words.
+  That raise is in `S_EXEC`, not in the star expander. W7 does not move it.
 - Positive and integral powers on the ALU, and `_cpow` for the
   negative-base fallback. Do not replace the five helpers in
   `floatfmt.py`. They are shared with formatting
@@ -620,3 +719,4 @@ numbers or bit masks out of them into a new table.
 | W4 | `py/builtinimport.c` `evaluate_relative_import`, `process_import_at_level`; `py/runtime.c` `mp_import_name`, `mp_import_from`, `mp_import_all`, `mp_load_global`; `py/objmodule.c` `mp_module_get_builtin` | `_import`, `_rel_name`, `_load_mod`, `_import_from`, `_import_star` |
 | W5 | `py/objtype.c` `mp_obj_class_lookup`, `super_attr` | `_c3`, `_super_attr`, `S_AT_MRO` |
 | W6 | `py/objcomplex.c` `MP_BINARY_OP_EQUAL`; `py/vm.c` `MP_BC_RAISE_FROM` is the leave-alone check | `S_EQ`, `S_SW_X`, `S_SW_E`, `S_WC_TR`, `S_CONT`, `S_LN_L` |
+| W7 | `py/runtime.c` `mp_call_prepare_args_n_kw_var` | `S_CVK_L`, `S_CVK_KW`, `_bind` |
