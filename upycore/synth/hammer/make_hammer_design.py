@@ -54,7 +54,7 @@ except ImportError:  # Hammer's own environment always has a YAML library.
 CONSTRAINTS = """\
 # Written by make_hammer_design.py for top {top}. The example's file is
 # constraints.tcl.orig: if it uses a different form for a line below (for
-# instance the driving cell), copy that form.
+# instance the I/O delays), copy that form.
 set core_clk_period {period}
 set io_frac {io_frac}
 
@@ -70,9 +70,6 @@ set_input_delay  -max [expr {{$io_frac * $core_clk_period}}] -clock core_clk $da
 set_input_delay  -min 0 -clock core_clk $data_in
 set_output_delay -max [expr {{$io_frac * $core_clk_period}}] -clock core_clk [all_outputs]
 set_output_delay -min 0 -clock core_clk [all_outputs]
-
-set_driving_cell -lib_cell sky130_fd_sc_hd__inv_2 [all_inputs]
-set_load [get_attribute [get_lib_pins */sky130_fd_sc_hd__inv_4/A] pin_capacitance] [all_outputs]
 
 # {reset} is an asynchronous reset: keep it out of the timing paths.
 set_false_path -from [get_ports {reset}]

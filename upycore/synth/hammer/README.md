@@ -50,13 +50,13 @@ Then the core, the same way, with `--top mpy_core`.
 | `Makefile`, `cfg/*.yml` names | example name replaced with the new folder name |
 | `v/` | replaced by one generated file, `v/<top>.sv` (all modules plus inlined headers, `SYNTHESIS` defined) |
 | `cfg/*cfg.yml` | `synthesis.inputs.top_module`; placement path renamed to the new top; `vlsi.inputs.clocks` updated only if the example already sets it |
-| `cfg/constraints.tcl` | rewritten: `create_clock` on `clk_i` at `--period` ns, I/O delays of `--io-frac` x period (class default 0.5), sky130 driving cell and load, false path from the async reset `rst_n_i`. The example's file is kept as `constraints.tcl.orig` |
+| `cfg/constraints.tcl` | rewritten: `create_clock` on `clk_i` at `--period` ns, I/O delays of `--io-frac` x period (class default 0.5), false path from the async reset `rst_n_i`. The example's file is kept as `constraints.tcl.orig` |
 | `cfg/*src.yml` | `synthesis.inputs.input_files` set to the generated file, in the example's path style |
 | `cfg/*tb.yml` | testbench and trace lists emptied (synthesis only) |
 
 The script prints a WARNING if the example didn't have a file or key it
 expected. Compare `constraints.tcl` with `constraints.tcl.orig` once: if
-the class writes a line differently (for instance the driving cell), use
+the class writes a line differently (for instance the I/O delays), use
 the class's form.
 
 ## Where the numbers are
