@@ -149,13 +149,18 @@ def bytearray__extend(self, it):
 
 
 def _barr_setslice(obj, sl, value):
-    if value is NULL:
-        value = b''
-    src = _as_bytes(value) if _tag(value) == TAG_BYTES or _isbarr(value) else _bytes_from_args((value,))
+    # Delete stays the old empty-assignment path, including its error.
+    # A store with any other step raises before the buffer is rebuilt.
+    deleting = value is NULL
     n = _ld(obj, 0)
     a, b, s = _slice_range(sl, n)
     if s != 1:
-        raise NotImplementedError('extended slice assignment')
+        if deleting:
+            raise NotImplementedError('extended slice assignment')
+        raise NotImplementedError('only slices with step=1 (aka None) are supported')
+    if deleting:
+        value = b''
+    src = _as_bytes(value) if _tag(value) == TAG_BYTES or _isbarr(value) else _bytes_from_args((value,))
     # rebuild
     left = _substr(_barr_bytes(obj), 0, a, TAG_BYTES)
     right = _substr(_barr_bytes(obj), b, n, TAG_BYTES)
