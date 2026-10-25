@@ -514,7 +514,7 @@ Prepends stop at slot 2 (`ab_lo <= 2` raises before the write), so
 slot 1 is never an argument today.
 
 - **Direct.** Slot 1 is `VNULL`. Slots 0 and 31..255 mean what they
-  mean now. `S_BF` does not read slot 1.
+  mean now. `S_BF` does not read slot 1. `ab_lo`, `ab_pe`, and `ab_nkw` stay 8-bit.
 - **Chunked.** Slot 1 is the small int `1`. Slot 0 is still the
   callable. Slot 2 is `n_pos` and slot 3 is the number of item words,
   both full integer payloads. Slot 4 is `VNULL` while the block
