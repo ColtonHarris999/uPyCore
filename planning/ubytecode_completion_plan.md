@@ -68,7 +68,7 @@ was raised by two and is wrong for this pin.
 | `c == c` is true for a complex NaN | C | **Do.** One tag compare in `S_EQ`. `_equal` already has the right answer and is skipped by the identity shortcut. |
 | Replace `_flog` / `_fexp` / `_fatan2` / `_fsin` / `_fcos` with libm | A, C (C says measure first) | **Do not land.** B is right that this is the shared float formatter, not a missing opcode. The negative-base case already reaches `_cpow`. A libm import grows ROM and changes formatting. |
 | `RAISE_FROM` chains exceptions | none (all three say leave) | **Leave.** `py/vm.c` warns and drops the cause. The hart already warns. |
-| `CALL_*_VAR_KW` past the argument buffer | none of the three; added after review | **Do, as a heap tuple.** Do not widen ARGBUF. Calls that fit stay on the SRAM path. See W7. |
+| `CALL_*_VAR_KW` past the argument buffer | none of the three; added after review | **Do, as one heap argument array with 32-bit counts.** Do not widen ARGBUF. Calls that fit stay on the SRAM path. See W7. |
 | Host directory importer | none | **Leave.** `MICROPY_VFS_POSIX` is 0. `'.'` and `'.frozen'` are `_FROZEN`. |
 
 ## Work items
@@ -87,7 +87,7 @@ with the W6 cycle numbers already recorded. Do not edit `S_CVK_*` and
 | W4 | `upycore/firmware/modules.py` | no |
 | W5 | `upycore/firmware/calls.py` (`_c3` only) | no |
 | W6 | `upycore/rtl/mpy_core.sv`, `upycore/rtl/mpy_abi.svh` | yes |
-| W7 | `upycore/rtl/mpy_core.sv` (`S_CVK_*` only) | yes |
+| W7 | `upycore/rtl/mpy_core.sv` (`S_CVK_*`, `S_CF_CHK`, `S_BS`, `S_CALL_BS`), one appended hook | yes |
 
 ### W1 — slices
 
@@ -497,64 +497,76 @@ add a check on `S_CALL`, `S_BF`, or plain `CALL_FUNCTION` /
 `CALL_METHOD`. `call_wide.py` (70 explicit arguments, not a star call)
 copies through `S_CC_FUN` and must keep its cycle count.
 
-When the next positional would make `ab_pe >= 200`, or the last
-keyword word would be stored past slot 255
-(`ab_pe + 2 * cv_j > 256`), stop filling ARGBUF. Build two heap tuples
-and hand them to `_bind`, which already walks a tuple of whatever
-length the heap can hold (`calls.py` `_bind`: `n = len(args)`, then
-`args[i]`).
+Rearranging ARGBUF does not reach the opcode's limit. `n_pos` and
+`n_kw` in the immediate are bytes, so a call may name 255 positional
+slots and 255 keyword pairs (510 words). `cv_bm` is 32 bits, and the
+pin's `star_args` is a small int shifted by the slot index, so only the
+first 32 positional slots can be stars. That bitmap is the opcode's
+limit. Do not widen it. Each star expands to the sequence's real
+length, and each `**` mapping expands to its real number of pairs.
+Those lengths are 32-bit. Slots 32..255 are 224 words, so 255 keyword
+pairs do not fit even if the reserved head is removed, and a star has
+no SRAM-sized bound. A wider ARGBUF would be powered on every call and
+would still not hold a long star.
 
-1. Positional tuple. Include slot 31 when `ab_lo` is 31, then every
-   positional already stored, then the rest of this star and any later
-   positionals. By `S_CVK_L` a star is a tuple or a list: `S_CVK_P`
-   has already run `ABI_HOOK_TUPLE` for anything else, and `S_CVK_N`
-   has the length in `x4`. Allocate once (`alloc(1 + n)` and the same
-   header `S_TUP` writes). Do not grow a list one append at a time, and
-   do not call `S_TUP` for this tuple. `tb_n` is 8 bits, so `S_TUP`
-   cannot hold the overflow that this path exists for.
-2. Keyword tuple. The pairs `S_CVK_KW` would have copied, in the same
-   order, including a null key that `_flat_kw` treats as a dict. One
-   allocation, same header.
-3. Park the tuples in ARGBUF slots 32 and 33, leave the callable in
-   slot 0, and set a hart bit `ab_wide`. Then enter `S_CALL` as usual.
-   Do not hook `_bind` from `S_CVK_*`. That hook would run in the
-   caller's frame. `_bind` runs from `S_BS`, after `S_CF` has opened
-   the callee frame, and `ABI_CONT_BIND` writes the locals into that
-   frame. `ab_lo`, `ab_pe`, and `ab_nkw` are hart registers and already
-   survive `S_CF_SW`. `ab_wide` is the same kind of register. It is not
-   a bit in `fflags`.
-4. `S_CF_CHK` is `c_fast <= !ab_wide &&` the condition already there.
-   `ab_wide` is clear on every call that fits, so the fast binder does
-   not gain a state. When the bit is set, `S_BS` reads slots 32 and 33
-   and hooks `_bind` with those tuples, skipping `S_TUP`. Clear
-   `ab_wide` before that hook. The firmware `_bind` makes its own
-   calls, and those must see the bit clear.
-5. `S_CALL_BS` prepends a bound-method `self` by writing `ab_lo - 1`.
-   When `ab_wide` is set, that write is the wrong shape: `self` has to
-   be the first item of the positional tuple. Allocate one new tuple,
-   write `self` at index 0 and copy the old tuple after it, store it
-   back in slot 32, then continue to the underlying function. The
-   `ab_lo <= 2` raise on that arm stays for the non-wide path.
+The wide representation is one items tuple, the pin's `args2` array in
+`mp_call_prepare_args_n_kw_var`, plus a 32-bit split point:
 
-`S_BF` does not learn a second representation. It stays an 8-bit walk
-of a contiguous ARGBUF span.
+- Word 0 of the tuple is the length, a full payload, not `tb_n`. The
+  GC traces a tuple from that length (`upycore/docs/mpy_gc.md`).
+- `items[0 .. n_pos)` are the positionals. `self` is item 0 when the
+  call has one.
+- `items[n_pos ..)` are the keyword pairs, in the order `S_CVK_KW`
+  walks them. A null key followed by a mapping stays a pair.
+  `_flat_kw` expands the mapping, so a `**` dict of any heap size does
+  not have to be unpacked in the hart.
+- `n_pos` lives in a new 32-bit hart register `ab_npos`. Do not widen
+  `ab_lo`, `ab_pe`, or `ab_nkw`. Those stay the 8-bit indexes `S_BF`
+  already uses.
 
-A failure to allocate is `MemoryError`, from the existing allocator.
-Delete the `RuntimeError("too many arguments")` result on this path.
-The other `ABI_ERR_STAR_ARGS` sites stay: `ab_lo <= 2` while prepending
-`self`, a closure cell, or `__new__` on the non-wide path, and the
-`> 224` check on plain `CALL_FUNCTION` / `CALL_METHOD` in `S_EXEC`.
-Those are not this opcode.
+Build it only when the next positional would make `ab_pe >= 200`, or
+the last keyword word would land past slot 255
+(`ab_pe + 2 * cv_j > 256`). Stars are tuples or lists by `S_CVK_L`
+(`S_CVK_P` has run `ABI_HOOK_TUPLE`), and `S_CVK_N` has the length in
+`x4`, so the items tuple is one exact `alloc`. Do not call `S_TUP`.
+Do not grow a list one append at a time.
 
-The tuple pointers are GC roots only while they sit in `t[]` or ARGBUF.
-Do not leave one only in a scratch register across `alloc`.
+1. Fill the items tuple from what ARGBUF already holds, then the rest
+   of this star, later positionals, and the keyword pairs.
+2. Park the tuple in ARGBUF slot 32, leave the callable in slot 0, set
+   `ab_npos`, and set a hart bit `ab_wide`. Enter `S_CALL`. Do not hook
+   the binder from `S_CVK_*`. That would run in the caller's frame.
+   `ab_wide` and `ab_npos` survive `S_CF_SW` the way `ab_lo` does.
+   Neither is a bit in `fflags`.
+3. `S_CF_CHK` is `c_fast <= !ab_wide &&` the condition already there.
+   The bit is clear on every call that fits, so `S_BF` does not gain a
+   state. When it is set, `S_BS` calls a new hook appended at the end
+   of `HOOKS`, `_bind_wide(fun, items, n_pos)`. Do not renumber the
+   existing hooks. `_bind_wide` is `_bind` reading positionals from
+   `items[0 .. n_pos)` and pairs from the tail, then `_flat_kw`. Clear
+   `ab_wide` before the hook so the firmware's own calls stay narrow.
+4. `S_CALL_BS` prepends a bound-method `self` at `ab_lo - 1` on the
+   narrow path, and that raise at `ab_lo <= 2` stays. On the wide path,
+   allocate a new items tuple one longer, write `self` at index 0, copy
+   the old items after it, add 1 to `ab_npos`, and store the tuple back
+   in slot 32.
 
-Exit: a function `def f(*a): return len(a)` called with a star of 200
-ones returns `200`. A method `def m(self, *a)` called the same way
-returns `200` and sees the instance as `self`. `def f(**k): return len(k)`
-with 113 explicit keyword pairs returns `113` (no positionals: the last
-pair would be stored past slot 255). A bound method `obj.m(*star)` of
-that length still receives `obj` as `self`. `call_function_ex`,
+`S_BF` stays an 8-bit walk of a contiguous ARGBUF span.
+
+A failure to allocate is `MemoryError`. Delete the
+`RuntimeError("too many arguments")` result on this path. The other
+`ABI_ERR_STAR_ARGS` sites stay: the non-wide prepends, and the `> 224`
+check on plain `CALL_FUNCTION` / `CALL_METHOD` in `S_EXEC`.
+
+The items pointer is a GC root only in `t[]` or ARGBUF. Do not leave it
+only in a scratch register across `alloc`.
+
+Exit: `def f(*a): return len(a)` starred with 300 ones returns `300`
+(past both ARGBUF and an 8-bit count). A method and a bound method of
+that star return `300` and see the instance as `self`.
+`def f(**k): return len(k)` with a dict of 200 keys returns `200`.
+`def f(**k)` with 113 explicit pairs returns `113`, which is the first
+explicit tail that would have wrapped slot 255. `call_function_ex`,
 `call_function_ex_kw`, `varargs`, `print_star`, and `call_wide` keep
 their stdout and their `cycles=` numbers.
 
@@ -645,8 +657,9 @@ bytecode.
 
 `with_stmt` stdout stays as quoted in W6.
 
-W7. `star_wide` is the 200-ones function, the method, the bound
-method, and the 113-keyword call, from the W7 exit. `oracle = true`.
+W7. `star_wide` is the 300-ones function, the method, the bound
+method, the 200-key `**` dict, and the 113-pair call, from the W7
+exit. `oracle = true`.
 
 ```text
 python3 upycore/tools/hw_tests.py star_wide call_function_ex call_function_ex_kw varargs print_star call_wide
@@ -719,4 +732,4 @@ numbers or bit masks out of them into a new table.
 | W4 | `py/builtinimport.c` `evaluate_relative_import`, `process_import_at_level`; `py/runtime.c` `mp_import_name`, `mp_import_from`, `mp_import_all`, `mp_load_global`; `py/objmodule.c` `mp_module_get_builtin` | `_import`, `_rel_name`, `_load_mod`, `_import_from`, `_import_star` |
 | W5 | `py/objtype.c` `mp_obj_class_lookup`, `super_attr` | `_c3`, `_super_attr`, `S_AT_MRO` |
 | W6 | `py/objcomplex.c` `MP_BINARY_OP_EQUAL`; `py/vm.c` `MP_BC_RAISE_FROM` is the leave-alone check | `S_EQ`, `S_SW_X`, `S_SW_E`, `S_WC_TR`, `S_CONT`, `S_LN_L` |
-| W7 | `py/runtime.c` `mp_call_prepare_args_n_kw_var` | `S_CVK_L`, `S_CVK_KW`, `_bind` |
+| W7 | `py/runtime.c` `mp_call_prepare_args_n_kw_var` (`args2`, `n_args`, `n_kw`) | `S_CVK_L`, `S_CVK_KW`, `_bind_wide` |
