@@ -218,6 +218,10 @@ Energy per cycle is total power divided by 100 MHz. Check
 whose names survive synthesis (flop outputs, ports) are annotated and
 Genus propagates the rest.
 
+Verilator also writes top-level `$unit` and package scopes into the SAIF;
+those were cut from `upycore_pystone.saif.gz` (keep only `tb_mpy_soc`),
+since nothing annotated with them in place.
+
 `activity/hazard3_pystone.saif.gz` is the same benchmark on the Hazard3
 baseline (same MicroPython script, 21,365,266 cycles in all at 10 ns; the
 benchmark's own timer reads 12,840,381 cycles, matching the cycle table).
