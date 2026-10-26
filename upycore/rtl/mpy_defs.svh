@@ -219,13 +219,13 @@ function automatic logic mpy_is_rf_link(
     input logic [MPY_ENTRY_WIDTH-1:0] entry
 );
     mpy_is_rf_link = (mpy_entry_tag(entry) == MPY_TAG_CONTROL) &&
-                     (mpy_entry_payload(entry)[3:0] == MPY_CTL_RF_LINK);
+                     (entry[3:0] == MPY_CTL_RF_LINK);
 endfunction
 
 function automatic logic [31:0] mpy_rf_link_addr(
     input logic [MPY_ENTRY_WIDTH-1:0] entry
 );
-    mpy_rf_link_addr = {mpy_entry_payload(entry)[31:4], 4'b0000};
+    mpy_rf_link_addr = {entry[31:4], 4'b0000};
 endfunction
 
 // Chunk word 0: tag holds count[5:4], payload[3:0] holds count[3:0],

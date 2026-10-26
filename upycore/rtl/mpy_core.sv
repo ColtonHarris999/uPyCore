@@ -133,6 +133,9 @@ module mpy_core
     function automatic logic [31:0] ival(input val_t v);
         ival = is_bool(v) ? {31'd0, v == VTRUE} : v[31:0];
     endfunction
+    function automatic logic [63:0] sx64(input logic [31:0] x);
+        sx64 = {{32{x[31]}}, x};
+    endfunction
     function automatic logic strlike(input val_t v);
         strlike = (tg(v) == ABI_TAG_QSTR) || (tg(v) == ABI_TAG_STR);
     endfunction
@@ -2932,14 +2935,14 @@ module mpy_core
             S_NUM: begin
                 na_f <= (tg(t[0]) == ABI_TAG_FLOAT);
                 if (tg(t[0]) == ABI_TAG_INT64) rd(adr(t[0]), S_NUM_AL);
-                else begin na <= {{32{ival(t[0])[31]}}, ival(t[0])}; st <= S_NUM_B; end
+                else begin na <= sx64(ival(t[0])); st <= S_NUM_B; end
             end
             S_NUM_AL: begin na[31:0] <= md; rd(adr(t[0]) + 4, S_NUM_AH); end
             S_NUM_AH: begin na[63:32] <= md; st <= S_NUM_B; end
             S_NUM_B: begin
                 nb_f <= (tg(t[1]) == ABI_TAG_FLOAT);
                 if (tg(t[1]) == ABI_TAG_INT64) rd(adr(t[1]), S_NUM_BL);
-                else begin nb <= {{32{ival(t[1])[31]}}, ival(t[1])}; st <= S_NUM_GO; end
+                else begin nb <= sx64(ival(t[1])); st <= S_NUM_GO; end
             end
             S_NUM_BL: begin nb[31:0] <= md; rd(adr(t[1]) + 4, S_NUM_BH); end
             S_NUM_BH: begin nb[63:32] <= md; st <= S_NUM_GO; end

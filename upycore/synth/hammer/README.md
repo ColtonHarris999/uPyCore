@@ -129,6 +129,20 @@ clock at the same period so its flops are timed.
 
 ## If the tool rejects the SystemVerilog
 
-The generated file elaborates cleanly in slang. If Genus rejects a
-construct, send the `genus.log` error; it can be fixed in the RTL or
-worked around by converting the file with sv2v.
+Genus reads `mpy_alu` as SystemVerilog, but its parser fails on
+`mpy_core` (VLOGPT-203 "Unresolved subprogram reference" inside the
+interpreter's state machine). Convert the core to Verilog-2005 with
+[sv2v](https://github.com/zachjs/sv2v) by passing `--sv2v`; `v/` then
+holds `<top>.v` instead of the `.sv`:
+
+```sh
+mkdir -p ~/bin && cd ~/bin
+curl -LO https://github.com/zachjs/sv2v/releases/download/v0.0.13/sv2v-Linux.zip
+unzip -o sv2v-Linux.zip && ln -sf ~/bin/sv2v-Linux/sv2v ~/bin/sv2v
+cd ~/upycore
+python3 upycore/synth/hammer/make_hammer_design.py \
+    ~/ee477/ee477-designs-module1/pow2 ~/ee477/ee477-designs-module1/upycore_core_p50 \
+    --top mpy_core --period 50 --sv2v ~/bin/sv2v --force
+```
+
+The converted file also reads cleanly in Yosys's own Verilog parser.

@@ -346,7 +346,7 @@ module mpy_gc #(
                     lnk_tw <= 3'd0;
                     if (mpy_rf_chunk_count(mem_rtag_i, mem_rdata_i) < 8'(MPY_RF_CHUNK_MIN) ||
                         mpy_rf_chunk_count(mem_rtag_i, mem_rdata_i) > 8'(MPY_RF_CHUNK_MAX) ||
-                        lnk_addr + mpy_rf_block_bytes(mpy_rf_chunk_count(mem_rtag_i, mem_rdata_i)[5:0]) >
+                        lnk_addr + mpy_rf_block_bytes(6'(mpy_rf_chunk_count(mem_rtag_i, mem_rdata_i))) >
                             (MPY_SRAM_BASE + MPY_FRAME_RESERVE_BYTES)) begin
                         st <= G_ROOT;
                     end else begin

@@ -39,6 +39,7 @@ import argparse
 import os
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -151,6 +152,9 @@ def main() -> int:
     ap.add_argument("--reset", default="rst_n_i", help="async reset port (default rst_n_i)")
     ap.add_argument("--also-clock", action="append", default=[],
                     help="another clock port at the same period (Hazard3: clk_always_on)")
+    ap.add_argument("--sv2v", type=Path, metavar="SV2V",
+                    help="convert the RTL to Verilog-2005 with this sv2v binary "
+                         "(for SystemVerilog the tool's parser rejects)")
     ap.add_argument("--force", action="store_true", help="replace dest if it exists")
     args = ap.parse_args()
 
@@ -203,6 +207,16 @@ def main() -> int:
         shutil.copy(args.rtl, unit)
     else:
         unit = write_unit(args.top, vdir)
+    if args.sv2v:
+        # Keep the .sv out of v/, so only the converted file is there.
+        sv = dest / unit.name
+        unit.rename(sv)
+        unit = unit.with_suffix(".v")
+        r = subprocess.run([str(args.sv2v), str(sv), "-w", str(unit)],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            sys.exit(f"sv2v failed:\n{r.stderr}")
+        sv.unlink()
 
     cfg_dir = dest / "cfg"
     cfg = _find_cfg(cfg_dir, "_cfg.yml") or _find_cfg(cfg_dir, "cfg.yml")
