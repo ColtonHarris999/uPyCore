@@ -188,3 +188,32 @@ After an RTL change, regenerate the files with `convert_rtl.sh` on a
 machine where sv2v runs, and commit them. Where sv2v runs on the lab
 machine itself, `--sv2v <binary>` converts while building the folder.
 The converted files also read cleanly in Yosys's own Verilog parser.
+
+## Power from simulated activity
+
+Vectorless power (Genus guessing how often each net toggles) does not
+compare two different cores fairly. `activity/upycore_pystone.saif.gz` is
+the switching activity of `mpy_core` running perf_bench `misc_pystone`
+(300 loops, MicroPython startup included: 15,235,606 cycles at the
+testbench's 10 ns clock). To regenerate it:
+
+```sh
+verilator --trace-saif -DMPY_SAIF ...   # the flags mpy_build.py uses, --Mdir build/mpy_soc_saif/obj
+MPY_SIM=build/mpy_soc_saif/obj/Vtb_mpy_soc MPY_SIM_ARGS=+SAIF=pystone.saif \
+    python3 upycore/tools/mpy_build.py run -v --max-cycles 4000000000 misc_pystone_timed.py
+```
+
+Read it into Genus on the mapped netlist, at the simulated 10 ns period:
+
+```sh
+gunzip -k ~/upycore/upycore/synth/hammer/activity/upycore_pystone.saif.gz
+printf 'set TOP mpy_core\nset PERIOD 10\nset SAIF %s\nset OUT build/extra-reports/saif_pystone\nsource %s\n' \
+    ~/upycore/upycore/synth/hammer/activity/upycore_pystone.saif \
+    ~/upycore/upycore/synth/hammer/genus_reports.tcl > ~/pw_saif.tcl
+genus -batch -no_gui -files ~/pw_saif.tcl
+```
+
+Energy per cycle is total power divided by 100 MHz. Check
+`saif_annotation.rpt`: the SAIF comes from RTL simulation, so only nets
+whose names survive synthesis (flop outputs, ports) are annotated and
+Genus propagates the rest.

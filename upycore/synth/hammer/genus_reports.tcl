@@ -9,7 +9,8 @@
 #         -execute "set TOP mpy_core; set PERIOD 25"
 #
 # Optional: set CORNER (default tt_025C_1v80), CLOCK (clk_i), RESET (rst_n_i),
-# ALSO_CLOCKS (list of other clock ports), LIB_DIR, NETLIST, OUT.
+# ALSO_CLOCKS (list of other clock ports), SAIF and SAIF_INSTANCE (activity
+# from simulation), LIB_DIR, NETLIST, OUT.
 # Reports go to build/extra-reports/<corner>/.
 
 if {![info exists TOP]}    { puts "set TOP first"; exit 1 }
@@ -38,6 +39,16 @@ set_false_path -from [get_ports $RESET]
 # Each report is wrapped so one unsupported option does not lose the rest.
 proc try_report {name cmd} {
     if {[catch {uplevel 1 $cmd} err]} { puts "WARNING: $name failed: $err" }
+}
+
+# Switching activity from simulation (SAIF): power from what a benchmark
+# really toggles instead of Genus's default guess. SAIF_INSTANCE is the
+# core's path in the testbench. Set PERIOD to the simulated clock period
+# (the uPyCore testbench runs at 10 ns), so the toggle rates match.
+if {[info exists SAIF]} {
+    if {![info exists SAIF_INSTANCE]} { set SAIF_INSTANCE tb_mpy_soc/u_soc/u_core }
+    try_report read_saif {read_saif -instance $SAIF_INSTANCE $SAIF}
+    try_report saif_annotation {report_sdb_annotation > $OUT/saif_annotation.rpt}
 }
 # Register-to-register timing only: this is the number Fmax comes from.
 try_report timing_reg2reg {report_timing -from [all_registers] -to [all_registers] -max_paths 5 > $OUT/timing_reg2reg.rpt}

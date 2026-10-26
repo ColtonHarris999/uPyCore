@@ -218,8 +218,11 @@ def run_image(image: Path, max_cycles: int = 50_000_000, trace: bool = False,
               timeout: float | None = None) -> SimResult:
     out = Path(f"{image}.stdout")
     err = Path(f"{image}.stderr")
-    cmd = [str(SIM), f"+IMAGE={image}.hex", f"+TAGS={image}.tags.hex",
+    # MPY_SIM picks another build of the testbench (for instance one made
+    # with --trace-saif); MPY_SIM_ARGS adds plusargs (+SAIF=<path>).
+    cmd = [os.environ.get("MPY_SIM", str(SIM)), f"+IMAGE={image}.hex", f"+TAGS={image}.tags.hex",
            f"+STDOUT={out}", f"+STDERR={err}", f"+MAX_CYCLES={max_cycles}"]
+    cmd += os.environ.get("MPY_SIM_ARGS", "").split()
     if trace:
         cmd.append("+TRACE=1")
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)

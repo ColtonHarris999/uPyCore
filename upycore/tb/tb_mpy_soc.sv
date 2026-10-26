@@ -44,6 +44,14 @@ module tb_mpy_soc;
         if ($value$plusargs("STDERR=%s", path)) fd_err = $fopen(path, "wb");
         if (!$value$plusargs("MAX_CYCLES=%d", max_cycles)) max_cycles = 50_000_000;
         do_trace = $value$plusargs("TRACE=%d", t) && t != 0;
+`ifdef MPY_SAIF
+        // Switching activity of the core for power analysis: +SAIF=<path>,
+        // in a build made with --trace-saif -DMPY_SAIF (see synth/hammer).
+        if ($value$plusargs("SAIF=%s", path)) begin
+            $dumpfile(path);
+            $dumpvars(0, u_soc.u_core);
+        end
+`endif
         repeat (3) @(posedge clk);
         rst_n = 1'b1;
     end
