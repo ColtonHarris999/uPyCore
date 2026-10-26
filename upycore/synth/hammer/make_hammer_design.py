@@ -157,7 +157,7 @@ def main() -> int:
                          "(for SystemVerilog the tool's parser rejects)")
     ap.add_argument("--tie-low", action="append", default=[], metavar="PORT",
                     help="input held at 0 in the benchmarked system, so its paths are not "
-                         "timed (Hazard3: dbg_sbus_vld, the unused debug bus)")
+                         "timed; may be a pattern (Hazard3: 'dbg_*', the unused debug ports)")
     ap.add_argument("--force", action="store_true", help="replace dest if it exists")
     args = ap.parse_args()
 
@@ -265,7 +265,7 @@ def main() -> int:
                                       also_ports="".join(f" {c}" for c in args.also_clock),
                                       tie_low="".join(
                                           f"\n# Held at 0 in the benchmarked system.\n"
-                                          f"set_case_analysis 0 [get_ports {p}]\n"
+                                          f"set_case_analysis 0 [remove_from_collection [get_ports {{{p}}}] [all_outputs]]\n"
                                           for p in args.tie_low)))
     if "constraints.tcl" not in cfg.read_text() and not any(
             "constraints.tcl" in f.read_text() for f in cfg_dir.glob("*.yml")):

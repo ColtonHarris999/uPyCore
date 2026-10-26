@@ -141,10 +141,10 @@ python3 upycore/synth/hammer/make_hammer_design.py \
     ~/ee477-designs-module1/pow2 ~/ee477-designs-module1/hazard3_ds \
     --rtl ~/hazard3_cpu_2port.sv --top hazard3_cpu_2port \
     --clock clk --reset rst_n --also-clock clk_always_on --period 25 \
-    --tie-low dbg_sbus_vld
+    --tie-low 'dbg_*'
 ```
 
-`--tie-low dbg_sbus_vld` stops timing the debug system-bus port, which
+`--tie-low 'dbg_*'` stops timing the debug system-bus port, which
 is unused with debug off: it is muxed straight onto the data bus, so with
 I/O delays of half the period each way those input-to-output paths fail
 at any clock. The logic is still synthesized; only its timing is ignored.
