@@ -5,6 +5,15 @@
 //   +STDOUT=<path> +STDERR=<path>           console streams (default: this log)
 //   +MAX_CYCLES=<n>                         give up after n cycles (default 50M)
 //   +TRACE=1                                one line per executed opcode
+//   +TIMER_STEP=<n>                         pulse timer_step every n cycles (0: never)
+//   +UART_RX=<hex>                          bytes for the UART, two hex digits each,
+//   +UART_RX_AT=<n> +UART_RX_GAP=<n>        strobed from cycle n, one every gap cycles
+//   +UART_BAUD=<n>                          send them as 8N1 frames at n clocks/bit instead
+//   +GPIO_IN=<hex>@<cycle>,...              drive gpio_in (gpio_in_en is high)
+//   +IO_TRACE=1                             one line per GPIO_OUT change and TX byte
+//
+// Before the halt line the bench prints
+// `MPY_IO gpio_out=<hex> gpio_oe=<hex> edges=<n> tx=<hex bytes>`.
 //
 // The last line is `MPY_HALT code=<n> value=<hex> cycles=<n> ops=<n> gc=<n>`
 // or `MPY_TIMEOUT cycles=<n> ...` (upycore/tools/mpy_build.py parses it).
@@ -23,13 +32,137 @@ module tb_mpy_soc;
     logic [7:0]  trace_op;
     logic [6:0]  trace_sp;
 
+    logic        timer_step = 1'b0;
+    logic        uart_rx_stb = 1'b0;
+    logic [7:0]  uart_rx_byte = 8'h0;
+    logic        uart_tx_stb;
+    logic [7:0]  uart_tx_byte;
+    logic        uart_rxd = 1'b1;
+    logic        uart_txd;
+    logic [31:0] gpio_out, gpio_oe, gpio_pu, gpio_pd;
+    logic [31:0] gpio_in = 32'h0;
+    logic        gpio_in_en = 1'b0;
+
     mpy_soc u_soc (
         .clk_i(clk), .rst_n_i(rst_n),
         .con_valid_o(con_valid), .con_err_o(con_err), .con_byte_o(con_byte),
         .halted_o(halted), .halt_code_o(halt_code), .halt_value_o(halt_value),
         .cycles_o(cycles), .ops_o(ops), .gc_collections_o(gc_coll), .gc_free_o(gc_free),
-        .trace_o(trace), .trace_pc_o(trace_pc), .trace_op_o(trace_op), .trace_sp_o(trace_sp)
+        .trace_o(trace), .trace_pc_o(trace_pc), .trace_op_o(trace_op), .trace_sp_o(trace_sp),
+        .timer_step_i(timer_step),
+        .uart_rx_stb_i(uart_rx_stb), .uart_rx_byte_i(uart_rx_byte),
+        .uart_tx_stb_o(uart_tx_stb), .uart_tx_byte_o(uart_tx_byte),
+        .uart_rxd_i(uart_rxd), .uart_txd_o(uart_txd),
+        .gpio_out_o(gpio_out), .gpio_oe_o(gpio_oe), .gpio_pu_o(gpio_pu), .gpio_pd_o(gpio_pd),
+        .gpio_in_i(gpio_in), .gpio_in_en_i(gpio_in_en),
+        .sim_irq_i(1'b0)
     );
+
+    // ---- peripheral stimulus and the IO summary ----
+    int          timer_period;
+    bit          io_trace;
+    logic [7:0]  rx_bytes [$];
+    int          rx_at, rx_gap, rx_baud;
+    logic [7:0]  tx_log [$];
+    int          gpio_edges;
+    logic [31:0] gpio_prev;
+    longint      cyc_n;
+
+    function automatic int hexval(input byte c);
+        if (c >= "0" && c <= "9") return c - "0";
+        if (c >= "a" && c <= "f") return c - "a" + 10;
+        if (c >= "A" && c <= "F") return c - "A" + 10;
+        return -1;
+    endfunction
+
+    initial begin
+        string text;
+        if (!$value$plusargs("TIMER_STEP=%d", timer_period)) timer_period = 0;
+        io_trace = $test$plusargs("IO_TRACE");
+        if (!$value$plusargs("UART_RX_AT=%d", rx_at)) rx_at = 1000;
+        if (!$value$plusargs("UART_RX_GAP=%d", rx_gap)) rx_gap = 1000;
+        if (!$value$plusargs("UART_BAUD=%d", rx_baud)) rx_baud = 0;
+        if ($value$plusargs("UART_RX=%s", text))
+            for (int i = 0; i + 1 < text.len(); i += 2)
+                rx_bytes.push_back(8'(hexval(text[i]) * 16 + hexval(text[i + 1])));
+        gpio_edges = 0;
+        gpio_prev = 32'h0;
+        cyc_n = 0;
+    end
+
+    always @(posedge clk) if (rst_n) cyc_n <= cyc_n + 1;
+
+    always @(negedge clk) begin
+        timer_step <= (timer_period > 0) && rst_n && (cyc_n % timer_period == timer_period - 1);
+    end
+
+    // UART RX stimulus: strobes in byte mode, or 8N1 frames on uart_rxd.
+    initial begin
+        @(posedge rst_n);
+        repeat (rx_at) @(posedge clk);
+        foreach (rx_bytes[k]) begin
+            if (rx_baud == 0) begin
+                @(negedge clk);
+                uart_rx_stb = 1'b1;
+                uart_rx_byte = rx_bytes[k];
+                @(negedge clk);
+                uart_rx_stb = 1'b0;
+                repeat (rx_gap - 1) @(posedge clk);
+            end else begin
+                logic [9:0] bits;
+                bits = {1'b1, rx_bytes[k], 1'b0};
+                for (int b = 0; b < 10; b++) begin
+                    uart_rxd = bits[b];
+                    repeat (rx_baud) @(posedge clk);
+                end
+                repeat (rx_gap) @(posedge clk);
+            end
+        end
+    end
+
+    // GPIO input schedule: +GPIO_IN=<hex>@<cycle>,<hex>@<cycle>,...
+    initial begin
+        string text;
+        int vals [$];
+        int ats [$];
+        if ($value$plusargs("GPIO_IN=%s", text)) begin
+            int v = 0, a = 0;
+            bit in_at = 0;
+            for (int i = 0; i <= text.len(); i++) begin
+                byte c = (i < text.len()) ? text[i] : ",";
+                if (c == "@") in_at = 1;
+                else if (c == ",") begin vals.push_back(v); ats.push_back(a); v = 0; a = 0; in_at = 0; end
+                else if (in_at) a = a * 10 + (c - "0");
+                else v = v * 16 + hexval(c);
+            end
+            gpio_in_en = 1'b1;
+            @(posedge rst_n);
+            foreach (vals[k]) begin
+                while (cyc_n < ats[k]) @(posedge clk);
+                gpio_in = 32'(vals[k]);
+            end
+        end
+    end
+
+    always @(posedge clk) begin
+        if (rst_n && uart_tx_stb) begin
+            tx_log.push_back(uart_tx_byte);
+            if (io_trace) $display("UART_TX cycle=%0d byte=%02x", cyc_n, uart_tx_byte);
+        end
+        if (rst_n && gpio_out != gpio_prev) begin
+            gpio_edges++;
+            if (io_trace) $display("GPIO cycle=%0d out=%08x", cyc_n, gpio_out);
+            gpio_prev <= gpio_out;
+        end
+    end
+
+    task automatic io_summary();
+        string txs;
+        txs = "";
+        foreach (tx_log[k]) txs = {txs, $sformatf("%02x", tx_log[k])};
+        $display("MPY_IO gpio_out=%08x gpio_oe=%08x edges=%0d tx=%s",
+                 gpio_out, gpio_oe, gpio_edges, txs);
+    endtask
 
     int    fd_out, fd_err;
     longint max_cycles;
@@ -73,6 +206,7 @@ module tb_mpy_soc;
         repeat (4) @(posedge clk);
         if (fd_out != 0) $fclose(fd_out);
         if (fd_err != 0) $fclose(fd_err);
+        io_summary();
         if (halted)
             $display("MPY_HALT code=%0d value=%08x cycles=%0d ops=%0d gc=%0d free=%0d",
                      halt_code, halt_value, cycles, ops, gc_coll, gc_free);

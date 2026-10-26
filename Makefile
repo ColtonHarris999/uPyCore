@@ -4,6 +4,7 @@
 #   make test-hw       the hardware suite on its own
 #   make test-hw-<area> one area, then the same area compiled with uPy2
 #   make test-host     host unit tests and the uPy2 byte compare
+#   make test-benches  verilate and run the peripheral unit benches
 #   make test-compiler compile the suite with the uPy2 compiler and run it
 #   make regen-goldens  rewrite suite goldens from the unix oracle
 #   make run RUN=path  run one MicroPython program
@@ -27,9 +28,9 @@ ORACLE := build/oracle/src/ports/unix/build-upycore/micropython
 # area calls compile/exec/eval on the hart. `test-compiler` is the host
 # uPy2 byte compare plus the whole suite compiled with uPy2.
 HW_AREAS := smoke alu control calls containers strings exceptions objects \
-	builtins modules integ variables memory gc generators compiler
+	builtins modules integ variables memory gc generators io compiler
 
-.PHONY: test sim fw run oracle oracle-header oracle-variant oracle-smoke mpy-cross \
+.PHONY: test test-benches sim fw run oracle oracle-header oracle-variant oracle-smoke mpy-cross \
 	docker-build docker-test test-hw test-host test-compiler regen-goldens check-goldens \
 	synth synth-gates clean
 
@@ -53,6 +54,7 @@ test: $(MPY_CROSS)
 	$(PYTHON) upycore/tests/test_numeric_const.py
 	$(PYTHON) upycore/tests/test_compiler_host.py
 	$(PYTHON) upycore/tools/compiler_suite.py
+	$(PYTHON) upycore/tools/run_benches.py
 	$(PYTHON) $(BUILD_PY) sim
 	$(PYTHON) upycore/tools/hw_tests.py
 	$(PYTHON) upycore/tools/hw_tests.py --compiler mpyc
@@ -75,6 +77,9 @@ test-host: $(MPY_CROSS)
 	$(PYTHON) upycore/tests/test_numeric_const.py
 	$(PYTHON) upycore/tests/test_compiler_host.py
 	$(PYTHON) upycore/tools/compiler_suite.py
+
+test-benches:
+	$(PYTHON) upycore/tools/run_benches.py
 
 test-compiler: $(MPY_CROSS)
 	$(PYTHON) upycore/tools/compiler_suite.py --nstate

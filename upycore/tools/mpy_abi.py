@@ -304,6 +304,8 @@ NATIVES = [
     "list.append", "object.__init__", "BaseException.__init__",
     # constructors
     "new.range", "new.object",
+    # Appended after the constructors so existing ids do not move.
+    "_poke32",   # _poke32(addr, word): raw word store, tag CONTROL (machine.mem32)
 ]
 NATIVE_ID = {name: i for i, name in enumerate(NATIVES)}
 
@@ -474,6 +476,8 @@ SR = {
     "FW0": 12, "FW1": 13, "FW2": 14, "FW3": 15,  # firmware state (_sysget/_sysset)
     "EMERG": 16,        # inline MemoryError object: words 16..20
     "FW4": 24, "FW5": 25, "FW6": 26, "FW7": 27,
+    "MACHINE": 28,      # machine module, built on first import
+    "TIME": 29,         # time module, built on first import
 }
 EMERG_WORDS = 5
 

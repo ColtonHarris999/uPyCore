@@ -25,7 +25,7 @@ import re
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -38,7 +38,8 @@ FW_SRC = ROOT / "upycore" / "firmware"
 ORACLE_SRC = ROOT / "build" / "oracle" / "src"
 MPY_CROSS = Path(os.environ.get("MPY_CROSS", ORACLE_SRC / "mpy-cross" / "build" / "mpy-cross"))
 ORACLE = Path(os.environ.get("MPY_ORACLE", ORACLE_SRC / "ports" / "unix" / "build-upycore" / "micropython"))
-SIM_DIR = ROOT / "build" / "mpy_soc"
+# MPY_SIM_DIR builds a second simulator next to the default one.
+SIM_DIR = Path(os.environ.get("MPY_SIM_DIR", ROOT / "build" / "mpy_soc"))
 SIM = SIM_DIR / "obj" / "Vtb_mpy_soc"
 MPY_CROSS_FLAGS = ["-msmall-int-bits=31", "-O0"]
 
@@ -47,7 +48,7 @@ MPY_CROSS_FLAGS = ["-msmall-int-bits=31", "-O0"]
 FW_ORDER = [
     "_abi.py", "base.py", "errors.py", "fmt.py", "floatfmt.py", "ops.py",
     "attrs.py", "calls.py", "iters.py", "strs.py", "seqs.py", "dicts.py",
-    "builtins.py", "modules.py", "boot.py", "load.py",
+    "builtins.py", "modules.py", "machine.py", "boot.py", "load.py",
 ]
 
 RTL = [
@@ -56,7 +57,8 @@ RTL = [
     "upycore/rtl/upycore_ipow.sv", "upycore/rtl/upycore_fp_add.sv", "upycore/rtl/upycore_fp_mul.sv",
     "upycore/rtl/upycore_fp_divrem.sv", "upycore/rtl/upycore_fp_pow.sv", "upycore/rtl/upycore_fpu.sv",
     "upycore/rtl/mpy_alu.sv", "upycore/rtl/mpy_decode.sv", "upycore/rtl/mpy_core.sv",
-    "upycore/rtl/mpy_gc.sv", "upycore/rtl/mpy_mem.sv", "upycore/rtl/mpy_soc.sv",
+    "upycore/rtl/mpy_gc.sv", "upycore/rtl/mpy_mem.sv", "upycore/rtl/mpy_mmio_pkg.sv",
+    "upycore/rtl/mpy_irq.sv", "upycore/rtl/mpy_periph.sv", "upycore/rtl/mpy_soc.sv",
     "upycore/tb/tb_mpy_soc.sv",
 ]
 RTL_INCLUDES = [
@@ -198,6 +200,8 @@ class SimResult:
     ops: int
     gc: int
     log: str
+    # MPY_IO fields from tb_mpy_soc: gpio_out, gpio_oe, edges, tx (hex text).
+    io: dict[str, str] = field(default_factory=dict)
 
     @property
     def exit_code(self) -> int | None:
@@ -212,29 +216,38 @@ class SimResult:
 
 _HALT_RE = re.compile(r"MPY_HALT code=(\d+) value=([0-9a-f]+) cycles=(\d+) ops=(\d+) gc=(\d+)")
 _TIMEOUT_RE = re.compile(r"MPY_TIMEOUT cycles=(\d+) ops=(\d+) gc=(\d+)")
+_IO_RE = re.compile(r"^MPY_IO (.*)$", re.M)
 
 
 def run_image(image: Path, max_cycles: int = 50_000_000, trace: bool = False,
-              timeout: float | None = None) -> SimResult:
+              timeout: float | None = None, plusargs: tuple[str, ...] = ()) -> SimResult:
     out = Path(f"{image}.stdout")
     err = Path(f"{image}.stderr")
     cmd = [str(SIM), f"+IMAGE={image}.hex", f"+TAGS={image}.tags.hex",
            f"+STDOUT={out}", f"+STDERR={err}", f"+MAX_CYCLES={max_cycles}"]
     if trace:
         cmd.append("+TRACE=1")
+    cmd.extend(plusargs)
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     log = r.stdout + r.stderr
+    io: dict[str, str] = {}
+    m = _IO_RE.search(log)
+    if m:
+        for part in m.group(1).split():
+            key, _, val = part.partition("=")
+            io[key] = val
     stdout = out.read_bytes() if out.exists() else b""
     stderr = err.read_bytes() if err.exists() else b""
     m = _HALT_RE.search(log)
     if m:
         code = int(m.group(1))
         return SimResult(stdout, stderr, HALT_NAMES.get(code, str(code)), int(m.group(2), 16),
-                         int(m.group(3)), int(m.group(4)), int(m.group(5)), log)
+                         int(m.group(3)), int(m.group(4)), int(m.group(5)), log, io)
     m = _TIMEOUT_RE.search(log)
     if m:
-        return SimResult(stdout, stderr, "TIMEOUT", 0, int(m.group(1)), int(m.group(2)), int(m.group(3)), log)
-    return SimResult(stdout, stderr, "NO_RESULT", 0, 0, 0, 0, log)
+        return SimResult(stdout, stderr, "TIMEOUT", 0, int(m.group(1)), int(m.group(2)), int(m.group(3)),
+                         log, io)
+    return SimResult(stdout, stderr, "NO_RESULT", 0, 0, 0, 0, log, io)
 
 
 def _cached_mpy(src: Path, source_name: str) -> Path:

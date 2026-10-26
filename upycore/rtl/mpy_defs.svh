@@ -122,17 +122,19 @@ localparam int MPY_SCHED_ENTRY_WORDS = 2;
 localparam logic [31:0] MPY_SCHED_BASE  = MPY_SRAM_BASE + MPY_FRAME_RESERVE_BYTES;
 localparam logic [31:0] MPY_SCHED_BYTES = 32'h0000_0040; // 64 B window, 64 B used
 
-localparam int MPY_IRQ_NSOURCES = 6;
+localparam int MPY_IRQ_NSOURCES = 8;
 localparam int MPY_IRQ_SRC_TIMER  = 0;
 localparam int MPY_IRQ_SRC_UART   = 1;
 localparam int MPY_IRQ_SRC_GPIO   = 2;
 localparam int MPY_IRQ_SRC_SOFT   = 3;
 localparam int MPY_IRQ_SRC_GC_REQ = 4;
 localparam int MPY_IRQ_SRC_SIM    = 5;
+localparam int MPY_IRQ_SRC_KBD    = 6;
+localparam int MPY_IRQ_SRC_MBOX   = 7;
 localparam int MPY_HANDLER_ENTRY_WORDS = 2;
-localparam int MPY_HANDLER_USED_BYTES  = MPY_IRQ_NSOURCES * MPY_HANDLER_ENTRY_WORDS * 4; // 48
+localparam int MPY_HANDLER_USED_BYTES  = MPY_IRQ_NSOURCES * MPY_HANDLER_ENTRY_WORDS * 4; // 64
 localparam logic [31:0] MPY_HANDLER_BASE  = MPY_SCHED_BASE + MPY_SCHED_BYTES;
-localparam logic [31:0] MPY_HANDLER_BYTES = 32'h0000_0040; // 64 B window, 48 B used
+localparam logic [31:0] MPY_HANDLER_BYTES = 32'h0000_0040; // 64 B window, all used
 
 // System roots (32 words) and the argument staging buffer (256 words)
 // follow the handler table; upycore/tools/mpy_abi.py is the source.

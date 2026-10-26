@@ -63,7 +63,9 @@ module tb_mpy_periph;
     int expect_sched_raise;
     logic [31:0] expect_edge_mask, expect_off_mask;
 
-    mpy_periph dut (
+    // Depth 1 is the v1 single-byte buffer, so these traces stay bit-identical.
+    // The serial pins, the pin sampler, and the KBD/MBOX sources are tied off.
+    mpy_periph #(.UART_FIFO_DEPTH(1)) dut (
         .clk_i(clk),
         .rst_n_i(rst_n),
         .req_i(req),
@@ -78,10 +80,19 @@ module tb_mpy_periph;
         .uart_rx_byte_i(uart_rx_byte),
         .uart_tx_stb_o(uart_tx_stb),
         .uart_tx_byte_o(uart_tx_byte),
+        .uart_rxd_i(1'b1),
+        .uart_txd_o(),
         .gpio_out_o(gpio_out),
+        .gpio_oe_o(),
+        .gpio_pu_o(),
+        .gpio_pd_o(),
+        .gpio_in_i(32'h0),
+        .gpio_in_en_i(1'b0),
         .soft_set_i(soft_set),
         .gc_req_i(gc_req),
         .sim_set_i(sim_set),
+        .kbd_set_i(1'b0),
+        .mbox_set_i(1'b0),
         .bc_boundary_i(bc_boundary),
         .jump_i(jump),
         .done_i(done),

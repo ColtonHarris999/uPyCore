@@ -1,7 +1,9 @@
 # MicroPython peripherals
 
-Status: the v1 register model. The RTL is `upycore/rtl/mpy_periph.sv` and
-`upycore/rtl/mpy_irq.sv`. The executable copy of the edge and UART rules is
+Status: the v1 register model, with the revision 1 additions of
+[`planning/interrupts_io_plan.md`](../../planning/interrupts_io_plan.md)
+§3. The RTL is `upycore/rtl/mpy_periph.sv` and `upycore/rtl/mpy_irq.sv`.
+The executable copy of the edge, UART, and tick rules is
 `upycore/tools/mpy_periph_model.py`.
 
 This file is the host register model. Blink and echo traces are checked
@@ -14,8 +16,9 @@ model and is not the oracle for edges. `print` and
 not frozen `.mpy` files. The hart's builtin table is what will call into
 this block. Nothing in this change freezes a `machine` image.
 
-This block does not implement the REPL, and it does not turn a UART byte
-into `KeyboardInterrupt`. Ctrl-C waits with the REPL.
+This block does not implement the REPL. It raises the `KBD` source for a
+UART byte that matches `UART_KBD`; the hart turns that source into
+`KeyboardInterrupt`.
 
 ## Window
 
@@ -37,8 +40,8 @@ The six draft offsets stay put. Added registers start at `0x18`.
 
 | Offset | Name | Rule |
 | --- | --- | --- |
-| `0x00` | `UART_TX` | A store of bits 7:0 emits that byte for one cycle on `uart_tx_stb`. There is no baud and no FIFO. A load returns the last byte stored |
-| `0x04` | `UART_RX` | One byte. A load returns the byte in bits 7:0 and pops it. Bit 31 is data-valid. Bit 30 is overrun. A second byte that arrives while bit 31 is set is dropped, and bit 30 sticks. Writing 1 to bit 30 clears overrun. The pop leaves bit 30 alone |
+| `0x00` | `UART_TX` | A store of bits 7:0 sends that byte. With `UART_BAUD` 0 the byte leaves on `uart_tx_stb` in the same cycle, as in v1. Otherwise it joins the TX FIFO; a store while the FIFO is full is dropped. A load returns the last byte stored |
+| `0x04` | `UART_RX` | The head of the RX FIFO. A load returns the byte in bits 7:0 and pops it. Bit 31 is data-valid. Bit 30 is overrun: a byte that arrives while the FIFO is full is dropped, and bit 30 sticks. Bit 29 is a framing error from the serial receiver; that byte is dropped and bit 29 sticks. Writing 1 to bit 30 or bit 29 clears it. The pop leaves both alone. With depth 1 this is the v1 single-byte buffer |
 | `0x08` | `GPIO_OUT` | Read/write. A blink toggles with a read-modify-write |
 | `0x0C` | `TIMER_COUNT` | A load returns the counter. A store sets the compare period and does not change the counter. Zero disables the timer. On match the counter returns to 0 and the timer IRQ bit sets |
 | `0x10` | `IRQ_STATUS` | Pending sources. Write 1 to clear. Accepting a callback for a source also clears that source. An edge during the callback sets the bit again |
@@ -51,6 +54,15 @@ The six draft offsets stay put. Added registers start at `0x18`.
 | `0x2C` | `SCHED_TAIL` | Free-running push index. Occupancy is `(tail - head) mod 256`, and it never exceeds 8. Equal head and tail means empty; a difference of 8 means full |
 | `0x30` | `GPIO_IN` | Input word. A store is how the testbench presents a pin level. Pin IRQ uses the change |
 | `0x34` | `GPIO_EDGE` | Two bits per pin, pin 0 in bits 1:0, for pins 0 through 15. `00` off, `01` rising, `10` falling, `11` both |
+| `0x38` | `TICKS` | Read-only. Free-running count of ticks (see Timer tick). Wraps at 2^32. `time.ticks_ms` reads it |
+| `0x3C` | `UART_BAUD` | System clocks per bit. 0 is byte mode: the testbench strobes whole bytes in, and TX bypasses the FIFO. N > 0 runs the 8N1 serializer on `uart_txd` and the receiver on `uart_rxd` at N clocks per bit. N below 4 is treated as 4 |
+| `0x40` | `UART_STATUS` | Read-only. Bits 7:0 RX level, bits 15:8 TX level, bit 16 TX busy (FIFO not empty or a frame on the wire), bit 17 RX full, bit 18 TX full |
+| `0x44` | `TIMER_PRESC` | System clocks per tick. 0 turns the prescaler off. The tick is the OR of `timer_step` and the prescaler's pulse |
+| `0x48` | `GPIO_OE` | Output enable per pin, to the pad wrapper. Reset 0, every pin an input |
+| `0x4C` | `GPIO_PULLUP` | Pull-up enable per pin, to the pad wrapper. Not modeled in RTL |
+| `0x50` | `GPIO_PULLDOWN` | Pull-down enable per pin, to the pad wrapper. Not modeled in RTL |
+| `0x54` | `GPIO_STATUS` | One bit per pin, set when that pin's `GPIO_EDGE` mode matches a change. Write 1 to clear. Independent of `IRQ_STATUS`: the `GPIO` source bit sets on the same edge |
+| `0x58` | `UART_KBD` | Bits 7:0 the interrupt character, bit 8 enable. A received byte that matches while enabled sets the `KBD` source and is not queued. Reset 0, disabled |
 
 Source bits in `IRQ_STATUS`, `IRQ_ENABLE`, and `IRQ_HARD`:
 
@@ -62,21 +74,34 @@ Source bits in `IRQ_STATUS`, `IRQ_ENABLE`, and `IRQ_HARD`:
 | 3 | `SOFT` |
 | 4 | `GC_REQ` |
 | 5 | `SIM` testbench stimulus |
+| 6 | `KBD` keyboard interrupt (UART character or coprocessor doorbell) |
+| 7 | `MBOX` coprocessor doorbell |
 
-`SOFT`, `GC_REQ`, and `SIM` set their status bit from a one-cycle pulse
-(`soft_set`, `gc_req`, `sim_set`). A dropped UART byte does not set the
-UART status bit again. The byte that is already valid is still the byte
-a load returns.
+`SOFT`, `GC_REQ`, `SIM`, `KBD`, and `MBOX` set their status bit from a
+one-cycle pulse (`soft_set`, `gc_req`, `sim_set`, `kbd_set`, `mbox_set`);
+`KBD` also sets from `UART_KBD`. A byte accepted into the RX FIFO sets
+the UART bit. A dropped UART byte does not set it again, and the bytes
+already queued are still the bytes a load returns.
+
+`KBD` is not a callback. The hart raises `KeyboardInterrupt` for it at
+a jump opcode; see Delivery.
 
 Reset: `IRQ_GIE` is 1. Enable, hard, and status are 0. Compare, counter,
-GPIO, UART, and the schedule indexes are 0. Handler slots are empty
-(function word 0). An empty function word is not a callback: the source
-stays pending until a handler is written.
+ticks, prescaler, baud, GPIO (including OE, pulls, and status), UART, the
+FIFOs, and the schedule indexes are 0. Handler slots are empty (function
+word 0). An empty function word is not a callback: the source stays
+pending until a handler is written.
+
+The block is parameterized by `UART_FIFO_DEPTH` (default 16). The unit
+bench instantiates depth 1, which is the v1 buffer.
 
 ## Timer tick
 
-The phase 5 timer advances when `timer_step` is high on a rising clock.
-That is one tick. A cycle-stepped mode is a later plusarg, so a blink
+The phase 5 timer advances on a tick: a rising clock with `timer_step`
+high, or with the prescaler's pulse. The prescaler counts system clocks
+and pulses once every `TIMER_PRESC` clocks; 0 turns it off. A store to
+`TIMER_PRESC` restarts its count. `TICKS` counts every tick, whatever
+the compare. A cycle-stepped mode is a later plusarg, so a blink
 trace does not move when an opcode takes more clocks. The testbench
 pulses `timer_step` once per tick and may insert idle clocks around it.
 
@@ -86,9 +111,37 @@ next count would be at least `N`. The counter becomes 0 and the timer
 status bit sets. After reset the counter is 0, so the first match is on
 tick `N`, then every `N` ticks.
 
+## UART
+
+The RX FIFO and the TX FIFO each hold `UART_FIFO_DEPTH` bytes. Bytes
+enter the RX FIFO from the `uart_rx_stb` byte strobe (both modes) or
+from the serial receiver (`UART_BAUD` > 0). The receiver synchronizes
+`uart_rxd`, finds the falling edge of the start bit, samples it again
+half a bit later, then samples eight data bits LSB first and the stop
+bit at one-bit intervals. A start bit that is high again is a glitch. A
+stop bit that is low is a framing error.
+
+The serializer takes the oldest TX FIFO byte when the line is idle,
+pulses `uart_tx_stb` with that byte, and drives the start bit, eight
+data bits LSB first, and one stop bit on `uart_txd`, which idles high.
+In byte mode `uart_txd` stays high.
+
+A pop and an arrival in the same cycle: the arrival is judged against
+the level before the pop, so a full FIFO drops it. That is the v1 rule
+for depth 1.
+
+## GPIO
+
+`gpio_in` is sampled through a two-flop synchronizer while `gpio_in_en`
+is high. A store to `GPIO_IN` and a sample in the same cycle: the store
+wins. Either writer runs the edge check against the previous `GPIO_IN`.
+`GPIO_OE`, `GPIO_PULLUP`, and `GPIO_PULLDOWN` are plain registers whose
+bits leave on `gpio_oe`, `gpio_pu`, and `gpio_pd`.
+
 ## Handler table
 
-`mpy_irq` holds the six slots. The native `machine` module writes a slot
+`mpy_irq` holds eight slots, one per source. The `KBD` slot is not
+read: that source raises instead of calling. The native `machine` module writes a slot
 when `Pin.irq`, `Timer`, or `UART.irq` runs. The port is `handler_we`
 with the source index, the function word, and the argument word. The
 hart, when it is wired, turns a store in the `IRQ_TABLE` range into that
@@ -122,6 +175,13 @@ On a clock where no callback is running:
 4. If this clock did not start a hard callback, and `jump` is set, and
    the ring is not empty, pop one entry and start it. A callback that
    was queued in step 2 on an empty ring runs on that same jump.
+
+`KBD` is checked on a jump when no hard callback is running and global
+enable is on, so a soft or `schedule` callback can be interrupted. If
+step 1 did not start a hard callback and `KBD` is armed, `kbd_raise`
+pulses for that clock, the `KBD` status bit clears, and steps 2 and 4
+do not run on that clock. The hart raises `KeyboardInterrupt` in the
+running frame. Queued callbacks stay queued for the next jump.
 
 `fire` stays high until `done`. A second callback does not start while
 it is high. `heap_locked` and `sched_locked` are high only for a hard
@@ -163,7 +223,11 @@ the same value `MICROPY_SCHEDULER_DEPTH` has on ESP32, RP2, and STM32.
 ## Exit trace
 
 `python3 upycore/tests/test_mpy_periph_model.py` runs the model.
-`upycore/tb/tb_mpy_periph.sv` is the RTL bench and is not part of `make test`.
+`make test-benches` (`upycore/tools/run_benches.py`) verilates and runs
+the RTL benches with the model's plusargs: `upycore/tb/tb_mpy_periph.sv`
+(the v1 traces, FIFO depth 1) and `upycore/tb/tb_mpy_periph_io.sv` (the
+revision 1 registers, depth 16). `make test` runs them too. The `io`
+area of `upycore/programs/hw_tests.toml` runs programs on the SoC.
 
 Blink: compare 4, soft timer IRQ, 20 ticks. The callback toggles
 `GPIO_OUT` bit 0 at the jump on ticks 4, 8, 12, 16, and 20 (five edges).

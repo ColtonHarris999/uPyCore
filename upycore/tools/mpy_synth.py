@@ -56,7 +56,8 @@ TOPS: dict[str, list[str]] = {
     "mpy_mem": ["mpy_mem.sv"],
     "mpy_core": ALU_FILES + ["mpy_decode.sv", "mpy_core.sv"],
     "mpy_soc": ALU_FILES
-    + ["mpy_decode.sv", "mpy_core.sv", "mpy_gc.sv", "mpy_mem.sv", "mpy_soc.sv"],
+    + ["mpy_decode.sv", "mpy_core.sv", "mpy_gc.sv", "mpy_mem.sv", "mpy_mmio_pkg.sv",
+       "mpy_irq.sv", "mpy_periph.sv", "mpy_soc.sv"],
 }
 
 # Gate mapping of full-size flash/SRAM/GC tables is a long memory job.

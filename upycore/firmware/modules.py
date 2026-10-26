@@ -215,6 +215,8 @@ def _nonext_builtin(name):
         return _sysget(SR_FW3)
     if _streq(name, 'builtins'):
         return _builtins_module()
+    if _streq(name, 'machine') or _streq(name, 'umachine'):
+        return _machine()
     # A leading u aliases an extensible native module. One character does not.
     # usys was handled above; it is not this prefix rule.
     if _slen(name) > 1 and _byte(name, 0) == 117:

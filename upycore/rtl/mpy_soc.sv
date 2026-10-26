@@ -1,14 +1,19 @@
 `include "mpy_defs.svh"
 `include "mpy_abi.svh"
 
-// uPyCore system: mpy_core, mpy_gc and mpy_mem on one memory port.
+// uPyCore system: mpy_core, mpy_gc and mpy_mem on one memory port, and
+// mpy_periph on the MMIO window.
 //
 // The collector owns the port while it is busy; the core only waits on an
 // allocation or a collection then, so the two never contend. Core accesses
 // to the simulator-control page (ABI_SIM_BASE) are answered here: a store to
 // SIM_STDOUT or SIM_STDERR emits the low byte on the console port, a store to
 // SIM_HALT stops the core's clock-enable view through halt_o, and a load of
-// SIM_CYCLES returns the cycle counter. Everything else goes to mpy_mem.
+// SIM_CYCLES returns the cycle counter. A core access in the MMIO window
+// (MPY_REGION_MMIO) goes to mpy_periph and never enters mpy_mem; the answer
+// is registered one cycle later, like the sim page. MMIO is word access only:
+// an unaligned address or a partial-word store faults as unaligned. Everything
+// else goes to mpy_mem.
 module mpy_soc #(
     parameter int SRAM_LATENCY = MPY_SRAM_LATENCY,
     parameter int FLASH_WAIT_STATES = MPY_FLASH_WAIT_STATES
@@ -31,7 +36,23 @@ module mpy_soc #(
     output logic        trace_o,
     output logic [31:0] trace_pc_o,
     output logic [7:0]  trace_op_o,
-    output logic [6:0]  trace_sp_o
+    output logic [6:0]  trace_sp_o,
+
+    // Peripheral pins (upycore/docs/mpy_peripherals.md)
+    input  logic        timer_step_i,
+    input  logic        uart_rx_stb_i,
+    input  logic [7:0]  uart_rx_byte_i,
+    output logic        uart_tx_stb_o,
+    output logic [7:0]  uart_tx_byte_o,
+    input  logic        uart_rxd_i,
+    output logic        uart_txd_o,
+    output logic [31:0] gpio_out_o,
+    output logic [31:0] gpio_oe_o,
+    output logic [31:0] gpio_pu_o,
+    output logic [31:0] gpio_pd_o,
+    input  logic [31:0] gpio_in_i,
+    input  logic        gpio_in_en_i,
+    input  logic        sim_irq_i
 );
     // core <-> port
     logic        c_req, c_we, c_tag_we;
@@ -108,9 +129,50 @@ module mpy_soc #(
         .fault_o(m_fault), .fault_reason_o(m_fault_reason)
     );
 
-    // Sim-page decode for core requests.
-    logic c_sim;
-    assign c_sim = (mpy_region_of(c_addr) == MPY_REGION_SIM);
+    // Sim-page and MMIO decode for core requests.
+    logic c_sim, c_mmio;
+    assign c_sim  = (mpy_region_of(c_addr) == MPY_REGION_SIM);
+    assign c_mmio = (mpy_region_of(c_addr) == MPY_REGION_MMIO);
+
+    logic        p_req, p_ack, p_fault;
+    logic [31:0] p_rdata;
+    logic        mmio_ack, mmio_fault;
+    logic [31:0] mmio_rdata;
+    logic        p_partial;
+
+    // The hart's delivery ports are tied off until the core drives them.
+    mpy_periph u_periph (
+        .clk_i, .rst_n_i,
+        .req_i(p_req), .we_i(c_we), .addr_i(c_addr), .wdata_i(c_wdata),
+        .rdata_o(p_rdata), .ack_o(p_ack), .fault_o(p_fault),
+        .timer_step_i, .uart_rx_stb_i, .uart_rx_byte_i,
+        .uart_tx_stb_o, .uart_tx_byte_o, .uart_rxd_i, .uart_txd_o,
+        .gpio_out_o, .gpio_oe_o, .gpio_pu_o, .gpio_pd_o, .gpio_in_i, .gpio_in_en_i,
+        .soft_set_i(1'b0), .gc_req_i(1'b0), .sim_set_i(sim_irq_i),
+        .kbd_set_i(1'b0), .mbox_set_i(1'b0),
+        .bc_boundary_i(1'b0), .jump_i(1'b0), .done_i(1'b0),
+        .fire_o(), .fire_hard_o(), .fire_sched_o(), .fire_src_o(), .fire_fn_o(), .fire_arg_o(),
+        .heap_locked_o(), .sched_locked_o(), .irq_active_o(),
+        .handler_we_i(1'b0), .handler_idx_i(3'd0), .handler_fn_i(32'd0), .handler_arg_i(32'd0),
+        .sched_push_i(1'b0), .sched_fn_i(32'd0), .sched_arg_i(32'd0),
+        .sched_ok_o(), .sched_full_o(),
+        .pc_i(32'd0), .fp_i(32'd0), .sp_i(32'd0), .exc_sp_i(32'd0),
+        .saved_pc_o(), .saved_fp_o(), .saved_sp_o(), .saved_exc_sp_o()
+    );
+
+    // A partial-word store would write a replicated byte; it faults instead.
+    assign p_partial = c_we && (c_be != 4'hF);
+    assign p_req = c_req && c_mmio && !p_partial && !g_busy;
+
+    always_ff @(posedge clk_i or negedge rst_n_i) begin
+        if (!rst_n_i) begin
+            mmio_ack <= 1'b0; mmio_fault <= 1'b0; mmio_rdata <= 32'd0;
+        end else begin
+            mmio_ack <= c_req && c_mmio && !g_busy;
+            mmio_fault <= c_req && c_mmio && !g_busy && (p_partial || p_fault);
+            mmio_rdata <= p_rdata;
+        end
+    end
 
     logic        sim_ack;
     logic [31:0] sim_rdata;
@@ -148,18 +210,18 @@ module mpy_soc #(
             m_req = gm_req; m_we = gm_we; m_tag_we = gm_tag_we; m_be = 4'hF;
             m_addr = gm_addr; m_wdata = gm_wdata; m_wtag = gm_wtag;
         end else begin
-            m_req = c_req && !c_sim; m_we = c_we; m_tag_we = c_tag_we; m_be = c_be;
+            m_req = c_req && !c_sim && !c_mmio; m_we = c_we; m_tag_we = c_tag_we; m_be = c_be;
             m_addr = c_addr; m_wdata = c_wdata; m_wtag = c_wtag;
         end
     end
     assign gm_ack = g_busy && m_ack;
     assign gm_rdata = m_rdata;
     assign gm_rtag = m_rtag;
-    assign c_ack = (!g_busy && m_ack) || sim_ack;
-    assign c_rdata = sim_ack ? sim_rdata : m_rdata;
-    assign c_rtag = sim_ack ? 4'd0 : m_rtag;
-    assign c_fault = !sim_ack && m_fault;
-    assign c_fault_reason = m_fault_reason;
+    assign c_ack = (!g_busy && m_ack) || sim_ack || mmio_ack;
+    assign c_rdata = sim_ack ? sim_rdata : mmio_ack ? mmio_rdata : m_rdata;
+    assign c_rtag = (sim_ack || mmio_ack) ? 4'd0 : m_rtag;
+    assign c_fault = mmio_ack ? mmio_fault : (!sim_ack && m_fault);
+    assign c_fault_reason = mmio_ack ? MPY_FAULT_UNALIGNED : m_fault_reason;
 
     assign halted_o = core_halted || sim_halt;
     assign halt_code_o = core_halted ? core_hcode : ABI_HALT_SYSEXIT;

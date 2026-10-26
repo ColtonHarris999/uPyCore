@@ -829,7 +829,8 @@ module mpy_core
         S_N_BCMP_W,
         S_N_BCMP_W2,
         S_N_BCI,
-        S_N_BCF
+        S_N_BCF,
+        S_NAT_P32
     } state_e;
 
     state_e st, wret;
@@ -3439,6 +3440,7 @@ module mpy_core
                     ABI_N_PEEK8: rd(ab_ptr(ab_lo + 8'd1), S_NAT_PEEK);
                     ABI_N_POKE8: rd(ab_ptr(ab_lo + 8'd1), S_NAT_POKE1);
                     ABI_N_PEEK32: rd(v1, S_N_RINT);
+                    ABI_N_POKE32: rd(ab_ptr(ab_lo + 8'd1), S_NAT_P32);
                     ABI_N_ALLOC: alloc(v1, S_N_ALLOC);
                     ABI_N_TYPEOF: begin ty_v <= mv; gosub(S_TYPEOF, S_N_TYPEOF); end
                     ABI_N_CALLNS: if (tg(mv) == ABI_TAG_INT) rd(ab_ptr(ab_lo + 8'd1), S_NAT_CNS);
@@ -3503,6 +3505,9 @@ module mpy_core
             end
             S_NAT_POKE1: begin x0 <= mv[31:0]; rd(ab_ptr(ab_lo + 8'd2), S_NAT_POKE2); end
             S_NAT_POKE2: wrb(padr(ab_q) + x0, mv[7:0], S_N_NONE);
+            // _poke32(addr, word): the raw payload with tag CONTROL, so a
+            // word stored this way is never a GC root.
+            S_NAT_P32: wr(ab_q[31:0], {ABI_TAG_CONTROL, mv[31:0]}, S_N_NONE);
             S_NAT_CNS: begin
                 c_ismod <= 1'b1; c_md <= ab_q[31:0]; cl_loc <= mv;
                 ab_lo <= 8'd32; ab_pe <= 8'd32;

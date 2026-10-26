@@ -535,3 +535,10 @@ gen_yield_from_send = { file = "hw/generators/gen_yield_from_send.py" }
 gen_yield_from_range = { file = "hw/generators/gen_yield_from_range.py" }
 gen_genexp_collect = { file = "hw/generators/gen_genexp_collect.py" }
 gen_user_next = { file = "hw/generators/gen_user_next.py" }
+
+# The peripheral window on the SoC (planning/interrupts_io_plan.md). The unix
+# port's machine module is not this map, so these goldens are written by hand
+# and the IO summary is checked against mpy_periph_model.py.
+[io]
+mmio_bus = { file = "hw/io/mmio_bus.py", oracle = false, plusargs = ["+UART_RX=4142", "+UART_RX_AT=10", "+UART_RX_GAP=10"], io = { gpio_out = "ffffffff", edges = "2" } }
+mmio_fault = { file = "hw/io/mmio_fault.py", oracle = false, halt = "BUS" }

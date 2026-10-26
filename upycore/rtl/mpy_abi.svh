@@ -221,6 +221,7 @@ localparam logic [7:0] ABI_N_OBJECT_INIT = 8'd36;
 localparam logic [7:0] ABI_N_BASEEXCEPTION_INIT = 8'd37;
 localparam logic [7:0] ABI_N_NEW_RANGE = 8'd38;
 localparam logic [7:0] ABI_N_NEW_OBJECT = 8'd39;
+localparam logic [7:0] ABI_N_POKE32 = 8'd40;
 
 localparam logic [7:0] ABI_HOOK_BOOT = 8'd0;
 localparam logic [7:0] ABI_HOOK_RAISE = 8'd1;
@@ -348,6 +349,8 @@ localparam logic [7:0] ABI_SR_FW4 = 8'd24;
 localparam logic [7:0] ABI_SR_FW5 = 8'd25;
 localparam logic [7:0] ABI_SR_FW6 = 8'd26;
 localparam logic [7:0] ABI_SR_FW7 = 8'd27;
+localparam logic [7:0] ABI_SR_MACHINE = 8'd28;
+localparam logic [7:0] ABI_SR_TIME = 8'd29;
 
 localparam logic [7:0] ABI_FR_PREV = 8'd0;
 localparam logic [7:0] ABI_FR_RC = 8'd1;
@@ -483,7 +486,7 @@ localparam int ABI_DICT_WORDS = 4;
 localparam int ABI_STR_HDR_WORDS = 3;
 localparam int ABI_ITER_WORDS = 4;
 localparam int ABI_N_TYPES = 64;
-localparam int ABI_N_NATIVES = 40;
+localparam int ABI_N_NATIVES = 41;
 localparam logic [31:0] ABI_SYSROOT_BASE = 32'h20008080;
 localparam logic [31:0] ABI_ARGBUF_BASE = 32'h20008100;
 localparam logic [31:0] ABI_GC_POOL_BASE = 32'h20008500;

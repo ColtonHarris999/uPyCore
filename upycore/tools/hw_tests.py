@@ -31,6 +31,15 @@ much larger cycle budget than the rest of the suite.
 A test with ``mpyc = false`` is still booted from ``mpy-cross``.
 ``--compiler mpyc`` prints ``SKIP`` and does not build the image.
 ``compiler_suite.py`` leaves the file out of its compare.
+
+The ``io`` area drives the SoC's peripheral pins. ``plusargs`` are passed
+to ``tb_mpy_soc`` (``+TIMER_STEP=``, ``+UART_RX=``, ...). ``io`` names the
+``MPY_IO`` fields the bench must report (``gpio_out``, ``gpio_oe``,
+``edges``, ``tx``), and ``model`` names a function in
+``mpy_periph_model.py`` that returns those fields, which is how a trace is
+checked against the host register model. ``halt`` is the halt the run must
+end with when it is not an exit (for example ``BUS``); the ``.exit`` golden
+is then not compared.
 """
 
 from __future__ import annotations
@@ -117,6 +126,11 @@ class Test:
     disabled: str | None = None
     # False: mpy-cross still boots it. ``--compiler mpyc`` skips it.
     mpyc: bool = True
+    # Peripheral stimulus and the expected IO summary (the io area).
+    plusargs: tuple[str, ...] = ()
+    io: dict | None = None
+    model: str | None = None
+    halt: str | None = None
 
     @property
     def source(self) -> Path:
@@ -158,6 +172,8 @@ def load_manifest(path: Path = MANIFEST) -> list[Test]:
             fields = dict(fields or {})
             if "modules" in fields:
                 fields["modules"] = tuple(fields["modules"])
+            if "plusargs" in fields:
+                fields["plusargs"] = tuple(fields["plusargs"])
             rel = fields.pop("file", f"hw/{area}/{name}.py")
             if area == "compiler":
                 # A small expression is already past 50e6 cycles. The large
@@ -293,13 +309,30 @@ def compare_streams(
     return "".join(parts)
 
 
+def expected_io(t: Test) -> dict[str, str]:
+    """The MPY_IO fields a test names, from the manifest or the host model."""
+
+    want = {k: str(v) for k, v in (t.io or {}).items()}
+    if t.model:
+        import mpy_periph_model as model
+
+        want.update({k: str(v) for k, v in model.soc_expect(t.model).items()})
+    return want
+
+
+def compare_io(got: dict[str, str], want: dict[str, str]) -> str:
+    bad = [f"{k}: device {got.get(k, '<missing>')}, expected {v}" for k, v in want.items()
+           if got.get(k, "").lower() != v.lower()]
+    return ("io mismatch\n" + "\n".join(bad) + "\n") if bad else ""
+
+
 def run_device(t: Test, compiler: str = "mpy-cross") -> Outcome:
     if not t.source.is_file():
         return Outcome(t, False, f"missing {t.source}")
     work = (ROOT / "build" / ("hw-mpyc" if compiler == "mpyc" else "hw")) / t.name
     try:
         image = build.build_program(t.source, work, t.source.name, _modules(t), compiler)
-        res = build.run_image(image, max_cycles=t.cycles, timeout=t.timeout)
+        res = build.run_image(image, max_cycles=t.cycles, timeout=t.timeout, plusargs=t.plusargs)
     except build.BuildError as exc:
         text = str(exc).strip().splitlines()
         return Outcome(t, False, text[-1] if text else "build failed")
@@ -309,9 +342,15 @@ def run_device(t: Test, compiler: str = "mpy-cross") -> Outcome:
         want_out, want_err, want_code = _read_golden(t)
     except FileNotFoundError as exc:
         return Outcome(t, False, str(exc), cycles=res.cycles, halt=res.halt)
-    detail = compare_streams(res.stdout, res.stderr, res.exit_code, want_out, want_err, want_code)
+    if t.halt:
+        # The run must stop with this halt; there is no exit status to compare.
+        detail = "" if res.halt == t.halt else f"halt {res.halt}, expected {t.halt}\n"
+        detail += compare_streams(res.stdout, res.stderr, 0, want_out, want_err, 0)
+    else:
+        detail = compare_streams(res.stdout, res.stderr, res.exit_code, want_out, want_err, want_code)
+    detail += compare_io(res.io, expected_io(t))
     if detail:
-        if res.exit_code is None:
+        if res.exit_code is None and not t.halt:
             detail = f"{res.halt} value={res.value:#x} cycles={res.cycles}\n" + detail
         return Outcome(t, False, detail.strip(), cycles=res.cycles, halt=res.halt)
     return Outcome(t, True, cycles=res.cycles, halt=res.halt)
