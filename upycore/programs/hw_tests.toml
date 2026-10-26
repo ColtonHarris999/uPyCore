@@ -52,6 +52,7 @@ branchy = { file = "hw/control/branchy.py" }
 pop_jump_if_none = { file = "hw/control/pop_jump_if_none.py" }
 for_iter_type_trap = { file = "hw/control/for_iter_type_trap.py" }
 for_iter_nested = { file = "hw/control/for_iter_nested.py" }
+getitem_iter = { file = "hw/control/getitem_iter.py" }
 for_iter_edges = { file = "hw/control/for_iter_edges.py" }
 for_iter_branch = { file = "hw/control/for_iter_branch.py" }
 for_iter_mutate = { file = "hw/control/for_iter_mutate.py" }
@@ -259,6 +260,9 @@ raise_after_call_loop = { file = "hw/exceptions/raise_after_call_loop.py" }
 [objects]
 classes = { file = "hw/objects/classes.py" }
 inherit = { file = "hw/objects/inherit.py" }
+mro_diamond = { file = "hw/objects/mro_diamond.py", oracle = true }
+mro_repeat = { file = "hw/objects/mro_repeat.py", oracle = true }
+mro_native = { file = "hw/objects/mro_native.py", oracle = true }
 props = { file = "hw/objects/props.py" }
 
 attr_basic = { file = "hw/objects/attr_basic.py" }
