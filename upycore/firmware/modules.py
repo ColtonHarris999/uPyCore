@@ -214,6 +214,20 @@ def _builtins_store(name, value):
     return None
 
 
+def _errno():
+    m = _sysget(SR_ERRNO)
+    if m is NULL:
+        codes = {}
+        g = {'errorcode': codes}
+        for pair in _ERRNO_NAMES:
+            g[pair[1]] = pair[0]
+            codes[pair[0]] = pair[1]
+        _st(codes, 3, _ld(codes, 3) | DICT_FLAG_ROM)
+        m = _mk_builtin_module('errno', g)
+        _sysset(SR_ERRNO, m)
+    return m
+
+
 def _nonext_builtin(name):
     if _streq(name, 'sys') or _streq(name, 'usys'):
         return _sysget(SR_FW1)
@@ -227,6 +241,8 @@ def _nonext_builtin(name):
         return _machine()
     if _streq(name, 'time') or _streq(name, 'utime'):
         return _time()
+    if _streq(name, 'errno') or _streq(name, 'uerrno'):
+        return _errno()
     # A leading u aliases an extensible native module. One character does not.
     # usys was handled above; it is not this prefix rule.
     if _slen(name) > 1 and _byte(name, 0) == 117:

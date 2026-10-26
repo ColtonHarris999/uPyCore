@@ -15,6 +15,8 @@ from mpy_periph_model import (  # noqa: E402
     blink_edge_mask,
     debounce_count,
     echo_fifo_result,
+    i2c_byte_clocks,
+    i2c_config,
     echo_result,
     io_plusargs,
     plusargs,
@@ -55,6 +57,13 @@ class MpyPeriphModelTest(unittest.TestCase):
         self.assertEqual(uart_burst_overruns(64, 80, 1240, 16), (64, -1))
         self.assertEqual(uart_burst_overruns(64, 80, 1640, 16), (60, 16))
         self.assertIn("+FIFO_DEPTH=16", io_plusargs())
+
+    def test_i2c_config(self) -> None:
+        self.assertEqual(i2c_config(48_000_000, 400_000, 50_000), (29, 400_000, 2_400_000))
+        self.assertEqual(i2c_config(48_000_000, 100_000, 10), (119, 100_000, 480))
+        self.assertEqual(i2c_config(48_000_000, 10, 100_000_000)[0::2], (0xFFFF, 0xFFFF_FFFF))
+        self.assertEqual(i2c_config(48_000_000, 48_000_000, 1)[:2], (0, 12_000_000))
+        self.assertEqual(i2c_byte_clocks(29), 1080)
 
     def test_soc_expectations(self) -> None:
         self.assertEqual(soc_expect("blink", ("+MAX_TICKS=20",))["gmask"], "00088888")

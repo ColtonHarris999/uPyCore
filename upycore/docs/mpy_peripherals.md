@@ -358,6 +358,9 @@ The module is native. The operations this block backs:
 | `mem32` | Word load/store in this window |
 | `disable_irq` / `enable_irq` | Read and write `IRQ_GIE` |
 | `idle` | The hart waits. A timer that is already armed keeps its compare |
+| `PWM(pin, freq, duty_u16)` | Pin mux code 1–4 (channel `pin % 4`); `PWM_PRESC`/`PWM_TOP` from `mpy_periph_model.pwm_config`, shared by all channels |
+| `SPI(0, baudrate, polarity, phase)` | Pads 10–12 by default; `SPI_CTRL`; bytes through the FIFOs, eight at a time. Chip select is a `Pin` |
+| `I2C(0, freq, timeout)` | Pads 14 (SCL) and 15 (SDA) by default; `I2C_DIV`/`I2C_TIMEOUT` from `mpy_periph_model.i2c_config` (timeout in µs). One command per byte. A NACKed address raises `OSError(ENODEV)`, a timeout `OSError(ETIMEDOUT)`; both end with STOP or the released bus. `scan` tries 0x08–0x77 |
 
 `micropython.schedule(fn, arg)` pulses `sched_push`. The ring depth is 8,
 the same value `MICROPY_SCHEDULER_DEPTH` has on ESP32, RP2, and STM32.

@@ -486,6 +486,7 @@ SR = {
     "FW4": 24, "FW5": 25, "FW6": 26, "FW7": 27,
     "MACHINE": 28,      # machine module, built on first import
     "TIME": 29,         # time module, built on first import
+    "ERRNO": 30,        # errno module, built on first import
 }
 EMERG_WORDS = 5
 
@@ -564,6 +565,8 @@ MMIO = {
     "PWM_DUTY0": 0x210,
     "PINMUX0": 0x900, "PINMUX1": 0x904,
     "SPI_CTRL": 0x300, "SPI_DATA": 0x304, "SPI_STATUS": 0x308,
+    "I2C_DIV": 0x400, "I2C_CMD": 0x404, "I2C_STATUS": 0x408, "I2C_TIMEOUT": 0x40C,
+    "I2C_CTRL": 0x410,
 }
 IRQ_SRC = {"TIMER": 0, "UART": 1, "GPIO": 2, "SOFT": 3, "GC_REQ": 4, "SIM": 5, "KBD": 6, "MBOX": 7}
 

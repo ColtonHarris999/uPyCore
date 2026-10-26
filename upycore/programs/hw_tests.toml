@@ -300,6 +300,7 @@ class_two_instances = { file = "hw/objects/class_two_instances.py" }
 
 [builtins]
 bytearray_repr = { file = "hw/builtins/bytearray_repr.py" }
+errno_oserror = { file = "hw/builtins/errno_oserror.py" }
 builtin_fns = { file = "hw/builtins/funcs.py" }
 method_getattr = { file = "hw/builtins/method_getattr.py" }
 sysmod = { file = "hw/builtins/sysmod.py" }
@@ -565,3 +566,4 @@ gc_burst_fast = { file = "hw/io/gc_burst_fast.py", oracle = false, cycles = 30_0
 pwm = { file = "hw/io/pwm.py", oracle = false, model = "pwm" }
 spi_flash = { file = "hw/io/spi_flash.py", oracle = false, plusargs = ["+SPI_DEV=flash"] }
 spi_loop = { file = "hw/io/spi_loop.py", oracle = false, plusargs = ["+SPI_DEV=loop"] }
+i2c = { file = "hw/io/i2c.py", oracle = false, plusargs = ["+I2C_DEV=1"] }

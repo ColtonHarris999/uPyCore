@@ -1,0 +1,12 @@
+[66, 80] 400000
+b'upy\x13'
+3
+b'"#'
+bytearray(b'\x01\x02"')
+b'\xa3\xa4'
+[Errno 19] ENODEV True
+[Errno 110] ETIMEDOUT True
+b'\xa0'
+2
+1
+bytearray(b'up')

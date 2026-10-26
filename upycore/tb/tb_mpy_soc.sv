@@ -4,7 +4,7 @@
 //   +IMAGE=<out>.hex +TAGS=<out>.tags.hex   flash contents (mpy_link.py)
 //   +STDOUT=<path> +STDERR=<path>           console streams (default: this log)
 //   +MAX_CYCLES=<n>                         give up after n cycles (default 50M)
-//   +TRACE=1                                one line per executed opcode
+//   +TRACE=1                                one line per executed opcode, with the cycle
 //   +TIMER_STEP=<n>                         pulse timer_step every n cycles (0: never)
 //   +UART_RX=<hex>                          bytes for the UART, two hex digits each,
 //   +UART_RX_AT=<n> +UART_RX_GAP=<n>        strobed from cycle n, one every gap cycles
@@ -21,6 +21,10 @@
 //   +SPI_DEV=flash|loop                     a SPI flash on pads 10 (SCK), 11 (MOSI),
 //                                           12 (MISO), 13 (CS, a GPIO); or MOSI looped
 //                                           back to MISO
+//   +I2C_DEV=1                              I2C targets on pads 14 (SCL) and 15 (SDA):
+//                                           a 24C02-style EEPROM at 0x50 and a
+//                                           16-byte device at 0x42 that stretches
+//                                           SCL 6000 clocks after every ACK
 //
 // Pads: a pad the SoC drives reads back its own level; ext_low pulls a pad
 // low (an open-drain target), ext_drv drives ext_val; otherwise the pad's
@@ -61,7 +65,7 @@ module tb_mpy_soc;
     logic [7:0]  strap;
     logic        core_idle;
     logic [15:0] pad_out, pad_oe, pad_in;
-    logic [15:0] ext_low = 16'h0;
+    logic [15:0] ext_low;
     logic [15:0] ext_drv;
     logic [15:0] ext_val;
     always_comb begin
@@ -97,6 +101,20 @@ module tb_mpy_soc;
         ext_val = 16'h0;
         ext_drv[12] = (spi_dev == "flash") || (spi_dev == "loop");
         ext_val[12] = (spi_dev == "flash") ? flash_miso : pad_in[11];
+    end
+
+    // I2C targets on pads 14 (SCL) and 15 (SDA).
+    bit          i2c_dev;
+    logic        e_scl_low, e_sda_low, s_scl_low, s_sda_low;
+    initial i2c_dev = $test$plusargs("I2C_DEV");
+    tb_i2c_target #(.ADDR(7'h50)) u_eeprom (.clk(clk), .scl(pad_in[14]), .sda(pad_in[15]),
+                                            .scl_low(e_scl_low), .sda_low(e_sda_low));
+    tb_i2c_target #(.ADDR(7'h42), .BYTES(16), .STRETCH(6000), .INIT(8'hA0)) u_slow (
+        .clk(clk), .scl(pad_in[14]), .sda(pad_in[15]), .scl_low(s_scl_low), .sda_low(s_sda_low));
+    always_comb begin
+        ext_low = 16'h0;
+        ext_low[14] = i2c_dev && (e_scl_low || s_scl_low);
+        ext_low[15] = i2c_dev && (e_sda_low || s_sda_low);
     end
 
     // Pulse widths on the pads: last rise, last fall, and the last full period.
@@ -272,7 +290,7 @@ module tb_mpy_soc;
             end
         end
         if (rst_n && do_trace && trace)
-            $display("TRACE pc=%08x op=%02x sp=%0d", trace_pc, trace_op, trace_sp);
+            $display("TRACE pc=%08x op=%02x sp=%0d c=%0d", trace_pc, trace_op, trace_sp, cyc_n);
     end
 
     initial begin

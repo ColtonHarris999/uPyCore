@@ -359,6 +359,7 @@ localparam logic [7:0] ABI_SR_FW6 = 8'd26;
 localparam logic [7:0] ABI_SR_FW7 = 8'd27;
 localparam logic [7:0] ABI_SR_MACHINE = 8'd28;
 localparam logic [7:0] ABI_SR_TIME = 8'd29;
+localparam logic [7:0] ABI_SR_ERRNO = 8'd30;
 
 localparam logic [7:0] ABI_FR_PREV = 8'd0;
 localparam logic [7:0] ABI_FR_RC = 8'd1;

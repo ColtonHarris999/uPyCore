@@ -158,6 +158,70 @@ def _spi_xfer(wbuf, wconst, rbuf, n):
     return None
 
 
+# I2C: one command at a time; the block waits out a stretch up to
+# I2C_TIMEOUT, then releases the bus and sets the timeout bit.
+I2C_START = const(1)
+I2C_STOP = const(2)
+I2C_WRITE = const(3)
+I2C_READ = const(4)
+ENODEV = const(19)
+ETIMEDOUT = const(110)
+
+
+def _i2c_cmd(c):
+    _poke32(MMIO_I2C_CMD, c)
+    st = _peek32(MMIO_I2C_STATUS)
+    while st & 1:
+        st = _peek32(MMIO_I2C_STATUS)
+    if st & 4:
+        raise OSError(ETIMEDOUT)
+    return st
+
+
+# Bytes of b sent after START; the count the target ACKed. A NACKed
+# address is ENODEV. STOP when stop is set or on any error.
+def _i2c_write(addr_byte, b, n, stop):
+    _i2c_cmd(I2C_START)
+    if _i2c_cmd(I2C_WRITE | (addr_byte << 8)) & 2:
+        _i2c_cmd(I2C_STOP)
+        raise OSError(ENODEV)
+    acks = 0
+    while acks < n:
+        if _i2c_cmd(I2C_WRITE | (_byte(b, acks) << 8)) & 2:
+            stop = True
+            break
+        acks += 1
+    if stop:
+        _i2c_cmd(I2C_STOP)
+    return acks
+
+
+def _i2c_read(addr, buf, stop):
+    _i2c_cmd(I2C_START)
+    if _i2c_cmd(I2C_WRITE | (((addr << 1) | 1) << 8)) & 2:
+        _i2c_cmd(I2C_STOP)
+        raise OSError(ENODEV)
+    n = len(buf)
+    i = 0
+    while i < n:
+        last = 1 if i == n - 1 else 0
+        buf[i] = (_i2c_cmd(I2C_READ | (last << 16)) >> 8) & 255
+        i += 1
+    if stop:
+        _i2c_cmd(I2C_STOP)
+    return None
+
+
+def _i2c_memaddr(memaddr, addrsize):
+    out = bytearray(addrsize // 8)
+    i = len(out)
+    while i > 0:
+        i -= 1
+        out[i] = memaddr & 255
+        memaddr >>= 8
+    return out
+
+
 def _sleep_ms(n):
     # n ticks: idle until TICKS moves, then a soft point (mp_handle_pending).
     while n > 0:
@@ -466,6 +530,104 @@ def _build_machine():
             _spi_xfer(b, 0, rbuf, len(rbuf))
             return None
 
+    class I2C:
+        def __init__(self, id, *, scl=None, sda=None, freq=400000, timeout=50000):
+            if id != 0:
+                raise ValueError('I2C does not exist')
+            self.init(scl=scl, sda=sda, freq=freq, timeout=timeout)
+
+        def init(self, *, scl=None, sda=None, freq=400000, timeout=50000):
+            hz = _peek32(MMIO_SYS_FREQ)
+            # mpy_periph_model.i2c_config: DIV 16 bits, the timeout 32.
+            div = hz // (4 * freq) - 1
+            if div < 0:
+                div = 0
+            if div > 0xFFFF:
+                div = 0xFFFF
+            self.freq = hz // (4 * (div + 1))
+            clocks = timeout * (hz // 1000000)
+            if clocks > 0xFFFFFFFF:
+                clocks = 0xFFFFFFFF
+            _pinmux(14 if scl is None else scl.id, 8)
+            _pinmux(15 if sda is None else sda.id, 9)
+            _poke32(MMIO_I2C_DIV, div)
+            _poke32(MMIO_I2C_TIMEOUT, _w32(clocks))
+            _poke32(MMIO_I2C_CTRL, 1)
+            return None
+
+        def deinit(self):
+            _poke32(MMIO_I2C_CTRL, 0)
+            return None
+
+        def scan(self):
+            found = []
+            a = 8
+            while a < 120:
+                _i2c_cmd(I2C_START)
+                st = _i2c_cmd(I2C_WRITE | ((a << 1) << 8))
+                _i2c_cmd(I2C_STOP)
+                if not st & 2:
+                    found.append(a)
+                a += 1
+            return found
+
+        def start(self):
+            _i2c_cmd(I2C_START)
+            return None
+
+        def stop(self):
+            _i2c_cmd(I2C_STOP)
+            return None
+
+        def readinto(self, buf, nack=True):
+            n = len(buf)
+            i = 0
+            while i < n:
+                last = 1 if nack and i == n - 1 else 0
+                buf[i] = (_i2c_cmd(I2C_READ | (last << 16)) >> 8) & 255
+                i += 1
+            return None
+
+        def write(self, buf):
+            b = _as_bytes(buf)
+            n = _slen(b)
+            acks = 0
+            while acks < n:
+                if _i2c_cmd(I2C_WRITE | (_byte(b, acks) << 8)) & 2:
+                    break
+                acks += 1
+            return acks
+
+        def writeto(self, addr, buf, stop=True):
+            b = _as_bytes(buf)
+            return _i2c_write(addr << 1, b, _slen(b), stop)
+
+        def readfrom(self, addr, nbytes, stop=True):
+            out = bytearray(nbytes)
+            _i2c_read(addr, out, stop)
+            return bytes(out)
+
+        def readfrom_into(self, addr, buf, stop=True):
+            _i2c_read(addr, buf, stop)
+            return None
+
+        def readfrom_mem(self, addr, memaddr, nbytes, *, addrsize=8):
+            out = bytearray(nbytes)
+            self.readfrom_mem_into(addr, memaddr, out, addrsize=addrsize)
+            return bytes(out)
+
+        def readfrom_mem_into(self, addr, memaddr, buf, *, addrsize=8):
+            m = _i2c_memaddr(memaddr, addrsize)
+            _i2c_write(addr << 1, m, len(m), False)
+            _i2c_read(addr, buf, True)
+            return None
+
+        def writeto_mem(self, addr, memaddr, buf, *, addrsize=8):
+            b = _as_bytes(buf)
+            m = _i2c_memaddr(memaddr, addrsize)
+            _i2c_write(addr << 1, m + b, len(m) + _slen(b), True)
+            return None
+
     def disable_irq():
         return _irqoff()
 
@@ -487,12 +649,13 @@ def _build_machine():
         'UART': UART,
         'PWM': PWM,
         'SPI': SPI,
+        'I2C': I2C,
         'disable_irq': disable_irq,
         'enable_irq': enable_irq,
         'idle': idle,
         'freq': freq,
     }
-    return _mk_module('machine', g)
+    return _mk_builtin_module('machine', g)
 
 
 def _machine():
@@ -532,7 +695,7 @@ def _time_sleep_us(n):
 
 
 def _build_time():
-    return _mk_module('time', {
+    return _mk_builtin_module('time', {
         'ticks_ms': _ticks_ms,
         'ticks_us': _ticks_us,
         'ticks_cpu': _ticks_cpu,

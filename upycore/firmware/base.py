@@ -390,3 +390,10 @@ def _mk_module(name, g):
     _st(m, 2, g)
     _st(m, 3, name)
     return m
+
+
+def _mk_builtin_module(name, g):
+    # A builtin module built at run time: named, and read-only like a ROM one.
+    g['__name__'] = name
+    _st(g, 3, _ld(g, 3) | DICT_FLAG_ROM)
+    return _mk_module(name, g)

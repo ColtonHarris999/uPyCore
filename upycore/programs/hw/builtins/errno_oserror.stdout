@@ -1,0 +1,17 @@
+19 110 ENODEV 22
+'[Errno 19] ENODEV' OSError(19,) (19,)
+'[Errno 19] ENODEV: x' OSError(19, 'x') (19, 'x')
+'999' OSError(999,) (999,)
+"(999, 'y')" OSError(999, 'y') (999, 'y')
+'s' OSError('s',) ('s',)
+"(19, 'a', 'b')" OSError(19, 'a', 'b') (19, 'a', 'b')
+'' OSError() ()
+[Errno 110] ETIMEDOUT 110 True
+[Errno 19] ENODEV E(19,)
+<class 'module'> errno
+True
+[(1, 'EPERM'), (2, 'ENOENT'), (5, 'EIO'), (9, 'EBADF'), (11, 'EAGAIN'), (12, 'ENOMEM'), (13, 'EACCES'), (17, 'EEXIST'), (19, 'ENODEV'), (21, 'EISDIR'), (22, 'EINVAL'), (95, 'EOPNOTSUPP'), (98, 'EADDRINUSE'), (103, 'ECONNABORTED'), (104, 'ECONNRESET'), (105, 'ENOBUFS'), (107, 'ENOTCONN'), (110, 'ETIMEDOUT'), (111, 'ECONNREFUSED'), (113, 'EHOSTUNREACH'), (114, 'EALREADY'), (115, 'EINPROGRESS')]
+-1 True
+AttributeError 'module' object has no attribute 'EXTRA'
+True False
+caught [Errno 5] EIO

@@ -279,11 +279,35 @@ def _set_repr(s):
     return _join(parts)
 
 
+# errno codes and names, the unix port's list (py/moderrno.c).
+_ERRNO_NAMES = (
+    (1, 'EPERM'), (2, 'ENOENT'), (5, 'EIO'), (9, 'EBADF'), (11, 'EAGAIN'),
+    (12, 'ENOMEM'), (13, 'EACCES'), (17, 'EEXIST'), (19, 'ENODEV'), (21, 'EISDIR'),
+    (22, 'EINVAL'), (95, 'EOPNOTSUPP'), (98, 'EADDRINUSE'), (103, 'ECONNABORTED'),
+    (104, 'ECONNRESET'), (105, 'ENOBUFS'), (107, 'ENOTCONN'), (110, 'ETIMEDOUT'),
+    (111, 'ECONNREFUSED'), (113, 'EHOSTUNREACH'), (114, 'EALREADY'), (115, 'EINPROGRESS'),
+)
+
+
+def _errno_name(code):
+    for pair in _ERRNO_NAMES:
+        if pair[0] == code:
+            return pair[1]
+    return NULL
+
+
 def _exc_args_str(e):
     args = _ld(e, 2)
     n = len(args)
     if n == 0:
         return ''
+    # OSError(code[, text]) with a known code: [Errno 19] ENODEV: text
+    if n <= 2 and _tag(args[0]) == TAG_INT and _issub(_ld(e, 1), _ntype(T_OSERROR)):
+        name = _errno_name(args[0])
+        if name is not NULL:
+            if n == 1:
+                return _s('[Errno ', _str(args[0]), '] ', name)
+            return _s('[Errno ', _str(args[0]), '] ', name, ': ', _str(args[1]))
     if n == 1:
         if _issub(_ld(e, 1), _ntype(T_KEYERROR)):
             return _repr(args[0])

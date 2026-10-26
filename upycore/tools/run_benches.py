@@ -42,6 +42,8 @@ BENCHES = [
                                 "upycore/tb/tb_mpy_pwm.sv"], "--pwm-plusargs"),
     Bench("spi", "tb_mpy_spi", ["upycore/rtl/mpy_spi.sv", "upycore/tb/tb_spi_flash.sv",
                                 "upycore/tb/tb_mpy_spi.sv"]),
+    Bench("i2c", "tb_mpy_i2c", ["upycore/rtl/mpy_i2c.sv", "upycore/tb/tb_i2c_target.sv",
+                                "upycore/tb/tb_mpy_i2c.sv"]),
 ]
 
 

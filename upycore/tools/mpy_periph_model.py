@@ -345,6 +345,22 @@ def pwm_wave(presc: int, top: int, duty: int) -> tuple[int, int]:
     return high, period
 
 
+def i2c_config(sys_hz: int, freq: int, timeout_us: int) -> tuple[int, int, int]:
+    """(I2C_DIV, the freq it gives, I2C_TIMEOUT) for machine.I2C(freq, timeout).
+
+    A bit is four quarters of DIV + 1 clocks; DIV is 16 bits and the
+    timeout 32, both clamped.
+    """
+    div = min(0xFFFF, max(0, sys_hz // (4 * freq) - 1))
+    clocks = min(0xFFFF_FFFF, timeout_us * (sys_hz // 1_000_000))
+    return div, sys_hz // (4 * (div + 1)), clocks
+
+
+def i2c_byte_clocks(div: int) -> int:
+    """Clocks of one WRITE or READ command: eight data bits and the ACK."""
+    return 9 * 4 * (div + 1)
+
+
 PWM_BENCH = ((1, 9, (3, 0, 10, 5)),)
 
 
