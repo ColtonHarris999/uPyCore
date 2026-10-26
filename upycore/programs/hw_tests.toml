@@ -299,6 +299,7 @@ class_const = { file = "hw/objects/class_const.py" }
 class_two_instances = { file = "hw/objects/class_two_instances.py" }
 
 [builtins]
+bytearray_repr = { file = "hw/builtins/bytearray_repr.py" }
 builtin_fns = { file = "hw/builtins/funcs.py" }
 method_getattr = { file = "hw/builtins/method_getattr.py" }
 sysmod = { file = "hw/builtins/sysmod.py" }

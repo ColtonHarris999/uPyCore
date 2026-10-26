@@ -407,7 +407,7 @@ def _repr(x):
             return _dict_repr(x)
         if k == MUT_SET:
             return _set_repr(x)
-        return _s('bytearray(', _str_repr(_barr_bytes(x), True), ')')
+        return _s('bytearray(b', _str_repr(_barr_bytes(x), True), ')')
     if t == TAG_BYTES:
         return _cat('b', _str_repr(x, True))
     if t == TAG_RANGE:
