@@ -217,3 +217,24 @@ Energy per cycle is total power divided by 100 MHz. Check
 `saif_annotation.rpt`: the SAIF comes from RTL simulation, so only nets
 whose names survive synthesis (flop outputs, ports) are annotated and
 Genus propagates the rest.
+
+`activity/hazard3_pystone.saif.gz` is the same benchmark on the Hazard3
+baseline (same MicroPython script, 21,365,266 cycles in all at 10 ns; the
+benchmark's own timer reads 12,840,381 cycles, matching the cycle table).
+It came from Hazard3's Verilator testbench (commit 8af9929) with
+`hazard3_tb_saif.patch` applied and `config_benchisa.vh` in
+`test/sim/tb_common/hdl/`, built with
+`make CONFIG=benchisa VERILATOR="verilator --trace-saif --timescale 1ns/1ps"`
+and run as `HZ3_SAIF=hazard3_pystone.saif tb-benchisa --bin <image>`. From
+the Hazard3 design folder:
+
+```sh
+gunzip -k ~/upycore/upycore/synth/hammer/activity/hazard3_pystone.saif.gz
+printf 'set TOP hazard3_cpu_2port\nset PERIOD 10\nset CLOCK clk\nset RESET rst_n\nset ALSO_CLOCKS clk_always_on\nset SAIF %s\nset SAIF_INSTANCE TOP/tb/cpu\nset OUT build/extra-reports/saif_pystone\nsource %s\n' \
+    ~/upycore/upycore/synth/hammer/activity/hazard3_pystone.saif \
+    ~/upycore/upycore/synth/hammer/genus_reports.tcl > ~/pw_saif_hz3.tcl
+genus -batch -no_gui -files ~/pw_saif_hz3.tcl
+```
+
+Both runs include MicroPython startup, which averages into the power. To
+compare, take energy per pystone run as power x benchmark cycles x 10 ns.

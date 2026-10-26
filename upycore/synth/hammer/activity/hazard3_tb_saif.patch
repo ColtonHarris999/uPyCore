@@ -1,0 +1,77 @@
+diff --git a/test/sim/tb_verilator/Makefile b/test/sim/tb_verilator/Makefile
+index f53aeae..ab105bd 100644
+--- a/test/sim/tb_verilator/Makefile
++++ b/test/sim/tb_verilator/Makefile
+@@ -36,14 +36,14 @@ $(BUILD_DIR)/vcc.touch: $(FILE_LIST) $(wildcard *.vh)
+ # CFG_GCH_IF_CLANG is set as a workaround for a verilator issue with newer GCC
+ # versions (see: https://github.com/verilator/verilator/issues/4730)
+ $(BUILD_DIR)/vlib.touch: $(BUILD_DIR)/vcc.touch
+-	$(MAKE) VERILATOR_ROOT=$(VERILATOR_ROOT) CFG_GCH_IF_CLANG=.gch -C $(VOBJ_DIR) -f V$(TOP).mk
++	$(MAKE) VERILATOR_ROOT=$(VERILATOR_ROOT) -C $(VOBJ_DIR) -f V$(TOP).mk
+ 	touch $@
+ 
+ clean::
+ 	rm -rf $(BUILD_DIR) $(TBEXEC)
+ 
+ $(TBEXEC): $(BUILD_DIR)/vlib.touch $(TB_CFILES)
+-	$(CXX) -O3 -std=c++14 $(addprefix -D,$(CDEFINES) $(CDEFINES_$(DOTF))) \
++	$(CXX) -O3 -std=c++20 $(addprefix -D,$(CDEFINES) $(CDEFINES_$(DOTF))) \
+ 	  $(addprefix -I ,$(CINCLUDE)) $(wildcard $(VOBJ_DIR)/*.o) $(TB_CFILES) -o $(TBEXEC)
+ 
+ lint:
+diff --git a/test/sim/tb_verilator/tb.cpp b/test/sim/tb_verilator/tb.cpp
+index 2c5a76b..28cffdb 100644
+--- a/test/sim/tb_verilator/tb.cpp
++++ b/test/sim/tb_verilator/tb.cpp
+@@ -1,5 +1,7 @@
+ #include "Vtb.h"
+ #include "verilated.h"
++#include "verilated_saif_c.h"
++#include <cstdlib>
+ 
+ #include <iostream>
+ #include <cstdint>
+@@ -20,9 +22,16 @@ class tb_verilator_top: public tb_top {
+ 	bool req_i_vld = false;
+ 	bool req_d_vld = false;
+ 
++	// Switching activity for power analysis: HZ3_SAIF=<path>. 10 ns cycles.
++	VerilatedSaifC *tfp = nullptr;
++	uint64_t trace_time = 0;
++
+ public:
+ 	tb_verilator_top(const tb_cli_args &parsed_args, int argc, char **argv);
+-	~tb_verilator_top() {delete top; delete contextp;}
++	~tb_verilator_top() {
++		if (tfp) {tfp->close(); delete tfp;}
++		delete top; delete contextp;
++	}
+ 
+ 	void step(const tb_cli_args &args, mem_io_state &memio) override;
+ 
+@@ -43,6 +52,12 @@ tb_verilator_top::tb_verilator_top(const tb_cli_args &parsed_args, int argc, cha
+ 	// argument prefixed with "+verilator+" is ignored by our tb arg parsing.
+ 	contextp->commandArgs(argc, argv);
+ 	top = new Vtb{contextp};
++	if (const char *saif = std::getenv("HZ3_SAIF")) {
++		contextp->traceEverOn(true);
++		tfp = new VerilatedSaifC;
++		top->trace(tfp, 99);
++		tfp->open(saif);
++	}
+ 
+ 	req_i_vld = false;
+ 	req_d_vld = false;
+@@ -68,8 +83,12 @@ tb_verilator_top::tb_verilator_top(const tb_cli_args &parsed_args, int argc, cha
+ void tb_verilator_top::step(const tb_cli_args &args, mem_io_state &memio) {
+ 	top->clk = false;
+ 	top->eval();
++	if (tfp) tfp->dump(trace_time);
++	trace_time += 5000;
+ 	top->clk = true;
+ 	top->eval();
++	if (tfp) tfp->dump(trace_time);
++	trace_time += 5000;
+ 
+ 	// The two bus ports are handled identically. This enables swapping out of
+ 	// various `tb.v` hardware integration files containing:
