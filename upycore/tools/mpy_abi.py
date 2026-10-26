@@ -525,6 +525,7 @@ CONT = [
     "BIND",          # _bind returned the locals tuple of this frame: store them and start
     "YFROM",         # _yfrom returned (True, value) to yield, or (False, value) to finish
     "WITH_ATTR",     # descriptor __enter__/__exit__ returned; resume as kind 1
+    "SPILL_REPLACE", # write the value over a spilled stack slot, re-run the opcode
 ]
 
 # One-shot overrides the REPLACE/GETITER/TRUTH continuations hand to the

@@ -115,6 +115,8 @@ call_wide = { file = "hw/calls/call_wide.py", cycles = 40_000_000, timeout = 240
 star_wide = { file = "hw/calls/star_wide.py", cycles = 80_000_000, timeout = 240 }
 star_wide_iter = { file = "hw/calls/star_wide_iter.py" }
 star_wide_dir = { file = "hw/calls/star_wide_dir.py", cycles = 40_000_000, timeout = 180 }
+star_wide_spill = { file = "hw/calls/star_wide_spill.py" }
+star_wide_oom = { file = "hw/calls/star_wide_oom.py", cycles = 80_000_000, timeout = 240, oracle = false }
 varargs_empty = { file = "hw/calls/varargs_empty.py" }
 varargs_kwonly = { file = "hw/calls/varargs_kwonly.py" }
 varargs_kwonly2 = { file = "hw/calls/varargs_kwonly2.py" }

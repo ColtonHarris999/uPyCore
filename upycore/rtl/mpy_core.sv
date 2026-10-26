@@ -204,6 +204,7 @@ module mpy_core
         S_AL,
         S_AL_OOM,
         S_AL_OOM2,
+        S_AL_CLR,
         S_AL_RT,
         S_AL_W,
         S_AT,
@@ -721,6 +722,12 @@ module mpy_core
         S_CVK_PS,
         S_CVK_P2W,
         S_CVK_PI,
+        S_CVK_SW0,
+        S_CVK_SW1,
+        S_CVK_SWN,
+        S_CVK_SWN2,
+        S_CVK_SWP,
+        S_CVK_SWD,
         S_CVK_RD,
         S_CVK_RD2,
         S_CVK_EV,
@@ -1922,6 +1929,18 @@ module mpy_core
                                     pc <= op_pc;
                                     st <= S_YLD;
                                 end else rd(adr(t[7]) + 4, S_YF_F);
+                // A spilled star is not a resident register. REPLACE would
+                // write rf[0] and leave the iterator in the chunk.
+                ABI_CONT_SPILL_REPLACE: begin
+                    if (!has_link) halt(ABI_HALT_INTERNAL, 32'h0000_C0C0);
+                    else begin
+                        srd_g <= aux[15:0];
+                        srd_addr <= mpy_rf_link_addr(rf[`SX(7'd0)]);
+                        srd_off <= spilled_reals - 16'd1 - aux[15:0];
+                        srd_hops <= 8'd0;
+                        st <= S_CVK_SW0;
+                    end
+                end
                 default: halt(ABI_HALT_INTERNAL, {24'd0, fcont});
             endcase
             S_WC_TR: begin
@@ -2985,12 +3004,53 @@ module mpy_core
                     t[0] <= t[3];
                     if (cv_bm[cv_i[4:0]] && !(tg(t[3]) == ABI_TAG_TUPLE ||
                                              is_mut(t[3], ABI_MUT_LIST))) begin
-                        if (stk_hit(cv_g)) aux <= vint({25'd0, stk_slot(cv_g)});
-                        else aux <= vint(32'd0);
-                        fcont <= ABI_CONT_REPLACE; pc <= op_pc;
+                        if (stk_hit(cv_g)) begin
+                            aux <= vint({25'd0, stk_slot(cv_g)});
+                            fcont <= ABI_CONT_REPLACE;
+                        end else begin
+                            aux <= vint({16'd0, cv_g});
+                            fcont <= ABI_CONT_SPILL_REPLACE;
+                        end
+                        pc <= op_pc;
                         hook(ABI_HOOK_TUPLE, ABI_RK_CONT, 8'd1, t[3], VNULL, VNULL, VNULL);
                     end else begin cv_i <= cv_i + 8'd1; st <= S_CVK_PW; end
                 end
+            // Walk the same chunk link as S_SRD, then store the tuple and its
+            // tag nibble. The collector marks a spill payload from the nibble.
+            S_CVK_SW0: rd(srd_addr, S_CVK_SW1);
+            S_CVK_SW1: begin
+                    v0 = 32'(mpy_rf_chunk_count(mt, md));
+                    v1 = mpy_rf_chunk_prev(md);
+                    if (v0 != 32'd0 && srd_off < v0[15:0]) begin
+                        x1 <= v0 - 32'd1 - 32'(srd_off);
+                        x0 <= srd_addr + 32'd4 + (32'((v0[5:0] + 6'd7) >> 3) << 2)
+                              + ((v0 - 32'd1 - 32'(srd_off)) << 2);
+                        st <= S_CVK_SWN;
+                    end else if (v1 == 32'd0 || srd_hops == 8'd64)
+                        halt(ABI_HALT_INTERNAL, 32'h0000_C0C1);
+                    else begin
+                        srd_off <= srd_off - v0[15:0];
+                        srd_addr <= v1;
+                        srd_hops <= srd_hops + 8'd1;
+                        st <= S_CVK_SW0;
+                    end
+                end
+            S_CVK_SWN: rd(srd_addr + 32'd4 + ((x1 >> 3) << 2), S_CVK_SWN2);
+            S_CVK_SWN2: begin
+                    case (x1[2:0])
+                        3'd0: v3 = {md[31:4], t[7][35:32]};
+                        3'd1: v3 = {md[31:8], t[7][35:32], md[3:0]};
+                        3'd2: v3 = {md[31:12], t[7][35:32], md[7:0]};
+                        3'd3: v3 = {md[31:16], t[7][35:32], md[11:0]};
+                        3'd4: v3 = {md[31:20], t[7][35:32], md[15:0]};
+                        3'd5: v3 = {md[31:24], t[7][35:32], md[19:0]};
+                        3'd6: v3 = {md[31:28], t[7][35:32], md[23:0]};
+                        default: v3 = {t[7][35:32], md[27:0]};
+                    endcase
+                    wr(srd_addr + 32'd4 + ((x1 >> 3) << 2), {4'd0, v3}, S_CVK_SWP);
+                end
+            S_CVK_SWP: wr(x0, t[7], S_CVK_SWD);
+            S_CVK_SWD: begin pc <= op_pc; st <= S_FETCH; end
             S_CVK_RD: if (stk_hit(cv_g)) begin t[3] <= stk_val(cv_g); st <= cv_ret; end
                       else begin srd_g <= cv_g; gosub(S_SRD, S_CVK_RD2); end
             S_CVK_RD2: begin t[3] <= srd_v; st <= cv_ret; end
@@ -3883,14 +3943,33 @@ module mpy_core
                 else if (al_soft) begin al_ok <= 1'b0; al_a <= 32'd0; ret(); end
                 else begin
                     al_soft <= 1'b0;
-                    // Word 4 of the emergency exception is its __dict__. The byte
-                    // count lives in the free sysroot word just past the object.
-                    wr(EMERG_ADDR + 20, vint(al_n << 2), S_AL_OOM);
+                    // A failed block alloc must drop pointers already stored in
+                    // ARGBUF. The direct path (ab_chunked clear, or no block
+                    // stored yet) still takes the single emergency write.
+                    if (ab_chunked && (ab_nblk != 32'd0 || ab_ovf)) begin
+                        t[2] <= VNULL;
+                        ab_blk <= VNULL;
+                        if (ab_ovf) begin
+                            t[4] <= VNULL;
+                            t[5] <= VNULL;
+                        end
+                        cv_k <= ab_ovf ? 32'd4 : 32'd5;
+                        x1 <= ab_ovf ? 32'd256 : (32'd5 + ab_nblk);
+                        st <= S_AL_CLR;
+                    end else
+                        // Word 4 of the emergency exception is its __dict__. The byte
+                        // count lives in the free sysroot word just past the object.
+                        wr(EMERG_ADDR + 20, vint(al_n << 2), S_AL_OOM);
                 end
             end
             S_AL_RT: begin gc_alloc_req <= 1'b1; st <= S_AL_W; end
             S_AL_OOM: wr(EMERG_ADDR + 12, VNULL, S_AL_OOM2);
             S_AL_OOM2: raise_val(vobj(EMERG_ADDR));
+            S_AL_CLR: if (cv_k == x1) wr(EMERG_ADDR + 20, vint(al_n << 2), S_AL_OOM);
+                      else begin
+                          wr(ab_ptr(cv_k[7:0]), VNULL, S_AL_CLR);
+                          cv_k <= cv_k + 32'd1;
+                      end
 
             // collect: spill every root holder, then run the collector
             S_GC: if (noframe) begin gi <= 32'd0; st <= S_GC_T; end
