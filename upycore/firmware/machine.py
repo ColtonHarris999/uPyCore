@@ -102,7 +102,7 @@ def _pinmux(pin, fn):
     # Four bits per pad; pads 0-7 in PINMUX0, 8-15 in PINMUX1.
     addr = MMIO_PINMUX0 + 4 * (pin >> 3)
     sh = 4 * (pin & 7)
-    _poke32(addr, (_peek32(addr) & ~(15 << sh)) | (fn << sh))
+    _poke32(addr, _w32((_peek32(addr) & ~(15 << sh)) | (fn << sh)))
     return None
 
 
