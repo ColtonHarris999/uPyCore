@@ -54,7 +54,10 @@ def _print_exc_line(out, e):
 
 
 def _print_tb(e, file=_MISSING):
-    out = _we if file is NULL or file == _MISSING else _stream_writer(file)
+    return _print_tb_to(_we if file is NULL or file == _MISSING else _stream_writer(file), e)
+
+
+def _print_tb_to(out, e):
     out('Traceback (most recent call last):\n')
     if _tag(e) == TAG_OBJECT and (_ld(e, 0) == OB_EXCEPTION or _ld(e, 0) == OB_INSTANCE):
         tb = _ld(e, 3)
@@ -84,11 +87,29 @@ def _warn(code):
     return None
 
 
-def _irq_uncaught():
+# Every IRQ and micropython.schedule callback runs in this frame, whose
+# return kind is RK_IRQ. An exception that leaves it goes to _irq_uncaught.
+def _irq_call(fn, arg):
+    fn(arg)
+    return None
+
+
+# An exception escaped a callback. The core stored it at SR_IRQ_EXC and
+# filled the interrupted frame. A hard callback still holds the heap lock:
+# the banner and the source disable allocate nothing, then done unlocks it
+# (mp_irq_handler in shared/runtime/mpirq.c). A soft or schedule callback
+# keeps its source armed and prints on stdout (mp_call_function_1_protected).
+def _irq_uncaught(hard, src):
+    if hard:
+        _we('Uncaught exception in IRQ callback handler\n')
+        _irq_handler(src, NULL, NULL)
+        _poke32(MMIO_IRQ_ENABLE, _peek32(MMIO_IRQ_ENABLE) & ~(1 << src))
+    _irq_done()
     exc = _sysget(SR_IRQ_EXC)
+    _sysset(SR_IRQ_EXC, NULL)
     if exc is not NULL:
-        _print_tb(exc)
-    _halt(1)
+        _print_tb_to(_we if hard else _wr, exc)
+    return None
 
 
 def _boot():

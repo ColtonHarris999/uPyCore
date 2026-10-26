@@ -347,14 +347,80 @@ def io_plusargs() -> str:
 
 
 # SoC trace expectations for the io area of hw_tests.toml. Each entry
-# returns the MPY_IO fields tb_mpy_soc must print for that program.
-SOC_EXPECT: dict[str, object] = {}
+# takes the test's plusargs (the stimulus the bench applied) and returns
+# the MPY_IO fields tb_mpy_soc must print for that program.
+def _plusarg(plusargs: tuple[str, ...], name: str, default: str | None = None) -> str:
+    for p in plusargs:
+        if p.startswith(f"+{name}="):
+            return p.split("=", 1)[1]
+    if default is None:
+        raise KeyError(f"missing +{name}")
+    return default
 
 
-def soc_expect(name: str) -> dict[str, str]:
+def _gpio_schedule(plusargs: tuple[str, ...]) -> list[tuple[int, int]]:
+    out = []
+    for item in _plusarg(plusargs, "GPIO_IN").split(","):
+        val, _, cyc = item.partition("@")
+        out.append((int(val, 16), int(cyc)))
+    return out
+
+
+def _expect_blink(plusargs: tuple[str, ...]) -> dict[str, str]:
+    ticks = int(_plusarg(plusargs, "MAX_TICKS"))
+    mask = blink_edge_mask(BLINK_PERIOD, ticks)
+    return {"gmask": f"{mask:08x}", "edges": str(mask.bit_count()), "gpio_oe": "00000001"}
+
+
+def _expect_blink_off(plusargs: tuple[str, ...]) -> dict[str, str]:
+    ticks = int(_plusarg(plusargs, "MAX_TICKS"))
+    mask = blink_edge_mask(0, ticks)
+    return {"gmask": f"{mask:08x}", "edges": str(mask.bit_count())}
+
+
+def _expect_echo(extra: int):
+    def f(plusargs: tuple[str, ...]) -> dict[str, str]:
+        tx, _ = echo_fifo_result(UART_FIFO_DEPTH, extra)
+        return {"tx": "".join(f"{b:02x}" for b in tx)}
+    return f
+
+
+def debounce_count(edges: list[tuple[int, int]], tick_clocks: int, window: int = 5) -> int:
+    """Presses a rising-edge handler accepts when it needs window ticks
+    since the last accepted one. A tick is one timer_step pulse; pulse k
+    lands on cycle k*tick_clocks - 1, so a level change at cycle c sees
+    (c + 1) // tick_clocks ticks."""
+    prev = 0
+    last = -100
+    n = 0
+    for val, cyc in edges:
+        if not prev & 1 and val & 1:
+            now = (cyc + 1) // tick_clocks
+            if now - last >= window:
+                last = now
+                n += 1
+        prev = val
+    return n
+
+
+def _expect_debounce(plusargs: tuple[str, ...]) -> dict[str, str]:
+    n = debounce_count(_gpio_schedule(plusargs), int(_plusarg(plusargs, "TIMER_STEP")))
+    return {"gpio_out": f"{n:08x}"}
+
+
+SOC_EXPECT = {
+    "blink": _expect_blink,
+    "blink_off": _expect_blink_off,
+    "echo_fifo": _expect_echo(0),
+    "echo_overrun": _expect_echo(15),
+    "debounce": _expect_debounce,
+}
+
+
+def soc_expect(name: str, plusargs: tuple[str, ...] = ()) -> dict[str, str]:
     if name not in SOC_EXPECT:
         raise KeyError(f"no SoC expectation named {name!r}")
-    return SOC_EXPECT[name]()  # type: ignore[operator]
+    return SOC_EXPECT[name](plusargs)
 
 
 def self_check() -> None:
@@ -396,6 +462,8 @@ def self_check() -> None:
         raise AssertionError("prescaler ticks")
     if uart_frame(0x41, 4)[:4] != [0, 0, 0, 0] or uart_frame(0x41, 4)[4:8] != [1] * 4:
         raise AssertionError("8N1 frame starts low, LSB first")
+    if debounce_count([(1, 1000), (0, 1300), (1, 1600), (0, 9000), (1, 20000)], 1000) != 2:
+        raise AssertionError("debounce window")
     kb = UartFifo(16, kbd=0x03)
     if kb.push(0x03) != "kbd" or kb.valid:
         raise AssertionError("the interrupt character is not queued")

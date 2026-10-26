@@ -542,3 +542,10 @@ gen_user_next = { file = "hw/generators/gen_user_next.py" }
 [io]
 mmio_bus = { file = "hw/io/mmio_bus.py", oracle = false, plusargs = ["+UART_RX=4142", "+UART_RX_AT=10", "+UART_RX_GAP=10"], io = { gpio_out = "ffffffff", edges = "2" } }
 mmio_fault = { file = "hw/io/mmio_fault.py", oracle = false, halt = "BUS" }
+sched_full = { file = "hw/io/sched_full.py" }
+sched_uncaught = { file = "hw/io/sched_uncaught.py", uncaught = true }
+sched_raise = { file = "hw/io/sched_raise.py" }
+heap_lock = { file = "hw/io/heap_lock.py" }
+sched_root = { file = "hw/io/sched_root.py", oracle = false }
+ctrl_c = { file = "hw/io/ctrl_c.py", oracle = false, halt = "TIMEOUT", cycles = 1_000_000, plusargs = ["+UART_RX=0303", "+UART_RX_AT=200000", "+UART_RX_GAP=300000"] }
+ctrl_c_uncaught = { file = "hw/io/ctrl_c_uncaught.py", oracle = false, uncaught = true, plusargs = ["+UART_RX=03", "+UART_RX_AT=200000"] }

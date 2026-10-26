@@ -316,7 +316,7 @@ def expected_io(t: Test) -> dict[str, str]:
     if t.model:
         import mpy_periph_model as model
 
-        want.update({k: str(v) for k, v in model.soc_expect(t.model).items()})
+        want.update({k: str(v) for k, v in model.soc_expect(t.model, t.plusargs).items()})
     return want
 
 

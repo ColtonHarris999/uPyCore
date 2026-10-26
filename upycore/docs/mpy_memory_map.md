@@ -113,8 +113,8 @@ Word 1 is the type pointer, or 0. Fields start at word 2. Heap words are
 | Window | Base | Size | Contents |
 | --- | --- | ---: | --- |
 | Flash | `0x0000_0000` | 512 KB | Linked image. First 8 bytes reserved |
-| SRAM | `0x2000_0000` | 256 KB | Frame reserve, schedule ring, handler table, GC pool |
-| MMIO | `0x4000_0000` | 4 KB | UART, GPIO, timer, IRQ |
+| SRAM | `0x2000_0000` | 256 KB | Frame reserve, schedule ring, handler table, system roots, argument buffer, GC pool |
+| MMIO | `0x4000_0000` | 4 KB | UART, GPIO, timers, IRQ, and the blocks in `mpy_peripherals.md` |
 | Sim control | `0xE000_0000` | 256 B | Halt reason, cycle counter. Simulation only |
 
 An address outside these windows is a bus fault. `0x00F4_0000` is outside
@@ -126,43 +126,55 @@ zero; those bytes stay reserved so a pointer payload is never 0 or 4.
 
 ### SRAM
 
+The header in `upycore/tools/mpy_abi.py` is the map; `mpy_abi.svh` and the
+firmware's `_abi.py` are generated from it.
+
 | Region | Base | Window | Used |
 | --- | --- | ---: | --- |
-| Frame reserve | `0x2000_0000` | 16 KB | 32 frame records |
-| Schedule ring | `0x2000_4000` | 64 B | 8 entries of function, argument |
-| Handler table | `0x2000_4040` | 64 B | 48 B: 6 sources, function and argument each |
-| GC pool | `0x2000_4080` | 245632 B (`0x3BF80`) | The rest of the 256 KB |
+| Frame reserve | `0x2000_0000` | 32 KB | Frame records back to back, and register chunks growing down from the end |
+| Schedule ring | `0x2000_8000` | 64 B | 8 entries of function, argument |
+| Handler table | `0x2000_8040` | 64 B | 8 sources, function and argument each |
+| System roots | `0x2000_8080` | 128 B | 32 tagged words (`SR` in `mpy_abi.py`) |
+| Argument buffer | `0x2000_8100` | 1 KB | 256 tagged words; slot 0 the callable, arguments from slot 32 |
+| GC pool | `0x2000_8500` | 228096 B (`0x37B00`) | The rest of the 256 KB |
 
 The pool ends at `0x2004_0000`. Sources, in order: timer, UART RX, GPIO,
-soft, `GC_REQ`, sim. The handler table is a GC root. The schedule depth is
-8. The ring and the table are tagged slots; their nibbles live in the SRAM
-side array.
+soft, `GC_REQ`, sim, `KBD`, `MBOX`. The schedule depth is 8. The ring and
+the table are tagged slots; their nibbles live in the SRAM side array.
+
+The collector's second root span, `gc_root1`, is `[0x2000_8000,
+0x2000_8500)`: the ring, the handler table, the system roots, and the
+argument buffer. The live copy of the ring and the handler table is the
+flop file in `mpy_irq`. The core mirrors it into these two windows at the
+next bytecode boundary after a handler write, a push, or a pop, and
+before any collection: ring slot `i` (mod 8) at `0x2000_8000 + 8*i`,
+handler `src` at `0x2000_8040 + 8*src`, function word then argument word,
+each with its tag. A ring slot outside `[head, tail)` and an empty
+handler are the empty word (tag `CONTROL`, payload 0). An `INT` argument
+is not a pointer, whatever its payload. `IRQ_TABLE` is not consulted.
 
 ### Frame record
 
-Stride 512 bytes. Thirty-two records fill the 16 KB reserve.
+Records are variable size and sit back to back from `0x2000_0000`. A
+call that would cross the end of the reserve, or the lowest register
+chunk, raises `RuntimeError: maximum recursion depth exceeded`.
 
-| Offset | Size | Contents |
-| --- | ---: | --- |
-| `0x000` | 256 B | 64 payload words. Slot `i` at `+ 4*i` |
-| `0x100` | 32 B | 8 packed tag words. Nibble `i` is lane `i % 8` of word `i / 8` |
-| `0x120` | 16 B | Return PC, `n_state`, frame index, zero |
-| `0x130` | 208 B | Padding inside the stride |
+| Word | Contents |
+| --- | --- |
+| 0–15 | Header (`FR` in `mpy_abi.py`): previous record, raw code, PC, opcode PC, stack and exception depths, return kind and continuation, globals, locals, function, three continuation words, qstr and const tables, generator |
+| 16 | Register-ring metadata: chunk count, local count, ring base |
+| 17 … | `n_state` locals, then 3 words per exception entry, then the resident operand stack when the frame is spilled |
 
-A spill writes every physical register. Payload bytes plus tag bytes plus
-the header for 32 frames are 9728 bytes, inside the 16 KB. Tags for these
-slots are the packed words in the record, not a second copy. Tags for every
-other SRAM slot are the side array, which is not its own address window and
-is not subtracted from the pool. A list slot is 4 bytes of pool plus one
-nibble.
-
-The call stack is 32 frames. A 33rd spill faults. Software reports
-`RuntimeError: maximum recursion depth exceeded`.
+Raw header words carry tag `CONTROL`, so the collector skips them. Tags
+for every SRAM slot are the side array, which is not its own address
+window and is not subtracted from the pool. A list slot is 4 bytes of
+pool plus one nibble.
 
 ### MMIO offsets
 
-Offsets from `0x4000_0000`. `mpy_mem` decodes the window and stores words.
-UART, timer, and IRQ side effects are not in that module.
+Offsets from `0x4000_0000`. `mpy_soc` sends the window to `mpy_periph`;
+`mpy_mem` never sees it. Word access only. The register rules are
+`upycore/docs/mpy_peripherals.md`.
 
 | Offset | Name |
 | --- | --- |
@@ -180,6 +192,15 @@ UART, timer, and IRQ side effects are not in that module.
 | `0x2C` | `SCHED_TAIL` |
 | `0x30` | `GPIO_IN` |
 | `0x34` | `GPIO_EDGE` |
+| `0x38` | `TICKS` |
+| `0x3C` | `UART_BAUD` |
+| `0x40` | `UART_STATUS` |
+| `0x44` | `TIMER_PRESC` |
+| `0x48` | `GPIO_OE` |
+| `0x4C` | `GPIO_PULLUP` |
+| `0x50` | `GPIO_PULLDOWN` |
+| `0x54` | `GPIO_STATUS` |
+| `0x58` | `UART_KBD` |
 
 The sim-control page is not a Cortex-M system-control block. Halt names
 for that page: clean return, uncaught exception, unsupported opcode, bad

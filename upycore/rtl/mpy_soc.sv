@@ -79,6 +79,17 @@ module mpy_soc #(
     logic [3:0]  m_be, m_wtag, m_rtag, m_fault_reason;
     logic [31:0] m_addr, m_wdata, m_rdata;
 
+    // core <-> periph delivery
+    logic        i_bnd, i_jmp, i_done, i_fire, i_fire_hard, i_heap_locked, i_kbd;
+    logic [2:0]  i_fire_src;
+    logic [31:0] i_fire_fn, i_fire_arg;
+    logic [3:0]  i_fire_fn_tag, i_fire_arg_tag;
+    logic        i_hwe, i_spush, i_sched_full, i_mdirty, i_mclr;
+    logic [2:0]  i_hidx;
+    logic [35:0] i_hfn, i_harg, i_sfn, i_sarg, i_mfn, i_marg;
+    logic [3:0]  i_msel;
+    logic [31:0] d_pc, d_fp, d_sp, d_xsp;
+
     logic        core_halted;
     logic [3:0]  core_hcode;
     logic [31:0] core_hval, core_cycles;
@@ -98,7 +109,18 @@ module mpy_soc #(
         .gc_free_i(g_free), .gc_total_i(g_total), .gc_collections_i(g_coll),
         .halted_o(core_halted), .halt_code_o(core_hcode), .halt_value_o(core_hval),
         .cycles_o(core_cycles), .ops_o,
-        .trace_o, .trace_pc_o, .trace_op_o, .trace_sp_o
+        .trace_o, .trace_pc_o, .trace_op_o, .trace_sp_o,
+        .irq_boundary_o(i_bnd), .irq_jump_o(i_jmp), .irq_done_o(i_done),
+        .irq_fire_i(i_fire), .irq_fire_hard_i(i_fire_hard), .irq_fire_src_i(i_fire_src),
+        .irq_fire_fn_i({i_fire_fn_tag, i_fire_fn}), .irq_fire_arg_i({i_fire_arg_tag, i_fire_arg}),
+        .irq_heap_locked_i(i_heap_locked), .irq_kbd_i(i_kbd),
+        .irq_handler_we_o(i_hwe), .irq_handler_idx_o(i_hidx),
+        .irq_handler_fn_o(i_hfn), .irq_handler_arg_o(i_harg),
+        .irq_sched_push_o(i_spush), .irq_sched_fn_o(i_sfn), .irq_sched_arg_o(i_sarg),
+        .irq_sched_full_i(i_sched_full),
+        .irq_mirror_dirty_i(i_mdirty), .irq_mirror_sel_o(i_msel), .irq_mirror_clr_o(i_mclr),
+        .irq_mirror_fn_i(i_mfn), .irq_mirror_arg_i(i_marg),
+        .dbg_pc_o(d_pc), .dbg_fp_o(d_fp), .dbg_sp_o(d_sp), .dbg_exc_sp_o(d_xsp)
     );
 
     mpy_gc #(
@@ -140,7 +162,6 @@ module mpy_soc #(
     logic [31:0] mmio_rdata;
     logic        p_partial;
 
-    // The hart's delivery ports are tied off until the core drives them.
     mpy_periph u_periph (
         .clk_i, .rst_n_i,
         .req_i(p_req), .we_i(c_we), .addr_i(c_addr), .wdata_i(c_wdata),
@@ -150,13 +171,20 @@ module mpy_soc #(
         .gpio_out_o, .gpio_oe_o, .gpio_pu_o, .gpio_pd_o, .gpio_in_i, .gpio_in_en_i,
         .soft_set_i(1'b0), .gc_req_i(1'b0), .sim_set_i(sim_irq_i),
         .kbd_set_i(1'b0), .mbox_set_i(1'b0),
-        .bc_boundary_i(1'b0), .jump_i(1'b0), .done_i(1'b0),
-        .fire_o(), .fire_hard_o(), .fire_sched_o(), .fire_src_o(), .fire_fn_o(), .fire_arg_o(),
-        .heap_locked_o(), .sched_locked_o(), .irq_active_o(),
-        .handler_we_i(1'b0), .handler_idx_i(3'd0), .handler_fn_i(32'd0), .handler_arg_i(32'd0),
-        .sched_push_i(1'b0), .sched_fn_i(32'd0), .sched_arg_i(32'd0),
-        .sched_ok_o(), .sched_full_o(),
-        .pc_i(32'd0), .fp_i(32'd0), .sp_i(32'd0), .exc_sp_i(32'd0),
+        .bc_boundary_i(i_bnd), .jump_i(i_jmp), .done_i(i_done),
+        .fire_o(i_fire), .fire_hard_o(i_fire_hard), .fire_sched_o(), .fire_src_o(i_fire_src),
+        .fire_fn_o(i_fire_fn), .fire_arg_o(i_fire_arg),
+        .fire_fn_tag_o(i_fire_fn_tag), .fire_arg_tag_o(i_fire_arg_tag), .kbd_raise_o(i_kbd),
+        .heap_locked_o(i_heap_locked), .sched_locked_o(), .irq_active_o(),
+        .handler_we_i(i_hwe), .handler_idx_i(i_hidx),
+        .handler_fn_i(i_hfn[31:0]), .handler_arg_i(i_harg[31:0]),
+        .handler_fn_tag_i(i_hfn[35:32]), .handler_arg_tag_i(i_harg[35:32]),
+        .sched_push_i(i_spush), .sched_fn_i(i_sfn[31:0]), .sched_arg_i(i_sarg[31:0]),
+        .sched_fn_tag_i(i_sfn[35:32]), .sched_arg_tag_i(i_sarg[35:32]),
+        .sched_ok_o(), .sched_full_o(i_sched_full),
+        .mirror_dirty_o(i_mdirty), .mirror_sel_i(i_msel), .mirror_clr_i(i_mclr),
+        .mirror_fn_o(i_mfn), .mirror_arg_o(i_marg),
+        .pc_i(d_pc), .fp_i(d_fp), .sp_i(d_sp), .exc_sp_i(d_xsp),
         .saved_pc_o(), .saved_fp_o(), .saved_sp_o(), .saved_exc_sp_o()
     );
 

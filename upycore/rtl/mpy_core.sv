@@ -26,6 +26,15 @@
 // Subroutines use a small return-state stack (rstk). Raising an exception
 // resets it: an exception abandons whatever microcode was in flight.
 //
+// Interrupts (planning/interrupts_io_plan.md): S_DEC marks the next S_FETCH
+// as a bytecode boundary. There the core pulses irq_boundary (and irq_jump
+// after a jump opcode that retired outside a firmware frame), mirrors the
+// handler and schedule flops into SRAM when they changed, and then either
+// raises KeyboardInterrupt, calls the callback through the _irq_call hook
+// with return kind RK_IRQ, or decodes. A path that re-runs the same opcode
+// (pc <= op_pc) is not a boundary. An exception that escapes the RK_IRQ
+// frame goes to _irq_uncaught instead of the interrupted frame.
+//
 // Every heap value that must survive an allocation sits in rf, ARGBUF, the
 // frame header, t[0..7], xc, or the cached exception top. Before a collection
 // the core spills the frame, t[], and xc. ARGBUF already sits in the
@@ -93,7 +102,36 @@ module mpy_core
     output logic        trace_o,
     output logic [31:0] trace_pc_o,
     output logic [7:0]  trace_op_o,
-    output logic [6:0]  trace_sp_o
+    output logic [6:0]  trace_sp_o,
+
+    // IRQ delivery (mpy_periph / mpy_irq). Tags ride in bits 35:32.
+    output logic        irq_boundary_o,
+    output logic        irq_jump_o,
+    output logic        irq_done_o,
+    input  logic        irq_fire_i,
+    input  logic        irq_fire_hard_i,
+    input  logic [2:0]  irq_fire_src_i,
+    input  logic [35:0] irq_fire_fn_i,
+    input  logic [35:0] irq_fire_arg_i,
+    input  logic        irq_heap_locked_i,
+    input  logic        irq_kbd_i,
+    output logic        irq_handler_we_o,
+    output logic [2:0]  irq_handler_idx_o,
+    output logic [35:0] irq_handler_fn_o,
+    output logic [35:0] irq_handler_arg_o,
+    output logic        irq_sched_push_o,
+    output logic [35:0] irq_sched_fn_o,
+    output logic [35:0] irq_sched_arg_o,
+    input  logic        irq_sched_full_i,
+    input  logic        irq_mirror_dirty_i,
+    output logic [3:0]  irq_mirror_sel_o,
+    output logic        irq_mirror_clr_o,
+    input  logic [35:0] irq_mirror_fn_i,
+    input  logic [35:0] irq_mirror_arg_i,
+    output logic [31:0] dbg_pc_o,
+    output logic [31:0] dbg_fp_o,
+    output logic [31:0] dbg_sp_o,
+    output logic [31:0] dbg_exc_sp_o
 );
     typedef logic [35:0] val_t;
 
@@ -830,7 +868,24 @@ module mpy_core
         S_N_BCMP_W2,
         S_N_BCI,
         S_N_BCF,
-        S_NAT_P32
+        S_NAT_P32,
+        S_IRQ_POLL,
+        S_IRQ_TAKE,
+        S_IRQ_MIR,
+        S_IRQ_MIRW,
+        S_IRQ_MIRD,
+        S_IRQ_UNC,
+        S_IRQ_UNC2,
+        S_AL_HL,
+        S_AL_OOMA,
+        S_AL_OOMB,
+        S_NAT_IRQH1,
+        S_NAT_IRQH2,
+        S_NAT_SCH1,
+        S_NAT_SCH2,
+        S_NAT_SCH3,
+        S_NAT_GIE1,
+        S_NAT_GIE2
     } state_e;
 
     state_e st, wret;
@@ -945,6 +1000,18 @@ module mpy_core
     val_t xc;
 
     // halting / counters
+    // IRQ delivery. need_poll: the next S_FETCH is a boundary. irq_jump:
+    // the opcode that ended there was a jump (a soft point). irq_in_cb: a
+    // callback this core took is running; done clears it.
+    logic        need_poll, irq_jump, irq_in_cb, irq_cb_hard, kbd_pend;
+    logic [2:0]  irq_cb_src;
+    logic        irq_jmp_q, irq_done_q, irq_hwe_q, irq_spush_q, irq_mclr_q;
+    logic [2:0]  irq_hidx_q;
+    val_t        irq_hfn_q, irq_harg_q, irq_sfn_q, irq_sarg_q;
+    logic [5:0]  mi;
+    // heap_lock depth: 16 bits that wrap, like gc_lock_depth in v1.29.0.
+    logic [15:0] hlock;
+    logic        al_hl;
     logic        halted;
     logic [3:0]  hcode;
     logic [31:0] hval, cyc, nops;
@@ -1275,6 +1342,22 @@ module mpy_core
     assign trace_pc_o = op_pc;
     assign trace_op_o = op;
     assign trace_sp_o = sp;
+    assign irq_boundary_o = (st == S_IRQ_POLL);
+    assign irq_jump_o = (st == S_IRQ_POLL) && irq_jump;
+    assign irq_done_o = irq_done_q;
+    assign irq_handler_we_o = irq_hwe_q;
+    assign irq_handler_idx_o = irq_hidx_q;
+    assign irq_handler_fn_o = irq_hfn_q;
+    assign irq_handler_arg_o = irq_harg_q;
+    assign irq_sched_push_o = irq_spush_q;
+    assign irq_sched_fn_o = irq_sfn_q;
+    assign irq_sched_arg_o = irq_sarg_q;
+    assign irq_mirror_sel_o = mi[4:1];
+    assign irq_mirror_clr_o = irq_mclr_q;
+    assign dbg_pc_o = pc;
+    assign dbg_fp_o = fbase;
+    assign dbg_sp_o = {25'd0, sp};
+    assign dbg_exc_sp_o = {27'd0, xsp};
 
     logic gc_alloc_req, gc_collect_req;
     assign gc_alloc_req_o = gc_alloc_req;
@@ -1455,12 +1538,19 @@ module mpy_core
                 lc_age[k] <= 3'd0;
             end
             lc_fi <= 4'd0;
+            need_poll <= 1'b1; irq_jump <= 1'b0; irq_in_cb <= 1'b0; irq_cb_hard <= 1'b0;
+            kbd_pend <= 1'b0; irq_cb_src <= 3'd0;
+            irq_done_q <= 1'b0; irq_hwe_q <= 1'b0; irq_spush_q <= 1'b0; irq_mclr_q <= 1'b0;
+            irq_hidx_q <= 3'd0; irq_hfn_q <= VNULL; irq_harg_q <= VNULL;
+            irq_sfn_q <= VNULL; irq_sarg_q <= VNULL;
+            mi <= 6'd0; hlock <= 16'd0; al_hl <= 1'b0;
         end else begin
             m_req <= 1'b0;
             gc_alloc_req <= 1'b0;
             gc_collect_req <= 1'b0;
             alu_start <= 1'b0;
             trace <= 1'b0;
+            irq_done_q <= 1'b0; irq_hwe_q <= 1'b0; irq_spush_q <= 1'b0; irq_mclr_q <= 1'b0;
             if (!halted) cyc <= cyc + 32'd1;
             // A spill or a reload moves sp without a push or a pop.
             if (sp_hold) sp_hold <= 1'b0;
@@ -1870,12 +1960,14 @@ module mpy_core
                     rf[`SX(sp)] <= t[7]; rf[`SX(6'(sp + 7'd1))] <= VNULL; sp <= sp + 7'd2; st <= S_FETCH;
                 end
                 ABI_RK_CONT: st <= S_CONT;
+                // The callback returned into the interrupted frame.
+                ABI_RK_IRQ: begin irq_done_q <= 1'b1; irq_in_cb <= 1'b0; st <= S_FETCH; end
                 default: halt(ABI_HALT_CLEAN, 32'd0);
             endcase
 
             S_CONT: case (fcont)
                 ABI_CONT_REDISPATCH: begin op <= aux[7:0]; st <= S_EXEC; end
-                ABI_CONT_REPLACE: begin rf[`SX(aux[6:0])] <= t[7]; pc <= op_pc; st <= S_FETCH; end
+                ABI_CONT_REPLACE: begin rf[`SX(aux[6:0])] <= t[7]; pc <= op_pc; need_poll <= 1'b0; st <= S_FETCH; end
                 ABI_CONT_INIT: if (t[7] != VNONE) raise_err(ABI_ERR_INIT_NONE, t[7], VNULL);
                                else begin fcont <= aux3[7:0]; deliver(aux, aux2[3:0]); end
                 ABI_CONT_WITH_ENTER: begin
@@ -1892,7 +1984,7 @@ module mpy_core
                 ABI_CONT_RAISE: raise_val(t[7]);
                 ABI_CONT_TRUTH: begin
                     ovr <= (t[7] == VTRUE) ? ABI_OVR_TRUE : ABI_OVR_FALSE;
-                    pc <= op_pc; st <= S_FETCH;
+                    pc <= op_pc; need_poll <= 1'b0; st <= S_FETCH;
                 end
                 // __exit__'s result was not decided in S_TR. None swallows.
                 ABI_CONT_WITH_TRUTH: begin
@@ -1919,7 +2011,8 @@ module mpy_core
                 ABI_CONT_FOR_NEXT: if (t[7] == VSTOP) begin sp <= sp - 7'd4; pc <= aux[31:0]; st <= S_FETCH; end
                                    else begin push(t[7]); st <= S_FETCH; end
                 ABI_CONT_GETITER: begin
-                    rf[`SX(6'(sp - 7'd1))] <= t[7]; ovr <= ABI_OVR_PYOBJ; pc <= op_pc; st <= S_FETCH;
+                    rf[`SX(6'(sp - 7'd1))] <= t[7]; ovr <= ABI_OVR_PYOBJ; pc <= op_pc; need_poll <= 1'b0;
+                    st <= S_FETCH;
                 end
                 ABI_CONT_BIND: rd(adr(t[7]), S_CB_N);
                 // Fast path: t[7] is the bare yielded value. The tuple arm stays
@@ -2013,6 +2106,9 @@ module mpy_core
                         drop_push_v <= xc;
                         drop_then <= S_FETCH;
                         st <= S_DROP;
+                    end else if (frk == ABI_RK_IRQ) begin
+                        // Out of the callback: back in the interrupted frame.
+                        fl_base <= fprev; gosub(S_FILL, S_IRQ_UNC);
                     end else if (gen != VNULL && fprev != 32'd0) begin
                         pc <= 32'd0;
                         st <= S_GN_ESC;
@@ -2022,17 +2118,56 @@ module mpy_core
                         rx_crk <= frk; fl_base <= fprev; gosub(S_FILL, S_RX_POP);
                     end
             S_RX_POP: begin rx_from <= 1'b1; st <= S_RAISE; end
+            S_IRQ_UNC: wr(ABI_SYSROOT_BASE + 4 * ABI_SR_IRQ_EXC, xc, S_IRQ_UNC2);
+            S_IRQ_UNC2: hook(ABI_HOOK_IRQ_UNCAUGHT, ABI_RK_DISCARD, 8'd2, vbool(irq_cb_hard),
+                             vint({29'd0, irq_cb_src}), VNULL, VNULL);
 
             // ---------------- fetch / decode ----------------
             S_FETCH: if (sp >= 7'(RF_SPILL_AT)) begin
                          rf_resume <= S_FETCH; st <= S_RF_SPILL;
                      end else if (has_link && sp <= 7'(RF_RELOAD_AT)) begin
                          rf_resume <= S_FETCH; st <= S_RF_RELOAD;
+                     end else if (need_poll) begin
+                         need_poll <= 1'b0; st <= S_IRQ_POLL;
                      end else if (in_win) st <= S_DEC;
                      else begin
                          fw_base <= {pc[31:2], 2'b00}; fw_i <= 2'd0; fw_ok <= 1'b0;
                          rd({pc[31:2], 2'b00}, S_FW);
                      end
+            // Boundary. irq_boundary_o and irq_jump_o are high in this state
+            // only; fire and kbd_raise answer on this cycle.
+            S_IRQ_POLL: begin
+                if (irq_kbd_i) kbd_pend <= 1'b1;
+                irq_jump <= 1'b0;
+                st <= S_IRQ_TAKE;
+            end
+            S_IRQ_TAKE: if (irq_mirror_dirty_i) gosub(S_IRQ_MIR, S_IRQ_TAKE);
+                        else if (kbd_pend) begin
+                            kbd_pend <= 1'b0;
+                            raise_msg(ABI_MSG_KBD);
+                        end else if (irq_fire_i && !irq_in_cb) begin
+                            irq_in_cb <= 1'b1;
+                            irq_cb_hard <= irq_fire_hard_i;
+                            irq_cb_src <= irq_fire_src_i;
+                            hook(ABI_HOOK_IRQ_CALL, ABI_RK_IRQ, 8'd2, irq_fire_fn_i, irq_fire_arg_i,
+                                 VNULL, VNULL);
+                        end else if (in_win) st <= S_DEC;
+                        else begin
+                            fw_base <= {pc[31:2], 2'b00}; fw_i <= 2'd0; fw_ok <= 1'b0;
+                            rd({pc[31:2], 2'b00}, S_FW);
+                        end
+            // Mirror the flop file: ring slot i at ABI_SCHED_BASE + 8*i, then
+            // handler src at ABI_HANDLER_BASE + 8*src, function then argument.
+            S_IRQ_MIR: if (irq_mirror_dirty_i) begin mi <= 6'd0; st <= S_IRQ_MIRW; end
+                       else ret();
+            S_IRQ_MIRW: if (mi == 6'd32) begin irq_mclr_q <= 1'b1; mi <= 6'd0; st <= S_IRQ_MIRD; end
+                        else begin
+                            wr((mi[4] ? ABI_HANDLER_BASE : ABI_SCHED_BASE) + {26'd0, mi[3:0], 2'b00},
+                               mi[0] ? irq_mirror_arg_i : irq_mirror_fn_i, S_IRQ_MIRW);
+                            mi <= mi + 6'd1;
+                        end
+            // The clear lands on this clock; the caller sees a clean flag.
+            S_IRQ_MIRD: ret();
             S_FW: begin
                 fwin[32 * fw_i +: 32] <= md;
                 if (fw_i == 2'd2) begin fw_ok <= 1'b1; st <= S_DEC; end
@@ -2047,6 +2182,7 @@ module mpy_core
                        op_pc <= pc; pc <= pc + d_len;
                        jt <= pc + d_len - (d_extv ? 32'd1 : 32'd0) + d_arg;
                        nops <= nops + 32'd1; trace <= 1'b1;
+                       need_poll <= 1'b1;
                        st <= S_EXEC;
                    end
 
@@ -2134,7 +2270,7 @@ module mpy_core
                     rf[`SX(6'(sp - 7'd1))] <= rf[`SX(6'(sp - 7'd2))];
                     st <= S_FETCH;
                 end
-                8'h42: begin pc <= jt; st <= S_FETCH; end
+                8'h42: begin pc <= jt; irq_jump <= !(fflags & FF_FW); st <= S_FETCH; end
                 8'h43, 8'h44, 8'h45, 8'h46: begin tr_v <= rf[`SX(6'(sp - 7'd1))]; gosub(S_TR, S_JT); end
                 8'h47: begin t[0] <= rf[`SX(6'(sp - 7'd1))]; at_q <= ABI_Q_EXIT_D; gosub_scr(SCR_AT, S_AT, S_SW_X); end
                 8'h48, 8'h49: begin
@@ -2144,7 +2280,7 @@ module mpy_core
                         gosub(S_XPUSH, S_FETCH);
                     end
                 end
-                8'h4a: begin pc <= jt; sw_k <= 2'd0; gosub(S_XPOP, S_FETCH); end
+                8'h4a: begin pc <= jt; irq_jump <= !(fflags & FF_FW); sw_k <= 2'd0; gosub(S_XPOP, S_FETCH); end
                 8'h40: begin
                     rf[`SX(sp)] <= vint(jt); rf[`SX(6'(sp + 7'd1))] <= vint({24'd0, ext});
                     sp <= sp + 7'd2; st <= S_UJ;
@@ -2510,6 +2646,7 @@ module mpy_core
                         8'h46: if (!tr_r) pc <= jt; else sp <= sp - 7'd1;
                         default: rf[`SX(6'(sp - 7'd1))] <= vbool(!tr_r);   // UNARY_OP NOT
                     endcase
+                    if (op >= 8'h43 && op <= 8'h46) irq_jump <= !(fflags & FF_FW);
                     st <= S_FETCH;
                 end
 
@@ -2706,6 +2843,7 @@ module mpy_core
                   end
             S_UJ: begin uj <= rf[`SX(6'(sp - 7'd1))][31:0]; sp <= sp - 7'd1; st <= S_UJ_L; end
             S_UJ_L: if (uj[6:0] == 7'd0) begin
+                        irq_jump <= !(fflags & FF_FW);
                         pc <= rf[`SX(6'(sp - 7'd1))][31:0];
                         sp <= sp - 7'd1 - (uj[7] ? 7'd4 : 7'd0);
                         st <= S_FETCH;
@@ -3051,7 +3189,7 @@ module mpy_core
                     wr(srd_addr + 32'd4 + ((x1 >> 3) << 2), {4'd0, v3}, S_CVK_SWP);
                 end
             S_CVK_SWP: wr(x0, t[7], S_CVK_SWD);
-            S_CVK_SWD: begin pc <= op_pc; st <= S_FETCH; end
+            S_CVK_SWD: begin pc <= op_pc; need_poll <= 1'b0; st <= S_FETCH; end
             S_CVK_RD: if (stk_hit(cv_g)) begin t[3] <= stk_val(cv_g); st <= cv_ret; end
                       else begin srd_g <= cv_g; gosub(S_SRD, S_CVK_RD2); end
             S_CVK_RD2: begin t[3] <= srd_v; st <= cv_ret; end
@@ -3441,6 +3579,15 @@ module mpy_core
                     ABI_N_POKE8: rd(ab_ptr(ab_lo + 8'd1), S_NAT_POKE1);
                     ABI_N_PEEK32: rd(v1, S_N_RINT);
                     ABI_N_POKE32: rd(ab_ptr(ab_lo + 8'd1), S_NAT_P32);
+                    ABI_N_IRQ_HANDLER: rd(ab_ptr(ab_lo + 8'd1), S_NAT_IRQH1);
+                    ABI_N_SCHED: rd(ab_ptr(ab_lo + 8'd1), S_NAT_SCH1);
+                    ABI_N_IRQOFF: rd(MPY_MMIO_BASE + MPY_MMIO_IRQ_GIE, S_NAT_GIE1);
+                    ABI_N_HEAPLOCK: if (v1 == 32'd0) begin hlock <= hlock + 16'd1; deliver(VNONE, crk); end
+                        else if (v1 == 32'd1) begin
+                            hlock <= hlock - 16'd1;
+                            deliver(vint({16'd0, 16'(hlock - 16'd1)}), crk);
+                        end else deliver(vint({16'd0, hlock}), crk);
+                    ABI_N_IRQ_DONE: begin irq_done_q <= 1'b1; irq_in_cb <= 1'b0; deliver(VNONE, crk); end
                     ABI_N_ALLOC: alloc(v1, S_N_ALLOC);
                     ABI_N_TYPEOF: begin ty_v <= mv; gosub(S_TYPEOF, S_N_TYPEOF); end
                     ABI_N_CALLNS: if (tg(mv) == ABI_TAG_INT) rd(ab_ptr(ab_lo + 8'd1), S_NAT_CNS);
@@ -3508,6 +3655,25 @@ module mpy_core
             // _poke32(addr, word): the raw payload with tag CONTROL, so a
             // word stored this way is never a GC root.
             S_NAT_P32: wr(ab_q[31:0], {ABI_TAG_CONTROL, mv[31:0]}, S_N_NONE);
+            // _irq_handler(src, fn, arg): one handler_we with both tags.
+            S_NAT_IRQH1: begin t[0] <= mv; rd(ab_ptr(ab_lo + 8'd2), S_NAT_IRQH2); end
+            S_NAT_IRQH2: begin
+                irq_hwe_q <= 1'b1; irq_hidx_q <= ab_q[2:0];
+                irq_hfn_q <= t[0]; irq_harg_q <= mv;
+                st <= S_N_NONE;
+            end
+            // _sched(fn, arg): push, then read sched_full a cycle later.
+            S_NAT_SCH1: begin
+                irq_spush_q <= 1'b1; irq_sfn_q <= ab_q; irq_sarg_q <= mv;
+                st <= S_NAT_SCH2;
+            end
+            S_NAT_SCH2: st <= S_NAT_SCH3;
+            S_NAT_SCH3: if (irq_sched_full_i) raise_msg(ABI_MSG_SCHED_FULL);
+                        else deliver(VNONE, crk);
+            // _irqoff(): read and clear IRQ_GIE inside one native, so no
+            // boundary falls between the two accesses.
+            S_NAT_GIE1: begin x0 <= md; wr(MPY_MMIO_BASE + MPY_MMIO_IRQ_GIE, vint(32'd0), S_NAT_GIE2); end
+            S_NAT_GIE2: deliver(vint({31'd0, x0[0]}), crk);
             S_NAT_CNS: begin
                 c_ismod <= 1'b1; c_md <= ab_q[31:0]; cl_loc <= mv;
                 ab_lo <= 8'd32; ab_pe <= 8'd32;
@@ -3853,7 +4019,9 @@ module mpy_core
             end
             S_GR_OPC: rd({pc[31:2], 2'b00}, S_GR_OPB);
             S_GR_OPB: if (byte_of(md, pc[1:0]) == 8'h68) begin
+                          // The deferred throw belongs to the YIELD_FROM at pc.
                           inj <= t[2];
+                          need_poll <= 1'b0;
                           st <= S_FETCH;
                       end else begin
                           inj <= VNONE;
@@ -3941,7 +4109,14 @@ module mpy_core
                   else begin wr(wb_a + 4 * wb_i, wb_v[wb_i[2:0]], S_WB); wb_i <= wb_i + 4'd1; end
 
             // allocate al_n words -> al_a (zeroed); GC once on failure
-            S_AL: begin gc_alloc_req <= 1'b1; al_gc <= 1'b0; st <= S_AL_W; end
+            // The heap is locked by a running hard callback or by heap_lock().
+            // A locked allocation does not collect: a soft one fails, any
+            // other raises the heap-locked MemoryError.
+            S_AL: if ((irq_heap_locked_i && irq_in_cb) || hlock != 16'd0) begin
+                      if (al_soft) begin al_ok <= 1'b0; al_a <= 32'd0; ret(); end
+                      else st <= S_AL_HL;
+                  end else begin gc_alloc_req <= 1'b1; al_gc <= 1'b0; st <= S_AL_W; end
+            S_AL_HL: begin al_hl <= 1'b1; wr(EMERG_ADDR + 20, vint(al_n << 2), S_AL_OOMA); end
             S_AL_W: if (gc_alloc_done_i) begin
                 if (gc_alloc_ok_i) begin al_a <= gc_alloc_addr_i; al_ok <= 1'b1; ret(); end
                 else if (!al_gc) begin al_gc <= 1'b1; gosub(S_GC, S_AL_RT); end
@@ -3964,20 +4139,24 @@ module mpy_core
                     end else
                         // Word 4 of the emergency exception is its __dict__. The byte
                         // count lives in the free sysroot word just past the object.
-                        wr(EMERG_ADDR + 20, vint(al_n << 2), S_AL_OOM);
+                        wr(EMERG_ADDR + 20, vint(al_n << 2), S_AL_OOMA);
                 end
             end
+            // The emergency object's args say which MemoryError this is.
+            S_AL_OOMA: rd(h_msgs + 4 * (al_hl ? ABI_MSG_HEAP_LOCKED : ABI_MSG_MEMORY), S_AL_OOMB);
+            S_AL_OOMB: begin al_hl <= 1'b0; wr(EMERG_ADDR + 8, mv, S_AL_OOM); end
             S_AL_RT: begin gc_alloc_req <= 1'b1; st <= S_AL_W; end
             S_AL_OOM: wr(EMERG_ADDR + 12, VNULL, S_AL_OOM2);
             S_AL_OOM2: raise_val(vobj(EMERG_ADDR));
-            S_AL_CLR: if (cv_k == x1) wr(EMERG_ADDR + 20, vint(al_n << 2), S_AL_OOM);
+            S_AL_CLR: if (cv_k == x1) wr(EMERG_ADDR + 20, vint(al_n << 2), S_AL_OOMA);
                       else begin
                           wr(ab_ptr(cv_k[7:0]), VNULL, S_AL_CLR);
                           cv_k <= cv_k + 32'd1;
                       end
 
             // collect: spill every root holder, then run the collector
-            S_GC: if (noframe) begin gi <= 32'd0; st <= S_GC_T; end
+            S_GC: if (irq_mirror_dirty_i) gosub(S_IRQ_MIR, S_GC);
+                  else if (noframe) begin gi <= 32'd0; st <= S_GC_T; end
                   else gosub(S_SPILL, S_GC_1);
             S_GC_1: begin gi <= 32'd0; st <= S_GC_T; end
             // The argument buffer already resides in ARGBUF, which the collector scans.

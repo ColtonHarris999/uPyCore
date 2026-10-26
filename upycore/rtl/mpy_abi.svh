@@ -222,6 +222,11 @@ localparam logic [7:0] ABI_N_BASEEXCEPTION_INIT = 8'd37;
 localparam logic [7:0] ABI_N_NEW_RANGE = 8'd38;
 localparam logic [7:0] ABI_N_NEW_OBJECT = 8'd39;
 localparam logic [7:0] ABI_N_POKE32 = 8'd40;
+localparam logic [7:0] ABI_N_IRQ_HANDLER = 8'd41;
+localparam logic [7:0] ABI_N_SCHED = 8'd42;
+localparam logic [7:0] ABI_N_IRQOFF = 8'd43;
+localparam logic [7:0] ABI_N_HEAPLOCK = 8'd44;
+localparam logic [7:0] ABI_N_IRQ_DONE = 8'd45;
 
 localparam logic [7:0] ABI_HOOK_BOOT = 8'd0;
 localparam logic [7:0] ABI_HOOK_RAISE = 8'd1;
@@ -248,6 +253,7 @@ localparam logic [7:0] ABI_HOOK_BIND = 8'd21;
 localparam logic [7:0] ABI_HOOK_SUPER_METHOD = 8'd22;
 localparam logic [7:0] ABI_HOOK_WARN = 8'd23;
 localparam logic [7:0] ABI_HOOK_BIND_WIDE = 8'd24;
+localparam logic [7:0] ABI_HOOK_IRQ_CALL = 8'd25;
 
 localparam logic [7:0] ABI_ERR_NAME = 8'd0;
 localparam logic [7:0] ABI_ERR_NOT_CALLABLE = 8'd1;
@@ -373,6 +379,7 @@ localparam logic [3:0] ABI_RK_DISCARD = 4'd1;
 localparam logic [3:0] ABI_RK_CONT = 4'd2;
 localparam logic [3:0] ABI_RK_HALT = 4'd3;
 localparam logic [3:0] ABI_RK_PUSH_NULL = 4'd4;
+localparam logic [3:0] ABI_RK_IRQ = 4'd5;
 
 localparam logic [7:0] ABI_CONT_REDISPATCH = 8'd0;
 localparam logic [7:0] ABI_CONT_REPLACE = 8'd1;
@@ -486,7 +493,7 @@ localparam int ABI_DICT_WORDS = 4;
 localparam int ABI_STR_HDR_WORDS = 3;
 localparam int ABI_ITER_WORDS = 4;
 localparam int ABI_N_TYPES = 64;
-localparam int ABI_N_NATIVES = 41;
+localparam int ABI_N_NATIVES = 46;
 localparam logic [31:0] ABI_SYSROOT_BASE = 32'h20008080;
 localparam logic [31:0] ABI_ARGBUF_BASE = 32'h20008100;
 localparam logic [31:0] ABI_GC_POOL_BASE = 32'h20008500;

@@ -31,6 +31,17 @@ module tb_mpy_periph_io;
     logic [2:0]  fire_src;
     logic [31:0] fire_fn, fire_arg;
     logic        sched_ok, sched_full;
+    logic        bnd = 1'b0, jmp = 1'b0, done = 1'b0;
+    logic [3:0]  fire_fn_tag, fire_arg_tag;
+    logic        kbd_raise;
+    logic        hwe = 1'b0;
+    logic [2:0]  hidx = 3'h0;
+    logic [35:0] hfn = 36'h0, harg = 36'h0;
+    logic        spush = 1'b0;
+    logic [35:0] sfn = 36'h0, sarg = 36'h0;
+    logic        mir_dirty, mir_clr = 1'b0;
+    logic [3:0]  mir_sel = 4'h0;
+    logic [35:0] mir_fn, mir_arg;
     logic [31:0] saved_pc, saved_fp, saved_sp, saved_exc;
 
     int fifo_depth, baud, burst, echo_n, echo_sum, echo_ovr, echo17_n, echo17_sum, echo17_ovr;
@@ -51,13 +62,18 @@ module tb_mpy_periph_io;
         .gpio_in_i(gpio_in), .gpio_in_en_i(gpio_in_en),
         .soft_set_i(1'b0), .gc_req_i(1'b0), .sim_set_i(1'b0),
         .kbd_set_i(kbd_set), .mbox_set_i(mbox_set),
-        .bc_boundary_i(1'b0), .jump_i(1'b0), .done_i(1'b0),
+        .bc_boundary_i(bnd), .jump_i(jmp), .done_i(done),
         .fire_o(fire), .fire_hard_o(fire_hard), .fire_sched_o(fire_sched),
         .fire_src_o(fire_src), .fire_fn_o(fire_fn), .fire_arg_o(fire_arg),
+        .fire_fn_tag_o(fire_fn_tag), .fire_arg_tag_o(fire_arg_tag), .kbd_raise_o(kbd_raise),
         .heap_locked_o(heap_locked), .sched_locked_o(sched_locked), .irq_active_o(irq_active),
-        .handler_we_i(1'b0), .handler_idx_i(3'h0), .handler_fn_i(32'h0), .handler_arg_i(32'h0),
-        .sched_push_i(1'b0), .sched_fn_i(32'h0), .sched_arg_i(32'h0),
+        .handler_we_i(hwe), .handler_idx_i(hidx), .handler_fn_i(hfn[31:0]), .handler_arg_i(harg[31:0]),
+        .handler_fn_tag_i(hfn[35:32]), .handler_arg_tag_i(harg[35:32]),
+        .sched_push_i(spush), .sched_fn_i(sfn[31:0]), .sched_arg_i(sarg[31:0]),
+        .sched_fn_tag_i(sfn[35:32]), .sched_arg_tag_i(sarg[35:32]),
         .sched_ok_o(sched_ok), .sched_full_o(sched_full),
+        .mirror_dirty_o(mir_dirty), .mirror_sel_i(mir_sel), .mirror_clr_i(mir_clr),
+        .mirror_fn_o(mir_fn), .mirror_arg_o(mir_arg),
         .pc_i(32'h0), .fp_i(32'h0), .sp_i(32'h0), .exc_sp_i(32'h0),
         .saved_pc_o(saved_pc), .saved_fp_o(saved_fp), .saved_sp_o(saved_sp),
         .saved_exc_sp_o(saved_exc)
@@ -346,6 +362,59 @@ module tb_mpy_periph_io;
         $display("GPIO oe=5 pu=2 pd=8 status per pin");
     endtask
 
+    // Tags travel with handler words and ring slots; the mirror port shows
+    // occupied slots and the empty word elsewhere; KBD raises at a jump.
+    task automatic check_mirror_kbd();
+        logic [31:0] v;
+        do_reset();
+        check(!mir_dirty, "mirror clean after reset");
+        @(negedge clk);
+        hwe = 1'b1; hidx = 3'(MPY_SRC_TIMER); hfn = {4'hE, 32'h2000_9000}; harg = {4'h1, 32'h2000_A000};
+        @(negedge clk);
+        hwe = 1'b0;
+        check(mir_dirty, "a handler write dirties the mirror");
+        mir_sel = 4'd8 + 4'(MPY_SRC_TIMER);
+        #1 check(mir_fn == {4'hE, 32'h2000_9000} && mir_arg == {4'h1, 32'h2000_A000},
+                 "handler word and tags on the mirror port");
+        @(negedge clk); mir_clr = 1'b1;
+        @(negedge clk); mir_clr = 1'b0;
+        check(!mir_dirty, "mirror_clr");
+        @(negedge clk);
+        spush = 1'b1; sfn = {4'h8, 32'h2000_B000}; sarg = {4'h9, 32'h2000_C000};
+        @(negedge clk);
+        spush = 1'b0;
+        check(sched_ok && mir_dirty, "a push dirties the mirror");
+        mir_sel = 4'd0;
+        #1 check(mir_fn == {4'h8, 32'h2000_B000} && mir_arg == {4'h9, 32'h2000_C000}, "ring slot 0 mirrored");
+        mir_sel = 4'd1;
+        #1 check(mir_fn == 36'h0 && mir_arg == 36'h0, "an empty slot is the empty word");
+        @(negedge clk); mir_clr = 1'b1;
+        @(negedge clk); mir_clr = 1'b0;
+        // KBD at a jump wins over the queued callback; the ring stays.
+        bus_write(MPY_IRQ_ENABLE, 32'h1 << MPY_SRC_KBD);
+        @(negedge clk); kbd_set = 1'b1;
+        @(negedge clk); kbd_set = 1'b0;
+        @(negedge clk); bnd = 1'b1; jmp = 1'b0;
+        #1 check(!kbd_raise, "KBD waits for a jump");
+        @(negedge clk); bnd = 1'b1; jmp = 1'b1;
+        #1 check(kbd_raise, "KBD raises at a jump");
+        @(negedge clk); bnd = 1'b0; jmp = 1'b0;
+        check(!fire && !mir_dirty, "no callback on the KBD jump");
+        bus_read(MPY_IRQ_STATUS, v);
+        check(!v[MPY_SRC_KBD], "the raise clears KBD");
+        @(negedge clk); bnd = 1'b1; jmp = 1'b1;
+        @(negedge clk); bnd = 1'b0; jmp = 1'b0;
+        check(fire && fire_sched && fire_fn_tag == 4'h8 && fire_arg_tag == 4'h9 && mir_dirty,
+              "the next jump pops with tags");
+        // KBD interrupts a running soft callback, not a hard one.
+        @(negedge clk); kbd_set = 1'b1;
+        @(negedge clk); kbd_set = 1'b0; bnd = 1'b1; jmp = 1'b1;
+        #1 check(kbd_raise, "KBD inside a soft callback");
+        @(negedge clk); bnd = 1'b0; jmp = 1'b0; done = 1'b1;
+        @(negedge clk); done = 1'b0;
+        $display("MIRROR tags and empty slots; KBD at the jump");
+    endtask
+
     initial begin
         if (!$value$plusargs("FIFO_DEPTH=%d", fifo_depth)) $fatal(1, "missing FIFO_DEPTH");
         if (!$value$plusargs("BAUD=%d", baud)) $fatal(1, "missing BAUD");
@@ -374,7 +443,8 @@ module tb_mpy_periph_io;
         check_burst(1);
         check_tick();
         check_gpio();
-        $display("PASS: mpy periph io fifo/serial/burst/tick/gpio");
+        check_mirror_kbd();
+        $display("PASS: mpy periph io fifo/serial/burst/tick/gpio/mirror/kbd");
         $finish;
     end
 endmodule

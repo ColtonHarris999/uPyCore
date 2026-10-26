@@ -73,14 +73,23 @@ def _mp_stack():
 
 
 def _mp_lock():
-    return None
+    return _heaplock(0)
 
 
 def _mp_unlock():
-    return None
+    return _heaplock(1)
 
 
 def _mp_kbd(i):
+    # The UART character and the coprocessor's KBD doorbell share one
+    # source; -1 disarms both.
+    en = _peek32(MMIO_IRQ_ENABLE)
+    if i < 0:
+        _poke32(MMIO_UART_KBD, 0)
+        _poke32(MMIO_IRQ_ENABLE, en & ~(1 << SRC_KBD))
+    else:
+        _poke32(MMIO_UART_KBD, 256 | (i & 255))
+        _poke32(MMIO_IRQ_ENABLE, en | (1 << SRC_KBD))
     return None
 
 
@@ -89,8 +98,7 @@ def _mp_qstr():
 
 
 def _mp_sched(func, arg):
-    func(arg)
-    return None
+    return _sched(func, arg)
 
 
 def _build_sys(filename):

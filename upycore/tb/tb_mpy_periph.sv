@@ -64,7 +64,8 @@ module tb_mpy_periph;
     logic [31:0] expect_edge_mask, expect_off_mask;
 
     // Depth 1 is the v1 single-byte buffer, so these traces stay bit-identical.
-    // The serial pins, the pin sampler, and the KBD/MBOX sources are tied off.
+    // The serial pins, the pin sampler, the KBD/MBOX sources, the tag
+    // sidebands, and the mirror port are tied off.
     mpy_periph #(.UART_FIFO_DEPTH(1)) dut (
         .clk_i(clk),
         .rst_n_i(rst_n),
@@ -102,6 +103,9 @@ module tb_mpy_periph;
         .fire_src_o(fire_src),
         .fire_fn_o(fire_fn),
         .fire_arg_o(fire_arg),
+        .fire_fn_tag_o(),
+        .fire_arg_tag_o(),
+        .kbd_raise_o(),
         .heap_locked_o(heap_locked),
         .sched_locked_o(sched_locked),
         .irq_active_o(irq_active),
@@ -109,11 +113,20 @@ module tb_mpy_periph;
         .handler_idx_i(handler_idx),
         .handler_fn_i(handler_fn),
         .handler_arg_i(handler_arg),
+        .handler_fn_tag_i(4'h0),
+        .handler_arg_tag_i(4'h0),
         .sched_push_i(sched_push),
         .sched_fn_i(sched_fn),
         .sched_arg_i(sched_arg),
+        .sched_fn_tag_i(4'h0),
+        .sched_arg_tag_i(4'h0),
         .sched_ok_o(sched_ok),
         .sched_full_o(sched_full),
+        .mirror_dirty_o(),
+        .mirror_sel_i(4'h0),
+        .mirror_clr_i(1'b0),
+        .mirror_fn_o(),
+        .mirror_arg_o(),
         .pc_i(pc),
         .fp_i(fp),
         .sp_i(sp),

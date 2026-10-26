@@ -25,6 +25,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -165,18 +166,29 @@ def firmware_source() -> str:
     return "\n".join(parts) + "\n"
 
 
-def build_firmware(out_dir: Path = BUILD / "fw") -> Path:
-    """Join and compile the firmware; returns the .mpy path."""
+_FW_LOCK = threading.Lock()
 
-    out_dir.mkdir(parents=True, exist_ok=True)
-    src = out_dir / "fw.py"
-    mpy = out_dir / "fw.mpy"
-    text = firmware_source()
-    if not src.exists() or src.read_text() != text:
-        src.write_text(text)
-    if _newer(mpy, [src, MPY_CROSS]):
-        mpy_cross(src, mpy, "_fw.py")
-    return mpy
+
+def build_firmware(out_dir: Path = BUILD / "fw") -> Path:
+    """Join and compile the firmware; returns the .mpy path.
+
+    hw_tests links images from several threads. The lock and the rename
+    keep a linker from reading a half-written fw.mpy when the sources
+    change during a run.
+    """
+
+    with _FW_LOCK:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        src = out_dir / "fw.py"
+        mpy = out_dir / "fw.mpy"
+        text = firmware_source()
+        if not src.exists() or src.read_text() != text:
+            src.write_text(text)
+        if _newer(mpy, [src, MPY_CROSS]):
+            tmp = out_dir / "fw.mpy.tmp"
+            mpy_cross(src, tmp, "_fw.py")
+            os.replace(tmp, mpy)
+        return mpy
 
 
 def link(main_mpy: Path, fw_mpy: Path, out: Path, modules: list[str] | None = None) -> Path:
@@ -217,6 +229,7 @@ class SimResult:
 _HALT_RE = re.compile(r"MPY_HALT code=(\d+) value=([0-9a-f]+) cycles=(\d+) ops=(\d+) gc=(\d+)")
 _TIMEOUT_RE = re.compile(r"MPY_TIMEOUT cycles=(\d+) ops=(\d+) gc=(\d+)")
 _IO_RE = re.compile(r"^MPY_IO (.*)$", re.M)
+_TICKS_RE = re.compile(r"MPY_TICKS ticks=(\d+) cycles=(\d+) ops=(\d+) gc=(\d+)")
 
 
 def run_image(image: Path, max_cycles: int = 50_000_000, trace: bool = False,
@@ -243,6 +256,11 @@ def run_image(image: Path, max_cycles: int = 50_000_000, trace: bool = False,
         code = int(m.group(1))
         return SimResult(stdout, stderr, HALT_NAMES.get(code, str(code)), int(m.group(2), 16),
                          int(m.group(3)), int(m.group(4)), int(m.group(5)), log, io)
+    m = _TICKS_RE.search(log)
+    if m:
+        # +MAX_TICKS ended the run: a trace pass, not a halt.
+        return SimResult(stdout, stderr, "TICKS", 0, int(m.group(2)), int(m.group(3)), int(m.group(4)),
+                         log, io)
     m = _TIMEOUT_RE.search(log)
     if m:
         return SimResult(stdout, stderr, "TIMEOUT", 0, int(m.group(1)), int(m.group(2)), int(m.group(3)),

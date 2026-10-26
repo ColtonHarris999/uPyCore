@@ -40,11 +40,14 @@ package mpy_mmio_pkg;
     localparam logic [11:0] MPY_UART_KBD    = 12'h058;
 
     // One schedule-ring slot. is_sched distinguishes micropython.schedule
-    // from a device IRQ that was queued for soft delivery.
+    // from a device IRQ that was queued for soft delivery. The tags travel
+    // with the payloads so the mirror can store GC-visible words.
     typedef struct packed {
         logic        is_sched;
         logic [2:0]  src;
+        logic [3:0]  arg_tag;
         logic [31:0] arg;
+        logic [3:0]  fn_tag;
         logic [31:0] fn;
     } mpy_sched_entry_t;
 

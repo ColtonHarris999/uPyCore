@@ -143,9 +143,17 @@ bits leave on `gpio_oe`, `gpio_pu`, and `gpio_pd`.
 `mpy_irq` holds eight slots, one per source. The `KBD` slot is not
 read: that source raises instead of calling. The native `machine` module writes a slot
 when `Pin.irq`, `Timer`, or `UART.irq` runs. The port is `handler_we`
-with the source index, the function word, and the argument word. The
-hart, when it is wired, turns a store in the `IRQ_TABLE` range into that
-port. Those flops are GC roots, together with the schedule ring.
+with the source index, the function word, the argument word, and a tag
+for each word; the `_irq_handler` native drives it. A `micropython.schedule`
+push carries the same two tags, and every ring slot keeps them.
+
+The flops are the delivery copy. They are GC roots through a mirror:
+`mirror_dirty` rises on a handler write, a push, or a pop, and the hart
+reads every slot through `mirror_sel` (0–7 ring slots, 8–15 handler
+slots; `mirror_fn`/`mirror_arg` are tag and payload) into the SRAM
+windows `upycore/docs/mpy_memory_map.md` gives, then pulses
+`mirror_clr`. A ring slot outside `[head, tail)` reads as the empty
+word. A change on the clock of the clear keeps the flag set.
 
 ## Delivery
 

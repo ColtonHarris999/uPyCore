@@ -306,6 +306,11 @@ NATIVES = [
     "new.range", "new.object",
     # Appended after the constructors so existing ids do not move.
     "_poke32",   # _poke32(addr, word): raw word store, tag CONTROL (machine.mem32)
+    "_irq_handler",  # _irq_handler(src, fn, arg): write handler slot src (NULL fn clears it)
+    "_sched",        # _sched(fn, arg): push the schedule ring; RuntimeError when full
+    "_irqoff",       # _irqoff() -> old IRQ_GIE bit; clears it in the same native
+    "_heaplock",     # _heaplock(op): 0 lock -> None, 1 unlock -> depth, 2 -> depth
+    "_irq_done",     # _irq_done(): pulse done for the running callback
 ]
 NATIVE_ID = {name: i for i, name in enumerate(NATIVES)}
 
@@ -336,6 +341,7 @@ HOOKS = [
     "_super_method",  # _super_method(type, obj, name): super().name
     "_warn",          # _warn(code): print a runtime warning to stderr
     "_bind_wide",     # _bind_wide(fun, n_pos, directory): bind a chunked star call
+    "_irq_call",      # _irq_call(fn, arg): every IRQ and schedule callback runs inside this frame
 ]
 HOOK_ID = {name: i for i, name in enumerate(HOOKS)}
 
@@ -506,7 +512,7 @@ FRAME_EXC_WORDS = 3       # handler, val_sp | finally << 31, prev_exc (tagged)
 FRAME_EXC_ENTRIES = 16
 
 # Return kinds: what happens to the value a frame returns.
-RK = ["PUSH", "DISCARD", "CONT", "HALT", "PUSH_NULL"]
+RK = ["PUSH", "DISCARD", "CONT", "HALT", "PUSH_NULL", "IRQ"]
 RK_ID = {name: i for i, name in enumerate(RK)}
 
 # Continuations a caller frame waits in (FR CONT).
@@ -540,6 +546,19 @@ CONT_ID = {name: i for i, name in enumerate(CONT)}
 # Sim-control page words (0xE000_0000).
 SIM_BASE = 0xE000_0000
 SIM = {"HALT": 0, "STDERR": 1, "STDOUT": 2, "CYCLES": 3, "TRACE": 4}
+
+# MMIO window (upycore/docs/mpy_peripherals.md). Offsets from MMIO_BASE;
+# the firmware gets each as an absolute address, MMIO_<NAME>.
+MMIO_BASE = 0x4000_0000
+MMIO = {
+    "UART_TX": 0x00, "UART_RX": 0x04, "GPIO_OUT": 0x08, "TIMER_COUNT": 0x0C,
+    "IRQ_STATUS": 0x10, "IRQ_ENABLE": 0x14, "IRQ_HARD": 0x18, "IRQ_GIE": 0x1C,
+    "IRQ_ACTIVE": 0x20, "IRQ_TABLE": 0x24, "SCHED_HEAD": 0x28, "SCHED_TAIL": 0x2C,
+    "GPIO_IN": 0x30, "GPIO_EDGE": 0x34, "TICKS": 0x38, "UART_BAUD": 0x3C,
+    "UART_STATUS": 0x40, "TIMER_PRESC": 0x44, "GPIO_OE": 0x48, "GPIO_PU": 0x4C,
+    "GPIO_PD": 0x50, "GPIO_STATUS": 0x54, "UART_KBD": 0x58,
+}
+IRQ_SRC = {"TIMER": 0, "UART": 1, "GPIO": 2, "SOFT": 3, "GC_REQ": 4, "SIM": 5, "KBD": 6, "MBOX": 7}
 
 HALT = {
     "CLEAN": 0, "UNCAUGHT": 1, "BAD_OPCODE": 2, "BAD_IMAGE": 3,
@@ -662,6 +681,9 @@ def _py_lines() -> list[str]:
     out.append(f"SET_FLAG_FROZEN = const({SET_FLAG_FROZEN})")
     out.append(f"RC_FLAG_FIRMWARE = const({RC_FLAG_FIRMWARE})")
     out.append(f"GC_POOL_BYTES = const({GC_POOL_BYTES})")
+    for name, off in MMIO.items():
+        out.append(f"MMIO_{name} = const({MMIO_BASE + off})")
+    block("SRC_", IRQ_SRC)
     return out
 
 

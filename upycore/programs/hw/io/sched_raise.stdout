@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "sched_raise.py", line 7, in bad
+ValueError: 5
+after 2
+Traceback (most recent call last):
+  File "sched_raise.py", line 7, in bad
+ValueError: 6
+done 4
