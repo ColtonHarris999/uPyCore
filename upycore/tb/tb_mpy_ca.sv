@@ -14,8 +14,9 @@
 // Build it with Verilator from the repo root, then run obj_dir/Vtb_mpy_ca:
 //   --binary -Iupycore/rtl upycore/rtl/mpy_ca.sv upycore/rtl/mpy_mem.sv
 //   upycore/tb/tb_mpy_ca.sv --top-module tb_mpy_ca
-// +SEED=<n> picks the random sequence and +OPS=<n> its length.
-module tb_mpy_ca;
+// +SEED=<n> picks the random sequence and +OPS=<n> its length. -GQDEPTH=<n>
+// sets the queue depth.
+module tb_mpy_ca #(parameter int QDEPTH = 2);
     localparam logic [31:0] BASE = MPY_SRAM_BASE + 32'h1000;
     localparam int W = 64;
 
@@ -38,7 +39,7 @@ module tb_mpy_ca;
     logic [31:0] m_addr, m_wdata, m_rdata;
     logic [3:0]  m_wtag, m_rtag, m_freason;
 
-    mpy_ca dut (
+    mpy_ca #(.QDEPTH(QDEPTH)) dut (
         .clk_i(clk), .rst_n_i(rst_n),
         .cmd_valid_i(cmd_valid), .cmd_ready_o(cmd_ready),
         .cmd_dst_i(cmd_dst), .cmd_src_i(cmd_src), .cmd_n_i(cmd_n), .idle_o(idle),
@@ -165,8 +166,8 @@ module tb_mpy_ca;
         end
         if (a_fault) begin errors++; $display("FAIL fault %0h at %08h", a_freason, a_faddr); end
         if (errors == 0)
-            $display("PASS mpy_ca seed=%0d ships=%0d words=%0d loads=%0d stores=%0d stall=%0d cycles=%0d",
-                     seed, ships, a_words, loads, stores, stall, cyc);
+            $display("PASS mpy_ca qdepth=%0d seed=%0d ships=%0d words=%0d loads=%0d stores=%0d stall=%0d cycles=%0d",
+                     QDEPTH, seed, ships, a_words, loads, stores, stall, cyc);
         else
             $display("FAIL %0d checks", errors);
         $finish;

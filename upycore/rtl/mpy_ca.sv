@@ -128,6 +128,11 @@ module mpy_ca #(
         end
     end
 
+    // A command leaves the queue when its last word lands or an access faults.
+    logic push, pop;
+    assign push = cmd_valid_i && cmd_ready_o && cmd_n_i != 32'd0;
+    assign pop = ack_i && ((st == E_RDW && fault_i) || (st == E_WRW && (fault_i || last)));
+
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) begin
             st <= E_IDLE;
@@ -141,9 +146,6 @@ module mpy_ca #(
             fault_o <= 1'b0; fault_reason_o <= '0; fault_addr_o <= '0;
             words_o <= '0; cmds_o <= '0;
         end else begin
-            logic push, pop;
-            push = cmd_valid_i && cmd_ready_o && cmd_n_i != 32'd0;
-            pop = 1'b0;
             if (push) begin
                 qv[tail] <= 1'b1;
                 back[tail] <= cmd_dst_i > cmd_src_i;
@@ -158,7 +160,6 @@ module mpy_ca #(
                 E_RDW: if (ack_i) begin
                     if (fault_i) begin
                         fault_o <= 1'b1; fault_reason_o <= fault_reason_i; fault_addr_o <= rd_a;
-                        pop = 1'b1;
                         st <= E_IDLE;
                     end else begin
                         dat_r <= rdata_i; tag_r <= rtag_i;
@@ -169,7 +170,6 @@ module mpy_ca #(
                 E_WRW: if (ack_i) begin
                     if (fault_i) begin
                         fault_o <= 1'b1; fault_reason_o <= fault_reason_i; fault_addr_o <= wr_a;
-                        pop = 1'b1;
                         st <= E_IDLE;
                     end else begin
                         words_o <= words_o + 32'd1;
@@ -179,7 +179,6 @@ module mpy_ca #(
                             dlo[head] <= dlo[head] + 32'd4; slo[head] <= slo[head] + 32'd4;
                         end
                         if (last) begin
-                            pop = 1'b1;
                             cmds_o <= cmds_o + 32'd1;
                             st <= E_IDLE;
                         end else st <= gnt_i ? E_RDW : E_RD;

@@ -19,14 +19,22 @@ def _list_of_iter(x):
 
 
 def _list_extend(lst, it):
-    if _islist(it) or _tag(it) == TAG_TUPLE:
-        # One word copy, read after the reserve so lst.extend(lst) works.
+    t = _tag(it)
+    if t == TAG_TUPLE or (t == TAG_MUT and (_pay(it) & 3) == MUT_LIST):
+        # One word copy. The source items are read after the reserve, so
+        # lst.extend(lst) copies the old items.
         m = _ld(it, 0)
-        if m:
+        if m == 1:
+            # One item is cheaper as the native append than as a copy.
+            lst.append(_ld(it, 1) if t == TAG_TUPLE else _ld(_ld(it, 2), 0))
+        elif m:
             n = _ld(lst, 0)
-            _list_reserve(lst, n + m)
-            base, off = _seq_items(it)
-            _wcopy(_ld(lst, 2), n, base, off, m)
+            if n + m > _ld(lst, 1):
+                _list_reserve(lst, n + m)
+            if t == TAG_TUPLE:
+                _wcopy(_ld(lst, 2), n, it, 1, m)
+            else:
+                _wcopy(_ld(lst, 2), n, _ld(it, 2), 0, m)
             _st(lst, 0, n + m)
         return None
     for a in it:

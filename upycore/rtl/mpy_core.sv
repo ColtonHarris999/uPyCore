@@ -37,6 +37,8 @@
 // destination. The core ships the command and moves on; the accelerator's
 // scoreboard makes any later access to words still being copied wait at the
 // port. The core waits for the accelerator to drain before a collection.
+// A binary op that cannot fail retires at issue: its result register is
+// busy until the ALU finishes, and only loads, constants and JUMP run past it.
 
 `include "mpy_defs.svh"
 `include "mpy_abi.svh"
@@ -60,7 +62,10 @@ module mpy_core
     parameter int LC_N = 8,
     parameter int LC_WB = 1,
     // Ship bulk copies to mpy_ca. 0 keeps them on the core. +CA= overrides in sim.
-    parameter int CA_EN = 1
+    parameter int CA_EN = 1,
+    // Retire a binary op that cannot fail at issue and let loads run while
+    // the ALU finishes it (upycore/docs/mpy_ca.md). +AALU= overrides in sim.
+    parameter int AALU = 1
 ) (
     input  logic        clk_i,
     input  logic        rst_n_i,
@@ -849,7 +854,8 @@ module mpy_core
         S_N_BCI,
         S_N_BCF,
         S_NAT_WCA,
-        S_LA_CA
+        S_LA_CA,
+        S_AALU_WB
     } state_e;
 
     state_e st, wret;
@@ -915,7 +921,7 @@ module mpy_core
     val_t        lc_d [0:7];
     logic [3:0]  cfg_lc_n;
     logic        cfg_lc_wb, cfg_lc_dm;
-    logic        cfg_ca;
+    logic        cfg_ca, cfg_aalu;
     logic [2:0]  lc_ev_way;
     logic [7:0]  lc_ev_idx;
     val_t        lc_ev_val;
@@ -1080,6 +1086,42 @@ module mpy_core
     logic [2:0]  alu_err;
     logic [7:0]  n_o;
 
+    // Async ALU. One result in flight: rf[aalu_slot] is busy until it is
+    // written. Only an op whose operands rule out every ALU error and every
+    // boxed int64 result goes this way, so nothing about it can raise later.
+    // S_EXEC lets loads, constants and JUMP run past it and holds anything
+    // else; spills, reloads, raises and collections wait for it too. The
+    // result waits in the ALU's output until one of those states needs it,
+    // then S_AALU_WB writes it. Keeping that the only write keeps the
+    // register file's write logic inside the sequencer's case.
+    logic        aalu_pend, aalu_ready, aalu_go;
+    logic [3:0]  aalu_slot;
+    state_e      aalu_ret;
+    assign aalu_go = aalu_ready || alu_done;
+    function automatic logic fits16(input logic [63:0] x);
+        fits16 = (x[63:15] == {49{1'b0}}) || (x[63:15] == {49{1'b1}});
+    endfunction
+    function automatic logic aalu_safe(input logic [5:0] o, input logic un, input logic af, input logic bf,
+                                       input logic [63:0] a, input logic [63:0] b);
+        logic cmp, nz;
+        cmp = (o <= ALU_NE);
+        nz = bf ? (b[30:0] != 31'd0) : (b != 64'd0);
+        if (un) aalu_safe = 1'b0;
+        else if (af || bf)
+            aalu_safe = cmp || o == ALU_ADD || o == ALU_SUB || o == ALU_MUL ||
+                        ((o == ALU_TDIV || o == ALU_FLOOR || o == ALU_MOD) && nz);
+        else if (!fits31(a) || !fits31(b)) aalu_safe = 1'b0;
+        else
+            aalu_safe = cmp || o == ALU_ADD || o == ALU_SUB || o == ALU_AND || o == ALU_OR || o == ALU_XOR ||
+                        ((o == ALU_TDIV || o == ALU_FLOOR || o == ALU_MOD) && nz) ||
+                        (o == ALU_MUL && fits16(a) && fits16(b));
+    endfunction
+    // Opcodes that only push or jump and never read the stack.
+    function automatic logic aalu_pass(input logic [7:0] o);
+        aalu_pass = (o >= 8'h70 && o < 8'hc0) || o == 8'h10 || o == 8'h22 || o == 8'h23 ||
+                    o == 8'h24 || (o >= 8'h50 && o <= 8'h53) || o == 8'h42;
+    endfunction
+
     mpy_alu u_alu (
         .clk_i, .rst_n_i, .start_i(alu_start), .op_i(alu_op),
         .a_flt_i(na_f), .b_flt_i(nb_f), .a_i(na), .b_i(nb), .small_i(n_small),
@@ -1202,7 +1244,7 @@ module mpy_core
     endtask
 `ifndef SYNTHESIS
     initial begin
-        int grow_v, adapt_v, lc_n_v, lc_wb_v, lc_dm_v, ca_v;
+        int grow_v, adapt_v, lc_n_v, lc_wb_v, lc_dm_v, ca_v, aalu_v;
         grow_v = GROW_CHUNK;
         adapt_v = GROW_ADAPT;
         lc_n_v = LC_N;
@@ -1214,6 +1256,7 @@ module mpy_core
         if (!$value$plusargs("LCWB=%d", lc_wb_v)) lc_wb_v = LC_WB;
         if (!$value$plusargs("LCDM=%d", lc_dm_v)) lc_dm_v = 0;
         if (!$value$plusargs("CA=%d", ca_v)) ca_v = CA_EN;
+        if (!$value$plusargs("AALU=%d", aalu_v)) aalu_v = AALU;
         if (grow_v < MPY_RF_CHUNK_MIN) grow_v = MPY_RF_CHUNK_MIN;
         if (grow_v > MPY_RF_CHUNK_MAX) grow_v = MPY_RF_CHUNK_MAX;
         if (lc_n_v < 0) lc_n_v = 0;
@@ -1224,6 +1267,7 @@ module mpy_core
         cfg_lc_wb = (lc_wb_v != 0);
         cfg_lc_dm = (lc_dm_v != 0);
         cfg_ca = (ca_v != 0);
+        cfg_aalu = (aalu_v != 0);
     end
 `else
     initial begin
@@ -1233,6 +1277,7 @@ module mpy_core
         cfg_lc_wb = (LC_WB != 0);
         cfg_lc_dm = 1'b0;
         cfg_ca = (CA_EN != 0);
+        cfg_aalu = (AALU != 0);
     end
 `endif
 
@@ -1459,7 +1504,7 @@ module mpy_core
             m_req <= 1'b0; m_we <= 1'b0; m_tag_we <= 1'b0; m_be <= 4'hF;
             m_addr <= 32'd0; m_wdata <= 32'd0; m_wtag <= 4'd0;
             gc_alloc_req <= 1'b0; gc_collect_req <= 1'b0;
-            alu_start <= 1'b0;
+            alu_start <= 1'b0; aalu_pend <= 1'b0; aalu_ready <= 1'b0; aalu_slot <= 4'd0; aalu_ret <= S_FETCH;
             ca_valid <= 1'b0; ca_dst <= 32'd0; ca_src <= 32'd0; ca_n <= 32'd0;
             halted <= 1'b0; hcode <= 4'd0; hval <= 32'd0;
             cyc <= 32'd0; nops <= 32'd0; trace <= 1'b0;
@@ -1507,8 +1552,9 @@ module mpy_core
             else if (sp < sp_d) rf_mono <= 1'b0;
             else if (sp > sp_d) rf_mono <= 1'b1;
             sp_d <= sp;
+            if (aalu_pend && alu_done) aalu_ready <= 1'b1;
 
-            if (rf_pend && st != S_MWAIT && st != S_RF_SPILL && st != S_RF_SPILL_W &&
+            if (rf_pend && st != S_MWAIT && st != S_AALU_WB && st != S_RF_SPILL && st != S_RF_SPILL_W &&
                 st != S_RF_RELOAD && st != S_RF_RELOAD_R && st != S_RF_RELOAD_G) begin
                 if (sp >= 7'(MPY_RF_DEPTH)) begin
                     rf_resume <= st;
@@ -2005,7 +2051,9 @@ module mpy_core
             S_CB_C: begin c_cells <= md; c_ci <= 32'd0; fcont <= 8'd0; st <= S_CELLS; end
 
             // ---------------- exceptions ----------------
-            S_RMSG: alloc(32'd5, S_RMSG1);
+            S_RMSG: if (aalu_pend) begin
+                        if (aalu_go) begin aalu_ret <= S_RMSG; st <= S_AALU_WB; end
+                    end else alloc(32'd5, S_RMSG1);
             S_RMSG1: rd(h_msgs + 4 * rm_id, S_RMSG2);
             S_RMSG2: begin t[0] <= mv; rd(TT + 4 * msg_type(rm_id), S_RMSG3); end
             S_RMSG3: begin
@@ -2016,7 +2064,9 @@ module mpy_core
             end
             S_RMSG4: begin rx_from <= 1'b0; rsp <= 5'd0; st <= S_RAISE; end
 
-            S_RAISE: if ((rx_from && rx_crk == ABI_RK_CONT && fcont == ABI_CONT_FOR_NEXT) ||
+            S_RAISE: if (aalu_pend) begin
+                         if (aalu_go) begin aalu_ret <= S_RAISE; st <= S_AALU_WB; end
+                     end else if ((rx_from && rx_crk == ABI_RK_CONT && fcont == ABI_CONT_FOR_NEXT) ||
                          (!rx_from && op == 8'h4b))
                          rd(adr(xc) + 4, S_RX_SI);
                      else if (rx_from && rx_crk == ABI_RK_CONT && fcont == ABI_CONT_YFROM)
@@ -2070,6 +2120,9 @@ module mpy_core
                              MPY_FAULT_FLASH_STORE: halt(ABI_HALT_FLASH_STORE, ca_fault_addr_i);
                              default: halt(ABI_HALT_BUS, ca_fault_addr_i);
                          endcase
+                     end else if (aalu_pend && (sp >= 7'(RF_SPILL_AT) || (has_link && sp <= 7'(RF_RELOAD_AT)))) begin
+                         // A spill or reload moves the ring under the busy slot.
+                         if (aalu_go) begin aalu_ret <= S_FETCH; st <= S_AALU_WB; end
                      end else if (sp >= 7'(RF_SPILL_AT)) begin
                          rf_resume <= S_FETCH; st <= S_RF_SPILL;
                      end else if (has_link && sp <= 7'(RF_RELOAD_AT)) begin
@@ -2097,7 +2150,9 @@ module mpy_core
                    end
 
             // ---------------- execute ----------------
-            S_EXEC: begin
+            S_EXEC: if (aalu_pend && !aalu_pass(op)) begin
+                if (aalu_go) begin aalu_ret <= S_EXEC; st <= S_AALU_WB; end
+            end else begin
                 if ((op >= 8'hb0 && op < 8'hc0) || op == 8'h24) begin
                     vi = (op == 8'h24) ? arg[7:0] : (op - 8'hb0);
                     if (lc_is_hit(vi)) begin
@@ -3418,7 +3473,11 @@ module mpy_core
             S_NUM_BH: begin nb[63:32] <= md; st <= S_NUM_GO; end
             S_NUM_GO: begin
                 n_small <= !na_f && !nb_f && fits31(na) && fits31(nb);
-                alu_start <= 1'b1; st <= S_NUM_W;
+                alu_start <= 1'b1;
+                if (cfg_aalu && aalu_safe(alu_op, n_un, na_f, nb_f, na, nb)) begin
+                    aalu_pend <= 1'b1; aalu_slot <= `SX(6'(sp - 7'd2));
+                    sp <= sp - 7'd1; st <= S_FETCH;
+                end else st <= S_NUM_W;
             end
             S_NUM_W: if (alu_done) begin
                 case (alu_err)
@@ -3441,6 +3500,12 @@ module mpy_core
                 wb_v[0] <= vint(alu_res[31:0]); wb_v[1] <= vint(alu_res[63:32]);
                 t[2] <= {ABI_TAG_INT64, al_a};
                 wblock(al_a, 4'd2, S_NUM_PUT);
+            end
+            S_AALU_WB: begin
+                rf[aalu_slot] <= (alu_kind == AK_BOOL) ? vbool(alu_res[0]) :
+                                 (alu_kind == AK_FLOAT) ? {ABI_TAG_FLOAT, alu_res[31:0]} : vint(alu_res[31:0]);
+                aalu_pend <= 1'b0; aalu_ready <= 1'b0;
+                st <= aalu_ret;
             end
             S_NUM_PUT: begin
                 if (n_un) rf[`SX(6'(sp - 7'd1))] <= t[2];
@@ -4026,7 +4091,9 @@ module mpy_core
                       end
 
             // collect: spill every root holder, then run the collector
-            S_GC: if (noframe) begin gi <= 32'd0; st <= S_GC_T; end
+            S_GC: if (aalu_pend) begin
+                      if (aalu_go) begin aalu_ret <= S_GC; st <= S_AALU_WB; end
+                  end else if (noframe) begin gi <= 32'd0; st <= S_GC_T; end
                   else gosub(S_SPILL, S_GC_1);
             S_GC_1: begin gi <= 32'd0; st <= S_GC_T; end
             // The argument buffer already resides in ARGBUF, which the collector scans.
@@ -4469,7 +4536,9 @@ module mpy_core
             // eager-reload line). After a pop, the chunk is MPY_RF_CHUNK_MIN.
             // A spill that already has a link moves that link into the header
             // and frees `n` registers. The first spill frees `n - 1`.
-            S_RF_SPILL: begin
+            S_RF_SPILL: if (aalu_pend) begin
+                if (aalu_go) begin aalu_ret <= S_RF_SPILL; st <= S_AALU_WB; end
+            end else begin
                 v0 = (cfg_adapt && !rf_mono) ? 32'(MPY_RF_CHUNK_MIN) : 32'(cfg_grow);
                 if (v0 < 32'(MPY_RF_CHUNK_MIN)) v0 = 32'(MPY_RF_CHUNK_MIN);
                 if (v0 > 32'(MPY_RF_CHUNK_MAX)) v0 = 32'(MPY_RF_CHUNK_MAX);
@@ -4526,7 +4595,9 @@ module mpy_core
                 sw_i <= sw_i + 32'd1;
             end
 
-            S_RF_RELOAD: begin
+            S_RF_RELOAD: if (aalu_pend) begin
+                if (aalu_go) begin aalu_ret <= S_RF_RELOAD; st <= S_AALU_WB; end
+            end else begin
                 if (!has_link) st <= rf_resume;
                 else begin
                     spill_addr <= mpy_rf_link_addr(rf[`SX(7'd0)]);
