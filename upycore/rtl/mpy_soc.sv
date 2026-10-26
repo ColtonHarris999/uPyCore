@@ -54,7 +54,12 @@ module mpy_soc #(
     input  logic        gpio_in_en_i,
     input  logic        sim_irq_i,
     input  logic [7:0]  strap_i,
-    output logic        idle_o
+    output logic        idle_o,
+
+    // Pads after the pin mux (upycore/docs/mpy_peripherals.md, Pin mux)
+    output logic [15:0] pad_out_o,
+    output logic [15:0] pad_oe_o,
+    input  logic [15:0] pad_in_i
 );
     // core <-> port
     logic        c_req, c_we, c_tag_we;
@@ -166,12 +171,23 @@ module mpy_soc #(
     logic [31:0] mmio_rdata;
     logic        p_partial;
 
+    // Every block past the base registers sees the same request; each one
+    // decodes its own range and reads 0 elsewhere.
+    logic        blk_req;
+    logic [31:0] pwm_rdata, mux_rdata;
+    logic [3:0]  pwm;
+    logic        uart_txd, uart_rxd;
+    logic        spi_sck, spi_mosi, spi_miso;
+    logic        i2c_scl_low, i2c_sda_low, i2c_scl, i2c_sda;
+    assign blk_req = p_req && !p_fault;
+    assign uart_txd_o = uart_txd;
+
     mpy_periph u_periph (
         .clk_i, .rst_n_i,
         .req_i(p_req), .we_i(c_we), .addr_i(c_addr), .wdata_i(c_wdata),
         .rdata_o(p_rdata), .ack_o(p_ack), .fault_o(p_fault),
         .timer_step_i, .uart_rx_stb_i, .uart_rx_byte_i,
-        .uart_tx_stb_o, .uart_tx_byte_o, .uart_rxd_i, .uart_txd_o,
+        .uart_tx_stb_o, .uart_tx_byte_o, .uart_rxd_i(uart_rxd), .uart_txd_o(uart_txd),
         .gpio_out_o, .gpio_oe_o, .gpio_pu_o, .gpio_pd_o, .gpio_in_i, .gpio_in_en_i,
         .soft_set_i(1'b0), .gc_req_i(1'b0), .sim_set_i(sim_irq_i),
         .kbd_set_i(1'b0), .mbox_set_i(1'b0),
@@ -195,8 +211,33 @@ module mpy_soc #(
     logic [31:0] sys_rdata;
     mpy_sys u_sys (
         .clk_i, .rst_n_i,
-        .req_i(p_req && !p_fault), .we_i(c_we), .off_i(c_addr[11:0]), .wdata_i(c_wdata),
+        .req_i(blk_req), .we_i(c_we), .off_i(c_addr[11:0]), .wdata_i(c_wdata),
         .rdata_o(sys_rdata), .strap_i
+    );
+
+    mpy_pwm u_pwm (
+        .clk_i, .rst_n_i,
+        .req_i(blk_req), .we_i(c_we), .off_i(c_addr[11:0]), .wdata_i(c_wdata),
+        .rdata_o(pwm_rdata), .pwm_o(pwm), .wrap_o()
+    );
+
+    // SPI and I2C are not in this SoC yet: SCK and MOSI idle low, both
+    // I2C lines released.
+    assign spi_sck = 1'b0;
+    assign spi_mosi = 1'b0;
+    assign i2c_scl_low = 1'b0;
+    assign i2c_sda_low = 1'b0;
+
+    mpy_pinmux u_mux (
+        .clk_i, .rst_n_i,
+        .req_i(blk_req), .we_i(c_we), .off_i(c_addr[11:0]), .wdata_i(c_wdata),
+        .rdata_o(mux_rdata),
+        .gpio_out_i(gpio_out_o[15:0]), .gpio_oe_i(gpio_oe_o[15:0]), .pwm_i(pwm),
+        .spi_sck_i(spi_sck), .spi_mosi_i(spi_mosi),
+        .i2c_scl_low_i(i2c_scl_low), .i2c_sda_low_i(i2c_sda_low),
+        .uart_txd_i(uart_txd), .uart_rxd_pin_i(uart_rxd_i),
+        .spi_miso_o(spi_miso), .i2c_scl_o(i2c_scl), .i2c_sda_o(i2c_sda), .uart_rxd_o(uart_rxd),
+        .pad_out_o, .pad_oe_o, .pad_in_i
     );
 
     // A partial-word store would write a replicated byte; it faults instead.
@@ -209,7 +250,7 @@ module mpy_soc #(
         end else begin
             mmio_ack <= c_req && c_mmio && !g_busy;
             mmio_fault <= c_req && c_mmio && !g_busy && (p_partial || p_fault);
-            mmio_rdata <= p_rdata | sys_rdata;
+            mmio_rdata <= p_rdata | sys_rdata | pwm_rdata | mux_rdata;
         end
     end
 

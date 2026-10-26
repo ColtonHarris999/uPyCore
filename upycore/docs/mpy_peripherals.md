@@ -111,15 +111,132 @@ next count would be at least `N`. The counter becomes 0 and the timer
 status bit sets. After reset the counter is 0, so the first match is on
 tick `N`, then every `N` ticks.
 
-## SYS block (`0x600`)
+## Blocks past the base registers
+
+Each block decodes its own offset range and reads 0 elsewhere, so the SoC
+ORs their read data. None of them has an IRQ source: the eight sources
+fill the handler window (`planning/interrupts_io_plan.md` §3). Each block
+has a status register that Python polls, and an `irq` output that is
+recorded here for a later source.
+
+### PWM (`0x200`)
+
+Four channels share one counter. The counter advances once every
+`PWM_PRESC + 1` clocks while any channel is enabled, and runs from 0 to
+`PWM_TOP`, so a period is `(PWM_TOP + 1) * (PWM_PRESC + 1)` clocks. A
+channel's output is high while the count is below its duty, so duty 0
+is always low and `PWM_TOP + 1` is always high. A disabled channel is
+low. Duty and top writes are shadowed and take effect when the counter
+wraps to 0, so a period is never cut short.
+
+| Offset | Name | Rule |
+| --- | --- | --- |
+| `0x200` | `PWM_PRESC` | Bits 15:0. Clocks per count, minus 1 |
+| `0x204` | `PWM_TOP` | Bits 15:0. Last count of a period. Reset `0xFFFF` |
+| `0x208` | `PWM_EN` | Bits 3:0, one per channel. Shadowed like duty: a channel turns on or off at the next wrap. When the first one turns on the counter starts at 0; when none is on at a wrap it stops |
+| `0x20C` | `PWM_COUNT` | Read-only. The counter |
+| `0x210`–`0x21C` | `PWM_DUTY0..3` | Bits 16:0. High while the count is below this |
+
+### Pin mux (`0x900`)
+
+Four bits per pin select the pad's function. Pins 0–7 are `PINMUX0`
+(`0x900`), pins 8–15 `PINMUX1` (`0x904`), pin `i % 8` in bits
+`4*(i%8)+3 : 4*(i%8)`. Reset 0: every pad is GPIO.
+
+| Code | Function | Pad output | Pad output enable |
+| --- | --- | --- | --- |
+| 0 | GPIO | `GPIO_OUT` bit | `GPIO_OE` bit |
+| 1–4 | PWM channel 0–3 | the channel | 1 |
+| 5 | `SPI_SCK` | SCK | 1 |
+| 6 | `SPI_MOSI` | MOSI | 1 |
+| 7 | `SPI_MISO` | — | 0 (input) |
+| 8 | `I2C_SCL` | 0 | drive low (open drain) |
+| 9 | `I2C_SDA` | 0 | drive low (open drain) |
+| 10 | `UART_TX` | `uart_txd` | 1 |
+| 11 | `UART_RX` | — | 0 (input) |
+
+An input function reads the lowest pad that selects it. With no pad
+selected, MISO reads 0, SCL and SDA read 1 (the bus pull-ups), and the
+UART receiver reads the dedicated `uart_rxd` pin. `GPIO_IN` keeps its
+own input (`gpio_in`, sampled while `gpio_in_en`), so the GPIO traces do
+not depend on the mux. The pad view is `pad_out`, `pad_oe`, and `pad_in`.
+
+### SPI controller (`0x300`)
+
+Mode 0–3, 8-bit frames MSB first, full duplex. Each byte taken from the
+TX FIFO is shifted out while a byte is shifted in, and the received byte
+joins the RX FIFO; a byte that arrives with the RX FIFO full is dropped
+and sets the overrun bit. Chip select is a GPIO.
+
+| Offset | Name | Rule |
+| --- | --- | --- |
+| `0x300` | `SPI_CTRL` | Bit 0 enable, bit 1 CPOL, bit 2 CPHA, bits 23:8 the half-period divider: SCK holds each level for `DIV + 1` clocks |
+| `0x304` | `SPI_DATA` | A store pushes a byte into the TX FIFO (dropped when full). A load pops the RX FIFO: bit 31 valid, bits 7:0 the byte |
+| `0x308` | `SPI_STATUS` | Bits 4:0 TX level, bits 12:8 RX level, bit 16 busy (a byte on the wire or queued), bit 17 TX empty, bit 18 RX ready, bit 19 overrun (sticky) |
+| `0x30C` | `SPI_IRQEN` | Bit 0 TX empty, bit 1 RX ready: the block's `irq` output |
+
+A store to `SPI_STATUS` with bit 19 set clears overrun; other bits ignore stores. FIFO depth is
+`SPI_FIFO_DEPTH`, default 8. CPOL is SCK's idle level. With CPHA 0 the
+first edge samples and MOSI changes on the second; with CPHA 1 MOSI
+changes on the first edge and the second samples.
+
+### I2C controller (`0x400`)
+
+Commands run one at a time from `I2C_CMD`. SCL and SDA are open drain:
+the block drives a line low or releases it, and reads it back. After it
+releases SCL it waits for the line to read high, so a target may stretch
+the clock. A stretch longer than `I2C_TIMEOUT` clocks stops the command
+with the timeout bit.
+
+| Offset | Name | Rule |
+| --- | --- | --- |
+| `0x400` | `I2C_DIV` | Bits 15:0. Clocks per quarter SCL period, minus 1 |
+| `0x404` | `I2C_CMD` | A store starts a command. Bits 3:0: 1 START (a repeated start when the bus is already held), 2 STOP, 3 WRITE bits 15:8, 4 READ (bit 16: send NACK instead of ACK) |
+| `0x408` | `I2C_STATUS` | Read-only. Bit 0 busy, bit 1 the last WRITE saw NACK, bit 2 timeout (sticky until the next START), bit 3 the bus is held (after START, before STOP), bits 15:8 the last byte READ |
+| `0x40C` | `I2C_TIMEOUT` | Clocks a stretch may last. Reset `0x0010_0000` |
+| `0x410` | `I2C_CTRL` | Bit 0 enable. Disabled, both lines are released |
+
+### WDT (`0x500`)
+
+| Offset | Name | Rule |
+| --- | --- | --- |
+| `0x500` | `WDT_LOAD` | Ticks before the reset. Writable until the watchdog starts |
+| `0x504` | `WDT_CTRL` | Writing bit 0 starts it. Once started it cannot be stopped; later writes are ignored |
+| `0x508` | `WDT_KICK` | Writing `0x6B1D_F00D` reloads the counter. Any other value is ignored |
+| `0x50C` | `WDT_COUNT` | Read-only. Ticks left |
+
+The counter decrements on each tick while started. When it reaches 0 the
+block pulses `wdt_reset` to the SoC reset controller, which resets the
+core, the collector, SRAM's controller, and every block except the reset
+cause, and records `WDT_RESET`.
+
+### SYS block (`0x600`)
 
 | Offset | Name | Rule |
 | --- | --- | --- |
 | `0x600` | `SYS_FREQ` | Read-only. The system clock in Hz, the `SYS_FREQ_HZ` parameter (default 48 000 000). `machine.freq()` |
 | `0x604` | `SYS_STRAP` | Read-only. The boot straps, sampled at reset from `strap_i`. Bit 0: the tick comes from `timer_step` (the testbench), so `_boot` leaves `TIMER_PRESC` at 0. Bits 2:1: console (0 sim console, 1 UART, 2 USB CDC). Bit 3: run the REPL after `__main__` |
+| `0x608` | `SYS_RESET_CAUSE` | Read-only. `PWRON_RESET` 1, `HARD_RESET` 2, `WDT_RESET` 3, `SOFT_RESET` 5 (the `machine` constants) |
+| `0x60C` | `SYS_RESET` | Writing `0x0B007ED0 | k` resets the system: `k` 0 hard (`machine.reset()`), 1 soft (`machine.soft_reset()`). Other values are ignored |
+| `0x610`, `0x614` | `SYS_UID0`, `SYS_UID1` | Read-only. The 64-bit unique id, the `SYS_UID` parameter, low word first. `machine.unique_id()` returns the 8 bytes |
 
-When bit 0 is clear, `_boot` writes `TIMER_PRESC = SYS_FREQ / 1000`, so
-a tick is one millisecond.
+When bit 0 of `SYS_STRAP` is clear, `_boot` writes `TIMER_PRESC = SYS_FREQ / 1000`,
+so a tick is one millisecond. Only power-on (the `rst_n` pin) clears the
+reset cause; a system reset keeps the straps.
+
+### ADC (`0x800`)
+
+A register interface for an external converter; the analog part is a
+behavioral model in the testbench.
+
+| Offset | Name | Rule |
+| --- | --- | --- |
+| `0x800` | `ADC_CTRL` | A store with bit 8 set starts a conversion of channel bits 3:0 |
+| `0x804` | `ADC_DATA` | Read-only. Bit 31 valid (a conversion finished since the last start), bits 15:0 the result, left-aligned to 16 bits |
+| `0x808` | `ADC_STATUS` | Read-only. Bit 0 busy |
+
+The converter port is `adc_start` (one clock, with `adc_chan`), then
+`adc_done` with `adc_data` some clocks later.
 
 ## Idle wake
 

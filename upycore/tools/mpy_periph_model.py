@@ -322,6 +322,42 @@ def plusargs() -> str:
     )
 
 
+SYS_HZ = 48_000_000
+
+
+def pwm_config(sys_hz: int, freq: int, duty_u16: int) -> tuple[int, int, int]:
+    """(PWM_PRESC, PWM_TOP, PWM_DUTYn) for machine.PWM(freq, duty_u16).
+
+    The firmware picks the smallest prescaler that fits the period in 16
+    bits. duty_u16 65535 is 100%: the duty compare is top + 1.
+    """
+    counts = max(1, sys_hz // freq)
+    presc = (counts - 1) // 65536
+    top = counts // (presc + 1) - 1
+    duty = duty_u16 * (top + 1) // 65535
+    return presc, top, duty
+
+
+def pwm_wave(presc: int, top: int, duty: int) -> tuple[int, int]:
+    """(high clocks, period clocks) of one channel."""
+    period = (top + 1) * (presc + 1)
+    high = min(duty, top + 1) * (presc + 1)
+    return high, period
+
+
+PWM_BENCH = ((1, 9, (3, 0, 10, 5)),)
+
+
+def pwm_plusargs() -> str:
+    presc, top, duties = PWM_BENCH[0]
+    parts = [f"+PRESC={presc} +TOP={top}"]
+    for ch, d in enumerate(duties):
+        high, period = pwm_wave(presc, top, d)
+        parts.append(f"+DUTY{ch}={d} +HIGH{ch}={high}")
+    parts.append(f"+PERIOD={pwm_wave(presc, top, 0)[1]}")
+    return " ".join(parts)
+
+
 IO_BAUD = 8
 IO_BURST = 64
 IO_STALLS = (15.5, 20.5)   # reader stall, in byte times
@@ -408,7 +444,17 @@ def _expect_debounce(plusargs: tuple[str, ...]) -> dict[str, str]:
     return {"gpio_out": f"{n:08x}"}
 
 
+def _expect_pwm(plusargs: tuple[str, ...]) -> dict[str, str]:
+    # pwm.py: pad 2 is channel 2, pad 5 channel 1, both at 1 MHz.
+    presc, top, d2 = pwm_config(SYS_HZ, 1_000_000, 16384)
+    _, _, d1 = pwm_config(SYS_HZ, 1_000_000, 49152)
+    h2, per = pwm_wave(presc, top, d2)
+    h1, _ = pwm_wave(presc, top, d1)
+    return {"pw": f"2:{h2}:{per},5:{h1}:{per}"}
+
+
 SOC_EXPECT = {
+    "pwm": _expect_pwm,
     "blink": _expect_blink,
     "blink_off": _expect_blink_off,
     "echo_fifo": _expect_echo(0),
@@ -464,6 +510,10 @@ def self_check() -> None:
         raise AssertionError("8N1 frame starts low, LSB first")
     if debounce_count([(1, 1000), (0, 1300), (1, 1600), (0, 9000), (1, 20000)], 1000) != 2:
         raise AssertionError("debounce window")
+    if pwm_config(48_000_000, 1000, 32768) != (0, 47999, 24000):
+        raise AssertionError("1 kHz, half duty")
+    if pwm_config(48_000_000, 100, 65535)[0] != 7 or pwm_wave(1, 9, 3) != (6, 20):
+        raise AssertionError("pwm prescaler and wave")
     kb = UartFifo(16, kbd=0x03)
     if kb.push(0x03) != "kbd" or kb.valid:
         raise AssertionError("the interrupt character is not queued")
@@ -486,6 +536,9 @@ def main(argv: list[str]) -> int:
         return 0
     if "--io-plusargs" in argv:
         print(io_plusargs())
+        return 0
+    if "--pwm-plusargs" in argv:
+        print(pwm_plusargs())
         return 0
     self_check()
     print(plusargs())

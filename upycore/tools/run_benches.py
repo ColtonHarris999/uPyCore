@@ -38,6 +38,8 @@ PERIPH = ["upycore/rtl/mpy_mmio_pkg.sv", "upycore/rtl/mpy_irq.sv", "upycore/rtl/
 BENCHES = [
     Bench("periph", "tb_mpy_periph", PERIPH + ["upycore/tb/tb_mpy_periph.sv"], "--plusargs"),
     Bench("periph_io", "tb_mpy_periph_io", PERIPH + ["upycore/tb/tb_mpy_periph_io.sv"], "--io-plusargs"),
+    Bench("pwm", "tb_mpy_pwm", ["upycore/rtl/mpy_pwm.sv", "upycore/rtl/mpy_pinmux.sv",
+                                "upycore/tb/tb_mpy_pwm.sv"], "--pwm-plusargs"),
 ]
 
 

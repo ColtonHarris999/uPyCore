@@ -19,6 +19,11 @@
 //                                           testbench drives the tick
 //   +IO_TRACE=1                             one line per GPIO_OUT change and TX byte
 //
+// Pads: a pad the SoC drives reads back its own level; ext_low pulls a pad
+// low (an open-drain target), ext_drv drives ext_val; otherwise the pad's
+// pull-up reads 1. Pads that toggled report `pw=<pad>:<high>:<period>`
+// from their last full period, in clocks.
+//
 // Before the last line the bench prints `MPY_IO gpio_out=<hex> gpio_oe=<hex>
 // edges=<n> gmask=<hex> ticks=<n> tx=<hex bytes>`. gmask bit k-1 is set when
 // GPIO_OUT changed while the tick count was k.
@@ -52,6 +57,15 @@ module tb_mpy_soc;
     logic        gpio_in_en = 1'b0;
     logic [7:0]  strap;
     logic        core_idle;
+    logic [15:0] pad_out, pad_oe, pad_in;
+    logic [15:0] ext_low = 16'h0;
+    logic [15:0] ext_drv = 16'h0;
+    logic [15:0] ext_val = 16'h0;
+    always_comb begin
+        for (int i = 0; i < 16; i++)
+            pad_in[i] = ext_low[i] ? 1'b0 :
+                        (pad_oe[i] ? pad_out[i] : (ext_drv[i] ? ext_val[i] : 1'b1));
+    end
 
     mpy_soc u_soc (
         .clk_i(clk), .rst_n_i(rst_n),
@@ -65,8 +79,28 @@ module tb_mpy_soc;
         .uart_rxd_i(uart_rxd), .uart_txd_o(uart_txd),
         .gpio_out_o(gpio_out), .gpio_oe_o(gpio_oe), .gpio_pu_o(gpio_pu), .gpio_pd_o(gpio_pd),
         .gpio_in_i(gpio_in), .gpio_in_en_i(gpio_in_en),
-        .sim_irq_i(1'b0), .strap_i(strap), .idle_o(core_idle)
+        .sim_irq_i(1'b0), .strap_i(strap), .idle_o(core_idle),
+        .pad_out_o(pad_out), .pad_oe_o(pad_oe), .pad_in_i(pad_in)
     );
+
+    // Pulse widths on the pads: last rise, last fall, and the last full period.
+    longint pw_rise [0:15];
+    longint pw_high [0:15];
+    longint pw_per [0:15];
+    int     pw_n [0:15];
+    logic [15:0] pad_prev = 16'h0;
+    initial for (int i = 0; i < 16; i++) begin pw_rise[i] = 0; pw_high[i] = 0; pw_per[i] = 0; pw_n[i] = 0; end
+    always @(posedge clk) begin
+        for (int i = 0; i < 16; i++) begin
+            if (pad_in[i] && !pad_prev[i]) begin
+                if (pw_n[i] > 0) pw_per[i] = cyc_n - pw_rise[i];
+                pw_rise[i] = cyc_n;
+                pw_n[i]++;
+            end else if (!pad_in[i] && pad_prev[i] && pw_n[i] > 0)
+                pw_high[i] = cyc_n - pw_rise[i];
+        end
+        pad_prev <= pad_in;
+    end
 
     // ---- peripheral stimulus and the IO summary ----
     int          timer_period;
@@ -182,11 +216,16 @@ module tb_mpy_soc;
 
     task automatic io_summary();
         string txs;
+        string pws;
         txs = "";
         foreach (tx_log[k]) txs = {txs, $sformatf("%02x", tx_log[k])};
-        $display("MPY_IO gpio_out=%08x gpio_oe=%08x edges=%0d gmask=%08x ticks=%0d tx=%s",
+        pws = "";
+        for (int i = 0; i < 16; i++)
+            if (pw_n[i] >= 3)
+                pws = {pws, (pws.len() > 0) ? "," : "", $sformatf("%0d:%0d:%0d", i, pw_high[i], pw_per[i])};
+        $display("MPY_IO gpio_out=%08x gpio_oe=%08x edges=%0d gmask=%08x ticks=%0d tx=%s pw=%s",
                  gpio_out, gpio_oe, gpio_edges, gmask,
-                 (max_ticks > 0 && ticks_n > max_ticks) ? max_ticks : ticks_n, txs);
+                 (max_ticks > 0 && ticks_n > max_ticks) ? max_ticks : ticks_n, txs, pws);
     endtask
 
     int    fd_out, fd_err;

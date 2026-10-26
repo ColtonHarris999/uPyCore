@@ -98,6 +98,39 @@ def _timer_once(t):
     return None
 
 
+def _pinmux(pin, fn):
+    # Four bits per pad; pads 0-7 in PINMUX0, 8-15 in PINMUX1.
+    addr = MMIO_PINMUX0 + 4 * (pin >> 3)
+    sh = 4 * (pin & 7)
+    _poke32(addr, (_peek32(addr) & ~(15 << sh)) | (fn << sh))
+    return None
+
+
+# PWM: four channels on one counter, so freq() is shared by every channel.
+# The channel of a pin is its id mod 4. _pwm_duty keeps each channel's
+# duty_u16, so a new frequency keeps the duty cycles.
+def _pwm_set_duty(ch, d):
+    top = _peek32(MMIO_PWM_TOP)
+    _poke32(MMIO_PWM_DUTY0 + 4 * ch, d * (top + 1) // 65535)
+    return None
+
+
+def _pwm_set_freq(f, duties):
+    hz = _peek32(MMIO_SYS_FREQ)
+    if f <= 0 or f > hz:
+        raise ValueError('freq out of range')
+    counts = hz // f
+    presc = (counts - 1) >> 16
+    top = counts // (presc + 1) - 1
+    _poke32(MMIO_PWM_PRESC, presc)
+    _poke32(MMIO_PWM_TOP, top)
+    ch = 0
+    while ch < 4:
+        _pwm_set_duty(ch, duties[ch])
+        ch += 1
+    return None
+
+
 def _sleep_ms(n):
     # n ticks: idle until TICKS moves, then a soft point (mp_handle_pending).
     while n > 0:
@@ -316,6 +349,46 @@ def _build_machine():
             _irqon(st)
             return None
 
+    pwm_duty = [0, 0, 0, 0]
+
+    class PWM:
+        def __init__(self, dest, freq=None, duty_u16=None, duty_ns=None, invert=False):
+            pid = dest.id if isinstance(dest, Pin) else dest
+            if not _isint(pid) or pid < 0 or pid > 15:
+                raise ValueError('invalid pin')
+            self.pin = pid
+            self.ch = pid & 3
+            if freq is not None:
+                self.freq(freq)
+            if duty_u16 is not None:
+                self.duty_u16(duty_u16)
+            _pinmux(pid, 1 + self.ch)
+            _poke32(MMIO_PWM_EN, _peek32(MMIO_PWM_EN) | (1 << self.ch))
+
+        def freq(self, f=_MISSING):
+            if f is _MISSING:
+                return _peek32(MMIO_SYS_FREQ) // ((_peek32(MMIO_PWM_TOP) + 1) * (_peek32(MMIO_PWM_PRESC) + 1))
+            return _pwm_set_freq(f, pwm_duty)
+
+        def duty_u16(self, d=_MISSING):
+            if d is _MISSING:
+                return pwm_duty[self.ch]
+            if d < 0 or d > 65535:
+                raise ValueError('duty_u16 must be 0-65535')
+            pwm_duty[self.ch] = d
+            return _pwm_set_duty(self.ch, d)
+
+        def duty_ns(self, ns=_MISSING):
+            per = 1000000000 // self.freq()
+            if ns is _MISSING:
+                return pwm_duty[self.ch] * per // 65535
+            return self.duty_u16(min(65535, ns * 65535 // per))
+
+        def deinit(self):
+            _poke32(MMIO_PWM_EN, _peek32(MMIO_PWM_EN) & ~(1 << self.ch))
+            _pinmux(self.pin, 0)
+            return None
+
     def disable_irq():
         return _irqoff()
 
@@ -335,6 +408,7 @@ def _build_machine():
         'Pin': Pin,
         'Timer': Timer,
         'UART': UART,
+        'PWM': PWM,
         'disable_irq': disable_irq,
         'enable_irq': enable_irq,
         'idle': idle,
