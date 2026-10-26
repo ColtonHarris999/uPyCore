@@ -200,7 +200,9 @@ format = { file = "hw/strings/format.py" }
 
 slice_str_clamp = { file = "hw/strings/slice_str_clamp.py" }
 slice_str_long = { file = "hw/strings/slice_str_long.py" }
-slice_str_unicode = { file = "hw/strings/slice_str_unicode.py", xfail = "unicode slice bounds do not match the unix port" }
+slice_str_unicode = { file = "hw/strings/slice_str_unicode.py" }
+slice_str_step = { file = "hw/strings/slice_str_step.py" }
+slice_list_step = { file = "hw/strings/slice_list_step.py" }
 slice_str_empty = { file = "hw/strings/slice_str_empty.py" }
 slice_str_scan = { file = "hw/strings/slice_str_scan.py" }
 slice_str_neg_trap = { file = "hw/strings/slice_str_neg_trap.py" }
@@ -340,6 +342,14 @@ import_missing = { file = "hw/modules/import_missing.py" }
 use_helper = { file = "hw/modules/use_helper.py", modules = ["helper=hw/modules/helper.py"], oracle = false }
 use_pkg = { file = "hw/modules/use_pkg.py", modules = ["pkg=hw/modules/pkg/__init__.py", "pkg.sub=hw/modules/pkg/sub.py"], oracle = false }
 use_rel = { file = "hw/modules/use_rel.py", modules = ["rel=hw/modules/rel/__init__.py", "rel.a=hw/modules/rel/a.py", "rel.b=hw/modules/rel/b.py"], oracle = false }
+import_rel_pkg = { file = "hw/modules/import_rel_pkg.py", modules = ["pkg=hw/modules/pkg_rel/__init__.py", "pkg.sub=hw/modules/pkg_rel/sub.py"], oracle = false }
+import_rel_main = { file = "hw/modules/import_rel_main.py", oracle = false }
+import_fail_body = { file = "hw/modules/import_fail_body.py", modules = ["badmod=hw/modules/badmod.py"], oracle = false }
+import_star_all = { file = "hw/modules/import_star_all.py", modules = ["starred=hw/modules/starred.py", "plainstar=hw/modules/plainstar.py"], oracle = false }
+import_getattr = { file = "hw/modules/import_getattr.py", modules = ["getattrmod=hw/modules/getattrmod.py"], oracle = false }
+import_usys = { file = "hw/modules/import_usys.py" }
+builtins_override_import = { file = "hw/modules/builtins_override_import.py" }
+import_from_hook = { file = "hw/modules/import_from_hook.py", modules = ["pkg_hook=hw/modules/pkg_hook/__init__.py", "pkg_hook.sub=hw/modules/pkg_hook/sub.py"], oracle = false }
 
 [integ]
 fib = { file = "hw/integ/fib.py" }

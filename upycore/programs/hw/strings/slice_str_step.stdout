@@ -1,0 +1,4 @@
+str NotImplementedError only slices with step=1 (aka None) are supported
+bytes NotImplementedError only slices with step=1 (aka None) are supported
+tuple NotImplementedError only slices with step=1 (aka None) are supported
+bytearray NotImplementedError only slices with step=1 (aka None) are supported
