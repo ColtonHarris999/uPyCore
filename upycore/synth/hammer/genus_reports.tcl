@@ -9,7 +9,7 @@
 #         -execute "set TOP mpy_core; set PERIOD 25"
 #
 # Optional: set CORNER (default tt_025C_1v80), CLOCK (clk_i), RESET (rst_n_i),
-# LIB_DIR, NETLIST, OUT.
+# ALSO_CLOCKS (list of other clock ports), LIB_DIR, NETLIST, OUT.
 # Reports go to build/extra-reports/<corner>/.
 
 if {![info exists TOP]}    { puts "set TOP first"; exit 1 }
@@ -29,7 +29,10 @@ read_netlist $NETLIST
 current_design $TOP
 
 create_clock -period $PERIOD -name core_clk [get_ports $CLOCK]
-set_clock_uncertainty 0.1 [get_clocks core_clk]
+# Other clock ports at the same period (Hazard3: clk_always_on).
+if {![info exists ALSO_CLOCKS]} { set ALSO_CLOCKS {} }
+foreach c $ALSO_CLOCKS { create_clock -period $PERIOD -name $c [get_ports $c] }
+set_clock_uncertainty 0.1 [all_clocks]
 set_false_path -from [get_ports $RESET]
 
 # Each report is wrapped so one unsupported option does not lose the rest.
