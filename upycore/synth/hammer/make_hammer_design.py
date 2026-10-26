@@ -205,6 +205,10 @@ def main() -> int:
         vdir.mkdir()
         unit = vdir / args.rtl.name
         shutil.copy(args.rtl, unit)
+        if args.top.startswith("mpy_") and unit.suffix == ".v":
+            # A converted uPyCore file (converted/): keep the SystemVerilog
+            # as the golden reference for equivalence checking.
+            write_unit(args.top, dest / "golden")
     else:
         unit = write_unit(args.top, vdir)
     if args.sv2v:

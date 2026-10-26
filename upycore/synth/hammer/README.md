@@ -166,18 +166,19 @@ clock at the same period so its flops are timed.
 
 Genus reads `mpy_alu` as SystemVerilog, but its parser fails on
 `mpy_core` (VLOGPT-203 "Unresolved subprogram reference" inside the
-interpreter's state machine). Convert the core to Verilog-2005 with
-[sv2v](https://github.com/zachjs/sv2v) by passing `--sv2v`; `v/` then
-holds `<top>.v` instead of the `.sv`:
+interpreter's state machine). `converted/` holds each top already
+converted to Verilog-2005 with [sv2v](https://github.com/zachjs/sv2v)
+(the lab machines' glibc is too old for the sv2v release binary). Use it
+with `--rtl`; the script then also writes the SystemVerilog to `golden/`
+for the equivalence check:
 
 ```sh
-mkdir -p ~/bin && cd ~/bin
-curl -LO https://github.com/zachjs/sv2v/releases/download/v0.0.13/sv2v-Linux.zip
-unzip -o sv2v-Linux.zip && ln -sf ~/bin/sv2v-Linux/sv2v ~/bin/sv2v
-cd ~/upycore
 python3 upycore/synth/hammer/make_hammer_design.py \
     ~/ee477/ee477-designs-module1/pow2 ~/ee477/ee477-designs-module1/upycore_core_p50 \
-    --top mpy_core --period 50 --sv2v ~/bin/sv2v --force
+    --top mpy_core --period 50 --rtl upycore/synth/hammer/converted/mpy_core.v
 ```
 
-The converted file also reads cleanly in Yosys's own Verilog parser.
+After an RTL change, regenerate the files with `convert_rtl.sh` on a
+machine where sv2v runs, and commit them. Where sv2v runs on the lab
+machine itself, `--sv2v <binary>` converts while building the folder.
+The converted files also read cleanly in Yosys's own Verilog parser.
