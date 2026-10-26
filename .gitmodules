@@ -6,3 +6,11 @@
 	path = vendor/upy2
 	url = https://github.com/ColtonHarris999/uPy2.git
 	shallow = true
+[submodule "vendor/tinyusb"]
+	path = vendor/tinyusb
+	url = https://github.com/hathach/tinyusb.git
+	shallow = true
+[submodule "vendor/no2usb"]
+	path = vendor/no2usb
+	url = https://github.com/no2fpga/no2usb.git
+	shallow = true
