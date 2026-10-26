@@ -139,6 +139,53 @@ overhead: 54% of all cycles are the core waiting on memory, 88% are
 inside firmware frames, the port is busy 23% of the time, and the ALU
 1.2%.
 
+### Best case
+
+`upycore/programs/bench/ca_best.py` is the scoreboard's best case. Each
+round ships one 8,192-word copy into a list that already has room
+(`c.clear(); c.extend(a)`, one `_wcopy` and no allocation), then runs
+work that touches only locals, then reads the copy. Measured on the
+kernel alone (a run with zero rounds subtracted), with the async ALU off:
+
+| | Cycles per round |
+| --- | ---: |
+| CA off | 105,935 |
+| CA on | 41,660 |
+| Speedup | 2.54x |
+
+The whole program, setup included, is 2.29x (`bench.py ca_best`). The core
+still waits about 2,500 cycles a round on the scoreboard: the read of the
+copy's last words comes just before they land.
+
+How the shape of the kernel moves the number, from a sweep of copy size
+`N` and work `W` (loop iterations, about 124 cycles each):
+
+| Kernel | `N` | `W` | Speedup |
+| --- | ---: | ---: | ---: |
+| `c = a.copy()` (allocates) | 64 | 0 | 1.15x |
+| `c = a.copy()` | 1,000 | 0 | 1.99x |
+| `c = a.copy()` | 8,000 | 0 | 2.19x |
+| `c = a.copy()` | 2,000 | 400 | 1.26x |
+| `c.extend(a)` into room | 4,000 | 0 | 2.03x |
+| `c.extend(a)` into room | 4,000 | 128 | 2.59x |
+| `c.extend(a)` into room | 8,000 | 272 | 2.63x |
+| `c.extend(a)` into room | 8,000 | 352 | 2.35x |
+
+- A small copy is mostly call overhead.
+- A new list is zeroed by the allocator, word by word, on both paths, so
+  `copy()` stops near 2.2x.
+- With no independent work the read waits for the whole copy, which then
+  runs at the accelerator's rate of 4 cycles a word instead of the core's
+  8: about 2x.
+- The peak is where the work takes as long as the copy. More work than
+  that costs the same cycles on both paths and pulls the ratio down.
+
+The ceiling is memory bandwidth, not the scoreboard. Sharing the port with
+the work loop, the accelerator copies about 4.8 cycles a word. A fully
+hidden copy against the core's 8 cycles a word gives at most
+(8 + 4.8) / 4.8, about 2.67x. Going past that would take a second memory
+port or a wider one.
+
 A small `extend` pays for the type dispatch that picks the copy: compared
 with the old item loop, an empty one costs about 210 cycles more, one item
 345 (it stays an append), and two items 125. Four items are already 775
