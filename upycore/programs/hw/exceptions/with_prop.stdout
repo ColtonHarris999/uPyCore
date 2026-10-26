@@ -1,0 +1,29 @@
+enter
+body
+exit None
+enter
+body
+exit ValueError
+propagated
+enter
+body
+exit ValueError
+propagated
+enter
+body
+exit ValueError
+propagated
+enter
+body
+exit ValueError
+swallowed
+enter
+body
+exit ValueError
+swallowed
+enter
+body
+exit ValueError
+propagated
+missing
+plain missing

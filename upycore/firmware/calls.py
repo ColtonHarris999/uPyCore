@@ -407,6 +407,35 @@ def super____new__(cls, *args):
     return o
 
 
+def _bind_wide(fun, n_pos, directory):
+    # _bind, reading item i from the block that contains it. Full blocks hold 16.
+    rc = _ld(fun, 2)
+    scope = (_peek32(rc + 4 * RC_SIG) >> 16) & 255
+    npos = _peek32(rc + 4 * RC_ARGS) & 255
+    if n_pos > npos and not (scope & SCOPE_VARARGS):
+        _arg_count(npos, n_pos)
+    args = []
+    kw = []
+    seen = 0
+    if directory is not NULL and len(directory):
+        b = 0
+        nb = len(directory)
+        while b < nb:
+            blk = directory[b]
+            m = len(blk)
+            j = 0
+            while j < m:
+                item = blk[j]
+                if seen < n_pos:
+                    args.append(item)
+                else:
+                    kw.append(item)
+                seen += 1
+                j += 1
+            b += 1
+    return _bind(fun, _tuple_of_list(args), _tuple_of_list(kw))
+
+
 def type____new__(cls, *args):
     n = len(args)
     if n == 1:
