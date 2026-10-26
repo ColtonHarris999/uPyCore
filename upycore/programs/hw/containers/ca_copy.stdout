@@ -1,0 +1,29 @@
+concat tail ok
+concat mid ok
+concat len ok
+slice src store ok
+slice dst store ok
+slice dst neighbour ok
+tuple of list ok
+list of tuple ok
+insert head ok
+insert mid ok
+pop head ok
+after pop ok
+del mid ok
+remove ok
+extend self ok
+extend tuple ok
+grow early 0 ok
+grow early 64 ok
+grow early 128 ok
+grow early 192 ok
+grow early 256 ok
+grow end ok
+setslice grow ok
+setslice shrink ok
+setslice clamp ok
+delslice ok
+flash source ok
+collect after ship ok
+after collect ok

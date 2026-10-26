@@ -197,6 +197,7 @@ list_del_shift_excore = { file = "hw/containers/list_del_shift_excore.py" }
 dict_grow_basic = { file = "hw/containers/dict_grow_basic.py" }
 dict_grow_large = { file = "hw/containers/dict_grow_large.py" }
 set_grow_basic = { file = "hw/containers/set_grow_basic.py" }
+ca_copy = { file = "hw/containers/ca_copy.py" }
 
 [strings]
 text = { file = "hw/strings/text.py" }

@@ -50,6 +50,15 @@ python3 upycore/tools/hw_tests.py --area alu
 python3 upycore/tools/hw_tests.py 'dict*'
 ```
 
+## Accelerators
+
+Bulk word copies run on the container accelerator while the core goes on
+to the next instruction, and a binary op that cannot fail retires before
+the ALU finishes. A scoreboard makes a later access to busy data wait.
+[`upycore/docs/mpy_ca.md`](upycore/docs/mpy_ca.md) has the rules and the
+measurements. `python3 upycore/tools/bench.py` compares the switches,
+and `mpy_build.py run --sim-arg +CA=0 --sim-arg +AALU=0` turns both off.
+
 ## Synthesis
 
 The hart and its components are written for a Yosys + yosys-slang backend
