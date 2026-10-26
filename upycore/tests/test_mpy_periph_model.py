@@ -24,6 +24,9 @@ from mpy_periph_model import (  # noqa: E402
     self_check,
     soc_expect,
     uart_burst_overruns,
+    wdt_plusargs,
+    wdt_reset_tick,
+    Wdt,
 )
 
 
@@ -64,6 +67,18 @@ class MpyPeriphModelTest(unittest.TestCase):
         self.assertEqual(i2c_config(48_000_000, 10, 100_000_000)[0::2], (0xFFFF, 0xFFFF_FFFF))
         self.assertEqual(i2c_config(48_000_000, 48_000_000, 1)[:2], (0, 12_000_000))
         self.assertEqual(i2c_byte_clocks(29), 1080)
+
+    def test_wdt(self) -> None:
+        self.assertEqual(wdt_reset_tick(7, ()), 7)
+        self.assertEqual(wdt_reset_tick(7, (3, 9)), 16)
+        self.assertEqual(wdt_reset_tick(0, ()), 1)
+        w = Wdt()
+        w.write_load(4)
+        w.start()
+        w.write_load(100)
+        w.kick(0x1234)
+        self.assertEqual((w.load, w.count), (4, 4))
+        self.assertIn("+WDT_RESET_AT=16", wdt_plusargs())
 
     def test_soc_expectations(self) -> None:
         self.assertEqual(soc_expect("blink", ("+MAX_TICKS=20",))["gmask"], "00088888")

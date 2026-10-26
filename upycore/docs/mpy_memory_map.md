@@ -172,9 +172,9 @@ pool plus one nibble.
 
 ### MMIO offsets
 
-Offsets from `0x4000_0000`. `mpy_soc` sends the window to `mpy_periph`;
-`mpy_mem` never sees it. Word access only. The register rules are
-`upycore/docs/mpy_peripherals.md`.
+Offsets from `0x4000_0000`. `mpy_soc` sends the window to `mpy_periph`
+and the blocks below; `mpy_mem` never sees it. Word access only. The
+register rules are `upycore/docs/mpy_peripherals.md`.
 
 | Offset | Name |
 | --- | --- |
@@ -201,6 +201,24 @@ Offsets from `0x4000_0000`. `mpy_soc` sends the window to `mpy_periph`;
 | `0x50` | `GPIO_PULLDOWN` |
 | `0x54` | `GPIO_STATUS` |
 | `0x58` | `UART_KBD` |
+
+The blocks past the base registers, one 256-byte range each:
+
+| Range | Block | RTL |
+| --- | --- | --- |
+| `0x100` | Mailbox | not built yet |
+| `0x200` | PWM | `mpy_pwm.sv` |
+| `0x300` | SPI controller | `mpy_spi.sv` |
+| `0x400` | I2C controller | `mpy_i2c.sv` |
+| `0x500` | WDT | `mpy_wdt.sv` |
+| `0x600` | SYS (frequency, straps, reset controller, id) | `mpy_sys.sv` |
+| `0x700` | TIMER1..3 | not built |
+| `0x800` | ADC | not built yet |
+| `0x900` | Pin mux | `mpy_pinmux.sv` |
+
+A system reset (`SYS_RESET`, or the watchdog) zeroes all of SRAM and its
+tags before the hart boots again, so SRAM reads zero at every boot, as it
+does at power-up.
 
 The sim-control page is not a Cortex-M system-control block. Halt names
 for that page: clean return, uncaught exception, unsupported opcode, bad

@@ -61,7 +61,7 @@ RTL = [
     "upycore/rtl/mpy_gc.sv", "upycore/rtl/mpy_mem.sv", "upycore/rtl/mpy_mmio_pkg.sv",
     "upycore/rtl/mpy_irq.sv", "upycore/rtl/mpy_periph.sv", "upycore/rtl/mpy_sys.sv",
     "upycore/rtl/mpy_pwm.sv", "upycore/rtl/mpy_pinmux.sv", "upycore/rtl/mpy_spi.sv",
-    "upycore/rtl/mpy_i2c.sv", "upycore/rtl/mpy_soc.sv", "upycore/tb/tb_spi_flash.sv",
+    "upycore/rtl/mpy_i2c.sv", "upycore/rtl/mpy_wdt.sv", "upycore/rtl/mpy_soc.sv", "upycore/tb/tb_spi_flash.sv",
     "upycore/tb/tb_i2c_target.sv",
     "upycore/tb/tb_mpy_soc.sv",
 ]

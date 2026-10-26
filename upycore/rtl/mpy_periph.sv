@@ -50,6 +50,7 @@ module mpy_periph
     input  logic        jump_i,
     input  logic        done_i,
     output logic        wake_o,
+    output logic        tick_o,          // one clock per tick (the watchdog counts these)
 
     output logic        fire_o,
     output logic        fire_hard_o,
@@ -258,6 +259,7 @@ module mpy_periph
 
     // machine.idle returns on any of these, enabled or not.
     assign wake_o = tick || (|event_set);
+    assign tick_o = tick;
 
     assign w1c = wr_stat ? wdata_i[MPY_NSRC-1:0] : '0;
     // The event that is accepted this cycle is cleared with the status

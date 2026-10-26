@@ -361,6 +361,66 @@ def i2c_byte_clocks(div: int) -> int:
     return 9 * 4 * (div + 1)
 
 
+WDT_KEY = 0x6B1D_F00D
+SYS_RESET_KEY = 0x0B00_7ED0
+RESET_CAUSE = {"PWRON": 1, "HARD": 2, "WDT": 3, "SOFT": 5}
+SRAM_WORDS = 65536      # MPY_SRAM_WORDS: the reset scrub takes one clock a word
+
+
+class Wdt:
+    """WDT_LOAD, WDT_CTRL, WDT_KICK, WDT_COUNT. step() is one tick; True on the reset."""
+
+    def __init__(self) -> None:
+        self.load = 0
+        self.started = False
+        self.count = 0
+
+    def write_load(self, v: int) -> None:
+        if not self.started:
+            self.load = v & 0xFFFF_FFFF
+
+    def start(self) -> None:
+        if not self.started:
+            self.started = True
+            self.count = self.load
+
+    def kick(self, key: int) -> None:
+        if self.started and key == WDT_KEY:
+            self.count = self.load
+
+    def step(self) -> bool:
+        if not self.started:
+            return False
+        if self.count <= 1:
+            self.count = 0
+            return True
+        self.count -= 1
+        return False
+
+
+def wdt_reset_tick(load: int, kicks: tuple[int, ...], ticks: int = 1000) -> int:
+    """The tick (1-based, counted from the start) whose step resets; kicks land before a step."""
+    w = Wdt()
+    w.write_load(load)
+    w.start()
+    for t in range(1, ticks + 1):
+        if t - 1 in kicks:
+            w.kick(WDT_KEY)
+        if w.step():
+            return t
+    return -1
+
+
+WDT_BENCH = (7, (3, 9))
+
+
+def wdt_plusargs() -> str:
+    load, kicks = WDT_BENCH
+    return (f"+WDT_LOAD={load} +WDT_KICK0={kicks[0]} +WDT_KICK1={kicks[1]} "
+            f"+WDT_RESET_AT={wdt_reset_tick(load, kicks)} +WDT_ZERO_AT={wdt_reset_tick(0, ())} "
+            f"+SRAM_WORDS={SRAM_WORDS}")
+
+
 PWM_BENCH = ((1, 9, (3, 0, 10, 5)),)
 
 
@@ -555,6 +615,9 @@ def main(argv: list[str]) -> int:
         return 0
     if "--pwm-plusargs" in argv:
         print(pwm_plusargs())
+        return 0
+    if "--wdt-plusargs" in argv:
+        print(wdt_plusargs())
         return 0
     self_check()
     print(plusargs())

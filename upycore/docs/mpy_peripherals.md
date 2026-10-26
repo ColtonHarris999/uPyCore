@@ -200,15 +200,16 @@ with the timeout bit.
 
 | Offset | Name | Rule |
 | --- | --- | --- |
-| `0x500` | `WDT_LOAD` | Ticks before the reset. Writable until the watchdog starts |
-| `0x504` | `WDT_CTRL` | Writing bit 0 starts it. Once started it cannot be stopped; later writes are ignored |
-| `0x508` | `WDT_KICK` | Writing `0x6B1D_F00D` reloads the counter. Any other value is ignored |
+| `0x500` | `WDT_LOAD` | Ticks before the reset. Writable until the watchdog starts; reset 0 |
+| `0x504` | `WDT_CTRL` | Writing bit 0 starts it and loads the counter from `WDT_LOAD`. Once started it cannot be stopped; later writes are ignored. Reads bit 0 started |
+| `0x508` | `WDT_KICK` | Writing `0x6B1D_F00D` reloads the counter from `WDT_LOAD`. Any other value is ignored |
 | `0x50C` | `WDT_COUNT` | Read-only. Ticks left |
 
-The counter decrements on each tick while started. When it reaches 0 the
-block pulses `wdt_reset` to the SoC reset controller, which resets the
-core, the collector, SRAM's controller, and every block except the reset
-cause, and records `WDT_RESET`.
+The counter decrements on each tick while started. The tick that takes it
+to 0 pulses `wdt_reset` to the reset controller (SYS block), so with no
+kick the reset comes `WDT_LOAD` ticks after the start; a start with
+`WDT_LOAD` 0 resets on the next tick. `machine.WDT(timeout=ms)` loads
+`timeout` ticks (a tick is a millisecond unless the testbench drives it).
 
 ### SYS block (`0x600`)
 
@@ -218,11 +219,21 @@ cause, and records `WDT_RESET`.
 | `0x604` | `SYS_STRAP` | Read-only. The boot straps, sampled at reset from `strap_i`. Bit 0: the tick comes from `timer_step` (the testbench), so `_boot` leaves `TIMER_PRESC` at 0. Bits 2:1: console (0 sim console, 1 UART, 2 USB CDC). Bit 3: run the REPL after `__main__` |
 | `0x608` | `SYS_RESET_CAUSE` | Read-only. `PWRON_RESET` 1, `HARD_RESET` 2, `WDT_RESET` 3, `SOFT_RESET` 5 (the `machine` constants) |
 | `0x60C` | `SYS_RESET` | Writing `0x0B007ED0 | k` resets the system: `k` 0 hard (`machine.reset()`), 1 soft (`machine.soft_reset()`). Other values are ignored |
-| `0x610`, `0x614` | `SYS_UID0`, `SYS_UID1` | Read-only. The 64-bit unique id, the `SYS_UID` parameter, low word first. `machine.unique_id()` returns the 8 bytes |
+| `0x610`, `0x614` | `SYS_UID0`, `SYS_UID1` | Read-only. The 64-bit unique id, the `SYS_UID` parameter, low word first. `machine.unique_id()` returns the 8 bytes, most significant first |
 
 When bit 0 of `SYS_STRAP` is clear, `_boot` writes `TIMER_PRESC = SYS_FREQ / 1000`,
 so a tick is one millisecond. Only power-on (the `rst_n` pin) clears the
 reset cause; a system reset keeps the straps.
+
+The reset controller is in this block, on the power-on reset. A system
+reset (`SYS_RESET` or `wdt_reset`) records the cause, then holds every
+other block in reset (`sys_rst_n` low: the core, the collector, the
+memory controller, the IRQ block, and the peripherals) for
+`MPY_SRAM_WORDS` clocks while it zeroes SRAM and its tags, one word a
+clock. The firmware relies on SRAM reading zero at power-up (empty
+sysroot slots, `A_FREE` tags), so the scrub gives a system reset the same
+start. Then it releases `sys_rst_n` and the hart boots the flash image
+again. Soft and hard reset differ only in the cause.
 
 ### ADC (`0x800`)
 
@@ -360,6 +371,8 @@ The module is native. The operations this block backs:
 | `idle` | The hart waits. A timer that is already armed keeps its compare |
 | `PWM(pin, freq, duty_u16)` | Pin mux code 1–4 (channel `pin % 4`); `PWM_PRESC`/`PWM_TOP` from `mpy_periph_model.pwm_config`, shared by all channels |
 | `SPI(0, baudrate, polarity, phase)` | Pads 10–12 by default; `SPI_CTRL`; bytes through the FIFOs, eight at a time. Chip select is a `Pin` |
+| `WDT(0, timeout)` / `feed` | `WDT_LOAD`, then `WDT_CTRL`; `feed` writes the key to `WDT_KICK` |
+| `reset` / `soft_reset` / `reset_cause` / `unique_id` | `SYS_RESET` with k 0 or 1; `SYS_RESET_CAUSE`; `SYS_UID1` then `SYS_UID0`, big-endian |
 | `I2C(0, freq, timeout)` | Pads 14 (SCL) and 15 (SDA) by default; `I2C_DIV`/`I2C_TIMEOUT` from `mpy_periph_model.i2c_config` (timeout in µs). One command per byte. A NACKed address raises `OSError(ENODEV)`, a timeout `OSError(ETIMEDOUT)`; both end with STOP or the released bus. `scan` tries 0x08–0x77 |
 
 `micropython.schedule(fn, arg)` pulses `sched_push`. The ring depth is 8,

@@ -164,6 +164,9 @@ I2C_START = const(1)
 I2C_STOP = const(2)
 I2C_WRITE = const(3)
 I2C_READ = const(4)
+# WDT_KICK and SYS_RESET keys (upycore/docs/mpy_peripherals.md).
+WDT_KEY = const(0x6B1DF00D)
+SYS_RESET_KEY = const(0x0B007ED0)
 ENODEV = const(19)
 ETIMEDOUT = const(110)
 
@@ -628,6 +631,42 @@ def _build_machine():
             _i2c_write(addr << 1, m + b, len(m) + _slen(b), True)
             return None
 
+    class WDT:
+        def __init__(self, id=0, timeout=5000):
+            if id != 0:
+                raise ValueError('WDT does not exist')
+            # A tick is a millisecond; the first WDT fixes the timeout.
+            _poke32(MMIO_WDT_LOAD, _w32(timeout))
+            _poke32(MMIO_WDT_CTRL, 1)
+
+        def feed(self):
+            _poke32(MMIO_WDT_KICK, WDT_KEY)
+            return None
+
+    def reset():
+        _poke32(MMIO_SYS_RESET, SYS_RESET_KEY)
+        while True:
+            pass
+
+    def soft_reset():
+        _poke32(MMIO_SYS_RESET, SYS_RESET_KEY | 1)
+        while True:
+            pass
+
+    def reset_cause():
+        return _peek32(MMIO_SYS_RESET_CAUSE)
+
+    def unique_id():
+        out = bytearray(8)
+        hi = _peek32(MMIO_SYS_UID1)
+        lo = _peek32(MMIO_SYS_UID0)
+        i = 0
+        while i < 4:
+            out[i] = (hi >> (24 - 8 * i)) & 255
+            out[4 + i] = (lo >> (24 - 8 * i)) & 255
+            i += 1
+        return bytes(out)
+
     def disable_irq():
         return _irqoff()
 
@@ -650,6 +689,16 @@ def _build_machine():
         'PWM': PWM,
         'SPI': SPI,
         'I2C': I2C,
+        'WDT': WDT,
+        'reset': reset,
+        'soft_reset': soft_reset,
+        'reset_cause': reset_cause,
+        'unique_id': unique_id,
+        'PWRON_RESET': 1,
+        'HARD_RESET': 2,
+        'WDT_RESET': 3,
+        'DEEPSLEEP_RESET': 4,
+        'SOFT_RESET': 5,
         'disable_irq': disable_irq,
         'enable_irq': enable_irq,
         'idle': idle,

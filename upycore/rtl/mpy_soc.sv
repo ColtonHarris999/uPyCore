@@ -14,6 +14,10 @@
 // is registered one cycle later, like the sim page. MMIO is word access only:
 // an unaligned address or a partial-word store faults as unaligned. Everything
 // else goes to mpy_mem.
+//
+// mpy_sys is the reset controller. A system reset (SYS_RESET, or the
+// watchdog) holds every other block on sys_rst_n while mpy_mem zeroes SRAM,
+// then the hart boots again; only rst_n_i resets mpy_sys and mpy_mem.
 module mpy_soc #(
     parameter int SRAM_LATENCY = MPY_SRAM_LATENCY,
     parameter int FLASH_WAIT_STATES = MPY_FLASH_WAIT_STATES
@@ -98,12 +102,19 @@ module mpy_soc #(
     logic [31:0] d_pc, d_fp, d_sp, d_xsp;
     logic        i_wake;
 
+    // System reset (mpy_sys): everything but mpy_sys and mpy_mem's SRAM
+    // scrub runs on sys_rst_n.
+    logic        sys_rst_n;
+    logic        scrub;
+    logic [15:0] scrub_idx;
+    logic        wdt_reset, tick;
+
     logic        core_halted;
     logic [3:0]  core_hcode;
     logic [31:0] core_hval, core_cycles;
 
     mpy_core u_core (
-        .clk_i, .rst_n_i,
+        .clk_i, .rst_n_i(sys_rst_n),
         .m_req_o(c_req), .m_we_o(c_we), .m_tag_we_o(c_tag_we), .m_be_o(c_be),
         .m_addr_o(c_addr), .m_wdata_o(c_wdata), .m_wtag_o(c_wtag),
         .m_ack_i(c_ack), .m_rdata_i(c_rdata), .m_rtag_i(c_rtag),
@@ -136,7 +147,7 @@ module mpy_soc #(
         .POOL_BASE(ABI_GC_POOL_BASE),
         .POOL_BYTES(ABI_GC_POOL_BYTES)
     ) u_gc (
-        .clk_i, .rst_n_i,
+        .clk_i, .rst_n_i(sys_rst_n),
         .alloc_req_i(g_alloc_req), .alloc_nbytes_i(g_alloc_nbytes),
         .alloc_done_o(g_alloc_done), .alloc_ok_o(g_alloc_ok), .alloc_addr_o(g_alloc_addr),
         .collect_req_i(g_collect_req),
@@ -157,7 +168,8 @@ module mpy_soc #(
         .req_i(m_req), .we_i(m_we), .tag_we_i(m_tag_we), .be_i(m_be),
         .addr_i(m_addr), .wdata_i(m_wdata), .wtag_i(m_wtag),
         .ack_o(m_ack), .rdata_o(m_rdata), .rtag_o(m_rtag),
-        .fault_o(m_fault), .fault_reason_o(m_fault_reason)
+        .fault_o(m_fault), .fault_reason_o(m_fault_reason),
+        .scrub_i(scrub), .scrub_idx_i(scrub_idx)
     );
 
     // Sim-page and MMIO decode for core requests.
@@ -183,7 +195,7 @@ module mpy_soc #(
     assign uart_txd_o = uart_txd;
 
     mpy_periph u_periph (
-        .clk_i, .rst_n_i,
+        .clk_i, .rst_n_i(sys_rst_n),
         .req_i(p_req), .we_i(c_we), .addr_i(c_addr), .wdata_i(c_wdata),
         .rdata_o(p_rdata), .ack_o(p_ack), .fault_o(p_fault),
         .timer_step_i, .uart_rx_stb_i, .uart_rx_byte_i,
@@ -191,7 +203,7 @@ module mpy_soc #(
         .gpio_out_o, .gpio_oe_o, .gpio_pu_o, .gpio_pd_o, .gpio_in_i, .gpio_in_en_i,
         .soft_set_i(1'b0), .gc_req_i(1'b0), .sim_set_i(sim_irq_i),
         .kbd_set_i(1'b0), .mbox_set_i(1'b0),
-        .bc_boundary_i(i_bnd), .jump_i(i_jmp), .done_i(i_done), .wake_o(i_wake),
+        .bc_boundary_i(i_bnd), .jump_i(i_jmp), .done_i(i_done), .wake_o(i_wake), .tick_o(tick),
         .fire_o(i_fire), .fire_hard_o(i_fire_hard), .fire_sched_o(), .fire_src_o(i_fire_src),
         .fire_fn_o(i_fire_fn), .fire_arg_o(i_fire_arg),
         .fire_fn_tag_o(i_fire_fn_tag), .fire_arg_tag_o(i_fire_arg_tag), .kbd_raise_o(i_kbd),
@@ -209,33 +221,41 @@ module mpy_soc #(
     );
 
     logic [31:0] sys_rdata;
-    mpy_sys u_sys (
+    mpy_sys #(.SRAM_WORDS(MPY_SRAM_WORDS)) u_sys (
         .clk_i, .rst_n_i,
         .req_i(blk_req), .we_i(c_we), .off_i(c_addr[11:0]), .wdata_i(c_wdata),
-        .rdata_o(sys_rdata), .strap_i
+        .rdata_o(sys_rdata), .strap_i,
+        .wdt_reset_i(wdt_reset), .sys_rst_n_o(sys_rst_n), .scrub_o(scrub), .scrub_idx_o(scrub_idx)
+    );
+
+    logic [31:0] wdt_rdata;
+    mpy_wdt u_wdt (
+        .clk_i, .rst_n_i(sys_rst_n),
+        .req_i(blk_req), .we_i(c_we), .off_i(c_addr[11:0]), .wdata_i(c_wdata),
+        .rdata_o(wdt_rdata), .tick_i(tick), .wdt_reset_o(wdt_reset)
     );
 
     mpy_pwm u_pwm (
-        .clk_i, .rst_n_i,
+        .clk_i, .rst_n_i(sys_rst_n),
         .req_i(blk_req), .we_i(c_we), .off_i(c_addr[11:0]), .wdata_i(c_wdata),
         .rdata_o(pwm_rdata), .pwm_o(pwm), .wrap_o()
     );
 
     mpy_spi u_spi (
-        .clk_i, .rst_n_i,
+        .clk_i, .rst_n_i(sys_rst_n),
         .req_i(blk_req), .we_i(c_we), .off_i(c_addr[11:0]), .wdata_i(c_wdata),
         .rdata_o(spi_rdata), .sck_o(spi_sck), .mosi_o(spi_mosi), .miso_i(spi_miso), .irq_o()
     );
 
     mpy_i2c u_i2c (
-        .clk_i, .rst_n_i,
+        .clk_i, .rst_n_i(sys_rst_n),
         .req_i(blk_req), .we_i(c_we), .off_i(c_addr[11:0]), .wdata_i(c_wdata),
         .rdata_o(i2c_rdata), .scl_low_o(i2c_scl_low), .sda_low_o(i2c_sda_low),
         .scl_i(i2c_scl), .sda_i(i2c_sda), .irq_o()
     );
 
     mpy_pinmux u_mux (
-        .clk_i, .rst_n_i,
+        .clk_i, .rst_n_i(sys_rst_n),
         .req_i(blk_req), .we_i(c_we), .off_i(c_addr[11:0]), .wdata_i(c_wdata),
         .rdata_o(mux_rdata),
         .gpio_out_i(gpio_out_o[15:0]), .gpio_oe_i(gpio_oe_o[15:0]), .pwm_i(pwm),
@@ -250,13 +270,13 @@ module mpy_soc #(
     assign p_partial = c_we && (c_be != 4'hF);
     assign p_req = c_req && c_mmio && !p_partial && !g_busy;
 
-    always_ff @(posedge clk_i or negedge rst_n_i) begin
-        if (!rst_n_i) begin
+    always_ff @(posedge clk_i or negedge sys_rst_n) begin
+        if (!sys_rst_n) begin
             mmio_ack <= 1'b0; mmio_fault <= 1'b0; mmio_rdata <= 32'd0;
         end else begin
             mmio_ack <= c_req && c_mmio && !g_busy;
             mmio_fault <= c_req && c_mmio && !g_busy && (p_partial || p_fault);
-            mmio_rdata <= p_rdata | sys_rdata | pwm_rdata | mux_rdata | spi_rdata | i2c_rdata;
+            mmio_rdata <= p_rdata | sys_rdata | wdt_rdata | pwm_rdata | mux_rdata | spi_rdata | i2c_rdata;
         end
     end
 
@@ -265,8 +285,8 @@ module mpy_soc #(
     logic        sim_halt;
     logic [31:0] sim_halt_val;
 
-    always_ff @(posedge clk_i or negedge rst_n_i) begin
-        if (!rst_n_i) begin
+    always_ff @(posedge clk_i or negedge sys_rst_n) begin
+        if (!sys_rst_n) begin
             sim_ack <= 1'b0; sim_rdata <= 32'd0;
             con_valid_o <= 1'b0; con_err_o <= 1'b0; con_byte_o <= 8'd0;
             sim_halt <= 1'b0; sim_halt_val <= 32'd0;

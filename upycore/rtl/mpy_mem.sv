@@ -9,6 +9,10 @@
 //
 // +IMAGE=<hex> loads flash words and +TAGS=<hex> the packed flash tags
 // (upycore/tools/mpy_link.py writes both).
+//
+// While scrub_i is high (a system reset, mpy_sys) the clock zeroes SRAM
+// word scrub_idx_i and, on a word that starts a tag word, its eight tags;
+// a request in flight is dropped. rst_n_i is the power-on reset.
 module mpy_mem #(
     parameter int FLASH_WAIT_STATES = MPY_FLASH_WAIT_STATES,
     parameter int SRAM_LATENCY = MPY_SRAM_LATENCY
@@ -27,7 +31,10 @@ module mpy_mem #(
     output logic [31:0] rdata_o,
     output logic [3:0]  rtag_o,
     output logic        fault_o,
-    output logic [3:0]  fault_reason_o
+    output logic [3:0]  fault_reason_o,
+
+    input  logic        scrub_i,
+    input  logic [15:0] scrub_idx_i
 );
 
     logic [31:0] sram      [0:MPY_SRAM_WORDS-1];
@@ -89,6 +96,14 @@ module mpy_mem #(
             rtag_o         <= '0;
             fault_o        <= 1'b0;
             fault_reason_o <= MPY_FAULT_NONE;
+        end else if (scrub_i) begin
+            phase_r        <= '0;
+            ack_o          <= 1'b0;
+            fault_o        <= 1'b0;
+            fault_reason_o <= MPY_FAULT_NONE;
+            sram[scrub_idx_i] <= '0;
+            if (scrub_idx_i[2:0] == 3'd0)
+                sram_tags[scrub_idx_i[15:3]] <= '0;
         end else begin
             ack_o          <= 1'b0;
             fault_o        <= 1'b0;
