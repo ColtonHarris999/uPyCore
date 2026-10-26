@@ -392,6 +392,15 @@ def _mk_module(name, g):
     return m
 
 
+def _rom_dict_set(d, k, v):
+    # Store into a read-only dict from the firmware (a lazy module entry).
+    f = _ld(d, 3)
+    _st(d, 3, f & ~DICT_FLAG_ROM)
+    d[k] = v
+    _st(d, 3, f)
+    return None
+
+
 def _mk_builtin_module(name, g):
     # A builtin module built at run time: named, and read-only like a ROM one.
     g['__name__'] = name

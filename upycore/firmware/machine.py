@@ -236,7 +236,11 @@ def _sleep_ms(n):
     return None
 
 
-def _build_machine():
+# machine is built on import, but each class only on its first use: the
+# module's __getattr__ runs the class's builder below and keeps the class
+# in the module dict. A class statement costs tens of thousands of cycles,
+# and the tick-driven tests start their timer right after `import machine`.
+def _mk_mem():
     class mem:
         def __init__(self, width):
             self.width = width
@@ -246,7 +250,10 @@ def _build_machine():
 
         def __setitem__(self, addr, v):
             return _mem_set(self.width, addr, v)
+    return mem
 
+
+def _mk_Pin():
     pins = [None] * 16
 
     class Pin:
@@ -324,7 +331,10 @@ def _build_machine():
             _setbit(MMIO_IRQ_ENABLE, SRC_GPIO, armed)
             _irqon(st)
             return None
+    return Pin
 
+
+def _mk_Timer():
     class Timer:
         ONE_SHOT = 0
         PERIODIC = 1
@@ -367,7 +377,10 @@ def _build_machine():
             self._cb = None
             _irqon(st)
             return None
+    return Timer
 
+
+def _mk_UART():
     class UART:
         IRQ_RX = 1
 
@@ -442,7 +455,11 @@ def _build_machine():
             _setbit(MMIO_IRQ_ENABLE, SRC_UART, handler is not None)
             _irqon(st)
             return None
+    return UART
 
+
+def _mk_PWM():
+    Pin = _machine_attr('Pin')
     pwm_duty = [0, 0, 0, 0]
 
     class PWM:
@@ -482,7 +499,10 @@ def _build_machine():
             _poke32(MMIO_PWM_EN, _peek32(MMIO_PWM_EN) & ~(1 << self.ch))
             _pinmux(self.pin, 0)
             return None
+    return PWM
 
+
+def _mk_SPI():
     class SPI:
         MSB = 0
         LSB = 1
@@ -532,7 +552,10 @@ def _build_machine():
                 raise ValueError('buffers must be the same length')
             _spi_xfer(b, 0, rbuf, len(rbuf))
             return None
+    return SPI
 
+
+def _mk_I2C():
     class I2C:
         def __init__(self, id, *, scl=None, sda=None, freq=400000, timeout=50000):
             if id != 0:
@@ -630,7 +653,26 @@ def _build_machine():
             m = _i2c_memaddr(memaddr, addrsize)
             _i2c_write(addr << 1, m + b, len(m) + _slen(b), True)
             return None
+    return I2C
 
+
+def _mk_ADC():
+    class ADC:
+        def __init__(self, id):
+            ch = id if _tag(id) == TAG_INT else id.id
+            if ch < 0 or ch > 15:
+                raise ValueError('ADC channel out of range')
+            self._ch = ch
+
+        def read_u16(self):
+            _poke32(MMIO_ADC_CTRL, 256 | self._ch)
+            while _peek32(MMIO_ADC_STATUS) & 1:
+                pass
+            return _peek32(MMIO_ADC_DATA) & 65535
+    return ADC
+
+
+def _mk_WDT():
     class WDT:
         def __init__(self, id=0, timeout=5000):
             if id != 0:
@@ -642,7 +684,54 @@ def _build_machine():
         def feed(self):
             _poke32(MMIO_WDT_KICK, WDT_KEY)
             return None
+    return WDT
 
+
+def _machine_lazy(name):
+    if _streq(name, 'Pin'):
+        return _mk_Pin
+    if _streq(name, 'Timer'):
+        return _mk_Timer
+    if _streq(name, 'UART'):
+        return _mk_UART
+    if _streq(name, 'PWM'):
+        return _mk_PWM
+    if _streq(name, 'SPI'):
+        return _mk_SPI
+    if _streq(name, 'I2C'):
+        return _mk_I2C
+    if _streq(name, 'ADC'):
+        return _mk_ADC
+    if _streq(name, 'WDT'):
+        return _mk_WDT
+    return NULL
+
+
+def _machine_getattr(name):
+    # A miss is NULL: the caller raises the usual AttributeError.
+    g = _ld(_machine(), 2)
+    if _streq(name, 'mem8') or _streq(name, 'mem16') or _streq(name, 'mem32'):
+        mem = _mk_mem()
+        _rom_dict_set(g, 'mem8', mem(1))
+        _rom_dict_set(g, 'mem16', mem(2))
+        _rom_dict_set(g, 'mem32', mem(4))
+        return _dget(g, name)
+    mk = _machine_lazy(name)
+    if mk is NULL:
+        return NULL
+    v = mk()
+    _rom_dict_set(g, name, v)
+    return v
+
+
+def _machine_attr(name):
+    v = _dget(_ld(_machine(), 2), name)
+    if v is NULL:
+        v = _machine_getattr(name)
+    return v
+
+
+def _build_machine():
     def reset():
         _poke32(MMIO_SYS_RESET, SYS_RESET_KEY)
         while True:
@@ -680,16 +769,7 @@ def _build_machine():
         return _peek32(MMIO_SYS_FREQ)
 
     g = {
-        'mem8': mem(1),
-        'mem16': mem(2),
-        'mem32': mem(4),
-        'Pin': Pin,
-        'Timer': Timer,
-        'UART': UART,
-        'PWM': PWM,
-        'SPI': SPI,
-        'I2C': I2C,
-        'WDT': WDT,
+        '__getattr__': _machine_getattr,
         'reset': reset,
         'soft_reset': soft_reset,
         'reset_cause': reset_cause,

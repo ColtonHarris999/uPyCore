@@ -2,8 +2,10 @@
 import machine
 import time
 
+count = machine.mem32
 w = machine.WDT(timeout=5)
 for i in range(30):
     time.sleep_ms(1)
     w.feed()
-print('fed', machine.reset_cause() == machine.PWRON_RESET, machine.mem32[0x4000050C])
+n = count[0x4000050C]
+print('fed', machine.reset_cause() == machine.PWRON_RESET, n)

@@ -570,3 +570,4 @@ i2c = { file = "hw/io/i2c.py", oracle = false, plusargs = ["+I2C_DEV=1"] }
 wdt_missed = { file = "hw/io/wdt_missed.py", oracle = false, plusargs = ["+TIMER_STEP=20000"] }
 wdt_fed = { file = "hw/io/wdt_fed.py", oracle = false, plusargs = ["+TIMER_STEP=20000"] }
 reset_chain = { file = "hw/io/reset_chain.py", oracle = false }
+adc = { file = "hw/io/adc.py", oracle = false }

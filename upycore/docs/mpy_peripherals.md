@@ -242,12 +242,18 @@ behavioral model in the testbench.
 
 | Offset | Name | Rule |
 | --- | --- | --- |
-| `0x800` | `ADC_CTRL` | A store with bit 8 set starts a conversion of channel bits 3:0 |
+| `0x800` | `ADC_CTRL` | A store with bit 8 set starts a conversion of channel bits 3:0; ignored while busy. Reads the last channel in bits 3:0 |
 | `0x804` | `ADC_DATA` | Read-only. Bit 31 valid (a conversion finished since the last start), bits 15:0 the result, left-aligned to 16 bits |
 | `0x808` | `ADC_STATUS` | Read-only. Bit 0 busy |
 
 The converter port is `adc_start` (one clock, with `adc_chan`), then
-`adc_done` with `adc_data` some clocks later.
+`adc_done` for one clock with the 12-bit `adc_code` some clocks later.
+`ADC_DATA` holds `adc_code << 4`. The testbench converter
+(`tb_adc_model.sv`) answers channel `c` with code
+`(273 * c + 100) & 0xFFF` after 48 clocks
+(`mpy_periph_model.adc_code`). `machine.ADC(id)` takes a channel number or a
+`Pin` (its id is the channel); `read_u16` starts a conversion, waits, and
+returns bits 15:0.
 
 ## Idle wake
 
@@ -358,7 +364,12 @@ already holds 8 entries.
 
 ## Native `machine`
 
-The module is native. The operations this block backs:
+The module is native. `import machine` builds the functions and constants;
+each class (`Pin`, `Timer`, `UART`, `PWM`, `SPI`, `I2C`, `ADC`, `WDT`, and
+the class behind `mem8`/`mem16`/`mem32`) is built on its first use by the
+module's `__getattr__` and then kept in the module dict. A class statement
+costs tens of thousands of cycles, so the import stays near 50k cycles
+however many classes there are. The operations this block backs:
 
 | Operation | Effect |
 | --- | --- |
@@ -373,6 +384,7 @@ The module is native. The operations this block backs:
 | `SPI(0, baudrate, polarity, phase)` | Pads 10–12 by default; `SPI_CTRL`; bytes through the FIFOs, eight at a time. Chip select is a `Pin` |
 | `WDT(0, timeout)` / `feed` | `WDT_LOAD`, then `WDT_CTRL`; `feed` writes the key to `WDT_KICK` |
 | `reset` / `soft_reset` / `reset_cause` / `unique_id` | `SYS_RESET` with k 0 or 1; `SYS_RESET_CAUSE`; `SYS_UID1` then `SYS_UID0`, big-endian |
+| `ADC(id)` / `read_u16` | `ADC_CTRL` start, wait while `ADC_STATUS` busy, `ADC_DATA` bits 15:0 |
 | `I2C(0, freq, timeout)` | Pads 14 (SCL) and 15 (SDA) by default; `I2C_DIV`/`I2C_TIMEOUT` from `mpy_periph_model.i2c_config` (timeout in µs). One command per byte. A NACKed address raises `OSError(ENODEV)`, a timeout `OSError(ETIMEDOUT)`; both end with STOP or the released bus. `scan` tries 0x08–0x77 |
 
 `micropython.schedule(fn, arg)` pulses `sched_push`. The ring depth is 8,
