@@ -46,6 +46,8 @@ BENCHES = [
                                 "upycore/tb/tb_mpy_i2c.sv"]),
     Bench("wdt", "tb_mpy_wdt", ["upycore/rtl/mpy_wdt.sv", "upycore/rtl/mpy_sys.sv",
                                 "upycore/tb/tb_mpy_wdt.sv"], "--wdt-plusargs"),
+    Bench("adc", "tb_mpy_adc", ["upycore/rtl/mpy_adc.sv", "upycore/tb/tb_adc_model.sv",
+                                "upycore/tb/tb_mpy_adc.sv"], "--adc-plusargs"),
 ]
 
 

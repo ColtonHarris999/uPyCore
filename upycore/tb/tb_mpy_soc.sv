@@ -26,6 +26,8 @@
 //                                           16-byte device at 0x42 that stretches
 //                                           SCL 6000 clocks after every ACK
 //
+// The ADC converter is tb_adc_model.sv (48 clocks, a fixed code per channel).
+//
 // Pads: a pad the SoC drives reads back its own level; ext_low pulls a pad
 // low (an open-drain target), ext_drv drives ext_val; otherwise the pad's
 // pull-up reads 1. Pads that toggled report `pw=<pad>:<high>:<period>`
@@ -65,6 +67,9 @@ module tb_mpy_soc;
     logic [7:0]  strap;
     logic        core_idle;
     logic [15:0] pad_out, pad_oe, pad_in;
+    logic        adc_start, adc_done;
+    logic [3:0]  adc_chan;
+    logic [11:0] adc_code;
     logic [15:0] ext_low;
     logic [15:0] ext_drv;
     logic [15:0] ext_val;
@@ -87,8 +92,12 @@ module tb_mpy_soc;
         .gpio_out_o(gpio_out), .gpio_oe_o(gpio_oe), .gpio_pu_o(gpio_pu), .gpio_pd_o(gpio_pd),
         .gpio_in_i(gpio_in), .gpio_in_en_i(gpio_in_en),
         .sim_irq_i(1'b0), .strap_i(strap), .idle_o(core_idle),
+        .adc_start_o(adc_start), .adc_chan_o(adc_chan), .adc_done_i(adc_done), .adc_code_i(adc_code),
         .pad_out_o(pad_out), .pad_oe_o(pad_oe), .pad_in_i(pad_in)
     );
+
+    // The ADC's converter (mpy_periph_model.adc_code).
+    tb_adc_model u_adc (.clk(clk), .start(adc_start), .chan(adc_chan), .done(adc_done), .code(adc_code));
 
     // SPI devices on the pads.
     string       spi_dev;

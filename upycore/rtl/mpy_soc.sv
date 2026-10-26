@@ -60,6 +60,12 @@ module mpy_soc #(
     input  logic [7:0]  strap_i,
     output logic        idle_o,
 
+    // ADC converter port (upycore/docs/mpy_peripherals.md, ADC)
+    output logic        adc_start_o,
+    output logic [3:0]  adc_chan_o,
+    input  logic        adc_done_i,
+    input  logic [11:0] adc_code_i,
+
     // Pads after the pin mux (upycore/docs/mpy_peripherals.md, Pin mux)
     output logic [15:0] pad_out_o,
     output logic [15:0] pad_oe_o,
@@ -228,6 +234,13 @@ module mpy_soc #(
         .wdt_reset_i(wdt_reset), .sys_rst_n_o(sys_rst_n), .scrub_o(scrub), .scrub_idx_o(scrub_idx)
     );
 
+    logic [31:0] adc_rdata;
+    mpy_adc u_adc (
+        .clk_i, .rst_n_i(sys_rst_n),
+        .req_i(blk_req), .we_i(c_we), .off_i(c_addr[11:0]), .wdata_i(c_wdata),
+        .rdata_o(adc_rdata), .adc_start_o, .adc_chan_o, .adc_done_i, .adc_code_i
+    );
+
     logic [31:0] wdt_rdata;
     mpy_wdt u_wdt (
         .clk_i, .rst_n_i(sys_rst_n),
@@ -276,7 +289,8 @@ module mpy_soc #(
         end else begin
             mmio_ack <= c_req && c_mmio && !g_busy;
             mmio_fault <= c_req && c_mmio && !g_busy && (p_partial || p_fault);
-            mmio_rdata <= p_rdata | sys_rdata | wdt_rdata | pwm_rdata | mux_rdata | spi_rdata | i2c_rdata;
+            mmio_rdata <= p_rdata | sys_rdata | wdt_rdata | adc_rdata | pwm_rdata | mux_rdata | spi_rdata
+                | i2c_rdata;
         end
     end
 

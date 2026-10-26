@@ -12,6 +12,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 
 from mpy_periph_model import (  # noqa: E402
+    adc_code,
+    adc_plusargs,
+    adc_read_u16,
     blink_edge_mask,
     debounce_count,
     echo_fifo_result,
@@ -67,6 +70,12 @@ class MpyPeriphModelTest(unittest.TestCase):
         self.assertEqual(i2c_config(48_000_000, 10, 100_000_000)[0::2], (0xFFFF, 0xFFFF_FFFF))
         self.assertEqual(i2c_config(48_000_000, 48_000_000, 1)[:2], (0, 12_000_000))
         self.assertEqual(i2c_byte_clocks(29), 1080)
+
+    def test_adc(self) -> None:
+        self.assertEqual(adc_code(0), 100)
+        self.assertEqual(adc_code(15), (273 * 15 + 100) & 0xFFF)
+        self.assertEqual(adc_read_u16(1), 373 << 4)
+        self.assertIn("+ADC_U16_5=", adc_plusargs())
 
     def test_wdt(self) -> None:
         self.assertEqual(wdt_reset_tick(7, ()), 7)

@@ -213,7 +213,7 @@ The blocks past the base registers, one 256-byte range each:
 | `0x500` | WDT | `mpy_wdt.sv` |
 | `0x600` | SYS (frequency, straps, reset controller, id) | `mpy_sys.sv` |
 | `0x700` | TIMER1..3 | not built |
-| `0x800` | ADC | not built yet |
+| `0x800` | ADC | `mpy_adc.sv` |
 | `0x900` | Pin mux | `mpy_pinmux.sv` |
 
 A system reset (`SYS_RESET`, or the watchdog) zeroes all of SRAM and its

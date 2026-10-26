@@ -421,6 +421,23 @@ def wdt_plusargs() -> str:
             f"+SRAM_WORDS={SRAM_WORDS}")
 
 
+ADC_LATENCY = 48       # tb_adc_model: clocks from adc_start to adc_done
+
+
+def adc_code(ch: int) -> int:
+    """The testbench converter's 12-bit answer for channel ch."""
+    return (273 * ch + 100) & 0xFFF
+
+
+def adc_read_u16(ch: int) -> int:
+    """ADC(ch).read_u16(): ADC_DATA bits 15:0, the code left-aligned."""
+    return adc_code(ch) << 4
+
+
+def adc_plusargs() -> str:
+    return " ".join([f"+ADC_LATENCY={ADC_LATENCY}"] + [f"+ADC_U16_{ch}={adc_read_u16(ch)}" for ch in (0, 5, 15)])
+
+
 PWM_BENCH = ((1, 9, (3, 0, 10, 5)),)
 
 
@@ -615,6 +632,9 @@ def main(argv: list[str]) -> int:
         return 0
     if "--pwm-plusargs" in argv:
         print(pwm_plusargs())
+        return 0
+    if "--adc-plusargs" in argv:
+        print(adc_plusargs())
         return 0
     if "--wdt-plusargs" in argv:
         print(wdt_plusargs())
