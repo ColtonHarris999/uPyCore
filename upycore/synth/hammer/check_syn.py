@@ -33,7 +33,10 @@ RTL_FLOPS = {"mpy_alu": 5552, "mpy_decode": 461, "mpy_core": 12677}
 BAD_WARNING = re.compile(
     r"latch|unresolved|black ?box|undriven|not driven|multiple driver|"
     r"combinational loop|timing loop|unconnected|no driver", re.I)
-EXPECTED_ERROR = re.compile(r"DEFAULT_CLOCK|clock_constraints_fragment")
+# Hammer's placeholder clock, and the set_clock_groups on it that then
+# has no valid clocks (SDC-204 does not name the clock).
+EXPECTED_ERROR = re.compile(r"DEFAULT_CLOCK|clock_constraints_fragment|"
+                            r"All clocks passed to -group option are invalid")
 
 
 def _blocks(lines: list[str], kind: str) -> list[tuple[str, str]]:
@@ -85,6 +88,13 @@ def main() -> int:
         head = first[wid].splitlines()[0].split(":", 1)[-1].strip()
         mark = "CHECK" if BAD_WARNING.search(first[wid]) else "     "
         print(f"  {mark} {n:6d}  {wid:10s} {head[:90]}")
+    print("  (Genus prints at most 20 of each message, see MESG-11.)")
+    removed = [t.splitlines()[1].split(":", 1)[-1].strip() for w, t in warns
+               if w == "CDFG-508" and len(t.splitlines()) > 1]
+    if removed:
+        print("  Registers Genus removed as unused (check each is really unused):")
+        for r in removed[:20]:
+            print(f"    {r[:110]}")
 
     netlists = sorted(run.glob("*.mapped.v"))
     top = netlists[0].name[: -len(".mapped.v")] if netlists else None
