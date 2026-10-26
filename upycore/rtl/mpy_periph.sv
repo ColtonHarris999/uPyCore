@@ -49,6 +49,7 @@ module mpy_periph
     input  logic        bc_boundary_i,
     input  logic        jump_i,
     input  logic        done_i,
+    output logic        wake_o,
 
     output logic        fire_o,
     output logic        fire_hard_o,
@@ -254,6 +255,9 @@ module mpy_periph
     assign event_set[MPY_SRC_SIM]    = sim_set_i;
     assign event_set[MPY_SRC_KBD]    = kbd_set_i || kbd_hit;
     assign event_set[MPY_SRC_MBOX]   = mbox_set_i;
+
+    // machine.idle returns on any of these, enabled or not.
+    assign wake_o = tick || (|event_set);
 
     assign w1c = wr_stat ? wdata_i[MPY_NSRC-1:0] : '0;
     // The event that is accepted this cycle is cleared with the status

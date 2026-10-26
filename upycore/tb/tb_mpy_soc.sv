@@ -10,10 +10,18 @@
 //   +UART_RX_AT=<n> +UART_RX_GAP=<n>        strobed from cycle n, one every gap cycles
 //   +UART_BAUD=<n>                          send them as 8N1 frames at n clocks/bit instead
 //   +GPIO_IN=<hex>@<cycle>,...              drive gpio_in (gpio_in_en is high)
+//   +UART_RX_IDLE=1                         strobe the next byte only while the core
+//                                           is in machine.idle, gap cycles apart; with
+//                                           +UART_BAUD only the first frame waits
+//   +MAX_TICKS=<n>                          stop at pulse n+1, so tick n's work is
+//                                           in: a trace pass (`MPY_TICKS`), not a halt
+//   +STRAP=<hex>                            boot straps (SYS_STRAP); default 1, the
+//                                           testbench drives the tick
 //   +IO_TRACE=1                             one line per GPIO_OUT change and TX byte
 //
-// Before the halt line the bench prints
-// `MPY_IO gpio_out=<hex> gpio_oe=<hex> edges=<n> tx=<hex bytes>`.
+// Before the last line the bench prints `MPY_IO gpio_out=<hex> gpio_oe=<hex>
+// edges=<n> gmask=<hex> ticks=<n> tx=<hex bytes>`. gmask bit k-1 is set when
+// GPIO_OUT changed while the tick count was k.
 //
 // The last line is `MPY_HALT code=<n> value=<hex> cycles=<n> ops=<n> gc=<n>`
 // or `MPY_TIMEOUT cycles=<n> ...` (upycore/tools/mpy_build.py parses it).
@@ -42,6 +50,8 @@ module tb_mpy_soc;
     logic [31:0] gpio_out, gpio_oe, gpio_pu, gpio_pd;
     logic [31:0] gpio_in = 32'h0;
     logic        gpio_in_en = 1'b0;
+    logic [7:0]  strap;
+    logic        core_idle;
 
     mpy_soc u_soc (
         .clk_i(clk), .rst_n_i(rst_n),
@@ -55,7 +65,7 @@ module tb_mpy_soc;
         .uart_rxd_i(uart_rxd), .uart_txd_o(uart_txd),
         .gpio_out_o(gpio_out), .gpio_oe_o(gpio_oe), .gpio_pu_o(gpio_pu), .gpio_pd_o(gpio_pd),
         .gpio_in_i(gpio_in), .gpio_in_en_i(gpio_in_en),
-        .sim_irq_i(1'b0)
+        .sim_irq_i(1'b0), .strap_i(strap), .idle_o(core_idle)
     );
 
     // ---- peripheral stimulus and the IO summary ----
@@ -63,6 +73,9 @@ module tb_mpy_soc;
     bit          io_trace;
     logic [7:0]  rx_bytes [$];
     int          rx_at, rx_gap, rx_baud;
+    bit          rx_idle;
+    longint      max_ticks, ticks_n;
+    logic [31:0] gmask;
     logic [7:0]  tx_log [$];
     int          gpio_edges;
     logic [31:0] gpio_prev;
@@ -82,6 +95,11 @@ module tb_mpy_soc;
         if (!$value$plusargs("UART_RX_AT=%d", rx_at)) rx_at = 1000;
         if (!$value$plusargs("UART_RX_GAP=%d", rx_gap)) rx_gap = 1000;
         if (!$value$plusargs("UART_BAUD=%d", rx_baud)) rx_baud = 0;
+        rx_idle = $test$plusargs("UART_RX_IDLE");
+        if (!$value$plusargs("MAX_TICKS=%d", max_ticks)) max_ticks = 0;
+        if (!$value$plusargs("STRAP=%h", strap)) strap = 8'h01;
+        ticks_n = 0;
+        gmask = 32'h0;
         if ($value$plusargs("UART_RX=%s", text))
             for (int i = 0; i + 1 < text.len(); i += 2)
                 rx_bytes.push_back(8'(hexval(text[i]) * 16 + hexval(text[i + 1])));
@@ -95,12 +113,16 @@ module tb_mpy_soc;
     always @(negedge clk) begin
         timer_step <= (timer_period > 0) && rst_n && (cyc_n % timer_period == timer_period - 1);
     end
+    always @(posedge clk) if (rst_n && timer_step) ticks_n <= ticks_n + 1;
 
     // UART RX stimulus: strobes in byte mode, or 8N1 frames on uart_rxd.
     initial begin
         @(posedge rst_n);
         repeat (rx_at) @(posedge clk);
         foreach (rx_bytes[k]) begin
+            // Serial frames run back to back: only the first waits for idle.
+            if (rx_idle && (rx_baud == 0 || k == 0))
+                while (!core_idle) @(posedge clk);
             if (rx_baud == 0) begin
                 @(negedge clk);
                 uart_rx_stb = 1'b1;
@@ -151,6 +173,8 @@ module tb_mpy_soc;
         end
         if (rst_n && gpio_out != gpio_prev) begin
             gpio_edges++;
+            if (ticks_n >= 1 && ticks_n <= 32 && !(max_ticks > 0 && ticks_n > max_ticks))
+                gmask[ticks_n - 1] <= 1'b1;
             if (io_trace) $display("GPIO cycle=%0d out=%08x", cyc_n, gpio_out);
             gpio_prev <= gpio_out;
         end
@@ -160,8 +184,9 @@ module tb_mpy_soc;
         string txs;
         txs = "";
         foreach (tx_log[k]) txs = {txs, $sformatf("%02x", tx_log[k])};
-        $display("MPY_IO gpio_out=%08x gpio_oe=%08x edges=%0d tx=%s",
-                 gpio_out, gpio_oe, gpio_edges, txs);
+        $display("MPY_IO gpio_out=%08x gpio_oe=%08x edges=%0d gmask=%08x ticks=%0d tx=%s",
+                 gpio_out, gpio_oe, gpio_edges, gmask,
+                 (max_ticks > 0 && ticks_n > max_ticks) ? max_ticks : ticks_n, txs);
     endtask
 
     int    fd_out, fd_err;
@@ -198,7 +223,7 @@ module tb_mpy_soc;
     initial begin
         n = 0;
         @(posedge rst_n);
-        while (!halted && n < max_cycles) begin
+        while (!halted && n < max_cycles && !(max_ticks > 0 && ticks_n > max_ticks)) begin
             @(posedge clk);
             n++;
         end
@@ -207,7 +232,9 @@ module tb_mpy_soc;
         if (fd_out != 0) $fclose(fd_out);
         if (fd_err != 0) $fclose(fd_err);
         io_summary();
-        if (halted)
+        if (!halted && max_ticks > 0 && ticks_n > max_ticks)
+            $display("MPY_TICKS ticks=%0d cycles=%0d ops=%0d gc=%0d", max_ticks, cycles, ops, gc_coll);
+        else if (halted)
             $display("MPY_HALT code=%0d value=%08x cycles=%0d ops=%0d gc=%0d free=%0d",
                      halt_code, halt_value, cycles, ops, gc_coll, gc_free);
         else

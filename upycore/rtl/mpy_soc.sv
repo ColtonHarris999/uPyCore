@@ -52,7 +52,9 @@ module mpy_soc #(
     output logic [31:0] gpio_pd_o,
     input  logic [31:0] gpio_in_i,
     input  logic        gpio_in_en_i,
-    input  logic        sim_irq_i
+    input  logic        sim_irq_i,
+    input  logic [7:0]  strap_i,
+    output logic        idle_o
 );
     // core <-> port
     logic        c_req, c_we, c_tag_we;
@@ -89,6 +91,7 @@ module mpy_soc #(
     logic [35:0] i_hfn, i_harg, i_sfn, i_sarg, i_mfn, i_marg;
     logic [3:0]  i_msel;
     logic [31:0] d_pc, d_fp, d_sp, d_xsp;
+    logic        i_wake;
 
     logic        core_halted;
     logic [3:0]  core_hcode;
@@ -120,6 +123,7 @@ module mpy_soc #(
         .irq_sched_full_i(i_sched_full),
         .irq_mirror_dirty_i(i_mdirty), .irq_mirror_sel_o(i_msel), .irq_mirror_clr_o(i_mclr),
         .irq_mirror_fn_i(i_mfn), .irq_mirror_arg_i(i_marg),
+        .irq_wake_i(i_wake), .idle_o,
         .dbg_pc_o(d_pc), .dbg_fp_o(d_fp), .dbg_sp_o(d_sp), .dbg_exc_sp_o(d_xsp)
     );
 
@@ -171,7 +175,7 @@ module mpy_soc #(
         .gpio_out_o, .gpio_oe_o, .gpio_pu_o, .gpio_pd_o, .gpio_in_i, .gpio_in_en_i,
         .soft_set_i(1'b0), .gc_req_i(1'b0), .sim_set_i(sim_irq_i),
         .kbd_set_i(1'b0), .mbox_set_i(1'b0),
-        .bc_boundary_i(i_bnd), .jump_i(i_jmp), .done_i(i_done),
+        .bc_boundary_i(i_bnd), .jump_i(i_jmp), .done_i(i_done), .wake_o(i_wake),
         .fire_o(i_fire), .fire_hard_o(i_fire_hard), .fire_sched_o(), .fire_src_o(i_fire_src),
         .fire_fn_o(i_fire_fn), .fire_arg_o(i_fire_arg),
         .fire_fn_tag_o(i_fire_fn_tag), .fire_arg_tag_o(i_fire_arg_tag), .kbd_raise_o(i_kbd),
@@ -188,6 +192,13 @@ module mpy_soc #(
         .saved_pc_o(), .saved_fp_o(), .saved_sp_o(), .saved_exc_sp_o()
     );
 
+    logic [31:0] sys_rdata;
+    mpy_sys u_sys (
+        .clk_i, .rst_n_i,
+        .req_i(p_req && !p_fault), .we_i(c_we), .off_i(c_addr[11:0]), .wdata_i(c_wdata),
+        .rdata_o(sys_rdata), .strap_i
+    );
+
     // A partial-word store would write a replicated byte; it faults instead.
     assign p_partial = c_we && (c_be != 4'hF);
     assign p_req = c_req && c_mmio && !p_partial && !g_busy;
@@ -198,7 +209,7 @@ module mpy_soc #(
         end else begin
             mmio_ack <= c_req && c_mmio && !g_busy;
             mmio_fault <= c_req && c_mmio && !g_busy && (p_partial || p_fault);
-            mmio_rdata <= p_rdata;
+            mmio_rdata <= p_rdata | sys_rdata;
         end
     end
 

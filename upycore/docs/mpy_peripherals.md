@@ -111,6 +111,23 @@ next count would be at least `N`. The counter becomes 0 and the timer
 status bit sets. After reset the counter is 0, so the first match is on
 tick `N`, then every `N` ticks.
 
+## SYS block (`0x600`)
+
+| Offset | Name | Rule |
+| --- | --- | --- |
+| `0x600` | `SYS_FREQ` | Read-only. The system clock in Hz, the `SYS_FREQ_HZ` parameter (default 48 000 000). `machine.freq()` |
+| `0x604` | `SYS_STRAP` | Read-only. The boot straps, sampled at reset from `strap_i`. Bit 0: the tick comes from `timer_step` (the testbench), so `_boot` leaves `TIMER_PRESC` at 0. Bits 2:1: console (0 sim console, 1 UART, 2 USB CDC). Bit 3: run the REPL after `__main__` |
+
+When bit 0 is clear, `_boot` writes `TIMER_PRESC = SYS_FREQ / 1000`, so
+a tick is one millisecond.
+
+## Idle wake
+
+`wake` is high on a clock with a tick, a byte accepted into the RX FIFO
+(or the interrupt character), a GPIO pin-status change, or any other
+source event. It does not look at `IRQ_ENABLE` or `IRQ_GIE`: `machine.idle`
+returns on the event, and delivery decides what runs.
+
 ## UART
 
 The RX FIFO and the TX FIFO each hold `UART_FIFO_DEPTH` bytes. Bytes

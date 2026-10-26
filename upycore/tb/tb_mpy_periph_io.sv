@@ -62,7 +62,7 @@ module tb_mpy_periph_io;
         .gpio_in_i(gpio_in), .gpio_in_en_i(gpio_in_en),
         .soft_set_i(1'b0), .gc_req_i(1'b0), .sim_set_i(1'b0),
         .kbd_set_i(kbd_set), .mbox_set_i(mbox_set),
-        .bc_boundary_i(bnd), .jump_i(jmp), .done_i(done),
+        .bc_boundary_i(bnd), .jump_i(jmp), .done_i(done), .wake_o(),
         .fire_o(fire), .fire_hard_o(fire_hard), .fire_sched_o(fire_sched),
         .fire_src_o(fire_src), .fire_fn_o(fire_fn), .fire_arg_o(fire_arg),
         .fire_fn_tag_o(fire_fn_tag), .fire_arg_tag_o(fire_arg_tag), .kbd_raise_o(kbd_raise),

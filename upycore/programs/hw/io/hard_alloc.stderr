@@ -1,0 +1,3 @@
+Uncaught exception in IRQ callback handler
+Traceback (most recent call last):
+MemoryError: memory allocation failed, heap is locked

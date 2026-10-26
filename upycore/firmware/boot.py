@@ -113,6 +113,9 @@ def _irq_uncaught(hard, src):
 
 
 def _boot():
+    # Strap bit 0: the testbench drives timer_step. Otherwise a tick is 1 ms.
+    if not (_peek32(MMIO_SYS_STRAP) & 1):
+        _poke32(MMIO_TIMER_PRESC, _peek32(MMIO_SYS_FREQ) // 1000)
     mods = {}
     _sysset(SR_MODULES, mods)
     _sysset(SR_FW4, True)

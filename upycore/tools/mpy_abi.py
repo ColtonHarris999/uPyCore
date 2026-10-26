@@ -311,6 +311,8 @@ NATIVES = [
     "_irqoff",       # _irqoff() -> old IRQ_GIE bit; clears it in the same native
     "_heaplock",     # _heaplock(op): 0 lock -> None, 1 unlock -> depth, 2 -> depth
     "_irq_done",     # _irq_done(): pulse done for the running callback
+    "_idle",         # _idle(): wait for a wake, taking hard callbacks only (machine.idle)
+    "_pending",      # _pending(): one soft point: KeyboardInterrupt or one queued callback
 ]
 NATIVE_ID = {name: i for i, name in enumerate(NATIVES)}
 
@@ -557,6 +559,7 @@ MMIO = {
     "GPIO_IN": 0x30, "GPIO_EDGE": 0x34, "TICKS": 0x38, "UART_BAUD": 0x3C,
     "UART_STATUS": 0x40, "TIMER_PRESC": 0x44, "GPIO_OE": 0x48, "GPIO_PU": 0x4C,
     "GPIO_PD": 0x50, "GPIO_STATUS": 0x54, "UART_KBD": 0x58,
+    "SYS_FREQ": 0x600, "SYS_STRAP": 0x604,
 }
 IRQ_SRC = {"TIMER": 0, "UART": 1, "GPIO": 2, "SOFT": 3, "GC_REQ": 4, "SIM": 5, "KBD": 6, "MBOX": 7}
 

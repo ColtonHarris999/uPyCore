@@ -549,3 +549,15 @@ heap_lock = { file = "hw/io/heap_lock.py" }
 sched_root = { file = "hw/io/sched_root.py", oracle = false }
 ctrl_c = { file = "hw/io/ctrl_c.py", oracle = false, halt = "TIMEOUT", cycles = 1_000_000, plusargs = ["+UART_RX=0303", "+UART_RX_AT=200000", "+UART_RX_GAP=300000"] }
 ctrl_c_uncaught = { file = "hw/io/ctrl_c_uncaught.py", oracle = false, uncaught = true, plusargs = ["+UART_RX=03", "+UART_RX_AT=200000"] }
+blink = { file = "hw/io/blink.py", oracle = false, halt = "TICKS", cycles = 30_000_000, plusargs = ["+TIMER_STEP=400000", "+MAX_TICKS=20"], model = "blink" }
+blink_slow = { file = "hw/io/blink.py", oracle = false, halt = "TICKS", cycles = 30_000_000, plusargs = ["+TIMER_STEP=600000", "+MAX_TICKS=20"], model = "blink" }
+blink_off = { file = "hw/io/blink_off.py", oracle = false, halt = "TICKS", cycles = 30_000_000, plusargs = ["+TIMER_STEP=400000", "+MAX_TICKS=20"], model = "blink_off" }
+echo_fifo = { file = "hw/io/echo_fifo.py", oracle = false, plusargs = ["+UART_RX=41424344", "+UART_RX_IDLE", "+UART_RX_AT=1000", "+UART_RX_GAP=2000"], model = "echo_fifo" }
+echo_overrun = { file = "hw/io/echo_overrun.py", oracle = false, plusargs = ["+UART_RX=4142434445464748494a4b4c4d4e4f50515253", "+UART_RX_IDLE", "+UART_RX_AT=1000", "+UART_RX_GAP=2000", "+TIMER_STEP=30000"], model = "echo_overrun" }
+pins_two = { file = "hw/io/pins_two.py", oracle = false, plusargs = ["+TIMER_STEP=20000", "+GPIO_IN=1@1000000,3@1500000,f@2500000"] }
+pin_oe = { file = "hw/io/pin_oe.py", oracle = false, io = { gpio_oe = "00000000" } }
+hard_alloc = { file = "hw/io/hard_alloc.py", oracle = false, plusargs = ["+TIMER_STEP=30000"] }
+sleep_ticks = { file = "hw/io/sleep_ticks.py", plusargs = ["+TIMER_STEP=20000"] }
+debounce = { file = "hw/io/debounce.py", oracle = false, halt = "TICKS", plusargs = ["+TIMER_STEP=50000", "+MAX_TICKS=40", "+GPIO_IN=1@515000,0@515300,1@515600,0@515900,1@516200,0@615000,1@665000,0@670000,1@1015000,0@1015300,1@1015600,0@1015900,1@1016200,0@1115000,1@1515000,0@1515300,1@1515600,0@1515900,1@1516200,0@1615000"], model = "debounce" }
+gc_burst_slow = { file = "hw/io/gc_burst_slow.py", oracle = false, cycles = 30_000_000, plusargs = ["+UART_RX=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f", "+UART_BAUD=1000", "+UART_RX_GAP=0", "+UART_RX_IDLE", "+TIMER_STEP=50000"] }
+gc_burst_fast = { file = "hw/io/gc_burst_fast.py", oracle = false, cycles = 30_000_000, plusargs = ["+UART_RX=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f", "+UART_BAUD=100", "+UART_RX_GAP=0", "+UART_RX_IDLE", "+TIMER_STEP=50000"] }

@@ -97,6 +97,7 @@ module tb_mpy_periph;
         .bc_boundary_i(bc_boundary),
         .jump_i(jump),
         .done_i(done),
+        .wake_o(),
         .fire_o(fire),
         .fire_hard_o(fire_hard),
         .fire_sched_o(fire_sched),

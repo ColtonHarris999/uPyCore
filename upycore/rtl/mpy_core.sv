@@ -128,6 +128,8 @@ module mpy_core
     output logic        irq_mirror_clr_o,
     input  logic [35:0] irq_mirror_fn_i,
     input  logic [35:0] irq_mirror_arg_i,
+    input  logic        irq_wake_i,
+    output logic        idle_o,
     output logic [31:0] dbg_pc_o,
     output logic [31:0] dbg_fp_o,
     output logic [31:0] dbg_sp_o,
@@ -885,7 +887,8 @@ module mpy_core
         S_NAT_SCH2,
         S_NAT_SCH3,
         S_NAT_GIE1,
-        S_NAT_GIE2
+        S_NAT_GIE2,
+        S_IDLE
     } state_e;
 
     state_e st, wret;
@@ -1008,6 +1011,15 @@ module mpy_core
     logic        irq_jmp_q, irq_done_q, irq_hwe_q, irq_spush_q, irq_mclr_q;
     logic [2:0]  irq_hidx_q;
     val_t        irq_hfn_q, irq_harg_q, irq_sfn_q, irq_sarg_q;
+    // poll_mode: what a poll with nothing to take does. DEC decodes the
+    // next opcode; IDLE sleeps (before a wake) or returns from _idle (after
+    // one); PEND returns from _pending. A callback saves and clears it.
+    localparam logic [1:0] PM_DEC = 2'd0;
+    localparam logic [1:0] PM_IDLE = 2'd1;
+    localparam logic [1:0] PM_PEND = 2'd2;
+    logic [1:0]  poll_mode, irq_cb_mode;
+    logic        idle_woken, wake_pend, irq_in_unc;
+    logic [3:0]  nat_crk, irq_cb_crk;
     logic [5:0]  mi;
     // heap_lock depth: 16 bits that wrap, like gc_lock_depth in v1.29.0.
     logic [15:0] hlock;
@@ -1354,6 +1366,7 @@ module mpy_core
     assign irq_sched_arg_o = irq_sarg_q;
     assign irq_mirror_sel_o = mi[4:1];
     assign irq_mirror_clr_o = irq_mclr_q;
+    assign idle_o = (st == S_IDLE);
     assign dbg_pc_o = pc;
     assign dbg_fp_o = fbase;
     assign dbg_sp_o = {25'd0, sp};
@@ -1544,6 +1557,8 @@ module mpy_core
             irq_hidx_q <= 3'd0; irq_hfn_q <= VNULL; irq_harg_q <= VNULL;
             irq_sfn_q <= VNULL; irq_sarg_q <= VNULL;
             mi <= 6'd0; hlock <= 16'd0; al_hl <= 1'b0;
+            poll_mode <= PM_DEC; irq_cb_mode <= PM_DEC; idle_woken <= 1'b0; wake_pend <= 1'b0;
+            irq_in_unc <= 1'b0; nat_crk <= ABI_RK_PUSH; irq_cb_crk <= ABI_RK_PUSH;
         end else begin
             m_req <= 1'b0;
             gc_alloc_req <= 1'b0;
@@ -1552,6 +1567,7 @@ module mpy_core
             trace <= 1'b0;
             irq_done_q <= 1'b0; irq_hwe_q <= 1'b0; irq_spush_q <= 1'b0; irq_mclr_q <= 1'b0;
             if (!halted) cyc <= cyc + 32'd1;
+            if (irq_wake_i) wake_pend <= 1'b1;
             // A spill or a reload moves sp without a push or a pop.
             if (sp_hold) sp_hold <= 1'b0;
             else if (sp < sp_d) rf_mono <= 1'b0;
@@ -1960,8 +1976,19 @@ module mpy_core
                     rf[`SX(sp)] <= t[7]; rf[`SX(6'(sp + 7'd1))] <= VNULL; sp <= sp + 7'd2; st <= S_FETCH;
                 end
                 ABI_RK_CONT: st <= S_CONT;
-                // The callback returned into the interrupted frame.
-                ABI_RK_IRQ: begin irq_done_q <= 1'b1; irq_in_cb <= 1'b0; st <= S_FETCH; end
+                // The callback (or _irq_uncaught) returned into the
+                // interrupted frame. _idle polls once more; _pending returns.
+                ABI_RK_IRQ: begin
+                    irq_done_q <= 1'b1; irq_in_cb <= 1'b0; irq_in_unc <= 1'b0;
+                    case (irq_cb_mode)
+                        PM_IDLE: begin
+                            poll_mode <= PM_IDLE; idle_woken <= 1'b1; nat_crk <= irq_cb_crk;
+                            irq_jump <= 1'b0; st <= S_IRQ_POLL;
+                        end
+                        PM_PEND: deliver(VNONE, irq_cb_crk);
+                        default: st <= S_FETCH;
+                    endcase
+                end
                 default: halt(ABI_HALT_CLEAN, 32'd0);
             endcase
 
@@ -2106,6 +2133,9 @@ module mpy_core
                         drop_push_v <= xc;
                         drop_then <= S_FETCH;
                         st <= S_DROP;
+                    end else if (frk == ABI_RK_IRQ && irq_in_unc) begin
+                        // _irq_uncaught itself raised: drop it and resume.
+                        r_rk <= ABI_RK_IRQ; fl_base <= fprev; gosub(S_FILL, S_RET_D);
                     end else if (frk == ABI_RK_IRQ) begin
                         // Out of the callback: back in the interrupted frame.
                         fl_base <= fprev; gosub(S_FILL, S_IRQ_UNC);
@@ -2119,8 +2149,12 @@ module mpy_core
                     end
             S_RX_POP: begin rx_from <= 1'b1; st <= S_RAISE; end
             S_IRQ_UNC: wr(ABI_SYSROOT_BASE + 4 * ABI_SR_IRQ_EXC, xc, S_IRQ_UNC2);
-            S_IRQ_UNC2: hook(ABI_HOOK_IRQ_UNCAUGHT, ABI_RK_DISCARD, 8'd2, vbool(irq_cb_hard),
-                             vint({29'd0, irq_cb_src}), VNULL, VNULL);
+            // The hook frame returns RK_IRQ, so the resume rules above apply.
+            S_IRQ_UNC2: begin
+                irq_in_unc <= 1'b1;
+                hook(ABI_HOOK_IRQ_UNCAUGHT, ABI_RK_IRQ, 8'd2, vbool(irq_cb_hard),
+                     vint({29'd0, irq_cb_src}), VNULL, VNULL);
+            end
 
             // ---------------- fetch / decode ----------------
             S_FETCH: if (sp >= 7'(RF_SPILL_AT)) begin
@@ -2144,13 +2178,21 @@ module mpy_core
             S_IRQ_TAKE: if (irq_mirror_dirty_i) gosub(S_IRQ_MIR, S_IRQ_TAKE);
                         else if (kbd_pend) begin
                             kbd_pend <= 1'b0;
+                            poll_mode <= PM_DEC;
                             raise_msg(ABI_MSG_KBD);
                         end else if (irq_fire_i && !irq_in_cb) begin
                             irq_in_cb <= 1'b1;
                             irq_cb_hard <= irq_fire_hard_i;
                             irq_cb_src <= irq_fire_src_i;
+                            irq_cb_mode <= poll_mode;
+                            irq_cb_crk <= nat_crk;
+                            poll_mode <= PM_DEC;
                             hook(ABI_HOOK_IRQ_CALL, ABI_RK_IRQ, 8'd2, irq_fire_fn_i, irq_fire_arg_i,
                                  VNULL, VNULL);
+                        end else if (poll_mode == PM_IDLE && !idle_woken) st <= S_IDLE;
+                        else if (poll_mode != PM_DEC) begin
+                            poll_mode <= PM_DEC;
+                            deliver(VNONE, nat_crk);
                         end else if (in_win) st <= S_DEC;
                         else begin
                             fw_base <= {pc[31:2], 2'b00}; fw_i <= 2'd0; fw_ok <= 1'b0;
@@ -2168,6 +2210,12 @@ module mpy_core
                         end
             // The clear lands on this clock; the caller sees a clean flag.
             S_IRQ_MIRD: ret();
+            // machine.idle: no opcode retires until a wake, then one more
+            // poll with jump low. wake_pend was cleared when _idle started.
+            S_IDLE: if (wake_pend) begin
+                        wake_pend <= 1'b0; idle_woken <= 1'b1; irq_jump <= 1'b0;
+                        st <= S_IRQ_POLL;
+                    end
             S_FW: begin
                 fwin[32 * fw_i +: 32] <= md;
                 if (fw_i == 2'd2) begin fw_ok <= 1'b1; st <= S_DEC; end
@@ -3588,6 +3636,13 @@ module mpy_core
                             deliver(vint({16'd0, 16'(hlock - 16'd1)}), crk);
                         end else deliver(vint({16'd0, hlock}), crk);
                     ABI_N_IRQ_DONE: begin irq_done_q <= 1'b1; irq_in_cb <= 1'b0; deliver(VNONE, crk); end
+                    ABI_N_IDLE: begin
+                        nat_crk <= crk; poll_mode <= PM_IDLE; idle_woken <= 1'b0;
+                        wake_pend <= 1'b0; irq_jump <= 1'b0; st <= S_IRQ_POLL;
+                    end
+                    ABI_N_PENDING: begin
+                        nat_crk <= crk; poll_mode <= PM_PEND; irq_jump <= 1'b1; st <= S_IRQ_POLL;
+                    end
                     ABI_N_ALLOC: alloc(v1, S_N_ALLOC);
                     ABI_N_TYPEOF: begin ty_v <= mv; gosub(S_TYPEOF, S_N_TYPEOF); end
                     ABI_N_CALLNS: if (tg(mv) == ABI_TAG_INT) rd(ab_ptr(ab_lo + 8'd1), S_NAT_CNS);
