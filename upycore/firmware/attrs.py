@@ -407,6 +407,17 @@ def _getslice(obj, sl):
             _slice_step_error()
         m = _slice_len(a, b, s)
         base, off = _seq_items(obj)
+        if s == 1:
+            # A plain slice is one word copy.
+            if _islist(obj):
+                r = _newlist(m)
+                if m:
+                    _wcopy(_ld(r, 2), 0, base, off + a, m)
+                return r
+            r = _newtuple(m)
+            if m:
+                _wcopy(r, 1, base, off + a, m)
+            return r
         if _islist(obj):
             r = _newlist(m)
             i = 0
@@ -488,10 +499,8 @@ def _setsubscr(obj, index, value):
 
 def _list_del(lst, i):
     n = _ld(lst, 0)
-    items = _ld(lst, 2)
-    while i < n - 1:
-        _st(items, i, _ld(items, i + 1))
-        i += 1
+    if i < n - 1:
+        _wcopy(_ld(lst, 2), i, _ld(lst, 2), i + 1, n - 1 - i)
     _st(lst, 0, n - 1)
     return None
 
@@ -506,24 +515,17 @@ def _list_setslice(lst, sl, value):
         value = ()
     src = _list_of_iter(value)
     m = _ld(src, 0)
+    # lst[3:1] = x inserts at 3, as mp_seq_get_fast_slice_indexes clamps stop.
+    if b < a:
+        b = a
     span = b - a
     newn = n - span + m
     _list_reserve(lst, newn)
     items = _ld(lst, 2)
-    if m != span:
-        if m < span:
-            i = a + m
-            while i < newn:
-                _st(items, i, _ld(items, i + (span - m)))
-                i += 1
-        else:
-            i = newn - 1
-            while i >= a + m:
-                _st(items, i, _ld(items, i - (m - span)))
-                i -= 1
-    i = 0
-    while i < m:
-        _st(items, a + i, _ld(_ld(src, 2), i))
-        i += 1
+    # The tail moves first; _wcopy runs the overlapping shift like memmove.
+    if m != span and b < n:
+        _wcopy(items, a + m, items, b, n - b)
+    if m:
+        _wcopy(items, a, _ld(src, 2), 0, m)
     _st(lst, 0, newn)
     return None

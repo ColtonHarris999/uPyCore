@@ -1,10 +1,17 @@
 `include "mpy_defs.svh"
 `include "mpy_abi.svh"
 
-// uPyCore system: mpy_core, mpy_gc and mpy_mem on one memory port.
+// uPyCore system: mpy_core, mpy_gc, mpy_ca and mpy_mem on one memory port.
 //
-// The collector owns the port while it is busy; the core only waits on an
-// allocation or a collection then, so the two never contend. Core accesses
+// Three masters share the port: the collector, the core, and the container
+// accelerator (mpy_ca). A request waits in the arbiter below until mpy_mem
+// is free, then the highest-priority one goes: collector, core, accelerator.
+// The accelerator therefore runs in the cycles the core leaves idle. A core
+// access that the accelerator's scoreboard marks busy waits until the copy
+// has moved past that word; the core's state machine only sees a longer
+// wait for its ack. The collector and the core never contend: the core
+// waits on every allocation and collection, and it lets the accelerator
+// drain before a collection. Core accesses
 // to the simulator-control page (ABI_SIM_BASE) are answered here: a store to
 // SIM_STDOUT or SIM_STDERR emits the low byte on the console port, a store to
 // SIM_HALT stops the core's clock-enable view through halt_o, and a load of
@@ -58,6 +65,14 @@ module mpy_soc #(
     logic [3:0]  m_be, m_wtag, m_rtag, m_fault_reason;
     logic [31:0] m_addr, m_wdata, m_rdata;
 
+    // core <-> container accelerator
+    logic        ca_valid, ca_ready, ca_idle, ca_busy, ca_fault;
+    logic [31:0] ca_dst, ca_src, ca_n, ca_fault_addr, ca_words, ca_cmds;
+    logic [3:0]  ca_fault_reason;
+    // accelerator <-> port
+    logic        am_req, am_we, am_gnt, am_ack;
+    logic [31:0] am_addr, am_wdata;
+    logic [3:0]  am_wtag;
     logic        core_halted;
     logic [3:0]  core_hcode;
     logic [31:0] core_hval, core_cycles;
@@ -75,6 +90,9 @@ module mpy_soc #(
         .gc_root1_lo_o(g_r1lo), .gc_root1_hi_o(g_r1hi),
         .gc_collect_done_i(g_collect_done),
         .gc_free_i(g_free), .gc_total_i(g_total), .gc_collections_i(g_coll),
+        .ca_valid_o(ca_valid), .ca_ready_i(ca_ready),
+        .ca_dst_o(ca_dst), .ca_src_o(ca_src), .ca_n_o(ca_n), .ca_idle_i(ca_idle),
+        .ca_fault_i(ca_fault), .ca_fault_reason_i(ca_fault_reason), .ca_fault_addr_i(ca_fault_addr),
         .halted_o(core_halted), .halt_code_o(core_hcode), .halt_value_o(core_hval),
         .cycles_o(core_cycles), .ops_o,
         .trace_o, .trace_pc_o, .trace_op_o, .trace_sp_o
@@ -95,6 +113,18 @@ module mpy_soc #(
         .mem_req_o(gm_req), .mem_we_o(gm_we), .mem_tag_we_o(gm_tag_we),
         .mem_addr_o(gm_addr), .mem_wdata_o(gm_wdata), .mem_wtag_o(gm_wtag),
         .mem_ack_i(gm_ack), .mem_rdata_i(gm_rdata), .mem_rtag_i(gm_rtag)
+    );
+
+    mpy_ca u_ca (
+        .clk_i, .rst_n_i,
+        .cmd_valid_i(ca_valid), .cmd_ready_o(ca_ready),
+        .cmd_dst_i(ca_dst), .cmd_src_i(ca_src), .cmd_n_i(ca_n), .idle_o(ca_idle),
+        .chk_addr_i(c_addr), .chk_we_i(c_we), .chk_busy_o(ca_busy),
+        .req_o(am_req), .we_o(am_we), .addr_o(am_addr), .wdata_o(am_wdata), .wtag_o(am_wtag),
+        .gnt_i(am_gnt), .ack_i(am_ack), .fault_i(m_fault), .fault_reason_i(m_fault_reason),
+        .rdata_i(m_rdata), .rtag_i(m_rtag),
+        .fault_o(ca_fault), .fault_reason_o(ca_fault_reason), .fault_addr_o(ca_fault_addr),
+        .words_o(ca_words), .cmds_o(ca_cmds)
     );
 
     mpy_mem #(
@@ -142,23 +172,57 @@ module mpy_soc #(
         end
     end
 
-    // Port mux: the collector while busy, else the core (sim page excluded).
+    // Port arbiter. The core and the collector pulse a request and hold its
+    // fields until the ack; the accelerator holds req until am_gnt. mpy_mem
+    // takes a new request in the cycle its previous ack is visible.
+    localparam logic [1:0] P_NONE = 2'd0, P_GC = 2'd1, P_CORE = 2'd2, P_CA = 2'd3;
+    logic       c_pend, g_pend, inflight, c_want, g_want, mem_free;
+    logic [1:0] owner, pick;
+    assign c_want = c_pend || (c_req && !c_sim);
+    assign g_want = g_pend || gm_req;
+    assign mem_free = !inflight || m_ack;
     always_comb begin
-        if (g_busy) begin
-            m_req = gm_req; m_we = gm_we; m_tag_we = gm_tag_we; m_be = 4'hF;
-            m_addr = gm_addr; m_wdata = gm_wdata; m_wtag = gm_wtag;
+        if (!mem_free) pick = P_NONE;
+        else if (g_want) pick = P_GC;
+        else if (c_want && !ca_busy) pick = P_CORE;
+        else if (am_req) pick = P_CA;
+        else pick = P_NONE;
+    end
+    always_comb begin
+        case (pick)
+            P_GC: begin
+                m_req = 1'b1; m_we = gm_we; m_tag_we = gm_tag_we; m_be = 4'hF;
+                m_addr = gm_addr; m_wdata = gm_wdata; m_wtag = gm_wtag;
+            end
+            P_CA: begin
+                m_req = 1'b1; m_we = am_we; m_tag_we = am_we; m_be = 4'hF;
+                m_addr = am_addr; m_wdata = am_wdata; m_wtag = am_wtag;
+            end
+            default: begin
+                m_req = (pick == P_CORE); m_we = c_we; m_tag_we = c_tag_we; m_be = c_be;
+                m_addr = c_addr; m_wdata = c_wdata; m_wtag = c_wtag;
+            end
+        endcase
+    end
+    assign am_gnt = (pick == P_CA);
+    always_ff @(posedge clk_i or negedge rst_n_i) begin
+        if (!rst_n_i) begin
+            c_pend <= 1'b0; g_pend <= 1'b0; inflight <= 1'b0; owner <= P_NONE;
         end else begin
-            m_req = c_req && !c_sim; m_we = c_we; m_tag_we = c_tag_we; m_be = c_be;
-            m_addr = c_addr; m_wdata = c_wdata; m_wtag = c_wtag;
+            c_pend <= c_want && (pick != P_CORE);
+            g_pend <= g_want && (pick != P_GC);
+            if (pick != P_NONE) begin inflight <= 1'b1; owner <= pick; end
+            else if (m_ack) inflight <= 1'b0;
         end
     end
-    assign gm_ack = g_busy && m_ack;
+    assign gm_ack = m_ack && (owner == P_GC);
+    assign am_ack = m_ack && (owner == P_CA);
     assign gm_rdata = m_rdata;
     assign gm_rtag = m_rtag;
-    assign c_ack = (!g_busy && m_ack) || sim_ack;
+    assign c_ack = (m_ack && owner == P_CORE) || sim_ack;
     assign c_rdata = sim_ack ? sim_rdata : m_rdata;
     assign c_rtag = sim_ack ? 4'd0 : m_rtag;
-    assign c_fault = !sim_ack && m_fault;
+    assign c_fault = !sim_ack && m_fault && (owner == P_CORE);
     assign c_fault_reason = m_fault_reason;
 
     assign halted_o = core_halted || sim_halt;
@@ -169,5 +233,5 @@ module mpy_soc #(
     assign gc_free_o = g_free;
 
     logic unused;
-    assign unused = ^{g_total, g_ovf};
+    assign unused = ^{g_total, g_ovf, g_busy, ca_words, ca_cmds};
 endmodule

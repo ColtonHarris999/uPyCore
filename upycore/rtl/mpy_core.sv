@@ -31,6 +31,12 @@
 // the core spills the frame, t[], and xc. ARGBUF already sits in the
 // collector's root window. The spill flushes the exception top into the frame
 // first; the entries under it are already there.
+//
+// Bulk word copies (the _wcopy native and a list's grow copy) go to the
+// container accelerator (mpy_ca) once the core has allocated the
+// destination. The core ships the command and moves on; the accelerator's
+// scoreboard makes any later access to words still being copied wait at the
+// port. The core waits for the accelerator to drain before a collection.
 
 `include "mpy_defs.svh"
 `include "mpy_abi.svh"
@@ -52,7 +58,9 @@ module mpy_core
     // Hot locals kept beside the operand stack. 0 disables the cache.
     // +LC= +LCWB= +LCDM= override these in simulation.
     parameter int LC_N = 8,
-    parameter int LC_WB = 1
+    parameter int LC_WB = 1,
+    // Ship bulk copies to mpy_ca. 0 keeps them on the core. +CA= overrides in sim.
+    parameter int CA_EN = 1
 ) (
     input  logic        clk_i,
     input  logic        rst_n_i,
@@ -84,6 +92,16 @@ module mpy_core
     input  logic [31:0] gc_free_i,
     input  logic [31:0] gc_total_i,
     input  logic [31:0] gc_collections_i,
+
+    output logic        ca_valid_o,
+    input  logic        ca_ready_i,
+    output logic [31:0] ca_dst_o,
+    output logic [31:0] ca_src_o,
+    output logic [31:0] ca_n_o,
+    input  logic        ca_idle_i,
+    input  logic        ca_fault_i,
+    input  logic [3:0]  ca_fault_reason_i,
+    input  logic [31:0] ca_fault_addr_i,
 
     output logic        halted_o,
     output logic [3:0]  halt_code_o,
@@ -829,7 +847,9 @@ module mpy_core
         S_N_BCMP_W,
         S_N_BCMP_W2,
         S_N_BCI,
-        S_N_BCF
+        S_N_BCF,
+        S_NAT_WCA,
+        S_LA_CA
     } state_e;
 
     state_e st, wret;
@@ -895,6 +915,7 @@ module mpy_core
     val_t        lc_d [0:7];
     logic [3:0]  cfg_lc_n;
     logic        cfg_lc_wb, cfg_lc_dm;
+    logic        cfg_ca;
     logic [2:0]  lc_ev_way;
     logic [7:0]  lc_ev_idx;
     val_t        lc_ev_val;
@@ -1181,7 +1202,7 @@ module mpy_core
     endtask
 `ifndef SYNTHESIS
     initial begin
-        int grow_v, adapt_v, lc_n_v, lc_wb_v, lc_dm_v;
+        int grow_v, adapt_v, lc_n_v, lc_wb_v, lc_dm_v, ca_v;
         grow_v = GROW_CHUNK;
         adapt_v = GROW_ADAPT;
         lc_n_v = LC_N;
@@ -1192,6 +1213,7 @@ module mpy_core
         if (!$value$plusargs("LC=%d", lc_n_v)) lc_n_v = LC_N;
         if (!$value$plusargs("LCWB=%d", lc_wb_v)) lc_wb_v = LC_WB;
         if (!$value$plusargs("LCDM=%d", lc_dm_v)) lc_dm_v = 0;
+        if (!$value$plusargs("CA=%d", ca_v)) ca_v = CA_EN;
         if (grow_v < MPY_RF_CHUNK_MIN) grow_v = MPY_RF_CHUNK_MIN;
         if (grow_v > MPY_RF_CHUNK_MAX) grow_v = MPY_RF_CHUNK_MAX;
         if (lc_n_v < 0) lc_n_v = 0;
@@ -1201,6 +1223,7 @@ module mpy_core
         cfg_lc_n = lc_n_v[3:0];
         cfg_lc_wb = (lc_wb_v != 0);
         cfg_lc_dm = (lc_dm_v != 0);
+        cfg_ca = (ca_v != 0);
     end
 `else
     initial begin
@@ -1209,6 +1232,7 @@ module mpy_core
         cfg_lc_n = LC_N[3:0];
         cfg_lc_wb = (LC_WB != 0);
         cfg_lc_dm = 1'b0;
+        cfg_ca = (CA_EN != 0);
     end
 `endif
 
@@ -1278,6 +1302,17 @@ module mpy_core
     logic gc_alloc_req, gc_collect_req;
     assign gc_alloc_req_o = gc_alloc_req;
     assign gc_collect_req_o = gc_collect_req;
+
+    // Accelerator command, a one-cycle pulse. A ship still landing counts
+    // as a full queue, so two ships one cycle apart cannot overrun it.
+    logic        ca_valid;
+    logic [31:0] ca_dst, ca_src, ca_n;
+    logic        ca_ok;
+    assign ca_valid_o = ca_valid;
+    assign ca_dst_o = ca_dst;
+    assign ca_src_o = ca_src;
+    assign ca_n_o = ca_n;
+    assign ca_ok = ca_ready_i && !ca_valid;
 
     // ------------------------------------------------------------------
     // Microcode helpers
@@ -1405,6 +1440,10 @@ module mpy_core
     task automatic alloc(input logic [31:0] n, input state_e back);
         al_n <= (n == 32'd0) ? 32'd1 : n; gosub(S_AL, back);
     endtask
+    // Copy n words from src to dst on the accelerator. The caller checked ca_ok.
+    task automatic ca_ship(input logic [31:0] dst, input logic [31:0] src, input logic [31:0] n);
+        ca_valid <= 1'b1; ca_dst <= dst; ca_src <= src; ca_n <= n;
+    endtask
 
     // ------------------------------------------------------------------
     // Main sequencer
@@ -1421,6 +1460,7 @@ module mpy_core
             m_addr <= 32'd0; m_wdata <= 32'd0; m_wtag <= 4'd0;
             gc_alloc_req <= 1'b0; gc_collect_req <= 1'b0;
             alu_start <= 1'b0;
+            ca_valid <= 1'b0; ca_dst <= 32'd0; ca_src <= 32'd0; ca_n <= 32'd0;
             halted <= 1'b0; hcode <= 4'd0; hval <= 32'd0;
             cyc <= 32'd0; nops <= 32'd0; trace <= 1'b0;
             fw_ok <= 1'b0; fw_base <= 32'd0;
@@ -1459,6 +1499,7 @@ module mpy_core
             gc_alloc_req <= 1'b0;
             gc_collect_req <= 1'b0;
             alu_start <= 1'b0;
+            ca_valid <= 1'b0;
             trace <= 1'b0;
             if (!halted) cyc <= cyc + 32'd1;
             // A spill or a reload moves sp without a push or a pop.
@@ -2023,7 +2064,13 @@ module mpy_core
             S_RX_POP: begin rx_from <= 1'b1; st <= S_RAISE; end
 
             // ---------------- fetch / decode ----------------
-            S_FETCH: if (sp >= 7'(RF_SPILL_AT)) begin
+            S_FETCH: if (ca_fault_i) begin
+                         case (ca_fault_reason_i)
+                             MPY_FAULT_UNALIGNED: halt(ABI_HALT_UNALIGNED, ca_fault_addr_i);
+                             MPY_FAULT_FLASH_STORE: halt(ABI_HALT_FLASH_STORE, ca_fault_addr_i);
+                             default: halt(ABI_HALT_BUS, ca_fault_addr_i);
+                         endcase
+                     end else if (sp >= 7'(RF_SPILL_AT)) begin
                          rf_resume <= S_FETCH; st <= S_RF_SPILL;
                      end else if (has_link && sp <= 7'(RF_RELOAD_AT)) begin
                          rf_resume <= S_FETCH; st <= S_RF_RELOAD;
@@ -3519,9 +3566,16 @@ module mpy_core
             // previous image overwrites mv on the way back.
             S_NAT_WC4: begin
                 x3 <= mv[31:0];
-                if (scr_id != SCR_LA) scr_adopt(SCR_LA, S_NAT_WC5);
+                if (cfg_ca) st <= S_NAT_WCA;
+                else if (scr_id != SCR_LA) scr_adopt(SCR_LA, S_NAT_WC5);
                 else st <= S_NAT_WC5;
             end
+            // Ship the copy and return None. The scoreboard covers the words.
+            S_NAT_WCA: if (x3 == 32'd0) deliver(VNONE, crk);
+                       else if (ca_ok) begin
+                           ca_ship(padr(ab_q) + (x1 << 2), padr(ab_s[0]) + (x2 << 2), x3);
+                           deliver(VNONE, crk);
+                       end
             S_NAT_WC5: begin
                 v2 = padr(ab_q) + (x1 << 2);
                 v3 = padr(ab_s[0]) + (x2 << 2);
@@ -3977,7 +4031,10 @@ module mpy_core
             S_GC_1: begin gi <= 32'd0; st <= S_GC_T; end
             // The argument buffer already resides in ARGBUF, which the collector scans.
             S_GC_AB: begin gi <= 32'd0; st <= S_GC_T; end
-            S_GC_T: if (gi == 32'd9) begin gc_collect_req <= 1'b1; st <= S_GC_W; end
+            // A copy in flight holds pointers the collector cannot see. Drain first.
+            S_GC_T: if (gi == 32'd9) begin
+                        if (ca_idle_i) begin gc_collect_req <= 1'b1; st <= S_GC_W; end
+                    end
                     else begin
                         case (gi[3:0])
                             4'd0: wr(ABI_SYSROOT_BASE + 4 * ABI_SR_CUR_EXC, xc, S_GC_T);
@@ -4236,7 +4293,16 @@ module mpy_core
             end
             S_LA_G: if (!al_ok) ret();
                     else begin `la_new <= al_a; `la_i <= 32'd0; rd(adr(t[2]) + 8, S_LA_G2); end
-            S_LA_G2: begin `la_items <= md; st <= S_LA_CP; end
+            S_LA_G2: begin
+                `la_items <= md;
+                st <= (cfg_ca && `la_len != 32'd0) ? S_LA_CA : S_LA_CP;
+            end
+            // The accelerator copies the old items. The core publishes the new
+            // array and stores the appended item above the copied words.
+            S_LA_CA: if (ca_ok) begin
+                         ca_ship(`la_new, `la_items, `la_len);
+                         `la_i <= `la_len; st <= S_LA_CP;
+                     end
             S_LA_CP: if (`la_i == `la_len) wr(adr(t[2]) + 4, vint((`la_alloc == 32'd0) ? 32'd4 : (`la_alloc << 1)), S_LA_G3);
                      else rd(`la_items + (`la_i << 2), S_LA_CP2);
             S_LA_CP2: begin wr(`la_new + (`la_i << 2), mv, S_LA_CP); `la_i <= `la_i + 32'd1; end
