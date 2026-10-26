@@ -339,8 +339,12 @@ def _make_type(name, bases, ns):
         flags |= TF_EQ
     for val in ns.values():
         if _tag(val) == TAG_OBJECT:
+            # No native type defines __set__, so only a property or an
+            # instance of a user class can be a data descriptor.
             vk = _ld(val, 0)
-            if vk == OB_PROPERTY or _tlookup(_ld(val, 1), '__set__') is not NULL:
+            if vk == OB_PROPERTY:
+                flags |= TF_DESC
+            elif (vk == OB_INSTANCE or vk == OB_EXCEPTION) and _tlookup(_ld(val, 1), '__set__') is not NULL:
                 flags |= TF_DESC
     custom_new = _lookup(ns, '__new__')
     if custom_new is STOP:
