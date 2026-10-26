@@ -208,15 +208,16 @@ def main() -> int:
     else:
         unit = write_unit(args.top, vdir)
     if args.sv2v:
-        # Keep the .sv out of v/, so only the converted file is there.
-        sv = dest / unit.name
+        # Keep the .sv out of v/, so only the converted file is there. It is
+        # the golden reference for equivalence checking (lec_dofile.py).
+        (dest / "golden").mkdir()
+        sv = dest / "golden" / unit.name
         unit.rename(sv)
         unit = unit.with_suffix(".v")
         r = subprocess.run([str(args.sv2v), str(sv), "-w", str(unit)],
                            capture_output=True, text=True)
         if r.returncode != 0:
             sys.exit(f"sv2v failed:\n{r.stderr}")
-        sv.unlink()
 
     cfg_dir = dest / "cfg"
     cfg = _find_cfg(cfg_dir, "_cfg.yml") or _find_cfg(cfg_dir, "cfg.yml")

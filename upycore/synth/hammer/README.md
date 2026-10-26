@@ -69,6 +69,39 @@ After `make syn`, in `build/syn-rundir/`:
 - `genus.log`: warnings (latches, undriven nets, removed flops)
 - `<top>.mapped.v`: the gate netlist
 
+## Checking a run
+
+A run that finishes is not necessarily a good netlist. After every
+`make syn`, from the design folder:
+
+```sh
+python3 ~/upycore/upycore/synth/hammer/check_syn.py
+```
+
+It lists errors (marking the expected ones from Hammer's placeholder
+`DEFAULT_CLOCK`), warnings by id with the dangerous kinds marked, latch
+cells and black boxes in the netlist, and the flop count against the RTL
+(slang counts: `mpy_alu` 5552, `mpy_decode` 461, `mpy_core` 12677). Genus
+drops constant and duplicate flops, so 85 to 100% of the RTL count is
+normal. It exits 1 if anything needs a look.
+
+## Proving the netlist matches the RTL
+
+Conformal LEC proves the gates compute what the RTL does. The RTL passes
+the hardware test suite, so a pass carries that to the netlist:
+
+```sh
+python3 ~/upycore/upycore/synth/hammer/lec_dofile.py
+lec -xl -nogui -dofile lec/lec.do
+```
+
+The golden side is `golden/<top>.sv` (kept by `--sv2v`), so this also
+checks the sv2v conversion. If Conformal cannot parse it, `--golden v`
+compares against the converted file instead. A pass is 0 non-equivalent
+and 0 aborted points in `report verification`. Not yet run: written
+without Conformal access, so check `lec/lec.log` if a command is rejected.
+If the class flow has its own LEC target, use that.
+
 ## Finding Fmax
 
 Re-run the script with a smaller `--period` (pass `--force` to overwrite
@@ -121,7 +154,9 @@ clock at the same period so its flops are timed.
 
 - `mpy_core`: the processor, with the ALU, FPU and decoder inside it. This
   is the main number.
-- `mpy_alu`: a sub-block of the core. Use it first to shake out problems.
+- `mpy_alu` and `mpy_decode`: the core's only two submodules. Use them to
+  shake out problems and for the per-unit area table. Everything else in
+  the core is its interpreter state machine, which does not split further.
 - `mpy_gc`: its allocation table (about 28k bits) would become flip-flops.
   Leave it out, or later map the table to a `bsg_fakeram` macro (Module 2).
 - Not `mpy_container`: no other module instantiates it.
