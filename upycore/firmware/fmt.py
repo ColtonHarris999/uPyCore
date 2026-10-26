@@ -516,9 +516,9 @@ def print(*args, **kw):
 
 
 def _stream_writer(f):
-    if f is mod_sys__stderr:
-        return _we
-    if f is mod_sys__stdout:
-        return _wr
-    w = getattr(f, 'write')
-    return w
+    # Only a stream: sys.stdin/stdout/stderr, all of one type. An object
+    # that merely has a write method is refused, as in v1.29.0.
+    out = _dget(_ld(_sysget(SR_FW1), 2), 'stdout')
+    if out is NULL or _tag(f) != TAG_OBJECT or _ld(f, 1) is not _ld(out, 1):
+        raise OSError('stream operation not supported')
+    return getattr(f, 'write')

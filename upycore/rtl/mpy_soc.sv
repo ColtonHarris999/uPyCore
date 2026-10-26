@@ -15,6 +15,10 @@
 // an unaligned address or a partial-word store faults as unaligned. Everything
 // else goes to mpy_mem.
 //
+// SYS_CONSOLE (mpy_sys) picks where SIM_STDOUT and SIM_STDERR bytes go: the
+// console port, or with 1 the UART TX FIFO, the store answered once the
+// FIFO takes the byte.
+//
 // mpy_sys is the reset controller. A system reset (SYS_RESET, or the
 // watchdog) holds every other block on sys_rst_n while mpy_mem zeroes SRAM,
 // then the hart boots again; only rst_n_i resets mpy_sys and mpy_mem.
@@ -114,6 +118,10 @@ module mpy_soc #(
     logic        scrub;
     logic [15:0] scrub_idx;
     logic        wdt_reset, tick;
+    // Console bytes for the UART (SYS_CONSOLE = 1).
+    logic [1:0]  console;
+    logic        con_pend_r, con_ready, con_stb;
+    logic [7:0]  con_byte_r;
 
     logic        core_halted;
     logic [3:0]  core_hcode;
@@ -206,6 +214,7 @@ module mpy_soc #(
         .rdata_o(p_rdata), .ack_o(p_ack), .fault_o(p_fault),
         .timer_step_i, .uart_rx_stb_i, .uart_rx_byte_i,
         .uart_tx_stb_o, .uart_tx_byte_o, .uart_rxd_i(uart_rxd), .uart_txd_o(uart_txd),
+        .con_stb_i(con_stb), .con_byte_i(con_byte_r), .con_ready_o(con_ready),
         .gpio_out_o, .gpio_oe_o, .gpio_pu_o, .gpio_pd_o, .gpio_in_i, .gpio_in_en_i,
         .soft_set_i(1'b0), .gc_req_i(1'b0), .sim_set_i(sim_irq_i),
         .kbd_set_i(1'b0), .mbox_set_i(1'b0),
@@ -231,6 +240,7 @@ module mpy_soc #(
         .clk_i, .rst_n_i,
         .req_i(blk_req), .we_i(c_we), .off_i(c_addr[11:0]), .wdata_i(c_wdata),
         .rdata_o(sys_rdata), .strap_i,
+        .console_o(console),
         .wdt_reset_i(wdt_reset), .sys_rst_n_o(sys_rst_n), .scrub_o(scrub), .scrub_idx_o(scrub_idx)
     );
 
@@ -298,16 +308,32 @@ module mpy_soc #(
     logic [31:0] sim_rdata;
     logic        sim_halt;
     logic [31:0] sim_halt_val;
+    logic        sim_out, sim_err;
+
+    // A stdout or stderr byte with the UART as the console waits in
+    // con_byte_r until the TX FIFO takes it; the store is answered then.
+    assign sim_out = c_req && c_sim && c_we && (((c_addr - ABI_SIM_BASE) >> 2) == 32'(ABI_SIM_STDOUT));
+    assign sim_err = c_req && c_sim && c_we && (((c_addr - ABI_SIM_BASE) >> 2) == 32'(ABI_SIM_STDERR));
+    assign con_stb = con_pend_r && con_ready;
 
     always_ff @(posedge clk_i or negedge sys_rst_n) begin
         if (!sys_rst_n) begin
             sim_ack <= 1'b0; sim_rdata <= 32'd0;
             con_valid_o <= 1'b0; con_err_o <= 1'b0; con_byte_o <= 8'd0;
             sim_halt <= 1'b0; sim_halt_val <= 32'd0;
+            con_pend_r <= 1'b0; con_byte_r <= 8'd0;
         end else begin
             sim_ack <= 1'b0;
             con_valid_o <= 1'b0;
-            if (c_req && c_sim) begin
+            if (con_stb) begin
+                con_pend_r <= 1'b0;
+                sim_ack <= 1'b1;
+                sim_rdata <= 32'd0;
+            end
+            if ((sim_out || sim_err) && console == 2'd1) begin
+                con_pend_r <= 1'b1;
+                con_byte_r <= c_wdata[7:0];
+            end else if (c_req && c_sim) begin
                 sim_ack <= 1'b1;
                 sim_rdata <= 32'd0;
                 if (c_we) begin

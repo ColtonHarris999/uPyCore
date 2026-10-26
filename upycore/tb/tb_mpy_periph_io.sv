@@ -21,6 +21,9 @@ module tb_mpy_periph_io;
     logic        uart_tx_stb;
     logic [7:0]  uart_tx_byte;
     logic        rxd = 1'b1;
+    logic        con_stb = 1'b0;
+    logic [7:0]  con_byte = 8'h0;
+    logic        con_ready;
     logic        txd;
     logic [31:0] gpio_out, gpio_oe, gpio_pu, gpio_pd;
     logic [31:0] gpio_in = 32'h0;
@@ -57,6 +60,7 @@ module tb_mpy_periph_io;
         .timer_step_i(timer_step),
         .uart_rx_stb_i(uart_rx_stb), .uart_rx_byte_i(uart_rx_byte),
         .uart_tx_stb_o(uart_tx_stb), .uart_tx_byte_o(uart_tx_byte),
+        .con_stb_i(con_stb), .con_byte_i(con_byte), .con_ready_o(con_ready),
         .uart_rxd_i(rxd), .uart_txd_o(txd),
         .gpio_out_o(gpio_out), .gpio_oe_o(gpio_oe), .gpio_pu_o(gpio_pu), .gpio_pd_o(gpio_pd),
         .gpio_in_i(gpio_in), .gpio_in_en_i(gpio_in_en),
@@ -266,6 +270,50 @@ module tb_mpy_periph_io;
         $display("SERIAL baud=%0d rx=a5,3c tx=55,00,f1 framing=1", baud);
     endtask
 
+    // Console bytes (mpy_soc's SYS_CONSOLE = UART path): pushed while
+    // con_ready, they leave on txd in order; with the FIFO full and a frame
+    // on the wire, con_ready drops. In byte mode a byte leaves on the strobe.
+    task automatic check_console();
+        logic [7:0] got [$];
+        int held;
+        do_reset();
+        @(negedge clk);
+        con_stb = 1'b1; con_byte = 8'h7E;
+        #1 check(con_ready && uart_tx_stb && uart_tx_byte == 8'h7E, "byte mode: out on the strobe");
+        @(negedge clk);
+        con_stb = 1'b0;
+        bus_write(MPY_UART_BAUD, 32'(baud));
+        fork
+            begin
+                for (int k = 0; k < 20; k++) begin
+                    logic [7:0] b;
+                    @(negedge txd);
+                    repeat (baud / 2) @(posedge clk);
+                    for (int i = 0; i < 8; i++) begin
+                        repeat (baud) @(posedge clk);
+                        b[i] = txd;
+                    end
+                    repeat (baud) @(posedge clk);
+                    got.push_back(b);
+                end
+            end
+            begin
+                held = 0;
+                for (int k = 0; k < 20; k++) begin
+                    @(negedge clk);
+                    if (k == DEPTH + 1) check(held == 0, "the first 17 bytes do not wait");
+                    while (!con_ready) begin held++; @(negedge clk); end
+                    con_stb = 1'b1; con_byte = 8'(8'h30 + k);
+                    @(negedge clk);
+                    con_stb = 1'b0;
+                end
+            end
+        join
+        check(held > 0, "a full FIFO holds the console off");
+        foreach (got[k]) check(got[k] == 8'(8'h30 + k), "console bytes in order");
+        $display("CONSOLE 20 bytes through the TX FIFO, held %0d clocks", held);
+    endtask
+
     // A burst at the line rate while the reader is stalled. Byte k is k,
     // so the first value that does not match its position is the first
     // dropped byte.
@@ -439,12 +487,13 @@ module tb_mpy_periph_io;
         check_fifo_echo();
         check_status_bits();
         check_serial();
+        check_console();
         check_burst(0);
         check_burst(1);
         check_tick();
         check_gpio();
         check_mirror_kbd();
-        $display("PASS: mpy periph io fifo/serial/burst/tick/gpio/mirror/kbd");
+        $display("PASS: mpy periph io fifo/serial/console/burst/tick/gpio/mirror/kbd");
         $finish;
     end
 endmodule

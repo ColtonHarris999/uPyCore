@@ -549,8 +549,29 @@ def open(*args, **kw):
     raise OSError('open')
 
 
-def input(*args, **kw):
-    raise OSError('input')
+def input(prompt=None):
+    # The console's line, echoed as it is read; Enter is CR or LF.
+    # Backspace (8 or 127) drops the last character.
+    if prompt is not None:
+        _wr(_str(prompt))
+    buf = bytearray()
+    while True:
+        c = _con_getc()
+        if c < 0:
+            if len(buf) == 0:
+                raise EOFError()
+            break
+        if c == 13 or c == 10:
+            _wr('\r\n')
+            break
+        if c == 8 or c == 127:
+            if len(buf) > 0:
+                buf.pop()
+                _wr('\b \b')
+            continue
+        buf.append(c)
+        _wr(c)
+    return str(bytes(buf), 'utf-8')
 
 
 def help(*args):

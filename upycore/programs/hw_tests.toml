@@ -301,6 +301,7 @@ class_two_instances = { file = "hw/objects/class_two_instances.py" }
 [builtins]
 bytearray_repr = { file = "hw/builtins/bytearray_repr.py" }
 errno_oserror = { file = "hw/builtins/errno_oserror.py" }
+sys_streams = { file = "hw/builtins/sys_streams.py" }
 builtin_fns = { file = "hw/builtins/funcs.py" }
 method_getattr = { file = "hw/builtins/method_getattr.py" }
 sysmod = { file = "hw/builtins/sysmod.py" }
@@ -571,3 +572,5 @@ wdt_missed = { file = "hw/io/wdt_missed.py", oracle = false, plusargs = ["+TIMER
 wdt_fed = { file = "hw/io/wdt_fed.py", oracle = false, plusargs = ["+TIMER_STEP=20000"] }
 reset_chain = { file = "hw/io/reset_chain.py", oracle = false }
 adc = { file = "hw/io/adc.py", oracle = false }
+console_uart = { file = "hw/io/console_uart.py", oracle = false, plusargs = ["+CONSOLE=uart", "+UART_RX=626f620d7820790a", "+UART_RX_IDLE=1", "+UART_RX_GAP=200"] }
+console_ctrl_c = { file = "hw/io/console_ctrl_c.py", oracle = false, plusargs = ["+CONSOLE=uart", "+UART_RX=03", "+UART_RX_AT=600000"] }

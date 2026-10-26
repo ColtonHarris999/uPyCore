@@ -219,6 +219,7 @@ kick the reset comes `WDT_LOAD` ticks after the start; a start with
 | `0x604` | `SYS_STRAP` | Read-only. The boot straps, sampled at reset from `strap_i`. Bit 0: the tick comes from `timer_step` (the testbench), so `_boot` leaves `TIMER_PRESC` at 0. Bits 2:1: console (0 sim console, 1 UART, 2 USB CDC). Bit 3: run the REPL after `__main__` |
 | `0x608` | `SYS_RESET_CAUSE` | Read-only. `PWRON_RESET` 1, `HARD_RESET` 2, `WDT_RESET` 3, `SOFT_RESET` 5 (the `machine` constants) |
 | `0x60C` | `SYS_RESET` | Writing `0x0B007ED0 | k` resets the system: `k` 0 hard (`machine.reset()`), 1 soft (`machine.soft_reset()`). Other values are ignored |
+| `0x618` | `SYS_CONSOLE` | Bits 1:0, where the console goes: 0 the sim console, 1 the UART, 2 USB CDC (the coprocessor; until it exists, 2 reads back but output stays on the sim console). Reset 0. `_boot` writes strap bits 2:1 here. See Console |
 | `0x610`, `0x614` | `SYS_UID0`, `SYS_UID1` | Read-only. The 64-bit unique id, the `SYS_UID` parameter, low word first. `machine.unique_id()` returns the 8 bytes, most significant first |
 
 When bit 0 of `SYS_STRAP` is clear, `_boot` writes `TIMER_PRESC = SYS_FREQ / 1000`,
@@ -254,6 +255,35 @@ The converter port is `adc_start` (one clock, with `adc_chan`), then
 (`mpy_periph_model.adc_code`). `machine.ADC(id)` takes a channel number or a
 `Pin` (its id is the channel); `read_u16` starts a conversion, waits, and
 returns bits 15:0.
+
+## Console
+
+`print`, tracebacks, and `sys.stdout` / `sys.stderr` write bytes to the
+sim page (`SIM_STDOUT`, `SIM_STDERR`). `mpy_soc` sends them where
+`SYS_CONSOLE` says. With 1, each byte joins the UART TX FIFO through a
+second push port on `mpy_periph` (`con_stb`, `con_byte`, `con_ready`); the
+store is not answered until the FIFO takes it, so output waits on the
+baud rate the way a hardware UART console does. In byte mode
+(`UART_BAUD` 0) it leaves on `uart_tx_stb` in that cycle. stdout and
+stderr share the UART. With 0 (the default, and the reset value) nothing
+changes: `make test` output is the sim console. With the UART as the
+console, `_boot` arms Ctrl-C (`micropython.kbd_intr(3)`) before
+`__main__`, and before it halts it waits for the TX FIFO and serializer
+to drain, so the last line is not lost. `kbd_intr` still arms the UART
+character on the sim console when a program asks for it.
+
+`sys.stdin` reads the console: with 1, bytes from the UART RX FIFO,
+waiting in `machine.idle` while it is empty; with 0 there is no input and
+a read returns `''` (end of file). `input(prompt)` writes the prompt,
+then reads to a carriage return or newline and echoes what it reads
+(backspace, 8 or 127, drops a character); at the end of input it raises
+`EOFError`. `print(file=f)` takes only these stream objects; any other
+object raises `OSError`, as in v1.29.0.
+`os.dupterm` is not provided.
+
+The testbench takes `+CONSOLE=uart` (strap bits 2:1 = 1) and then writes
+the UART's TX bytes, not the sim console's, to the stdout file, so a test
+on the UART console compares stdout like any other.
 
 ## Idle wake
 

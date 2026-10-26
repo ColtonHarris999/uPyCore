@@ -15,6 +15,9 @@
 //                                           +UART_BAUD only the first frame waits
 //   +MAX_TICKS=<n>                          stop at pulse n+1, so tick n's work is
 //                                           in: a trace pass (`MPY_TICKS`), not a halt
+//   +CONSOLE=uart                           strap bits 2:1 = 1: the console is the UART,
+//                                           and its TX bytes go to the stdout file
+//   +REPL=1                                 strap bit 3: run the REPL after __main__
 //   +STRAP=<hex>                            boot straps (SYS_STRAP); default 1, the
 //                                           testbench drives the tick
 //   +IO_TRACE=1                             one line per GPIO_OUT change and TX byte
@@ -65,6 +68,8 @@ module tb_mpy_soc;
     logic [31:0] gpio_in = 32'h0;
     logic        gpio_in_en = 1'b0;
     logic [7:0]  strap;
+    int          fd_out, fd_err;
+    bit          con_uart = 1'b0;
     logic        core_idle;
     logic [15:0] pad_out, pad_oe, pad_in;
     logic        adc_start, adc_done;
@@ -175,6 +180,11 @@ module tb_mpy_soc;
         rx_idle = $test$plusargs("UART_RX_IDLE");
         if (!$value$plusargs("MAX_TICKS=%d", max_ticks)) max_ticks = 0;
         if (!$value$plusargs("STRAP=%h", strap)) strap = 8'h01;
+        if ($value$plusargs("CONSOLE=%s", text) && text == "uart") begin
+            strap[2:1] = 2'd1;
+            con_uart = 1'b1;
+        end
+        if ($test$plusargs("REPL")) strap[3] = 1'b1;
         ticks_n = 0;
         gmask = 32'h0;
         if ($value$plusargs("UART_RX=%s", text))
@@ -246,6 +256,10 @@ module tb_mpy_soc;
     always @(posedge clk) begin
         if (rst_n && uart_tx_stb) begin
             tx_log.push_back(uart_tx_byte);
+            if (con_uart) begin
+                if (fd_out != 0) $fwrite(fd_out, "%c", uart_tx_byte);
+                else $write("%c", uart_tx_byte);
+            end
             if (io_trace) $display("UART_TX cycle=%0d byte=%02x", cyc_n, uart_tx_byte);
         end
         if (rst_n && gpio_out != gpio_prev) begin
@@ -271,7 +285,6 @@ module tb_mpy_soc;
                  (max_ticks > 0 && ticks_n > max_ticks) ? max_ticks : ticks_n, txs, pws);
     endtask
 
-    int    fd_out, fd_err;
     longint max_cycles;
     bit    do_trace;
     longint n;

@@ -122,6 +122,7 @@ def _build_sys(filename):
         'exit': _sys_exit,
         'print_exception': _sys_print_exception,
         'exc_info': _sys_exc_info,
+        '__getattr__': _sys_getattr,
     }
     # Five words: the extra one is the builtins module singleton. Firmware
     # globals are a ROM dict, so that object cannot be stored by name, and
@@ -132,6 +133,81 @@ def _build_sys(filename):
     _st(m, 2, g)
     _st(m, 3, 'sys')
     return m
+
+
+# sys.stdin, sys.stdout, and sys.stderr are built on first use, like
+# machine's classes, and kept in the sys dict. They write through the sim
+# page and read the console (mpy_peripherals.md, Console).
+def _mk_stream_type():
+    class TextIOWrapper:
+        def __init__(self, fd):
+            self._fd = fd
+
+        def __repr__(self):
+            return '<TextIOWrapper>'
+
+        def write(self, s):
+            if self._fd == 2:
+                _we(s)
+            else:
+                _wr(s)
+            return len(s)
+
+        def read(self, n=-1):
+            return _con_read(n)
+
+        def readline(self):
+            return _con_readline()
+
+        def flush(self):
+            return None
+
+    return TextIOWrapper
+
+
+def _sys_getattr(name):
+    if not (_streq(name, 'stdin') or _streq(name, 'stdout') or _streq(name, 'stderr')):
+        return NULL
+    g = _ld(_sysget(SR_FW1), 2)
+    t = _mk_stream_type()
+    g['stdin'] = t(0)
+    g['stdout'] = t(1)
+    g['stderr'] = t(2)
+    return _dget(g, name)
+
+
+def _con_getc():
+    # One byte from the console; -1 at the end of input (the sim console has
+    # none). The UART waits in idle; a byte arriving wakes it.
+    if (_peek32(MMIO_SYS_CONSOLE) & 3) != 1:
+        return -1
+    while True:
+        v = _peek32(MMIO_UART_RX)
+        if v < 0:
+            return v & 255
+        _idle()
+
+
+def _con_read(n):
+    buf = bytearray()
+    while n < 0 or len(buf) < n:
+        c = _con_getc()
+        if c < 0:
+            break
+        buf.append(c)
+    return str(bytes(buf), 'utf-8')
+
+
+def _con_readline():
+    buf = bytearray()
+    while True:
+        c = _con_getc()
+        if c < 0:
+            break
+        buf.append(c)
+        if c == 10:
+            break
+    return str(bytes(buf), 'utf-8')
 
 
 def _sys_exc_info():

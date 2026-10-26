@@ -81,6 +81,7 @@ module tb_mpy_periph;
         .uart_rx_byte_i(uart_rx_byte),
         .uart_tx_stb_o(uart_tx_stb),
         .uart_tx_byte_o(uart_tx_byte),
+        .con_stb_i(1'b0), .con_byte_i(8'h0), .con_ready_o(),
         .uart_rxd_i(1'b1),
         .uart_txd_o(),
         .gpio_out_o(gpio_out),

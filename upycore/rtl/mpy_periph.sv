@@ -31,6 +31,11 @@ module mpy_periph
     input  logic [7:0]  uart_rx_byte_i,
     output logic        uart_tx_stb_o,
     output logic [7:0]  uart_tx_byte_o,
+    // Console bytes for the TX FIFO (mpy_soc, SYS_CONSOLE = UART). A byte
+    // is taken on a con_stb_i clock with con_ready_o high.
+    input  logic        con_stb_i,
+    input  logic [7:0]  con_byte_i,
+    output logic        con_ready_o,
     input  logic        uart_rxd_i,
     output logic        uart_txd_o,
     output logic [31:0] gpio_out_o,
@@ -134,7 +139,8 @@ module mpy_periph
     logic [7:0]  rx_in_byte;
     logic        kbd_hit;
     logic        rx_pop;
-    logic        tx_push, tx_pop;
+    logic        tx_push, tx_pop, tx_wr;
+    logic [7:0]  tx_in;
     // serializer
     logic        txd_r, tx_busy_r;
     logic [8:0]  tx_sh_r;
@@ -222,10 +228,15 @@ module mpy_periph
     assign uart_drop = rx_in && !kbd_hit && rx_full;
     assign rx_pop    = rd_rx && !rx_empty;
 
-    assign tx_push = wr_tx && !byte_mode && !tx_full;
+    // A UART_TX store and a console byte share the TX side; the core makes
+    // one access at a time, so they never meet.
+    assign tx_wr   = wr_tx || con_stb_i;
+    assign tx_in   = con_stb_i ? con_byte_i : wdata_i[7:0];
+    assign con_ready_o = byte_mode || !tx_full;
+    assign tx_push = tx_wr && !byte_mode && !tx_full;
     assign tx_pop  = !byte_mode && !tx_busy_r && !tx_empty;
-    assign uart_tx_stb_o  = byte_mode ? wr_tx : tx_pop;
-    assign uart_tx_byte_o = byte_mode ? (wr_tx ? wdata_i[7:0] : tx_byte_r)
+    assign uart_tx_stb_o  = byte_mode ? tx_wr : tx_pop;
+    assign uart_tx_byte_o = byte_mode ? (tx_wr ? tx_in : tx_byte_r)
                                       : (tx_pop ? txq[tx_rd_r] : tx_byte_r);
     assign uart_txd_o = txd_r;
 
@@ -470,8 +481,8 @@ module mpy_periph
             else if (tick && (compare_r != 32'h0))
                 count_r <= count_inc[31:0];
 
-            if (wr_tx)
-                tx_byte_r <= wdata_i[7:0];
+            if (tx_wr)
+                tx_byte_r <= tx_in;
 
             // RX FIFO. A byte that arrives while it is full is dropped,
             // even when the same cycle pops, so the v1 depth-1 rule holds.
@@ -497,7 +508,7 @@ module mpy_periph
 
             // TX FIFO and serializer.
             if (tx_push) begin
-                txq[tx_wr_r] <= wdata_i[7:0];
+                txq[tx_wr_r] <= tx_in;
                 tx_wr_r <= fnext(tx_wr_r);
             end
             if (tx_pop)

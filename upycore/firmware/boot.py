@@ -112,10 +112,25 @@ def _irq_uncaught(hard, src):
     return None
 
 
+def _con_flush():
+    # A UART console sends what is queued before the halt stops the clock.
+    if (_peek32(MMIO_SYS_CONSOLE) & 3) == 1:
+        while _peek32(MMIO_UART_STATUS) & 0x10000:
+            pass
+    return None
+
+
 def _boot():
     # Strap bit 0: the testbench drives timer_step. Otherwise a tick is 1 ms.
-    if not (_peek32(MMIO_SYS_STRAP) & 1):
+    strap = _peek32(MMIO_SYS_STRAP)
+    if not (strap & 1):
         _poke32(MMIO_TIMER_PRESC, _peek32(MMIO_SYS_FREQ) // 1000)
+    # Bits 2:1 pick the console. On the UART, Ctrl-C interrupts the program,
+    # as MicroPython arms it while code runs.
+    con = (strap >> 1) & 3
+    _poke32(MMIO_SYS_CONSOLE, con)
+    if con == 1:
+        _mp_kbd(3)
     mods = {}
     _sysset(SR_MODULES, mods)
     _sysset(SR_FW4, True)
@@ -134,8 +149,11 @@ def _boot():
     try:
         _callns(md, g)
     except SystemExit as e:
+        _con_flush()
         _halt(_sysexit(e))
     except BaseException as e:
         _print_tb(e)
+        _con_flush()
         _halt(1)
+    _con_flush()
     _halt(0)

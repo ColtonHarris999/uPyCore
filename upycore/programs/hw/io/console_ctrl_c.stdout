@@ -1,0 +1,4 @@
+01234567890123456789012345678901234567890123456789012345678901234567890123456789
+Traceback (most recent call last):
+  File "console_ctrl_c.py", line 10, in <module>
+KeyboardInterrupt: 

@@ -1,0 +1,9 @@
+hello on the uart
+name? bob
+hi bob
+'x y\n'
+err line
+caught divide by zero
+Traceback (most recent call last):
+  File "console_uart.py", line 16, in <module>
+ValueError: uncaught
