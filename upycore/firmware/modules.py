@@ -418,7 +418,9 @@ def _import_from(mod, name):
     mname = _dget(g, '__name__')
     if mname is NULL or not _isstr(mname):
         mname = _ld(mod, 3)
-    return _load_import(_cat(_cat(mname, '.'), name), True, 0, NULL)
+    # mp_import_from calls mp_import_name. fromlist True reaches an override.
+    # Do not catch ImportError: a missing submodule keeps no module named.
+    return _import(_cat(_cat(mname, '.'), name), True, 0, NULL)
 
 
 def _import_star(mod, loc):

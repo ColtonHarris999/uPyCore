@@ -345,6 +345,7 @@ import_star_all = { file = "hw/modules/import_star_all.py", modules = ["starred=
 import_getattr = { file = "hw/modules/import_getattr.py", modules = ["getattrmod=hw/modules/getattrmod.py"], oracle = false }
 import_usys = { file = "hw/modules/import_usys.py" }
 builtins_override_import = { file = "hw/modules/builtins_override_import.py" }
+import_from_hook = { file = "hw/modules/import_from_hook.py", modules = ["pkg_hook=hw/modules/pkg_hook/__init__.py", "pkg_hook.sub=hw/modules/pkg_hook/sub.py"], oracle = false }
 
 [integ]
 fib = { file = "hw/integ/fib.py" }
