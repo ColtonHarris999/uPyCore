@@ -131,6 +131,33 @@ def _pwm_set_freq(f, duties):
     return None
 
 
+# SPI: up to one FIFO of bytes in flight, then drain what came back.
+# rbuf is a bytearray or None; out supplies the byte to send at i.
+SPI_FIFO = const(8)
+
+
+def _spi_xfer(wbuf, wconst, rbuf, n):
+    i = 0
+    while i < n:
+        k = n - i
+        if k > SPI_FIFO:
+            k = SPI_FIFO
+        j = 0
+        while j < k:
+            _poke32(MMIO_SPI_DATA, wconst if wbuf is None else _byte(wbuf, i + j))
+            j += 1
+        while ((_peek32(MMIO_SPI_STATUS) >> 8) & 31) < k:
+            pass
+        j = 0
+        while j < k:
+            v = _peek32(MMIO_SPI_DATA) & 255
+            if rbuf is not None:
+                rbuf[i + j] = v
+            j += 1
+        i += k
+    return None
+
+
 def _sleep_ms(n):
     # n ticks: idle until TICKS moves, then a soft point (mp_handle_pending).
     while n > 0:
@@ -389,6 +416,56 @@ def _build_machine():
             _pinmux(self.pin, 0)
             return None
 
+    class SPI:
+        MSB = 0
+        LSB = 1
+
+        def __init__(self, id, baudrate=1000000, polarity=0, phase=0, bits=8, firstbit=0,
+                     sck=None, mosi=None, miso=None):
+            if id != 0:
+                raise ValueError('SPI does not exist')
+            self.init(baudrate, polarity, phase, bits, firstbit, sck, mosi, miso)
+
+        def init(self, baudrate=1000000, polarity=0, phase=0, bits=8, firstbit=0,
+                 sck=None, mosi=None, miso=None):
+            if bits != 8 or firstbit != 0:
+                raise ValueError('only 8-bit MSB-first frames')
+            hz = _peek32(MMIO_SYS_FREQ)
+            div = hz // (2 * baudrate) - 1
+            if div < 0:
+                div = 0
+            self.baudrate = hz // (2 * (div + 1))
+            _pinmux(10 if sck is None else sck.id, 5)
+            _pinmux(11 if mosi is None else mosi.id, 6)
+            _pinmux(12 if miso is None else miso.id, 7)
+            _poke32(MMIO_SPI_CTRL, (div << 8) | ((phase & 1) << 2) | ((polarity & 1) << 1) | 1)
+            return None
+
+        def deinit(self):
+            _poke32(MMIO_SPI_CTRL, 0)
+            return None
+
+        def write(self, buf):
+            b = _as_bytes(buf)
+            _spi_xfer(b, 0, None, _slen(b))
+            return None
+
+        def read(self, nbytes, write=0):
+            out = bytearray(nbytes)
+            _spi_xfer(None, write & 255, out, nbytes)
+            return bytes(out)
+
+        def readinto(self, buf, write=0):
+            _spi_xfer(None, write & 255, buf, len(buf))
+            return None
+
+        def write_readinto(self, wbuf, rbuf):
+            b = _as_bytes(wbuf)
+            if _slen(b) != len(rbuf):
+                raise ValueError('buffers must be the same length')
+            _spi_xfer(b, 0, rbuf, len(rbuf))
+            return None
+
     def disable_irq():
         return _irqoff()
 
@@ -409,6 +486,7 @@ def _build_machine():
         'Timer': Timer,
         'UART': UART,
         'PWM': PWM,
+        'SPI': SPI,
         'disable_irq': disable_irq,
         'enable_irq': enable_irq,
         'idle': idle,

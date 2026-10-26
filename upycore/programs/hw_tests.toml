@@ -563,3 +563,5 @@ debounce = { file = "hw/io/debounce.py", oracle = false, halt = "TICKS", plusarg
 gc_burst_slow = { file = "hw/io/gc_burst_slow.py", oracle = false, cycles = 30_000_000, plusargs = ["+UART_RX=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f", "+UART_BAUD=1000", "+UART_RX_GAP=0", "+UART_RX_IDLE", "+TIMER_STEP=50000"] }
 gc_burst_fast = { file = "hw/io/gc_burst_fast.py", oracle = false, cycles = 30_000_000, plusargs = ["+UART_RX=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f", "+UART_BAUD=100", "+UART_RX_GAP=0", "+UART_RX_IDLE", "+TIMER_STEP=50000"] }
 pwm = { file = "hw/io/pwm.py", oracle = false, model = "pwm" }
+spi_flash = { file = "hw/io/spi_flash.py", oracle = false, plusargs = ["+SPI_DEV=flash"] }
+spi_loop = { file = "hw/io/spi_loop.py", oracle = false, plusargs = ["+SPI_DEV=loop"] }

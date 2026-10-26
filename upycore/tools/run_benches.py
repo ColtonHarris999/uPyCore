@@ -40,6 +40,8 @@ BENCHES = [
     Bench("periph_io", "tb_mpy_periph_io", PERIPH + ["upycore/tb/tb_mpy_periph_io.sv"], "--io-plusargs"),
     Bench("pwm", "tb_mpy_pwm", ["upycore/rtl/mpy_pwm.sv", "upycore/rtl/mpy_pinmux.sv",
                                 "upycore/tb/tb_mpy_pwm.sv"], "--pwm-plusargs"),
+    Bench("spi", "tb_mpy_spi", ["upycore/rtl/mpy_spi.sv", "upycore/tb/tb_spi_flash.sv",
+                                "upycore/tb/tb_mpy_spi.sv"]),
 ]
 
 

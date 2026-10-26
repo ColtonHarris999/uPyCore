@@ -18,6 +18,9 @@
 //   +STRAP=<hex>                            boot straps (SYS_STRAP); default 1, the
 //                                           testbench drives the tick
 //   +IO_TRACE=1                             one line per GPIO_OUT change and TX byte
+//   +SPI_DEV=flash|loop                     a SPI flash on pads 10 (SCK), 11 (MOSI),
+//                                           12 (MISO), 13 (CS, a GPIO); or MOSI looped
+//                                           back to MISO
 //
 // Pads: a pad the SoC drives reads back its own level; ext_low pulls a pad
 // low (an open-drain target), ext_drv drives ext_val; otherwise the pad's
@@ -59,8 +62,8 @@ module tb_mpy_soc;
     logic        core_idle;
     logic [15:0] pad_out, pad_oe, pad_in;
     logic [15:0] ext_low = 16'h0;
-    logic [15:0] ext_drv = 16'h0;
-    logic [15:0] ext_val = 16'h0;
+    logic [15:0] ext_drv;
+    logic [15:0] ext_val;
     always_comb begin
         for (int i = 0; i < 16; i++)
             pad_in[i] = ext_low[i] ? 1'b0 :
@@ -82,6 +85,19 @@ module tb_mpy_soc;
         .sim_irq_i(1'b0), .strap_i(strap), .idle_o(core_idle),
         .pad_out_o(pad_out), .pad_oe_o(pad_oe), .pad_in_i(pad_in)
     );
+
+    // SPI devices on the pads.
+    string       spi_dev;
+    logic        flash_miso;
+    initial if (!$value$plusargs("SPI_DEV=%s", spi_dev)) spi_dev = "";
+    tb_spi_flash u_flash (.cs_n(pad_in[13] | spi_dev != "flash"), .sck(pad_in[10]), .mosi(pad_in[11]),
+                          .miso(flash_miso));
+    always_comb begin
+        ext_drv = 16'h0;
+        ext_val = 16'h0;
+        ext_drv[12] = (spi_dev == "flash") || (spi_dev == "loop");
+        ext_val[12] = (spi_dev == "flash") ? flash_miso : pad_in[11];
+    end
 
     // Pulse widths on the pads: last rise, last fall, and the last full period.
     longint pw_rise [0:15];

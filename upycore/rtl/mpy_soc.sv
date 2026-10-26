@@ -174,7 +174,7 @@ module mpy_soc #(
     // Every block past the base registers sees the same request; each one
     // decodes its own range and reads 0 elsewhere.
     logic        blk_req;
-    logic [31:0] pwm_rdata, mux_rdata;
+    logic [31:0] pwm_rdata, mux_rdata, spi_rdata;
     logic [3:0]  pwm;
     logic        uart_txd, uart_rxd;
     logic        spi_sck, spi_mosi, spi_miso;
@@ -221,10 +221,13 @@ module mpy_soc #(
         .rdata_o(pwm_rdata), .pwm_o(pwm), .wrap_o()
     );
 
-    // SPI and I2C are not in this SoC yet: SCK and MOSI idle low, both
-    // I2C lines released.
-    assign spi_sck = 1'b0;
-    assign spi_mosi = 1'b0;
+    mpy_spi u_spi (
+        .clk_i, .rst_n_i,
+        .req_i(blk_req), .we_i(c_we), .off_i(c_addr[11:0]), .wdata_i(c_wdata),
+        .rdata_o(spi_rdata), .sck_o(spi_sck), .mosi_o(spi_mosi), .miso_i(spi_miso), .irq_o()
+    );
+
+    // I2C is not in this SoC yet: both lines released.
     assign i2c_scl_low = 1'b0;
     assign i2c_sda_low = 1'b0;
 
@@ -250,7 +253,7 @@ module mpy_soc #(
         end else begin
             mmio_ack <= c_req && c_mmio && !g_busy;
             mmio_fault <= c_req && c_mmio && !g_busy && (p_partial || p_fault);
-            mmio_rdata <= p_rdata | sys_rdata | pwm_rdata | mux_rdata;
+            mmio_rdata <= p_rdata | sys_rdata | pwm_rdata | mux_rdata | spi_rdata;
         end
     end
 

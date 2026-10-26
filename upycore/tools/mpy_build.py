@@ -60,7 +60,8 @@ RTL = [
     "upycore/rtl/mpy_alu.sv", "upycore/rtl/mpy_decode.sv", "upycore/rtl/mpy_core.sv",
     "upycore/rtl/mpy_gc.sv", "upycore/rtl/mpy_mem.sv", "upycore/rtl/mpy_mmio_pkg.sv",
     "upycore/rtl/mpy_irq.sv", "upycore/rtl/mpy_periph.sv", "upycore/rtl/mpy_sys.sv",
-    "upycore/rtl/mpy_pwm.sv", "upycore/rtl/mpy_pinmux.sv", "upycore/rtl/mpy_soc.sv",
+    "upycore/rtl/mpy_pwm.sv", "upycore/rtl/mpy_pinmux.sv", "upycore/rtl/mpy_spi.sv",
+    "upycore/rtl/mpy_soc.sv", "upycore/tb/tb_spi_flash.sv",
     "upycore/tb/tb_mpy_soc.sv",
 ]
 RTL_INCLUDES = [

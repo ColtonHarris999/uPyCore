@@ -563,6 +563,7 @@ MMIO = {
     "PWM_PRESC": 0x200, "PWM_TOP": 0x204, "PWM_EN": 0x208, "PWM_COUNT": 0x20C,
     "PWM_DUTY0": 0x210,
     "PINMUX0": 0x900, "PINMUX1": 0x904,
+    "SPI_CTRL": 0x300, "SPI_DATA": 0x304, "SPI_STATUS": 0x308,
 }
 IRQ_SRC = {"TIMER": 0, "UART": 1, "GPIO": 2, "SOFT": 3, "GC_REQ": 4, "SIM": 5, "KBD": 6, "MBOX": 7}
 
