@@ -742,6 +742,8 @@ def link(main: Path, modules: list[tuple[str, Path, bool]], fw: Path, out: Path,
         builtins.append((img.qval("__build_class__"), fw_items["__build_class__"]))
     if "__import__" in fw_items:
         builtins.append((img.qval("__import__"), fw_items["__import__"]))
+    if "__repl_print__" in fw_items:
+        builtins.append((img.qval("__repl_print__"), fw_items["__repl_print__"]))
     builtins.append((img.qval("__name__"), img.qval("builtins")))
     builtins.append((img.qval("NotImplemented"), (T["OBJECT"], img.symbols["notimpl"])))
     builtins.append((img.qval("Ellipsis"), (T["OBJECT"], img.symbols["ellipsis"])))

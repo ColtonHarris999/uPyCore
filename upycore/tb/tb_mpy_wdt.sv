@@ -2,7 +2,7 @@
 // (mpy_periph_model.wdt_reset_tick), LOAD locked and no stop once started,
 // a wrong key ignored, the system reset holding sys_rst_n for one scrub
 // pass over every SRAM word, the reset causes, the straps kept across a
-// system reset, and the id registers.
+// system reset with SYS_KEEP, and the id registers.
 module tb_mpy_wdt;
     logic        clk = 1'b0;
     logic        por_n = 1'b0;
@@ -144,10 +144,12 @@ module tb_mpy_wdt;
         // SYS_RESET: a wrong key is ignored, k 1 is soft, k 0 is hard.
         wr(12'h60C, 32'h0B00_7ED2);
         @(negedge clk); check(sys_rst_n, "a wrong key does not reset");
+        wr(12'h61C, 32'hA5A5_0001);
         wr(12'h60C, 32'h0B00_7ED1);
         check(!sys_rst_n, "SYS_RESET holds the system");
         wait_reset(held);
         rd(12'h608, v); check(v == 32'd5, "SOFT_RESET");
+        rd(12'h61C, v); check(v == 32'hA5A5_0001, "SYS_KEEP survives a system reset");
         wr(12'h60C, 32'h0B00_7ED0);
         wait_reset(held);
         rd(12'h608, v); check(v == 32'd2, "HARD_RESET");

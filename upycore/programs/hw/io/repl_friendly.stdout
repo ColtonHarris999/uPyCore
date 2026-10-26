@@ -1,0 +1,21 @@
+main ran
+MicroPython v1.29.0 on 2026-10-14; upycore with mpy_core
+Type "help()" for more information.
+>>> 1+1
+2
+>>> for i in range(2):
+...   print(i * x)
+... 
+0
+5
+>>> _
+2
+>>> 1/0
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+ZeroDivisionError: divide by zero
+>>> ab
+>>> 
+MicroPython v1.29.0 on 2026-10-14; upycore with mpy_core
+Type "help()" for more information.
+>>> 

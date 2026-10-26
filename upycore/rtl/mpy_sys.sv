@@ -8,7 +8,7 @@
 // over every SRAM word, one a clock, so the memory controller can zero it.
 // sys_rst_n_o is rst_n_i ANDed with that hold, so power-on releases both on
 // the same clock. The straps are sampled once after power-on and survive a
-// system reset, as does the cause. SYS_CONSOLE (console_o) steers the
+// system reset, as do the cause and SYS_KEEP. SYS_CONSOLE (console_o) steers the
 // sim page's stdout and stderr bytes in mpy_soc. Offsets outside 0x600..0x6FF read 0 and
 // ignore stores, so the SoC can OR this block's read data with the others.
 module mpy_sys #(
@@ -41,6 +41,7 @@ module mpy_sys #(
     localparam logic [11:0] SYS_UID0        = 12'h610;
     localparam logic [11:0] SYS_UID1        = 12'h614;
     localparam logic [11:0] SYS_CONSOLE     = 12'h618;
+    localparam logic [11:0] SYS_KEEP        = 12'h61C;
     localparam logic [31:0] RESET_KEY       = 32'h0B00_7ED0;
 
     localparam logic [2:0] CAUSE_PWRON = 3'd1;
@@ -55,6 +56,7 @@ module mpy_sys #(
     logic [15:0] idx_r;
     logic        sw_reset;
     logic [1:0]  console_r;
+    logic [31:0] keep_r;
 
     assign sw_reset = req_i && we_i && (off_i == SYS_RESET) && (wdata_i[31:1] == RESET_KEY[31:1]);
     assign sys_rst_n_o = rst_n_i && !hold_r;
@@ -72,6 +74,7 @@ module mpy_sys #(
                 SYS_UID0:        rdata_o = SYS_UID[31:0];
                 SYS_UID1:        rdata_o = SYS_UID[63:32];
                 SYS_CONSOLE:     rdata_o = {30'h0, console_r};
+                SYS_KEEP:        rdata_o = keep_r;
                 default:         rdata_o = 32'h0;
             endcase
         end
@@ -85,9 +88,12 @@ module mpy_sys #(
             hold_r     <= 1'b0;
             idx_r      <= 16'h0;
             console_r  <= 2'd0;
+            keep_r     <= 32'h0;
         end else begin
             if (req_i && we_i && off_i == SYS_CONSOLE)
                 console_r <= wdata_i[1:0];
+            if (req_i && we_i && off_i == SYS_KEEP)
+                keep_r <= wdata_i;
             // Latch the straps on the first clock out of power-on reset.
             if (!rst_seen_r) begin
                 strap_r    <= strap_i;

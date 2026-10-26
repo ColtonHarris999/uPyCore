@@ -549,6 +549,15 @@ def open(*args, **kw):
     raise OSError('open')
 
 
+def __repl_print__(o):
+    # An expression statement at the REPL: its repr, and builtins._.
+    if o is not None:
+        _wr(_repr(o))
+        _wr('\n')
+        _builtins_store('_', o)
+    return None
+
+
 def input(prompt=None):
     # The console's line, echoed as it is read; Enter is CR or LF.
     # Backspace (8 or 127) drops the last character.

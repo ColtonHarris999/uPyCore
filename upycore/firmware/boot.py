@@ -146,14 +146,21 @@ def _boot():
     g['sys'] = sys
     _sysset(SR_MAIN, _mk_module('__main__', g))
     _sysset(SR_FW0, g)
-    try:
-        _callns(md, g)
-    except SystemExit as e:
-        _con_flush()
-        _halt(_sysexit(e))
-    except BaseException as e:
-        _print_tb(e)
-        _con_flush()
-        _halt(1)
+    # Strap bit 3: the REPL after __main__. A soft reset from the raw REPL
+    # (SYS_KEEP bit 0) goes straight back to it and skips __main__.
+    repl = bool(strap & 8)
+    status = 0
+    if not (repl and (_peek32(MMIO_SYS_KEEP) & 1)):
+        try:
+            _callns(md, g)
+        except SystemExit as e:
+            _con_flush()
+            _halt(_sysexit(e))
+        except BaseException as e:
+            _print_tb(e)
+            status = 1
+    if repl:
+        _repl(g)
+        status = 0
     _con_flush()
-    _halt(0)
+    _halt(status)

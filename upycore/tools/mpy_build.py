@@ -49,7 +49,7 @@ MPY_CROSS_FLAGS = ["-msmall-int-bits=31", "-O0"]
 FW_ORDER = [
     "_abi.py", "base.py", "errors.py", "fmt.py", "floatfmt.py", "ops.py",
     "attrs.py", "calls.py", "iters.py", "strs.py", "seqs.py", "dicts.py",
-    "builtins.py", "modules.py", "machine.py", "boot.py", "load.py",
+    "builtins.py", "modules.py", "machine.py", "boot.py", "load.py", "repl.py",
 ]
 
 RTL = [

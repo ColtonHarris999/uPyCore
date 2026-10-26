@@ -220,6 +220,7 @@ kick the reset comes `WDT_LOAD` ticks after the start; a start with
 | `0x608` | `SYS_RESET_CAUSE` | Read-only. `PWRON_RESET` 1, `HARD_RESET` 2, `WDT_RESET` 3, `SOFT_RESET` 5 (the `machine` constants) |
 | `0x60C` | `SYS_RESET` | Writing `0x0B007ED0 | k` resets the system: `k` 0 hard (`machine.reset()`), 1 soft (`machine.soft_reset()`). Other values are ignored |
 | `0x618` | `SYS_CONSOLE` | Bits 1:0, where the console goes: 0 the sim console, 1 the UART, 2 USB CDC (the coprocessor; until it exists, 2 reads back but output stays on the sim console). Reset 0. `_boot` writes strap bits 2:1 here. See Console |
+| `0x61C` | `SYS_KEEP` | A word the firmware keeps across a system reset; only power-on clears it. Bit 0: come back in the raw REPL (see REPL) |
 | `0x610`, `0x614` | `SYS_UID0`, `SYS_UID1` | Read-only. The 64-bit unique id, the `SYS_UID` parameter, low word first. `machine.unique_id()` returns the 8 bytes, most significant first |
 
 When bit 0 of `SYS_STRAP` is clear, `_boot` writes `TIMER_PRESC = SYS_FREQ / 1000`,
@@ -284,6 +285,35 @@ object raises `OSError`, as in v1.29.0.
 The testbench takes `+CONSOLE=uart` (strap bits 2:1 = 1) and then writes
 the UART's TX bytes, not the sim console's, to the stdout file, so a test
 on the UART console compares stdout like any other.
+
+## REPL
+
+With strap bit 3 set, `_boot` runs the REPL on the console once
+`__main__` returns or raises (a `SystemExit` still halts). It follows
+v1.29.0 `shared/runtime/pyexec.c`:
+
+- Friendly: the banner, `>>> `, and `... ` while a statement continues (an
+  open bracket or triple quote, a trailing `\` or `:`, or a compound
+  statement until an empty line). Characters echo; backspace edits;
+  Enter is CR or LF. Ctrl-C drops the input, Ctrl-D on an empty line
+  soft-resets, Ctrl-A enters the raw REPL, Ctrl-B prints the banner, and
+  Ctrl-E enters paste mode (`=== ` per line, Ctrl-D runs it, Ctrl-C
+  cancels). A line compiles in `single` mode, so an expression's repr is
+  printed by the `__repl_print__` builtin, which also sets `_`.
+- Raw: `raw REPL; CTRL-B to exit` and `>`. Bytes collect until Ctrl-D, then
+  `OK`, the program's output, `\x04`, the traceback if it raised, `\x04`,
+  and `>` again. Ctrl-D on empty input soft-resets, Ctrl-B returns to the
+  friendly REPL, Ctrl-C clears the input. The raw-paste request
+  (Ctrl-E `A` Ctrl-A) is answered `R\x00`, not supported, so a host falls
+  back to the plain raw REPL.
+
+Code runs with Ctrl-C armed and input is read with it disarmed, so 0x03
+reaches the line editor. A soft reset prints `MPY: soft reboot`, waits for
+the console to drain, and writes `SYS_RESET` with k 1; in the raw REPL it
+first sets `SYS_KEEP` bit 0, and the next boot skips `__main__` and goes
+straight back to the raw REPL, as `pyexec_mode_kind` survives a soft
+reset in MicroPython. Output is not cooked: `\n` is not turned into
+`\r\n`.
 
 ## Idle wake
 
