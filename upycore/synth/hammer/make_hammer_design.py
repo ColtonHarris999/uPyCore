@@ -74,7 +74,7 @@ set_output_delay -min 0 -clock core_clk [all_outputs]
 
 # {reset} is an asynchronous reset: keep it out of the timing paths.
 set_false_path -from [get_ports {reset}]
-{tie_low}"""
+{tie_low}{feedthrough}"""
 
 
 def _get(doc: dict, dotted: str):
@@ -158,6 +158,9 @@ def main() -> int:
     ap.add_argument("--tie-low", action="append", default=[], metavar="PORT",
                     help="input held at 0 in the benchmarked system, so its paths are not "
                          "timed; may be a pattern (Hazard3: 'dbg_*', the unused debug ports)")
+    ap.add_argument("--no-feedthrough", action="store_true",
+                    help="do not time paths from an input straight to an output (bus "
+                         "feedthroughs belong to the system's timing, not the core's)")
     ap.add_argument("--force", action="store_true", help="replace dest if it exists")
     args = ap.parse_args()
 
@@ -266,7 +269,11 @@ def main() -> int:
                                       tie_low="".join(
                                           f"\n# Held at 0 in the benchmarked system.\n"
                                           f"set_case_analysis 0 [remove_from_collection [get_ports {{{p}}}] [all_outputs]]\n"
-                                          for p in args.tie_low)))
+                                          for p in args.tie_low),
+                                      feedthrough=(
+                                          "\n# Input-to-output feedthroughs are timed in the system.\n"
+                                          "set_false_path -from $data_in -to [all_outputs]\n"
+                                          if args.no_feedthrough else "")))
     if "constraints.tcl" not in cfg.read_text() and not any(
             "constraints.tcl" in f.read_text() for f in cfg_dir.glob("*.yml")):
         warnings.append("no yml file names constraints.tcl; find how the example loads it")
