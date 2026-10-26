@@ -206,11 +206,19 @@ gives the CA something to do.
 
 ## Not done
 
-- Dict and set rehash on the CA. Rehash is 19% of the `dict` benchmark.
-  The hashes are simple (one read at most), but a key the hardware cannot
-  hash (an instance) sends the whole insert to the firmware. The core
+- Dict and set rehash on the CA. Rehash is 20.6% of the `dict` benchmark:
+  2,546 keys at 24.2 cycles each, five memory accesses and one probe per
+  key. On the CA it would be about 11 cycles a key, which is about 11% of
+  that benchmark and nothing on the suite (rehash is 0.04% of it). The
+  hashes are simple (one read at most), but a key the hardware cannot
+  hash (an instance) sends the whole insert to the firmware, so the core
   would have to wait for a first pass over the keys before it could
-  retire the insert, and the probe needs a second 32-bit modulo unit.
+  retire the insert. The probe needs `hash % alloc`. The CA should share
+  the core's single-cycle modulo, core first, rather than add one: in the
+  same generic-gate flow a second 32-bit modulo is 7,972 cells (+1.9% of
+  the core, more than `mpy_ca`) and 564 gate levels deep, against 220
+  cells and 18 levels for a 32-bit add. A 32-cycle iterative one is 310
+  cells but makes the rehash slower than the core's.
 - Byte copies (`_bcopy`). They are 1.6% of the string benchmark, which is
   dominated by firmware call overhead.
 - Scratch-image swaps (`S_SCR`) are 38% of `listbuild`: `FOR_ITER`,
