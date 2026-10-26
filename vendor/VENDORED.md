@@ -27,3 +27,27 @@ without asking first.
 | Licence | HDL: CERN-OHL-P-2.0 (permissive). TinyUSB driver: MIT. Its own USB stack (`fw/v0`): LGPL-3.0, **not used** |
 | Used by | `coproc` USB SIE (phase 4); `coproc/sw/dcd` driver |
 | Local changes | The submodule is unmodified. `coproc/sw/dcd/dcd_no2usb.c` and `dcd_no2usb_hw.h` are copies of `fw/tinyusb`, ported to the pinned TinyUSB: `dcd_init` takes the rhport init struct and returns `bool`; `dcd_edpt_xfer` takes `is_isr`; the endpoint size comes from `tu_edpt_packet_size`; `dcd_sof_enable` and `dcd_edpt_close_all` are added. Each change is marked `upycore port` |
+
+## CVE2
+
+| Field | Value |
+| --- | --- |
+| Path | `vendor/cve2` (git submodule) |
+| Upstream | https://github.com/openhwgroup/cve2 |
+| Commit | `d7f21568028a1114be663599bd42145dccf28928` (2026-10-09) |
+| Licence | Apache-2.0 WITH SHL-2.1, the Solderpad Hardware Licence (`vendor/cve2/LICENSE`); the lowRISC primitives it includes are Apache-2.0 |
+| Used by | `coproc/rtl/coproc_top.sv`: `cve2_top` with `RV32E` = 1, `RV32M` = `RV32MFast`, no performance counters. The file list is `COPROC_RTL` in `upycore/tools/mpy_build.py` |
+| Local changes | None. `boot_addr_i` is `0x80`: CVE2 resets to `boot_addr` itself and takes `mtvec` from its upper bits, so the reset entry is at `0x80` and the vector table at 0 (`coproc/sw/common/crt0.S`) |
+
+## no2usb in the SoC
+
+`coproc/rtl/coproc_top.sv` instantiates `usb` from `vendor/no2usb/rtl`
+unmodified, with `EPDW` 32 and `EVT_DEPTH` 0 (no event FIFO, so the
+no2misc FIFO it would need is not used; the driver is built without
+`NO2USB_WITH_EVENT_FIFO`). The iCE40 primitives it instantiates,
+`SB_RAM40_4K` and `SB_IO`, are behavioral models in `coproc/rtl/ice40_sim.sv`
+that follow the primitive's bit layout. The transaction microcode ROM is
+generated at build time by `vendor/no2usb/utils/microcode.py` (MIT) into
+`build/coproc/fw/usb_trans_mc.hex`. `SIM` is not defined: in no2usb it
+switches the transmitter off.
+

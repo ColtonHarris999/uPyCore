@@ -14,3 +14,7 @@
 	path = vendor/no2usb
 	url = https://github.com/no2fpga/no2usb.git
 	shallow = true
+[submodule "vendor/cve2"]
+	path = vendor/cve2
+	url = https://github.com/openhwgroup/cve2.git
+	shallow = true

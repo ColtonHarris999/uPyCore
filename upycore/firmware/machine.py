@@ -687,6 +687,23 @@ def _mk_WDT():
     return WDT
 
 
+def _mk_Mailbox():
+    # The coprocessor mailbox (upycore/docs/mpy_coproc.md).
+    class Mailbox:
+        SHARED = MMIO_SHARED
+
+        def send(self, w):
+            return _mbox_send(w)
+
+        def recv(self):
+            return _mbox_recv()
+
+        def any(self):
+            return _mbox_avail()
+
+    return Mailbox
+
+
 def _machine_lazy(name):
     if _streq(name, 'Pin'):
         return _mk_Pin
@@ -704,6 +721,8 @@ def _machine_lazy(name):
         return _mk_ADC
     if _streq(name, 'WDT'):
         return _mk_WDT
+    if _streq(name, 'Mailbox'):
+        return _mk_Mailbox
     return NULL
 
 

@@ -113,9 +113,14 @@ def _irq_uncaught(hard, src):
 
 
 def _con_flush():
-    # A UART console sends what is queued before the halt stops the clock.
-    if (_peek32(MMIO_SYS_CONSOLE) & 3) == 1:
+    # A UART console sends what is queued before the halt stops the clock;
+    # the USB console waits for the coprocessor to take the mailbox's words.
+    con = _peek32(MMIO_SYS_CONSOLE) & 3
+    if con == 1:
         while _peek32(MMIO_UART_STATUS) & 0x10000:
+            pass
+    elif con == 2:
+        while _peek32(MMIO_MBOX_STATUS) & 0x1F00:
             pass
     return None
 
@@ -129,7 +134,7 @@ def _boot():
     # as MicroPython arms it while code runs.
     con = (strap >> 1) & 3
     _poke32(MMIO_SYS_CONSOLE, con)
-    if con == 1:
+    if con == 1 or con == 2:
         _mp_kbd(3)
     mods = {}
     _sysset(SR_MODULES, mods)

@@ -28,7 +28,7 @@ def _repl_soft_reset(raw):
 
 def _repl_kbd(on):
     # Ctrl-C interrupts running code; while a line is read it is a character.
-    if (_peek32(MMIO_SYS_CONSOLE) & 3) == 1:
+    if (_peek32(MMIO_SYS_CONSOLE) & 3) in (1, 2):
         _mp_kbd(3 if on else -1)
     return None
 

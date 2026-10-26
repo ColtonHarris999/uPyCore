@@ -574,7 +574,11 @@ module mpy_core
         S_N_ISI3,
         S_N_LEN_S,
         S_N_LOOKUP,
+        S_N_MBA,
+        S_N_MBR,
+        S_N_MBS,
         S_N_NONE,
+        S_N_TRUE,
         S_N_OBJ,
         S_N_PEEK8,
         S_N_RANGE,
@@ -3643,6 +3647,14 @@ module mpy_core
                     ABI_N_PENDING: begin
                         nat_crk <= crk; poll_mode <= PM_PEND; irq_jump <= 1'b1; st <= S_IRQ_POLL;
                     end
+                    // The mailbox (upycore/docs/mpy_coproc.md): MBOX_STATUS first,
+                    // then a push or a pop when there is room or a word.
+                    ABI_N_MBOX_SEND: if (v0 != 32'd1 || tg(mv) != ABI_TAG_INT) st <= S_NAT_FB;
+                        else rd(MPY_MMIO_BASE + 32'h108, S_N_MBS);
+                    ABI_N_MBOX_RECV: if (v0 != 32'd0) st <= S_NAT_FB;
+                        else rd(MPY_MMIO_BASE + 32'h108, S_N_MBR);
+                    ABI_N_MBOX_AVAIL: if (v0 != 32'd0) st <= S_NAT_FB;
+                        else rd(MPY_MMIO_BASE + 32'h108, S_N_MBA);
                     ABI_N_ALLOC: alloc(v1, S_N_ALLOC);
                     ABI_N_TYPEOF: begin ty_v <= mv; gosub(S_TYPEOF, S_N_TYPEOF); end
                     ABI_N_CALLNS: if (tg(mv) == ABI_TAG_INT) rd(ab_ptr(ab_lo + 8'd1), S_NAT_CNS);
@@ -3786,6 +3798,12 @@ module mpy_core
             S_NAT_FB1: if (mv == VNULL) rd(adr(ab_q) + 16, S_NAT_FB2);
                        else wr(ab_ptr(8'd0), mv, S_CALL);
             S_NAT_FB2: raise_err(ABI_ERR_BUILTIN_ARGS, mv, vint(32'(ab_pe - ab_lo)));
+            S_N_MBS: if (md[16]) deliver(VFALSE, crk);
+                     else wr(MPY_MMIO_BASE + 32'h100, {ABI_TAG_CONTROL, ab_q[31:0]}, S_N_TRUE);
+            S_N_MBR: if (!md[17]) deliver(VNONE, crk);
+                     else rd(MPY_MMIO_BASE + 32'h104, S_N_RINT);
+            S_N_MBA: deliver(vint({27'd0, md[4:0]}), crk);
+            S_N_TRUE: deliver(VTRUE, crk);
             S_N_NONE: deliver(VNONE, crk);
             S_N_RINT: deliver(vint(md), crk);
             S_N_RV: deliver(mv, crk);

@@ -21,6 +21,9 @@
 //   +STRAP=<hex>                            boot straps (SYS_STRAP); default 1, the
 //                                           testbench drives the tick
 //   +IO_TRACE=1                             one line per GPIO_OUT change and TX byte
+//   +COPROC=<hex> +NO2USB_DATA=<dir>        run the USB coprocessor from this image
+//                                           (upycore/docs/mpy_coproc.md); +COPROC_LOG=<path>
+//                                           collects its debug bytes
 //   +SPI_DEV=flash|loop                     a SPI flash on pads 10 (SCK), 11 (MOSI),
 //                                           12 (MISO), 13 (CS, a GPIO); or MOSI looped
 //                                           back to MISO
@@ -72,6 +75,9 @@ module tb_mpy_soc;
     bit          con_uart = 1'b0;
     logic        core_idle;
     logic [15:0] pad_out, pad_oe, pad_in;
+    logic        cclk = 1'b0;
+    wire         usb_dp, usb_dn;
+    logic        usb_pu;
     logic        adc_start, adc_done;
     logic [3:0]  adc_chan;
     logic [11:0] adc_code;
@@ -98,8 +104,18 @@ module tb_mpy_soc;
         .gpio_in_i(gpio_in), .gpio_in_en_i(gpio_in_en),
         .sim_irq_i(1'b0), .strap_i(strap), .idle_o(core_idle),
         .adc_start_o(adc_start), .adc_chan_o(adc_chan), .adc_done_i(adc_done), .adc_code_i(adc_code),
-        .pad_out_o(pad_out), .pad_oe_o(pad_oe), .pad_in_i(pad_in)
+        .pad_out_o(pad_out), .pad_oe_o(pad_oe), .pad_in_i(pad_in),
+        .cclk_i(cclk), .usb_dp_io(usb_dp), .usb_dn_io(usb_dn), .usb_pu_o(usb_pu)
     );
+
+    // The coprocessor's 48 MHz clock runs only with an image (+COPROC);
+    // without one the coprocessor stays in reset and costs nothing.
+    initial if ($test$plusargs("COPROC=")) forever #10.417 cclk = ~cclk;
+
+    // USB: the host's 15k pull-downs, and the device's 1.5k pull-up on D+
+    // when it switches it on. A driver (the device, or the host model) wins.
+    assign (weak0, weak1) usb_dp = usb_pu ? 1'b1 : 1'b0;
+    assign (weak0, weak1) usb_dn = 1'b0;
 
     // The ADC's converter (mpy_periph_model.adc_code).
     tb_adc_model u_adc (.clk(clk), .start(adc_start), .chan(adc_chan), .done(adc_done), .code(adc_code));

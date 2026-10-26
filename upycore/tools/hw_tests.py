@@ -131,6 +131,8 @@ class Test:
     io: dict | None = None
     model: str | None = None
     halt: str | None = None
+    # Runs the USB coprocessor from its firmware image (+COPROC).
+    coproc: bool = False
 
     @property
     def source(self) -> Path:
@@ -332,7 +334,8 @@ def run_device(t: Test, compiler: str = "mpy-cross") -> Outcome:
     work = (ROOT / "build" / ("hw-mpyc" if compiler == "mpyc" else "hw")) / t.name
     try:
         image = build.build_program(t.source, work, t.source.name, _modules(t), compiler)
-        res = build.run_image(image, max_cycles=t.cycles, timeout=t.timeout, plusargs=t.plusargs)
+        extra = tuple(build.coproc_plusargs()) if t.coproc else ()
+        res = build.run_image(image, max_cycles=t.cycles, timeout=t.timeout, plusargs=t.plusargs + extra)
     except build.BuildError as exc:
         text = str(exc).strip().splitlines()
         return Outcome(t, False, text[-1] if text else "build failed")

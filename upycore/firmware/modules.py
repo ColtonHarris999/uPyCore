@@ -80,9 +80,15 @@ def _mp_unlock():
     return _heaplock(1)
 
 
+# Mailbox channels and control commands (upycore/docs/mpy_coproc.md).
+MB_CON = const(0)
+MB_CTRL_KBD = const(0x01010000)
+
+
 def _mp_kbd(i):
     # The UART character and the coprocessor's KBD doorbell share one
-    # source; -1 disarms both.
+    # source; -1 disarms both. On the USB console the coprocessor filters
+    # the character, so it is told too.
     en = _peek32(MMIO_IRQ_ENABLE)
     if i < 0:
         _poke32(MMIO_UART_KBD, 0)
@@ -90,7 +96,29 @@ def _mp_kbd(i):
     else:
         _poke32(MMIO_UART_KBD, 256 | (i & 255))
         _poke32(MMIO_IRQ_ENABLE, en | (1 << SRC_KBD))
+    if (_peek32(MMIO_SYS_CONSOLE) & 3) == 2:
+        w = MB_CTRL_KBD if i < 0 else MB_CTRL_KBD | 256 | (i & 255)
+        while not _mbox_send(w):
+            pass
     return None
+
+
+def _mbox_send_fb(*args):
+    # The native takes one small int; a wider int sends its low 32 bits.
+    if len(args) != 1:
+        raise TypeError(_s('function takes 1 positional arguments but ', _istr(len(args)), ' were given'))
+    w = args[0]
+    if not _isint(w):
+        raise TypeError("can't convert to int")
+    return _mbox_send(_w32(w))
+
+
+def _mbox_recv_fb(*args):
+    raise TypeError(_s('function takes 0 positional arguments but ', _istr(len(args)), ' were given'))
+
+
+def _mbox_avail_fb(*args):
+    raise TypeError(_s('function takes 0 positional arguments but ', _istr(len(args)), ' were given'))
 
 
 def _mp_qstr():
@@ -178,8 +206,17 @@ def _sys_getattr(name):
 
 def _con_getc():
     # One byte from the console; -1 at the end of input (the sim console has
-    # none). The UART waits in idle; a byte arriving wakes it.
-    if (_peek32(MMIO_SYS_CONSOLE) & 3) != 1:
+    # none). The UART and the mailbox wait in idle; a byte arriving wakes it.
+    # On the USB console a mailbox word on another channel is dropped.
+    con = _peek32(MMIO_SYS_CONSOLE) & 3
+    if con == 2:
+        while True:
+            w = _mbox_recv()
+            if w is None:
+                _idle()
+            elif (w >> 24) & 255 == MB_CON:
+                return w & 255
+    if con != 1:
         return -1
     while True:
         v = _peek32(MMIO_UART_RX)

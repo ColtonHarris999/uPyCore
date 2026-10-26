@@ -92,7 +92,13 @@ callback can be interrupted; its trampoline catches it like any other
 exception. The UART raises `KBD` for the `UART_KBD` character, which is
 not queued; the coprocessor's doorbell raises it directly.
 `micropython.kbd_intr(c)` writes the character and the `KBD` enable bit;
-`kbd_intr(-1)` clears both.
+`kbd_intr(-1)` clears both. On the USB console it also sends the
+character to the coprocessor (a `KBD` control word, `mpy_coproc.md`),
+which rings the doorbell instead of passing that byte on.
+
+`MBOX` (source 7) sets each time words reach the mailbox's RX FIFO
+(`mpy_mbox.sv`). Nothing installs a handler for it today; its event is
+what wakes `machine.idle` while the USB console waits for input.
 
 ## An exception that escapes a callback
 

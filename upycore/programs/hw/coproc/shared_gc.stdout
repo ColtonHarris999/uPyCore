@@ -1,0 +1,3 @@
+held while referenced True
+freed with pointers in shared SRAM True
+the coprocessor copied it True

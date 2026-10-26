@@ -66,6 +66,29 @@ RTL = [
     "upycore/tb/tb_i2c_target.sv", "upycore/tb/tb_adc_model.sv",
     "upycore/tb/tb_mpy_soc.sv",
 ]
+# The USB coprocessor (upycore/docs/mpy_coproc.md): CVE2, the no2usb SIE,
+# and our glue. The vendored Verilog sets `default_nettype none`, so these
+# come after every file of ours.
+CVE2_RTL = [f"vendor/cve2/rtl/{n}.sv" for n in (
+    "cve2_pkg", "cve2_alu", "cve2_compressed_decoder", "cve2_controller", "cve2_cs_registers",
+    "cve2_csr", "cve2_counter", "cve2_decoder", "cve2_ex_block", "cve2_fetch_fifo",
+    "cve2_id_stage", "cve2_if_stage", "cve2_load_store_unit", "cve2_multdiv_fast",
+    "cve2_multdiv_slow", "cve2_prefetch_buffer", "cve2_pmp", "cve2_register_file_ff",
+    "cve2_wb", "cve2_core", "cve2_clock_gate", "cve2_top")]
+COPROC_RTL = (
+    ["vendor/cve2/vendor/lowrisc_ip/ip/prim/rtl/prim_ram_1p_pkg.sv"] + CVE2_RTL
+    + ["upycore/rtl/mpy_async_fifo.sv", "upycore/rtl/mpy_shared_ram.sv", "upycore/rtl/mpy_mbox.sv",
+       "coproc/rtl/coproc_top.sv", "coproc/rtl/ice40_sim.sv"]
+    + [f"vendor/no2usb/rtl/{n}.v" for n in (
+        "usb", "usb_crc", "usb_ep_buf", "usb_ep_status", "usb_phy", "usb_rx_ll", "usb_rx_pkt",
+        "usb_trans", "usb_tx_ll", "usb_tx_pkt")]
+)
+COPROC_INCDIRS = [
+    "vendor/cve2/rtl", "vendor/cve2/vendor/lowrisc_ip/ip/prim/rtl",
+    "vendor/cve2/vendor/lowrisc_ip/dv/sv/dv_utils", "vendor/no2usb/rtl",
+]
+COPROC_FW_DIR = BUILD.parent / "coproc" / "fw"
+COPROC_HEX = COPROC_FW_DIR / "coproc.hex"
 RTL_INCLUDES = [
     "upycore/rtl/mpy_abi.svh", "upycore/rtl/mpy_defs.svh", "upycore/rtl/upycore_defs.svh",
     "upycore/rtl/upycore_fp_defs.svh", "upycore/rtl/upycore_fp_pow_rom.svh",
@@ -85,10 +108,28 @@ def _newer(target: Path, sources: list[Path]) -> bool:
     return any(s.stat().st_mtime > t for s in sources)
 
 
+def build_coproc_fw() -> Path:
+    """make -C coproc/sw/fw: the coprocessor image and the SIE microcode."""
+
+    with _FW_LOCK:
+        r = subprocess.run(["make", "-s", "-C", str(ROOT / "coproc" / "sw" / "fw")],
+                           capture_output=True, text=True)
+    if r.returncode != 0:
+        raise BuildError("coprocessor firmware failed:\n" + r.stdout[-4000:] + r.stderr[-4000:])
+    return COPROC_HEX
+
+
+def coproc_plusargs() -> list[str]:
+    """What a run with the coprocessor needs: its image and the SIE's ROM directory."""
+
+    hexfile = build_coproc_fw()
+    return [f"+COPROC={hexfile}", f"+NO2USB_DATA={hexfile.parent}"]
+
+
 def build_sim(force: bool = False, quiet: bool = True) -> Path:
     """Verilate tb_mpy_soc when any RTL source is newer than the binary."""
 
-    sources = [ROOT / p for p in RTL + RTL_INCLUDES]
+    sources = [ROOT / p for p in RTL + COPROC_RTL + RTL_INCLUDES]
     if not force and not _newer(SIM, sources):
         return SIM
     (SIM_DIR / "obj").mkdir(parents=True, exist_ok=True)
@@ -96,10 +137,11 @@ def build_sim(force: bool = False, quiet: bool = True) -> Path:
         os.environ.get("VERILATOR", "verilator"), "-sv", "--binary", "--timing",
         "--timescale", "1ns/1ps", "-O3", "--x-assign", "fast", "--x-initial", "fast",
         f"+incdir+{ROOT / 'upycore' / 'rtl'}", "-y", str(ROOT / "upycore" / "rtl"),
+    ] + [f"+incdir+{ROOT / d}" for d in COPROC_INCDIRS] + [
         "--top-module", "tb_mpy_soc",
         "--Mdir", str(SIM_DIR / "obj"), "-Wno-fatal", "-Wno-WIDTH", "-Wno-UNUSED",
         "-Wno-CASEINCOMPLETE", "-Wno-BLKSEQ", "-Wno-TIMESCALEMOD", "-j", str(os.cpu_count() or 4),
-    ] + [str(s) for s in sources if s.suffix == ".sv"]
+    ] + [str(s) for s in sources if s.suffix in (".sv", ".v")]
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
     if r.returncode != 0:
         raise BuildError("verilator failed:\n" + r.stdout[-4000:] + r.stderr[-4000:])

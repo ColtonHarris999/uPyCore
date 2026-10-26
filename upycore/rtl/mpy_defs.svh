@@ -97,7 +97,7 @@ localparam logic [31:0] MPY_SRAM_BASE  = 32'h2000_0000;
 localparam logic [31:0] MPY_SRAM_BYTES = 32'h0004_0000; // 256 KB
 
 localparam logic [31:0] MPY_MMIO_BASE  = 32'h4000_0000;
-localparam logic [31:0] MPY_MMIO_BYTES = 32'h0000_1000; // 4 KB
+localparam logic [31:0] MPY_MMIO_BYTES = 32'h0000_2000; // 8 KB: registers, then the shared SRAM
 
 localparam logic [31:0] MPY_SIM_BASE  = 32'hE000_0000;
 localparam logic [31:0] MPY_SIM_BYTES = 32'd256;

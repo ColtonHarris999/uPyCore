@@ -21,6 +21,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "upycore" / "tools"))
+import mpy_build  # noqa: E402
 MODEL = ROOT / "upycore" / "tools" / "mpy_periph_model.py"
 BUILD = ROOT / "build" / "benches"
 
@@ -31,6 +33,8 @@ class Bench:
     top: str
     sources: list[str]
     model_flag: str | None = None   # mpy_periph_model.py option that prints the plusargs
+    incdirs: tuple[str, ...] = ()
+    coproc: bool = False            # needs the coprocessor firmware (+COPROC)
 
 
 PERIPH = ["upycore/rtl/mpy_mmio_pkg.sv", "upycore/rtl/mpy_irq.sv", "upycore/rtl/mpy_periph.sv"]
@@ -48,15 +52,18 @@ BENCHES = [
                                 "upycore/tb/tb_mpy_wdt.sv"], "--wdt-plusargs"),
     Bench("adc", "tb_mpy_adc", ["upycore/rtl/mpy_adc.sv", "upycore/tb/tb_adc_model.sv",
                                 "upycore/tb/tb_mpy_adc.sv"], "--adc-plusargs"),
+    Bench("mbox", "tb_mpy_mbox", ["upycore/tb/tb_mpy_mbox.sv"] + mpy_build.COPROC_RTL, "--mbox-plusargs",
+          incdirs=tuple(mpy_build.COPROC_INCDIRS), coproc=True),
 ]
 
 
 def plusargs(b: Bench) -> list[str]:
+    args = mpy_build.coproc_plusargs() if b.coproc else []
     if not b.model_flag:
-        return []
+        return args
     out = subprocess.run([sys.executable, str(MODEL), b.model_flag], check=True,
                          capture_output=True, text=True).stdout
-    return out.split()
+    return args + out.split()
 
 
 def build(b: Bench) -> Path:
@@ -68,7 +75,8 @@ def build(b: Bench) -> Path:
     obj.mkdir(parents=True, exist_ok=True)
     cmd = [os.environ.get("VERILATOR", "verilator"), "-sv", "--binary", "--timing",
            "--timescale", "1ns/1ps", "-Wno-fatal", "-Wno-WIDTH", "-Wno-UNUSED",
-           f"+incdir+{ROOT / 'upycore' / 'rtl'}", "--top-module", b.top, "--Mdir", str(obj),
+           f"+incdir+{ROOT / 'upycore' / 'rtl'}"] + [f"+incdir+{ROOT / d}" for d in b.incdirs] + [
+           "--top-module", b.top, "--Mdir", str(obj),
            "-j", str(os.cpu_count() or 2)] + [str(s) for s in srcs]
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:

@@ -421,6 +421,28 @@ def wdt_plusargs() -> str:
             f"+SRAM_WORDS={SRAM_WORDS}")
 
 
+# Mailbox (upycore/docs/mpy_coproc.md, Messages): channel in bits 31:24.
+MBOX_DEPTH = 16
+MBOX_CH = {"CON": 0x00, "CTRL": 0x01, "ECHO": 0x02, "COPY": 0x03}
+
+
+def mbox_word(ch: str, payload: int) -> int:
+    return (MBOX_CH[ch] << 24) | (payload & 0xFFFFFF)
+
+
+def mbox_echo_payload(k: int) -> int:
+    """Payload k of the echo streams the benches and tests send."""
+    return (k * 40503 + 7) & 0xFFFFFF
+
+
+def mbox_echo_sum(n: int) -> int:
+    return sum(mbox_echo_payload(k) for k in range(n))
+
+
+def mbox_plusargs(n: int = 256) -> str:
+    return f"+MBOX_N={n} +MBOX_SUM={mbox_echo_sum(n)}"
+
+
 ADC_LATENCY = 48       # tb_adc_model: clocks from adc_start to adc_done
 
 
@@ -632,6 +654,9 @@ def main(argv: list[str]) -> int:
         return 0
     if "--pwm-plusargs" in argv:
         print(pwm_plusargs())
+        return 0
+    if "--mbox-plusargs" in argv:
+        print(mbox_plusargs())
         return 0
     if "--adc-plusargs" in argv:
         print(adc_plusargs())

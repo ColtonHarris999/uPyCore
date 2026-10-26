@@ -25,6 +25,7 @@ UART byte that matches `UART_KBD`; the hart turns that source into
 | Window | Base | Size |
 | --- | --- | --- |
 | MMIO | `0x4000_0000` | 4 KB |
+| Shared SRAM | `0x4000_1000` | 4 KB, the coprocessor's second port (`mpy_coproc.md`); words, untagged, not scanned by the collector |
 
 The slave accepts a full address in that window, or an offset whose upper
 bits are already 0. A store or load whose address is outside the window,
@@ -114,10 +115,30 @@ tick `N`, then every `N` ticks.
 ## Blocks past the base registers
 
 Each block decodes its own offset range and reads 0 elsewhere, so the SoC
-ORs their read data. None of them has an IRQ source: the eight sources
-fill the handler window (`planning/interrupts_io_plan.md` §3). Each block
-has a status register that Python polls, and an `irq` output that is
-recorded here for a later source.
+ORs their read data. Only the mailbox has an IRQ source: the eight sources
+fill the handler window (`planning/interrupts_io_plan.md` §3). Each other
+block has a status register that Python polls, and an `irq` output that
+is recorded here for a later source.
+
+### Mailbox (`0x100`)
+
+The hart's side of the coprocessor mailbox (`upycore/docs/mpy_coproc.md`,
+which owns the message format). Two 16-word dual-clock FIFOs; a level
+or `full` read here is the synchronized view and may lag the other side
+by a few clocks, never in the unsafe direction.
+
+| Offset | Name | Rule |
+| --- | --- | --- |
+| `0x100` | `MBOX_TX` | A store pushes the word to the coprocessor. Dropped when full, and sets overrun |
+| `0x104` | `MBOX_RX` | A load pops the word from the coprocessor; 0 when empty |
+| `0x108` | `MBOX_STATUS` | Bits 4:0 RX level, bits 12:8 TX level, bit 16 TX full, bit 17 RX not empty, bit 18 TX overrun (write 1 to clear) |
+
+Unlike the other blocks the mailbox has a source: `MBOX` (7) sets each
+time a word reaches the RX FIFO. The coprocessor's `CMB_KBD` doorbell
+sets `KBD` (6). With `SYS_CONSOLE` = 2 the console's bytes are `CON`
+words: stdout and stderr bytes are pushed through a second port, waiting
+while the TX FIFO is full, and the stdin side pops `CON` words and drops
+the other channels.
 
 ### PWM (`0x200`)
 
@@ -219,7 +240,7 @@ kick the reset comes `WDT_LOAD` ticks after the start; a start with
 | `0x604` | `SYS_STRAP` | Read-only. The boot straps, sampled at reset from `strap_i`. Bit 0: the tick comes from `timer_step` (the testbench), so `_boot` leaves `TIMER_PRESC` at 0. Bits 2:1: console (0 sim console, 1 UART, 2 USB CDC). Bit 3: run the REPL after `__main__` |
 | `0x608` | `SYS_RESET_CAUSE` | Read-only. `PWRON_RESET` 1, `HARD_RESET` 2, `WDT_RESET` 3, `SOFT_RESET` 5 (the `machine` constants) |
 | `0x60C` | `SYS_RESET` | Writing `0x0B007ED0 | k` resets the system: `k` 0 hard (`machine.reset()`), 1 soft (`machine.soft_reset()`). Other values are ignored |
-| `0x618` | `SYS_CONSOLE` | Bits 1:0, where the console goes: 0 the sim console, 1 the UART, 2 USB CDC (the coprocessor; until it exists, 2 reads back but output stays on the sim console). Reset 0. `_boot` writes strap bits 2:1 here. See Console |
+| `0x618` | `SYS_CONSOLE` | Bits 1:0, where the console goes: 0 the sim console, 1 the UART, 2 USB CDC through the coprocessor mailbox. Reset 0. `_boot` writes strap bits 2:1 here. See Console |
 | `0x61C` | `SYS_KEEP` | A word the firmware keeps across a system reset; only power-on clears it. Bit 0: come back in the raw REPL (see REPL) |
 | `0x610`, `0x614` | `SYS_UID0`, `SYS_UID1` | Read-only. The 64-bit unique id, the `SYS_UID` parameter, low word first. `machine.unique_id()` returns the 8 bytes, most significant first |
 
@@ -273,9 +294,13 @@ console, `_boot` arms Ctrl-C (`micropython.kbd_intr(3)`) before
 to drain, so the last line is not lost. `kbd_intr` still arms the UART
 character on the sim console when a program asks for it.
 
-`sys.stdin` reads the console: with 1, bytes from the UART RX FIFO,
-waiting in `machine.idle` while it is empty; with 0 there is no input and
-a read returns `''` (end of file). `input(prompt)` writes the prompt,
+With 2, each byte is a `CON` word into the mailbox (Mailbox), and the
+coprocessor writes it to the USB CDC port; Ctrl-C is armed the same way,
+by a `KBD` control word to the coprocessor.
+
+`sys.stdin` reads the console: with 1, bytes from the UART RX FIFO, with
+2 `CON` words from the mailbox, waiting in `machine.idle` while there is
+none; with 0 there is no input and a read returns `''` (end of file). `input(prompt)` writes the prompt,
 then reads to a carriage return or newline and echoes what it reads
 (backspace, 8 or 127, drops a character); at the end of input it raises
 `EOFError`. `print(file=f)` takes only these stream objects; any other
@@ -284,7 +309,9 @@ object raises `OSError`, as in v1.29.0.
 
 The testbench takes `+CONSOLE=uart` (strap bits 2:1 = 1) and then writes
 the UART's TX bytes, not the sim console's, to the stdout file, so a test
-on the UART console compares stdout like any other.
+on the UART console compares stdout like any other. `+CONSOLE=usb`
+(strap 2) does the same with the bytes its USB host model reads from the
+CDC port.
 
 ## REPL
 

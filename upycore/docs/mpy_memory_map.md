@@ -114,7 +114,7 @@ Word 1 is the type pointer, or 0. Fields start at word 2. Heap words are
 | --- | --- | ---: | --- |
 | Flash | `0x0000_0000` | 512 KB | Linked image. First 8 bytes reserved |
 | SRAM | `0x2000_0000` | 256 KB | Frame reserve, schedule ring, handler table, system roots, argument buffer, GC pool |
-| MMIO | `0x4000_0000` | 4 KB | UART, GPIO, timers, IRQ, and the blocks in `mpy_peripherals.md` |
+| MMIO | `0x4000_0000` | 8 KB | UART, GPIO, timers, IRQ, and the blocks in `mpy_peripherals.md` in the first 4 KB; the shared SRAM with the coprocessor (`mpy_coproc.md`) in the second |
 | Sim control | `0xE000_0000` | 256 B | Halt reason, cycle counter. Simulation only |
 
 An address outside these windows is a bus fault. `0x00F4_0000` is outside
@@ -206,7 +206,7 @@ The blocks past the base registers, one 256-byte range each:
 
 | Range | Block | RTL |
 | --- | --- | --- |
-| `0x100` | Mailbox | not built yet |
+| `0x100` | Mailbox | `mpy_mbox.sv` |
 | `0x200` | PWM | `mpy_pwm.sv` |
 | `0x300` | SPI controller | `mpy_spi.sv` |
 | `0x400` | I2C controller | `mpy_i2c.sv` |
@@ -215,6 +215,11 @@ The blocks past the base registers, one 256-byte range each:
 | `0x700` | TIMER1..3 | not built |
 | `0x800` | ADC | `mpy_adc.sv` |
 | `0x900` | Pin mux | `mpy_pinmux.sv` |
+
+`0x1000`–`0x1FFF` is the shared SRAM, 1024 untagged words that the
+coprocessor also reads and writes. It is not SRAM in this map's sense:
+the collector's pool and its root spans are all below it, so nothing
+there is scanned.
 
 A system reset (`SYS_RESET`, or the watchdog) zeroes all of SRAM and its
 tags before the hart boots again, so SRAM reads zero at every boot, as it

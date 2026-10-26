@@ -313,6 +313,9 @@ NATIVES = [
     "_irq_done",     # _irq_done(): pulse done for the running callback
     "_idle",         # _idle(): wait for a wake, taking hard callbacks only (machine.idle)
     "_pending",      # _pending(): one soft point: KeyboardInterrupt or one queued callback
+    "_mbox_send",    # _mbox_send(w): push w to the coprocessor if MBOX_TX has room -> bool
+    "_mbox_recv",    # _mbox_recv(): pop a word from the coprocessor -> int, or None when empty
+    "_mbox_avail",   # _mbox_avail(): the MBOX RX level
 ]
 NATIVE_ID = {name: i for i, name in enumerate(NATIVES)}
 
@@ -571,6 +574,8 @@ MMIO = {
     "SPI_CTRL": 0x300, "SPI_DATA": 0x304, "SPI_STATUS": 0x308,
     "I2C_DIV": 0x400, "I2C_CMD": 0x404, "I2C_STATUS": 0x408, "I2C_TIMEOUT": 0x40C,
     "I2C_CTRL": 0x410,
+    "MBOX_TX": 0x100, "MBOX_RX": 0x104, "MBOX_STATUS": 0x108,
+    "SHARED": 0x1000,
 }
 IRQ_SRC = {"TIMER": 0, "UART": 1, "GPIO": 2, "SOFT": 3, "GC_REQ": 4, "SIM": 5, "KBD": 6, "MBOX": 7}
 

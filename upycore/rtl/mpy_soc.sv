@@ -16,8 +16,12 @@
 // else goes to mpy_mem.
 //
 // SYS_CONSOLE (mpy_sys) picks where SIM_STDOUT and SIM_STDERR bytes go: the
-// console port, or with 1 the UART TX FIFO, the store answered once the
-// FIFO takes the byte.
+// console port, or with 1 the UART TX FIFO, or with 2 the coprocessor
+// mailbox as CON words, the store answered once the FIFO takes the byte.
+//
+// The coprocessor (coproc_top) runs on cclk_i and reaches the hart through
+// mpy_mbox (MMIO 0x100) and mpy_shared_ram (the window's second 4 KB, word
+// access only). Its reset is power-on only (upycore/docs/mpy_coproc.md).
 //
 // mpy_sys is the reset controller. A system reset (SYS_RESET, or the
 // watchdog) holds every other block on sys_rst_n while mpy_mem zeroes SRAM,
@@ -73,7 +77,14 @@ module mpy_soc #(
     // Pads after the pin mux (upycore/docs/mpy_peripherals.md, Pin mux)
     output logic [15:0] pad_out_o,
     output logic [15:0] pad_oe_o,
-    input  logic [15:0] pad_in_i
+    input  logic [15:0] pad_in_i,
+
+    // The USB coprocessor (upycore/docs/mpy_coproc.md): its 48 MHz clock
+    // and the USB pads.
+    input  logic        cclk_i,
+    inout  wire         usb_dp_io,
+    inout  wire         usb_dn_io,
+    output logic        usb_pu_o
 );
     // core <-> port
     logic        c_req, c_we, c_tag_we;
@@ -198,8 +209,11 @@ module mpy_soc #(
     logic        p_partial;
 
     // Every block past the base registers sees the same request; each one
-    // decodes its own range and reads 0 elsewhere.
+    // decodes its own range and reads 0 elsewhere. The second 4 KB of the
+    // window is the shared SRAM, not a register.
     logic        blk_req;
+    logic        c_shared, sh_fault, sh_q;
+    logic [31:0] sh_a_rdata;
     logic [31:0] pwm_rdata, mux_rdata, spi_rdata, i2c_rdata;
     logic [3:0]  pwm;
     logic        uart_txd, uart_rxd;
@@ -214,10 +228,10 @@ module mpy_soc #(
         .rdata_o(p_rdata), .ack_o(p_ack), .fault_o(p_fault),
         .timer_step_i, .uart_rx_stb_i, .uart_rx_byte_i,
         .uart_tx_stb_o, .uart_tx_byte_o, .uart_rxd_i(uart_rxd), .uart_txd_o(uart_txd),
-        .con_stb_i(con_stb), .con_byte_i(con_byte_r), .con_ready_o(con_ready),
+        .con_stb_i(con_stb && console == 2'd1), .con_byte_i(con_byte_r), .con_ready_o(con_ready),
         .gpio_out_o, .gpio_oe_o, .gpio_pu_o, .gpio_pd_o, .gpio_in_i, .gpio_in_en_i,
         .soft_set_i(1'b0), .gc_req_i(1'b0), .sim_set_i(sim_irq_i),
-        .kbd_set_i(1'b0), .mbox_set_i(1'b0),
+        .kbd_set_i(mb_kbd_set), .mbox_set_i(mb_set),
         .bc_boundary_i(i_bnd), .jump_i(i_jmp), .done_i(i_done), .wake_o(i_wake), .tick_o(tick),
         .fire_o(i_fire), .fire_hard_o(i_fire_hard), .fire_sched_o(), .fire_src_o(i_fire_src),
         .fire_fn_o(i_fire_fn), .fire_arg_o(i_fire_arg),
@@ -289,18 +303,67 @@ module mpy_soc #(
         .pad_out_o, .pad_oe_o, .pad_in_i
     );
 
+    // ---- the coprocessor, its mailbox, and the shared SRAM ----
+    logic        crst_n;
+    logic [1:0]  csync = 2'b11;     // starts high: CVE2 resets on the falling edge
+    logic        mb_set, mb_kbd_set, mb_con_ready;
+    logic [31:0] mbox_rdata;
+    logic        cm_pop, cm_empty, cm_push, cm_full, cm_kbd;
+    logic [31:0] cm_data, cm_wdata;
+    logic [4:0]  cm_level, cm_wlevel;
+    logic        cs_en;
+    logic [3:0]  cs_be;
+    logic [9:0]  cs_addr;
+    logic [31:0] cs_wdata, cs_rdata;
+
+    always_ff @(posedge cclk_i or negedge rst_n_i)
+        if (!rst_n_i) csync <= 2'b00; else csync <= {csync[0], 1'b1};
+    assign crst_n = csync[1];
+
+    mpy_mbox u_mbox (
+        .clk_i, .rst_n_i(sys_rst_n), .por_n_i(rst_n_i),
+        .req_i(blk_req), .we_i(c_we), .off_i(c_addr[11:0]), .wdata_i(c_wdata),
+        .rdata_o(mbox_rdata),
+        .con_stb_i(con_stb && console == 2'd2), .con_byte_i(con_byte_r), .con_ready_o(mb_con_ready),
+        .mbox_set_o(mb_set), .kbd_set_o(mb_kbd_set),
+        .cclk_i, .crst_n_i(crst_n),
+        .c_pop_i(cm_pop), .c_data_o(cm_data), .c_empty_o(cm_empty), .c_level_o(cm_level),
+        .c_push_i(cm_push), .c_wdata_i(cm_wdata), .c_full_o(cm_full), .c_wlevel_o(cm_wlevel),
+        .c_kbd_toggle_i(cm_kbd)
+    );
+
+    mpy_shared_ram u_shared (
+        .a_clk(clk_i), .a_en(c_req && c_shared && !g_busy && !sh_fault), .a_we(c_we),
+        .a_addr(c_addr[11:2]), .a_wdata(c_wdata), .a_rdata(sh_a_rdata),
+        .b_clk(cclk_i), .b_en(cs_en), .b_be(cs_be), .b_addr(cs_addr), .b_wdata(cs_wdata),
+        .b_rdata(cs_rdata)
+    );
+
+    coproc_top u_coproc (
+        .cclk_i, .rst_n_i(crst_n),
+        .mb_pop_o(cm_pop), .mb_data_i(cm_data), .mb_empty_i(cm_empty), .mb_level_i(cm_level),
+        .mb_push_o(cm_push), .mb_wdata_o(cm_wdata), .mb_full_i(cm_full), .mb_wlevel_i(cm_wlevel),
+        .mb_kbd_toggle_o(cm_kbd),
+        .sh_en_o(cs_en), .sh_be_o(cs_be), .sh_addr_o(cs_addr), .sh_wdata_o(cs_wdata),
+        .sh_rdata_i(cs_rdata),
+        .usb_dp_io, .usb_dn_io, .usb_pu_o
+    );
+
     // A partial-word store would write a replicated byte; it faults instead.
     assign p_partial = c_we && (c_be != 4'hF);
-    assign p_req = c_req && c_mmio && !p_partial && !g_busy;
+    assign c_shared = c_mmio && c_addr[12];
+    assign sh_fault = p_partial || (c_addr[1:0] != 2'b00);
+    assign p_req = c_req && c_mmio && !c_shared && !p_partial && !g_busy;
 
     always_ff @(posedge clk_i or negedge sys_rst_n) begin
         if (!sys_rst_n) begin
-            mmio_ack <= 1'b0; mmio_fault <= 1'b0; mmio_rdata <= 32'd0;
+            mmio_ack <= 1'b0; mmio_fault <= 1'b0; mmio_rdata <= 32'd0; sh_q <= 1'b0;
         end else begin
             mmio_ack <= c_req && c_mmio && !g_busy;
-            mmio_fault <= c_req && c_mmio && !g_busy && (p_partial || p_fault);
+            mmio_fault <= c_req && c_mmio && !g_busy && (c_shared ? sh_fault : (p_partial || p_fault));
+            sh_q <= c_shared;
             mmio_rdata <= p_rdata | sys_rdata | wdt_rdata | adc_rdata | pwm_rdata | mux_rdata | spi_rdata
-                | i2c_rdata;
+                | i2c_rdata | mbox_rdata;
         end
     end
 
@@ -314,7 +377,7 @@ module mpy_soc #(
     // con_byte_r until the TX FIFO takes it; the store is answered then.
     assign sim_out = c_req && c_sim && c_we && (((c_addr - ABI_SIM_BASE) >> 2) == 32'(ABI_SIM_STDOUT));
     assign sim_err = c_req && c_sim && c_we && (((c_addr - ABI_SIM_BASE) >> 2) == 32'(ABI_SIM_STDERR));
-    assign con_stb = con_pend_r && con_ready;
+    assign con_stb = con_pend_r && ((console == 2'd2) ? mb_con_ready : con_ready);
 
     always_ff @(posedge clk_i or negedge sys_rst_n) begin
         if (!sys_rst_n) begin
@@ -330,7 +393,7 @@ module mpy_soc #(
                 sim_ack <= 1'b1;
                 sim_rdata <= 32'd0;
             end
-            if ((sim_out || sim_err) && console == 2'd1) begin
+            if ((sim_out || sim_err) && (console == 2'd1 || console == 2'd2)) begin
                 con_pend_r <= 1'b1;
                 con_byte_r <= c_wdata[7:0];
             end else if (c_req && c_sim) begin
@@ -364,7 +427,7 @@ module mpy_soc #(
     assign gm_rdata = m_rdata;
     assign gm_rtag = m_rtag;
     assign c_ack = (!g_busy && m_ack) || sim_ack || mmio_ack;
-    assign c_rdata = sim_ack ? sim_rdata : mmio_ack ? mmio_rdata : m_rdata;
+    assign c_rdata = sim_ack ? sim_rdata : mmio_ack ? (sh_q ? sh_a_rdata : mmio_rdata) : m_rdata;
     assign c_rtag = (sim_ack || mmio_ack) ? 4'd0 : m_rtag;
     assign c_fault = mmio_ack ? mmio_fault : (!sim_ack && m_fault);
     assign c_fault_reason = mmio_ack ? MPY_FAULT_UNALIGNED : m_fault_reason;
