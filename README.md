@@ -12,8 +12,11 @@ The unix oracle is MicroPython v1.29.0 built as the `upycore` variant
 
 ## Run a program
 
-Requires Python 3 and Verilator 5.032 or newer. `make test` builds `mpy-cross`
-from `vendor/micropython` when the binary is missing.
+Requires Python 3, Verilator 5.032 or newer, and the RV32EMC toolchain for
+the USB coprocessor's firmware (`gcc-riscv64-unknown-elf` and
+`picolibc-riscv64-unknown-elf`; `coproc/sw/TOOLCHAIN.md`). `make test` builds
+`mpy-cross` from `vendor/micropython` when the binary is missing, and the
+coprocessor firmware when a test or bench needs it.
 
 ```bash
 make test
@@ -43,6 +46,16 @@ the suite so the marker is removed with the fix. The `compiler` area calls
 Those programs take minutes each; `make test-hw-compiler` runs that area
 on its own. The `generators` area is the runtime suite. Host uPy2 matches
 `mpy-cross` on those programs, so they are in the byte compare too.
+
+The SoC areas run on the peripheral window and their goldens are written
+by hand: `core` (MMIO steering and faults, the heap lock, the mailbox
+natives), `irq` (callbacks, the schedule ring, Ctrl-C, timers and pins),
+`io` (UART, GPIO, PWM, SPI, I2C, ADC), `system` (watchdog, system reset,
+the UART console, the REPL), `coproc` (the RV32EMC USB coprocessor and its
+mailbox), and `usb` (a full-speed host model on the bench enumerates the
+coprocessor's CDC function and drives the console over it). The registers
+are `upycore/docs/mpy_peripherals.md`; the coprocessor is
+`upycore/docs/mpy_coproc.md`.
 
 ```bash
 python3 upycore/tools/hw_tests.py --list
@@ -78,6 +91,7 @@ backend flow.
 | `upycore/firmware` | Device firmware, MicroPython source joined into one `.mpy` |
 | `upycore/tools` | Image linker, ABI tables, and `mpy_build.py` |
 | `upycore/programs` | Example programs |
+| `coproc` | The USB coprocessor: `coproc_top.sv` (CVE2, SRAMs, mailbox side, no2usb SIE) and its TinyUSB firmware in `coproc/sw` |
 | `upycore/targets/upycore.json` | Pinned bytecode catalog |
 | `variants/upycore` | 32-bit unix oracle |
 | `vendor/micropython` | MicroPython v1.29.0 pin |

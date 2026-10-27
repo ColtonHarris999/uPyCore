@@ -58,7 +58,27 @@ TOPS: dict[str, list[str]] = {
     "mpy_soc": ALU_FILES
     + ["mpy_decode.sv", "mpy_core.sv", "mpy_gc.sv", "mpy_mem.sv", "mpy_mmio_pkg.sv",
        "mpy_irq.sv", "mpy_periph.sv", "mpy_sys.sv", "mpy_pwm.sv", "mpy_pinmux.sv",
-       "mpy_spi.sv", "mpy_i2c.sv", "mpy_wdt.sv", "mpy_adc.sv", "mpy_soc.sv"],
+       "mpy_spi.sv", "mpy_i2c.sv", "mpy_wdt.sv", "mpy_adc.sv", "mpy_soc.sv"]
+    # The USB coprocessor (upycore/docs/mpy_coproc.md), paths from RTL.
+    + [os.path.relpath(ROOT / p, RTL) for p in (
+        ["vendor/cve2/vendor/lowrisc_ip/ip/prim/rtl/prim_ram_1p_pkg.sv"]
+        + [f"vendor/cve2/rtl/{n}.sv" for n in (
+            "cve2_pkg", "cve2_alu", "cve2_compressed_decoder", "cve2_controller",
+            "cve2_cs_registers", "cve2_csr", "cve2_counter", "cve2_decoder", "cve2_ex_block",
+            "cve2_fetch_fifo", "cve2_id_stage", "cve2_if_stage", "cve2_load_store_unit",
+            "cve2_multdiv_fast", "cve2_multdiv_slow", "cve2_prefetch_buffer", "cve2_pmp",
+            "cve2_register_file_ff", "cve2_wb", "cve2_core", "cve2_clock_gate", "cve2_top")]
+        + ["upycore/rtl/mpy_async_fifo.sv", "upycore/rtl/mpy_shared_ram.sv",
+           "upycore/rtl/mpy_mbox.sv", "coproc/rtl/coproc_top.sv", "coproc/rtl/ice40_sim.sv"]
+        + [f"vendor/no2usb/rtl/{n}.v" for n in (
+            "usb", "usb_crc", "usb_ep_buf", "usb_ep_status", "usb_phy", "usb_rx_ll",
+            "usb_rx_pkt", "usb_trans", "usb_tx_ll", "usb_tx_pkt")])],
+}
+
+# Include directories a top needs past upycore/rtl.
+INCDIRS: dict[str, list[str]] = {
+    "mpy_soc": ["vendor/cve2/rtl", "vendor/cve2/vendor/lowrisc_ip/ip/prim/rtl",
+                "vendor/cve2/vendor/lowrisc_ip/dv/sv/dv_utils", "vendor/no2usb/rtl"],
 }
 
 # Gate mapping of full-size flash/SRAM/GC tables is a long memory job.
@@ -100,6 +120,7 @@ def _write_script(
 ) -> Path:
     sources = _files(top)
     ys = out_dir / f"{top}.ys"
+    slang_extra = [f"-I {(ROOT / d).as_posix()}" for d in INCDIRS.get(top, [])] + list(slang_extra)
     extra = (" " + " ".join(slang_extra)) if slang_extra else ""
     lines = [
         "plugin -i slang",
