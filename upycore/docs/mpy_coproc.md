@@ -141,4 +141,45 @@ with `STATE`.
 
 The build (`make -C coproc/sw/fw`) writes `build/coproc/fw/coproc.hex`,
 one 32-bit word a line for `$readmemh`, and checks the sizes against the
-16 KB and 8 KB SRAMs at link time.
+16 KB and 8 KB SRAMs at link time: about 10 KB of code and 1.8 KB of data.
+
+Console bytes from the hart go straight into TinyUSB's CDC IN FIFO, up to
+64 mailbox words a pass of the loop; one waits only while that FIFO is
+full. The no2usb driver (`coproc/sw/dcd`) is the upstream one ported to
+the pinned TinyUSB; it also reports bus suspend and resume, from the
+core's `BUS_SUSPEND` bit, which upstream leaves to the application.
+
+## Host model and tests
+
+`upycore/tb/tb_usb_host.sv` is a full-speed host on the bench's D+ and D-
+(the device's pull-up, the host's pull-downs, and the two drivers are
+resolved as tristates). It waits for the pull-up, resets the bus for
+10 ms (no2usb counts 10 ms of SE0), sends SOF every 1 ms, and enumerates
+the device like a CDC ACM host: the device descriptor, `SET_ADDRESS`,
+the configuration descriptor, `SET_CONFIGURATION`, `SET_LINE_CODING`,
+and `SET_CONTROL_LINE_STATE`. It then runs a script of console input,
+waits on output, suspends, and loopbacks (the file's header lists the
+commands). Every packet starts at least four bit times after the bus
+last went idle; a SOF sent on the heels of the device's EOP is lost,
+three lost in a row suspend the device, and output is dropped while it
+is suspended.
+
+The `coproc` area runs the firmware against the hart with no host; the
+`usb` area adds the host, with the console on USB (`+CONSOLE=usb`):
+
+| Test | What it shows |
+| --- | --- |
+| `usb_repl_raw` | Enumeration, then the raw REPL entered as mpremote does (CR, Ctrl-C twice, Ctrl-A) and `print(1+1)` answered `OK2\n\x04\x04>` |
+| `usb_ctrl_c` | The armed Ctrl-C byte rings `KBD` and a running loop ends in `KeyboardInterrupt` |
+| `usb_loopback` | 4 KB from the host through bulk OUT, the mailbox, `sys.stdin`, `sys.stdout`, and bulk IN back, every byte checked |
+| `usb_suspend` | 5 ms without SOF: the SIE reports one suspend, TinyUSB's callbacks run, and the console works after resume |
+
+Measured on the bench (hart clock 100 MHz in simulated time, `cclk`
+48 MHz): enumeration completes 15.6 ms after power-up, 10.5 ms of it the
+bus reset. The 4 KB loopback takes 219 ms, 18.7 kB/s each way. The hart
+is the limit, at about 5,700 cycles a byte for the Python `read`/`write`
+loop; the USB side moves a 64-byte packet in well under 0.1 ms.
+
+`MPY_IO`'s `usb=` field is configured, bytes sent, bytes read, the host's
+suspends, and the suspends the device's SIE detected after enumeration.
+

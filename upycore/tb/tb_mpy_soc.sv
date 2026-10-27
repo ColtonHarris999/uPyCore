@@ -17,6 +17,12 @@
 //                                           in: a trace pass (`MPY_TICKS`), not a halt
 //   +CONSOLE=uart                           strap bits 2:1 = 1: the console is the UART,
 //                                           and its TX bytes go to the stdout file
+//   +CONSOLE=usb                            strap bits 2:1 = 2: the console is USB CDC
+//                                           through the coprocessor, and what the host
+//                                           model reads goes to the stdout file
+//   +USB_SCRIPT=<file>                      attach the USB host model and run its
+//                                           script (tb_usb_host.sv); the run ends when
+//                                           the script does, with `MPY_DONE`
 //   +REPL=1                                 strap bit 3: run the REPL after __main__
 //   +STRAP=<hex>                            boot straps (SYS_STRAP); default 1, the
 //                                           testbench drives the tick
@@ -43,8 +49,11 @@
 // edges=<n> gmask=<hex> ticks=<n> tx=<hex bytes>`. gmask bit k-1 is set when
 // GPIO_OUT changed while the tick count was k.
 //
-// The last line is `MPY_HALT code=<n> value=<hex> cycles=<n> ops=<n> gc=<n>`
-// or `MPY_TIMEOUT cycles=<n> ...` (upycore/tools/mpy_build.py parses it).
+// The last line is `MPY_HALT code=<n> value=<hex> cycles=<n> ops=<n> gc=<n>`,
+// `MPY_DONE cycles=<n> ...` when a USB script finished, or `MPY_TIMEOUT
+// cycles=<n> ...` (upycore/tools/mpy_build.py parses it). The `usb=` field
+// of `MPY_IO` is configured:bytes sent:bytes read:suspends the host made:
+// suspends the device's SIE detected after enumeration.
 module tb_mpy_soc;
     logic clk = 1'b0;
     logic rst_n = 1'b0;
@@ -73,6 +82,7 @@ module tb_mpy_soc;
     logic [7:0]  strap;
     int          fd_out, fd_err;
     bit          con_uart = 1'b0;
+    bit          con_usb = 1'b0;
     logic        core_idle;
     logic [15:0] pad_out, pad_oe, pad_in;
     logic        cclk = 1'b0;
@@ -116,6 +126,26 @@ module tb_mpy_soc;
     // when it switches it on. A driver (the device, or the host model) wins.
     assign (weak0, weak1) usb_dp = usb_pu ? 1'b1 : 1'b0;
     assign (weak0, weak1) usb_dn = 1'b0;
+
+    // The USB host (+USB_SCRIPT). With +CONSOLE=usb what it reads from the
+    // CDC port is the stdout file; a finished script ends the run (MPY_DONE).
+    tb_usb_host u_host (.dp(usb_dp), .dn(usb_dn));
+    int usb_seen = 0;
+    // Suspends the device's SIE saw (no2usb's 3 ms without SOF).
+    int usb_dev_suspends = 0;
+    logic usb_susp_q = 1'b0;
+    always @(posedge cclk) begin
+        if (u_soc.u_coproc.u_usb.usb_suspend && !usb_susp_q && u_host.configured) begin
+            usb_dev_suspends++;
+            if (usb_debug) $display("USB_DEV t=%0t suspend", $time);
+        end
+        usb_susp_q <= u_soc.u_coproc.u_usb.usb_suspend;
+    end
+    bit usb_debug;
+    initial usb_debug = $test$plusargs("USB_DEBUG");
+    always @(posedge clk)
+        if (usb_debug && u_soc.con_stb)
+            $display("HART_CON t=%0t byte=%02x console=%0d", $time, u_soc.con_byte_r, u_soc.console);
 
     // The ADC's converter (mpy_periph_model.adc_code).
     tb_adc_model u_adc (.clk(clk), .start(adc_start), .chan(adc_chan), .done(adc_done), .code(adc_code));
@@ -199,6 +229,10 @@ module tb_mpy_soc;
         if ($value$plusargs("CONSOLE=%s", text) && text == "uart") begin
             strap[2:1] = 2'd1;
             con_uart = 1'b1;
+        end
+        if ($value$plusargs("CONSOLE=%s", text) && text == "usb") begin
+            strap[2:1] = 2'd2;
+            con_usb = 1'b1;
         end
         if ($test$plusargs("REPL")) strap[3] = 1'b1;
         ticks_n = 0;
@@ -296,9 +330,10 @@ module tb_mpy_soc;
         for (int i = 0; i < 16; i++)
             if (pw_n[i] >= 3)
                 pws = {pws, (pws.len() > 0) ? "," : "", $sformatf("%0d:%0d:%0d", i, pw_high[i], pw_per[i])};
-        $display("MPY_IO gpio_out=%08x gpio_oe=%08x edges=%0d gmask=%08x ticks=%0d tx=%s pw=%s",
+        $display("MPY_IO gpio_out=%08x gpio_oe=%08x edges=%0d gmask=%08x ticks=%0d tx=%s pw=%s usb=%0d:%0d:%0d:%0d:%0d",
                  gpio_out, gpio_oe, gpio_edges, gmask,
-                 (max_ticks > 0 && ticks_n > max_ticks) ? max_ticks : ticks_n, txs, pws);
+                 (max_ticks > 0 && ticks_n > max_ticks) ? max_ticks : ticks_n, txs, pws,
+                 u_host.configured, u_host.tx_total, u_host.rx_n, u_host.suspends, usb_dev_suspends);
     endtask
 
     longint max_cycles;
@@ -329,22 +364,35 @@ module tb_mpy_soc;
         end
         if (rst_n && do_trace && trace)
             $display("TRACE pc=%08x op=%02x sp=%0d c=%0d", trace_pc, trace_op, trace_sp, cyc_n);
+        if (con_usb)
+            while (usb_seen < u_host.rx_n) begin
+                if (fd_out != 0) $fwrite(fd_out, "%c", u_host.rxmem[usb_seen % 65536]);
+                else $write("%c", u_host.rxmem[usb_seen % 65536]);
+                usb_seen++;
+            end
     end
 
     initial begin
         n = 0;
         @(posedge rst_n);
-        while (!halted && n < max_cycles && !(max_ticks > 0 && ticks_n > max_ticks)) begin
+        while (!halted && n < max_cycles && !(max_ticks > 0 && ticks_n > max_ticks) &&
+               !(u_host.active && (u_host.done || u_host.failed))) begin
             @(posedge clk);
             n++;
         end
         // let the last console byte land
         repeat (4) @(posedge clk);
+        if (u_host.failed) begin
+            $display("MPY_USB_FAIL %s", u_host.fail_msg);
+            if (fd_err != 0) $fwrite(fd_err, "USB host: %s\n", u_host.fail_msg);
+        end
         if (fd_out != 0) $fclose(fd_out);
         if (fd_err != 0) $fclose(fd_err);
         io_summary();
         if (!halted && max_ticks > 0 && ticks_n > max_ticks)
             $display("MPY_TICKS ticks=%0d cycles=%0d ops=%0d gc=%0d", max_ticks, cycles, ops, gc_coll);
+        else if (!halted && u_host.active && u_host.done && !u_host.failed)
+            $display("MPY_DONE cycles=%0d ops=%0d gc=%0d", cycles, ops, gc_coll);
         else if (halted)
             $display("MPY_HALT code=%0d value=%08x cycles=%0d ops=%0d gc=%0d free=%0d",
                      halt_code, halt_value, cycles, ops, gc_coll, gc_free);

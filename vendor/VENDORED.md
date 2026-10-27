@@ -26,7 +26,7 @@ without asking first.
 | Commit | `48e3f00ae3abf808285275402cb8fe486cfb76e4` (2026-03-01) |
 | Licence | HDL: CERN-OHL-P-2.0 (permissive). TinyUSB driver: MIT. Its own USB stack (`fw/v0`): LGPL-3.0, **not used** |
 | Used by | `coproc` USB SIE (phase 4); `coproc/sw/dcd` driver |
-| Local changes | The submodule is unmodified. `coproc/sw/dcd/dcd_no2usb.c` and `dcd_no2usb_hw.h` are copies of `fw/tinyusb`, ported to the pinned TinyUSB: `dcd_init` takes the rhport init struct and returns `bool`; `dcd_edpt_xfer` takes `is_isr`; the endpoint size comes from `tu_edpt_packet_size`; `dcd_sof_enable` and `dcd_edpt_close_all` are added. Each change is marked `upycore port` |
+| Local changes | The submodule is unmodified. `coproc/sw/dcd/dcd_no2usb.c` and `dcd_no2usb_hw.h` are copies of `fw/tinyusb`, ported to the pinned TinyUSB: `dcd_init` takes the rhport init struct and returns `bool`; `dcd_edpt_xfer` takes `is_isr`; the endpoint size comes from `tu_edpt_packet_size`; `dcd_sof_enable` and `dcd_edpt_close_all` are added; `dcd_int_handler` reports bus suspend and resume from `CSR_BUS_SUSPEND`, which the upstream driver ignores. Each change is marked `upycore port` |
 
 ## CVE2
 

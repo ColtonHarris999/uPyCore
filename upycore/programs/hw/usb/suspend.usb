@@ -1,0 +1,6 @@
+text one\n
+wait got one\n
+suspend 5
+text two\n
+wait got two\n
+finish

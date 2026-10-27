@@ -555,6 +555,18 @@ dcd_int_handler(uint8_t rhport)
 		_usb_bus_reset();
 	}
 
+	/* upycore port: report bus suspend and resume. The core holds
+	 * BUS_SUSPEND after 3 ms without SOF and drops it on the next SOF or
+	 * reset; the upstream driver never tells the stack. */
+	{
+		static bool suspended;
+		bool now = (csr & NO2USB_CSR_BUS_SUSPEND) != 0;
+		if (now != suspended) {
+			suspended = now;
+			dcd_event_bus_signal(0, now ? DCD_EVENT_SUSPEND : DCD_EVENT_RESUME, true);
+		}
+	}
+
 	/* Handle SoF */
 #ifdef NO2USB_WITH_SOF
 	if (csr & NO2USB_CSR_SOF_PENDING) {

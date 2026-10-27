@@ -28,7 +28,8 @@ ORACLE := build/oracle/src/ports/unix/build-upycore/micropython
 # area calls compile/exec/eval on the hart. `test-compiler` is the host
 # uPy2 byte compare plus the whole suite compiled with uPy2.
 HW_AREAS := smoke alu control calls containers strings exceptions objects \
-	builtins modules integ variables memory gc generators io compiler
+	builtins modules integ variables memory gc generators core irq io system \
+	coproc usb compiler
 
 .PHONY: test test-benches sim fw run oracle oracle-header oracle-variant oracle-smoke mpy-cross \
 	docker-build docker-test test-hw test-host test-compiler regen-goldens check-goldens \

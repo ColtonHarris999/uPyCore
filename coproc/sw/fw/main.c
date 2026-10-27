@@ -38,10 +38,15 @@ static void hart_word(uint32_t w) {
     uint32_t p = MB_PAYLOAD(w);
     switch (MB_CH(w)) {
     case CH_CON:
-        // Output with no host is dropped, so the hart never blocks on it.
+        // Output with no host is dropped, so the hart never blocks on it. A
+        // byte waits only while the CDC IN FIFO is full.
         if (tud_mounted() && !suspended) {
-            con_out = (uint8_t)p;
-            con_out_pending = 1;
+            if (tud_cdc_write_available() > 0)
+                tud_cdc_write_char((char)p);
+            else {
+                con_out = (uint8_t)p;
+                con_out_pending = 1;
+            }
         }
         break;
     case CH_CTRL:
@@ -98,7 +103,7 @@ int main(void) {
             }
         }
         // Hart to coprocessor, a burst at a time.
-        for (int n = 0; n < 16 && !reply_pending && !con_out_pending &&
+        for (int n = 0; n < 64 && !reply_pending && !con_out_pending &&
                         (CMB->status & CMB_ST_RX_ANY); n++)
             hart_word(CMB->rx);
         if (tud_mounted() && tud_cdc_write_available() < CFG_TUD_CDC_TX_BUFSIZE)

@@ -1,0 +1,5 @@
+text go\n
+wait looping\n
+text \x03
+wait KeyboardInterrupt over USB True\n
+finish

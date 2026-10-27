@@ -32,7 +32,11 @@ A test with ``mpyc = false`` is still booted from ``mpy-cross``.
 ``--compiler mpyc`` prints ``SKIP`` and does not build the image.
 ``compiler_suite.py`` leaves the file out of its compare.
 
-The ``io`` area drives the SoC's peripheral pins. ``plusargs`` are passed
+The ``core``, ``irq``, ``io``, ``system``, ``coproc``, and ``usb`` areas
+run on the SoC's peripheral window. ``coproc = true`` runs the USB
+coprocessor from its firmware image; ``usb_script`` attaches the bench's
+USB host and runs that script (``upycore/tb/tb_usb_host.sv``), ending
+with halt ``DONE``. ``plusargs`` are passed
 to ``tb_mpy_soc`` (``+TIMER_STEP=``, ``+UART_RX=``, ...). ``io`` names the
 ``MPY_IO`` fields the bench must report (``gpio_out``, ``gpio_oe``,
 ``edges``, ``tx``), and ``model`` names a function in
@@ -133,6 +137,9 @@ class Test:
     halt: str | None = None
     # Runs the USB coprocessor from its firmware image (+COPROC).
     coproc: bool = False
+    # A USB host script (tb_usb_host.sv), relative to upycore/programs; it
+    # attaches the host and implies coproc.
+    usb_script: str | None = None
 
     @property
     def source(self) -> Path:
@@ -334,7 +341,9 @@ def run_device(t: Test, compiler: str = "mpy-cross") -> Outcome:
     work = (ROOT / "build" / ("hw-mpyc" if compiler == "mpyc" else "hw")) / t.name
     try:
         image = build.build_program(t.source, work, t.source.name, _modules(t), compiler)
-        extra = tuple(build.coproc_plusargs()) if t.coproc else ()
+        extra = tuple(build.coproc_plusargs()) if (t.coproc or t.usb_script) else ()
+        if t.usb_script:
+            extra += (f"+USB_SCRIPT={PROGRAMS / t.usb_script}",)
         res = build.run_image(image, max_cycles=t.cycles, timeout=t.timeout, plusargs=t.plusargs + extra)
     except build.BuildError as exc:
         text = str(exc).strip().splitlines()

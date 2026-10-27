@@ -55,12 +55,13 @@ jobs:
   # Hardware tests, one job per area of upycore/programs/hw_tests.toml.
   # Each job verilates once, then runs the area from mpy-cross and from uPy2.
   # The compiler area calls compile/exec/eval on the hart, so that job is
-  # allowed a longer timeout. `make test-compiler` is the host uPy2 suite.
+  # allowed a longer timeout; so are system (the REPL compiles each line on
+  # the hart) and usb (the coprocessor and the USB host model run too). `make test-compiler` is the host uPy2 suite.
   hardware:
     name: ${{ matrix.area }}
     if: github.event.action != 'edited' || github.event.changes.base.ref.from
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ matrix.area == 'compiler' && 360 || 60 }}
+    timeout-minutes: ${{ matrix.area == 'compiler' && 360 || ((matrix.area == 'usb' || matrix.area == 'system') && 120 || 60) }}
     strategy:
       fail-fast: false
       matrix:
@@ -80,7 +81,12 @@ jobs:
           - memory
           - gc
           - generators
+          - core
+          - irq
           - io
+          - system
+          - coproc
+          - usb
           - compiler
     steps:
       - uses: actions/checkout@v4

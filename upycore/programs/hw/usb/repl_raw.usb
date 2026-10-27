@@ -1,0 +1,8 @@
+# mpremote's way in: interrupt, then the raw REPL
+text \r\x03\x03
+wait >>>\x20
+text \x01
+wait raw REPL; CTRL-B to exit\r\n>
+text print(1+1)\x04
+wait OK2\n\x04\x04>
+finish

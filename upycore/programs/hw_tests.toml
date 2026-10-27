@@ -539,43 +539,60 @@ gen_yield_from_range = { file = "hw/generators/gen_yield_from_range.py" }
 gen_genexp_collect = { file = "hw/generators/gen_genexp_collect.py" }
 gen_user_next = { file = "hw/generators/gen_user_next.py" }
 
-# The peripheral window on the SoC (planning/interrupts_io_plan.md). The unix
-# port's machine module is not this map, so these goldens are written by hand
-# and the IO summary is checked against mpy_periph_model.py.
+# The areas from here on run on the SoC with its peripheral window
+# (planning/interrupts_io_plan.md). The unix port's machine module is not this
+# map, so their goldens are written by hand (oracle = false) and the IO summary
+# is checked against mpy_periph_model.py.
+
+# The hart's own new paths: MMIO steering and faults, the heap lock, the
+# mailbox natives with no coprocessor attached.
+[core]
+mmio_bus = { file = "hw/core/mmio_bus.py", oracle = false, plusargs = ["+UART_RX=4142", "+UART_RX_AT=10", "+UART_RX_GAP=10"], io = { gpio_out = "ffffffff", edges = "2" } }
+mmio_fault = { file = "hw/core/mmio_fault.py", oracle = false, halt = "BUS" }
+heap_lock = { file = "hw/core/heap_lock.py" }
+mbox_natives = { file = "hw/core/mbox_natives.py", oracle = false }
+
+# Interrupts on the hart (upycore/docs/mpy_interrupts.md): the schedule ring,
+# hard and soft callbacks, Ctrl-C, timers and pins, allocation in a hard IRQ.
+[irq]
+sched_full = { file = "hw/irq/sched_full.py" }
+sched_uncaught = { file = "hw/irq/sched_uncaught.py", uncaught = true }
+sched_raise = { file = "hw/irq/sched_raise.py" }
+sched_root = { file = "hw/irq/sched_root.py", oracle = false }
+ctrl_c = { file = "hw/irq/ctrl_c.py", oracle = false, halt = "TIMEOUT", cycles = 1_000_000, plusargs = ["+UART_RX=0303", "+UART_RX_AT=200000", "+UART_RX_GAP=300000"] }
+ctrl_c_uncaught = { file = "hw/irq/ctrl_c_uncaught.py", oracle = false, uncaught = true, plusargs = ["+UART_RX=03", "+UART_RX_AT=200000"] }
+blink = { file = "hw/irq/blink.py", oracle = false, halt = "TICKS", cycles = 30_000_000, plusargs = ["+TIMER_STEP=400000", "+MAX_TICKS=20"], model = "blink" }
+blink_slow = { file = "hw/irq/blink.py", oracle = false, halt = "TICKS", cycles = 30_000_000, plusargs = ["+TIMER_STEP=600000", "+MAX_TICKS=20"], model = "blink" }
+blink_off = { file = "hw/irq/blink_off.py", oracle = false, halt = "TICKS", cycles = 30_000_000, plusargs = ["+TIMER_STEP=400000", "+MAX_TICKS=20"], model = "blink_off" }
+pins_two = { file = "hw/irq/pins_two.py", oracle = false, plusargs = ["+TIMER_STEP=20000", "+GPIO_IN=1@1000000,3@1500000,f@2500000"] }
+hard_alloc = { file = "hw/irq/hard_alloc.py", oracle = false, plusargs = ["+TIMER_STEP=30000"] }
+debounce = { file = "hw/irq/debounce.py", oracle = false, halt = "TICKS", plusargs = ["+TIMER_STEP=50000", "+MAX_TICKS=40", "+GPIO_IN=1@515000,0@515300,1@515600,0@515900,1@516200,0@615000,1@665000,0@670000,1@1015000,0@1015300,1@1015600,0@1015900,1@1016200,0@1115000,1@1515000,0@1515300,1@1515600,0@1515900,1@1516200,0@1615000"], model = "debounce" }
+
+# Peripheral I/O against the bench's pins and models: UART FIFOs and baud,
+# GPIO, PWM, SPI, I2C, ADC, ticks, and the UART during a collection.
 [io]
-mmio_bus = { file = "hw/io/mmio_bus.py", oracle = false, plusargs = ["+UART_RX=4142", "+UART_RX_AT=10", "+UART_RX_GAP=10"], io = { gpio_out = "ffffffff", edges = "2" } }
-mmio_fault = { file = "hw/io/mmio_fault.py", oracle = false, halt = "BUS" }
-sched_full = { file = "hw/io/sched_full.py" }
-sched_uncaught = { file = "hw/io/sched_uncaught.py", uncaught = true }
-sched_raise = { file = "hw/io/sched_raise.py" }
-heap_lock = { file = "hw/io/heap_lock.py" }
-sched_root = { file = "hw/io/sched_root.py", oracle = false }
-ctrl_c = { file = "hw/io/ctrl_c.py", oracle = false, halt = "TIMEOUT", cycles = 1_000_000, plusargs = ["+UART_RX=0303", "+UART_RX_AT=200000", "+UART_RX_GAP=300000"] }
-ctrl_c_uncaught = { file = "hw/io/ctrl_c_uncaught.py", oracle = false, uncaught = true, plusargs = ["+UART_RX=03", "+UART_RX_AT=200000"] }
-blink = { file = "hw/io/blink.py", oracle = false, halt = "TICKS", cycles = 30_000_000, plusargs = ["+TIMER_STEP=400000", "+MAX_TICKS=20"], model = "blink" }
-blink_slow = { file = "hw/io/blink.py", oracle = false, halt = "TICKS", cycles = 30_000_000, plusargs = ["+TIMER_STEP=600000", "+MAX_TICKS=20"], model = "blink" }
-blink_off = { file = "hw/io/blink_off.py", oracle = false, halt = "TICKS", cycles = 30_000_000, plusargs = ["+TIMER_STEP=400000", "+MAX_TICKS=20"], model = "blink_off" }
 echo_fifo = { file = "hw/io/echo_fifo.py", oracle = false, plusargs = ["+UART_RX=41424344", "+UART_RX_IDLE", "+UART_RX_AT=1000", "+UART_RX_GAP=2000"], model = "echo_fifo" }
 echo_overrun = { file = "hw/io/echo_overrun.py", oracle = false, plusargs = ["+UART_RX=4142434445464748494a4b4c4d4e4f50515253", "+UART_RX_IDLE", "+UART_RX_AT=1000", "+UART_RX_GAP=2000", "+TIMER_STEP=30000"], model = "echo_overrun" }
-pins_two = { file = "hw/io/pins_two.py", oracle = false, plusargs = ["+TIMER_STEP=20000", "+GPIO_IN=1@1000000,3@1500000,f@2500000"] }
 pin_oe = { file = "hw/io/pin_oe.py", oracle = false, io = { gpio_oe = "00000000" } }
-hard_alloc = { file = "hw/io/hard_alloc.py", oracle = false, plusargs = ["+TIMER_STEP=30000"] }
 sleep_ticks = { file = "hw/io/sleep_ticks.py", plusargs = ["+TIMER_STEP=20000"] }
-debounce = { file = "hw/io/debounce.py", oracle = false, halt = "TICKS", plusargs = ["+TIMER_STEP=50000", "+MAX_TICKS=40", "+GPIO_IN=1@515000,0@515300,1@515600,0@515900,1@516200,0@615000,1@665000,0@670000,1@1015000,0@1015300,1@1015600,0@1015900,1@1016200,0@1115000,1@1515000,0@1515300,1@1515600,0@1515900,1@1516200,0@1615000"], model = "debounce" }
 gc_burst_slow = { file = "hw/io/gc_burst_slow.py", oracle = false, cycles = 30_000_000, plusargs = ["+UART_RX=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f", "+UART_BAUD=1000", "+UART_RX_GAP=0", "+UART_RX_IDLE", "+TIMER_STEP=50000"] }
 gc_burst_fast = { file = "hw/io/gc_burst_fast.py", oracle = false, cycles = 30_000_000, plusargs = ["+UART_RX=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f", "+UART_BAUD=100", "+UART_RX_GAP=0", "+UART_RX_IDLE", "+TIMER_STEP=50000"] }
 pwm = { file = "hw/io/pwm.py", oracle = false, model = "pwm" }
 spi_flash = { file = "hw/io/spi_flash.py", oracle = false, plusargs = ["+SPI_DEV=flash"] }
 spi_loop = { file = "hw/io/spi_loop.py", oracle = false, plusargs = ["+SPI_DEV=loop"] }
 i2c = { file = "hw/io/i2c.py", oracle = false, plusargs = ["+I2C_DEV=1"] }
-wdt_missed = { file = "hw/io/wdt_missed.py", oracle = false, plusargs = ["+TIMER_STEP=20000"] }
-wdt_fed = { file = "hw/io/wdt_fed.py", oracle = false, plusargs = ["+TIMER_STEP=20000"] }
-reset_chain = { file = "hw/io/reset_chain.py", oracle = false }
 adc = { file = "hw/io/adc.py", oracle = false }
-console_uart = { file = "hw/io/console_uart.py", oracle = false, plusargs = ["+CONSOLE=uart", "+UART_RX=626f620d7820790a", "+UART_RX_IDLE=1", "+UART_RX_GAP=200"] }
-console_ctrl_c = { file = "hw/io/console_ctrl_c.py", oracle = false, plusargs = ["+CONSOLE=uart", "+UART_RX=03", "+UART_RX_AT=600000"] }
-repl_friendly = { file = "hw/io/repl_friendly.py", oracle = false, halt = "TIMEOUT", cycles = 150_000_000, timeout = 900, plusargs = ["+CONSOLE=uart", "+REPL=1", "+UART_RX=312b310d666f72206920696e2072616e67652832293a0d20207072696e742869202a2078290d0d5f0d312f300d61620302", "+UART_RX_IDLE=1", "+UART_RX_GAP=200"] }
-repl_raw = { file = "hw/io/repl_raw.py", oracle = false, halt = "TIMEOUT", cycles = 120_000_000, timeout = 900, plusargs = ["+CONSOLE=uart", "+REPL=1", "+UART_RX=017072696e7428312b3129047804054101047072696e7428332904", "+UART_RX_IDLE=1", "+UART_RX_GAP=200"] }
+
+# The system block: the watchdog and system reset, the UART console, and the
+# REPL.
+[system]
+wdt_missed = { file = "hw/system/wdt_missed.py", oracle = false, plusargs = ["+TIMER_STEP=20000"] }
+wdt_fed = { file = "hw/system/wdt_fed.py", oracle = false, plusargs = ["+TIMER_STEP=20000"] }
+reset_chain = { file = "hw/system/reset_chain.py", oracle = false }
+console_uart = { file = "hw/system/console_uart.py", oracle = false, plusargs = ["+CONSOLE=uart", "+UART_RX=626f620d7820790a", "+UART_RX_IDLE=1", "+UART_RX_GAP=200"] }
+console_ctrl_c = { file = "hw/system/console_ctrl_c.py", oracle = false, plusargs = ["+CONSOLE=uart", "+UART_RX=03", "+UART_RX_AT=600000"] }
+repl_friendly = { file = "hw/system/repl_friendly.py", oracle = false, halt = "TIMEOUT", cycles = 150_000_000, timeout = 900, plusargs = ["+CONSOLE=uart", "+REPL=1", "+UART_RX=312b310d666f72206920696e2072616e67652832293a0d20207072696e742869202a2078290d0d5f0d312f300d61620302", "+UART_RX_IDLE=1", "+UART_RX_GAP=200"] }
+repl_raw = { file = "hw/system/repl_raw.py", oracle = false, halt = "TIMEOUT", cycles = 120_000_000, timeout = 900, plusargs = ["+CONSOLE=uart", "+REPL=1", "+UART_RX=017072696e7428312b3129047804054101047072696e7428332904", "+UART_RX_IDLE=1", "+UART_RX_GAP=200"] }
 
 # The USB coprocessor and its mailbox (upycore/docs/mpy_coproc.md). Each test
 # runs the coprocessor's firmware next to the hart.
@@ -583,3 +600,12 @@ repl_raw = { file = "hw/io/repl_raw.py", oracle = false, halt = "TIMEOUT", cycle
 mbox_echo = { file = "hw/coproc/mbox_echo.py", oracle = false, coproc = true, cycles = 60_000_000, timeout = 600 }
 mbox_kbd = { file = "hw/coproc/mbox_kbd.py", oracle = false, coproc = true }
 shared_gc = { file = "hw/coproc/shared_gc.py", oracle = false, coproc = true }
+
+# USB: the coprocessor's TinyUSB CDC function against the bench's host model
+# (upycore/tb/tb_usb_host.sv), with the console on USB. Each test's .usb file
+# is the host's script; the run ends when the script does (halt DONE).
+[usb]
+usb_repl_raw = { file = "hw/usb/repl_raw.py", oracle = false, usb_script = "hw/usb/repl_raw.usb", halt = "DONE", plusargs = ["+CONSOLE=usb", "+REPL=1"], cycles = 400_000_000, timeout = 1800, io = { usb = "1:15:54:0:0" } }
+usb_ctrl_c = { file = "hw/usb/ctrl_c.py", oracle = false, usb_script = "hw/usb/ctrl_c.usb", halt = "DONE", plusargs = ["+CONSOLE=usb"], cycles = 400_000_000, timeout = 1800 }
+usb_loopback = { file = "hw/usb/loopback.py", oracle = false, usb_script = "hw/usb/loopback.usb", halt = "DONE", plusargs = ["+CONSOLE=usb"], cycles = 400_000_000, timeout = 1800, io = { usb = "1:4096:4096:0:0" } }
+usb_suspend = { file = "hw/usb/suspend.py", oracle = false, usb_script = "hw/usb/suspend.usb", halt = "DONE", plusargs = ["+CONSOLE=usb"], cycles = 400_000_000, timeout = 1800, io = { usb = "1:8:16:1:1" } }

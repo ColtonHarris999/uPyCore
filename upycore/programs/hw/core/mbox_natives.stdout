@@ -1,0 +1,7 @@
+rx 0 None
+queued before full 16 16 1
+wide int when full False
+TypeError can't convert to int
+overrun 0
+overrun after a store 1
+cleared 0

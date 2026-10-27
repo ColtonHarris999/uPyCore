@@ -63,7 +63,7 @@ RTL = [
     "upycore/rtl/mpy_pwm.sv", "upycore/rtl/mpy_pinmux.sv", "upycore/rtl/mpy_spi.sv",
     "upycore/rtl/mpy_i2c.sv", "upycore/rtl/mpy_wdt.sv", "upycore/rtl/mpy_adc.sv",
     "upycore/rtl/mpy_soc.sv", "upycore/tb/tb_spi_flash.sv",
-    "upycore/tb/tb_i2c_target.sv", "upycore/tb/tb_adc_model.sv",
+    "upycore/tb/tb_i2c_target.sv", "upycore/tb/tb_adc_model.sv", "upycore/tb/tb_usb_host.sv",
     "upycore/tb/tb_mpy_soc.sv",
 ]
 # The USB coprocessor (upycore/docs/mpy_coproc.md): CVE2, the no2usb SIE,
@@ -276,6 +276,7 @@ _HALT_RE = re.compile(r"MPY_HALT code=(\d+) value=([0-9a-f]+) cycles=(\d+) ops=(
 _TIMEOUT_RE = re.compile(r"MPY_TIMEOUT cycles=(\d+) ops=(\d+) gc=(\d+)")
 _IO_RE = re.compile(r"^MPY_IO (.*)$", re.M)
 _TICKS_RE = re.compile(r"MPY_TICKS ticks=(\d+) cycles=(\d+) ops=(\d+) gc=(\d+)")
+_DONE_RE = re.compile(r"MPY_DONE cycles=(\d+) ops=(\d+) gc=(\d+)")
 
 
 def run_image(image: Path, max_cycles: int = 50_000_000, trace: bool = False,
@@ -306,6 +307,11 @@ def run_image(image: Path, max_cycles: int = 50_000_000, trace: bool = False,
     if m:
         # +MAX_TICKS ended the run: a trace pass, not a halt.
         return SimResult(stdout, stderr, "TICKS", 0, int(m.group(2)), int(m.group(3)), int(m.group(4)),
+                         log, io)
+    m = _DONE_RE.search(log)
+    if m:
+        # A USB host script finished: the hart may still be running (a REPL).
+        return SimResult(stdout, stderr, "DONE", 0, int(m.group(1)), int(m.group(2)), int(m.group(3)),
                          log, io)
     m = _TIMEOUT_RE.search(log)
     if m:

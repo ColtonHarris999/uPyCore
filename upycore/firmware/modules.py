@@ -227,6 +227,16 @@ def _con_getc():
 
 def _con_read(n):
     buf = bytearray()
+    if n > 0 and (_peek32(MMIO_SYS_CONSOLE) & 3) == 2:
+        # The USB console's bulk path: pop mailbox words without a call
+        # per byte.
+        while len(buf) < n:
+            w = _mbox_recv()
+            if w is None:
+                _idle()
+            elif (w >> 24) & 255 == MB_CON:
+                buf.append(w & 255)
+        return str(bytes(buf), 'utf-8')
     while n < 0 or len(buf) < n:
         c = _con_getc()
         if c < 0:
