@@ -5,6 +5,7 @@ under `pycore/docs/`, `excore/docs/`, and `pycore_firmware/builtins/`.
 
 | File | Role |
 | --- | --- |
+| [`interrupts_io_plan.md`](interrupts_io_plan.md) | How the existing peripheral block becomes GPIO, UART, a timer, and hard/soft callbacks on the hart. Not started |
 | [`generators_plan.md`](generators_plan.md) | `yield`, `yield from`, `send` / `throw` / `close` / `pend_throw`. Not started. Prompts for the tester, two implementers, and the critic are in [`agent_prompts/`](agent_prompts/) |
 | [`upy2_compiler_plan.md`](upy2_compiler_plan.md) | How the uPy2 compiler (`mpyc`) becomes on-device `compile` / `exec` / `eval`. Runtime work stays in this repo. Compiler work stays in uPy2 |
 | [`micropython_pivot_plan.md`](micropython_pivot_plan.md) | **The plan of record for micro-pycore:** restructuring this tree from a CPython 3.14 hart into a MicroPython microcontroller core. Read it first. Product decisions D1–D7 and the week schedule live here |
