@@ -1,0 +1,38 @@
+% Paste this environment into the IEEEtran source.
+% The preamble must already \input the sibling iscafig.tex.
+\begin{figure*}[t]
+\centering
+\begin{tikzpicture}[iscafig, node distance=2.4mm]
+  \node[imm, text width=7.15cm] (top) {Dict or set must grow};
+  \node[hot, text width=7.15cm, below=of top] (bit)
+    {Bit 31 of word 0 set?};
+  \node[accel, text width=3.35cm, below left=6mm and -1.2cm of bit] (common)
+    {Accelerator rehashes every key and skips tombstones};
+  \node[imm, text width=3.35cm, below right=6mm and -1.2cm of bit] (walk)
+    {Walk the types table};
+  \node[hot, text width=3.35cm, below=of walk] (ask)
+    {Any type defines \texttt{\_\_hash\_\_}?};
+  \node[accel, text width=3.35cm, below left=5mm and -0.15cm of ask] (plain)
+    {Same common path};
+  \node[core, text width=3.35cm, below right=5mm and -0.15cm of ask] (ch)
+    {Computed-hash dict: key $=$ old slot, value $=$ hash, both \texttt{INT}};
+
+  \draw[arr] (top) -- (bit);
+  \draw[arr] (bit.south) -- ++(0,-0.18) -| (common.north)
+    node[pos=0.25, left, lbl] {no};
+  \draw[arr] (bit.south) -- ++(0,-0.18) -| (walk.north)
+    node[pos=0.25, right, lbl] {yes};
+  \draw[arr] (walk) -- (ask);
+  \draw[arr] (ask.south) -- ++(0,-0.15) -| (plain.north)
+    node[pos=0.28, left, lbl] {no};
+  \draw[arr] (ask.south) -- ++(0,-0.15) -| (ch.north)
+    node[pos=0.28, right, lbl] {yes};
+\end{tikzpicture}
+\caption{Container-accelerator resize of a dict or set.
+When the object bit is clear, the accelerator hashes every remaining key.
+When the bit is set, the core first looks for a type that defines \texttt{\_\_hash\_\_}.
+If it finds one, it builds a dict from old slot numbers to hashes, using only \texttt{INT} entries, and the accelerator consumes that dict instead of calling Python.
+Slots absent from the dict are hashed by the accelerator.
+List growth is a separate doubling copy of the item array and does not use this path.}
+\label{fig:resize}
+\end{figure*}

@@ -1,0 +1,76 @@
+% Paste this environment into the IEEEtran source.
+% The preamble must already \input the sibling iscafig.tex.
+\begin{figure*}[t]
+\centering
+\begin{tikzpicture}[iscafig]
+  % kind bits
+  \node[lbl, anchor=west] at (0,0.42)
+    {\texttt{MUT\_COLLEC} payload: address in [31:2], kind in [1:0]};
+  \node[fldimm, minimum width=3.85cm, minimum height=6.4mm, anchor=west] at (0,0) {00\quad list};
+  \node[fldimm, minimum width=3.85cm, minimum height=6.4mm, anchor=west] at (4.05,0) {01\quad dict};
+  \node[fldimm, minimum width=3.85cm, minimum height=6.4mm, anchor=west] at (8.10,0) {10\quad set};
+  \node[fldimm, minimum width=4.15cm, minimum height=6.4mm, anchor=west] at (12.15,0) {11\quad bytearray};
+
+  % list
+  \begin{scope}[yshift=-1.15cm]
+    \node[lbl, anchor=west] at (0,0.38) {\textbf{List}, three header words};
+    \rec{0}{+0}{fldimm}{6.4cm}{length}
+    \rec{-0.55}{+4}{fldimm}{6.4cm}{capacity, minimum 4}
+    \rec{-1.10}{+8}{fldmem}{6.4cm}{pointer to item 0}
+    \node[fldcore, anchor=west, minimum width=6.4cm] (items) at (0,-1.85)
+      {item $i$, one tagged word};
+    \draw[thinarr] ($(0,-1.10)+(6.55,0)$) -- ++(0.35,0) |- (items.east);
+    \node[lbl, anchor=west, align=left] at (0,-2.45)
+      {A full list doubles the item array and\\
+       updates the pointer. The header does not move.};
+  \end{scope}
+
+  % bytearray
+  \begin{scope}[xshift=8.7cm, yshift=-1.15cm]
+    \node[lbl, anchor=west] at (0,0.38) {\textbf{Bytearray}, three header words};
+    \rec{0}{+0}{fldimm}{6.4cm}{length, in bytes}
+    \rec{-0.55}{+4}{fldimm}{6.4cm}{capacity, in bytes}
+    \rec{-1.10}{+8}{fldmem}{6.4cm}{pointer to the byte buffer}
+    \node[fldimm, anchor=west, minimum width=6.4cm] at (0,-1.85)
+      {raw bytes, not scanned};
+    \node[lbl, anchor=west, align=left] at (0,-2.45)
+      {Same indexing shape as a list.\\
+       The buffer holds bytes, not tagged values.};
+  \end{scope}
+
+  % dict
+  \begin{scope}[yshift=-4.55cm]
+    \node[lbl, anchor=west] at (0,0.38) {\textbf{Dict}, four header words};
+    \rec{0}{+0}{fldhot}{6.4cm}{used\,[30:0], object bit\,[31]}
+    \rec{-0.55}{+4}{fldimm}{6.4cm}{allocated slots}
+    \rec{-1.10}{+8}{fldmem}{6.4cm}{pointer to entry 0}
+    \rec{-1.65}{+12}{fldmem}{6.4cm}{types table, or 0}
+    \node[fldcore, anchor=west, minimum width=3.1cm] (k) at (0,-2.40) {key};
+    \node[fldcore, anchor=west, minimum width=3.1cm] (v) at (3.3,-2.40) {value};
+    \node[lbl, anchor=west] at (0,-2.95)
+      {empty $=$ \texttt{CONTROL}/0 \quad tombstone $=$ \texttt{CONTROL}/3};
+  \end{scope}
+
+  % set
+  \begin{scope}[xshift=8.7cm, yshift=-4.55cm]
+    \node[lbl, anchor=west] at (0,0.38) {\textbf{Set}, same header as a dict};
+    \rec{0}{+0}{fldhot}{6.4cm}{used\,[30:0], object bit\,[31]}
+    \rec{-0.55}{+4}{fldimm}{6.4cm}{allocated slots}
+    \rec{-1.10}{+8}{fldmem}{6.4cm}{pointer to slot 0}
+    \rec{-1.65}{+12}{fldmem}{6.4cm}{types table, or 0}
+    \node[fldcore, anchor=west, minimum width=6.4cm] at (0,-2.40)
+      {one key per slot};
+    \node[lbl, anchor=west] at (0,-2.95)
+      {tombstones are not copied on a resize};
+  \end{scope}
+\end{tikzpicture}
+\caption{Mutable collections.
+The low two bits of a \texttt{MUT\_COLLEC} payload select the kind, and the address clears them.
+A list stores length and capacity in the object and keeps items in a separate array.
+Dict and set share a four-word header.
+Bit 31 of the first word stays set once an \texttt{OBJECT} has been inserted, and the types-table pointer is then live.
+Green boxes are pointers.
+An empty slot is \texttt{CONTROL} kind 0.
+A deleted slot is \texttt{CONTROL} kind 3.}
+\label{fig:collections}
+\end{figure*}

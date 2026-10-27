@@ -1,0 +1,27 @@
+% Driver that compiles every paste-ready figure in IEEEtran.
+%   cd docs/paper/figures && pdflatex build.tex
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\input{iscafig.tex}
+
+\begin{document}
+\title{\upycore{} figure proofs}
+\author{\IEEEauthorblockN{Figure proofs}}
+\maketitle
+
+\section{Figures}
+\input{overview.tex}
+\input{regfile.tex}
+\input{frame.tex}
+\input{values.tex}
+\input{collections.tex}
+\input{objects.tex}
+\input{strings.tex}
+\input{resize.tex}
+\input{iterables.tex}
+\end{document}
