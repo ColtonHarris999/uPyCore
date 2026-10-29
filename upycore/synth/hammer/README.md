@@ -246,3 +246,12 @@ genus -batch -no_gui -files ~/pw_saif_hz3.tcl
 
 Both runs include MicroPython startup, which averages into the power. To
 compare, take energy per pystone run as power x benchmark cycles x 10 ns.
+
+## Clock sweep
+
+`sweep.sh start 12 10 8` builds `upycore_v2_p<period>` design folders and
+starts `make syn` in each at once, in the background (they keep running
+after you log out). `sweep.sh status` lists every folder with its state,
+slack, critical-path delay, the shortest period its netlist meets
+(period - slack) and the cell area. `DESIGNS`, `PREFIX`, `TOP` and `RTL`
+override the defaults.
