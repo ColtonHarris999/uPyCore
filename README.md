@@ -50,6 +50,18 @@ python3 upycore/tools/hw_tests.py --area alu
 python3 upycore/tools/hw_tests.py 'dict*'
 ```
 
+## Unit testbenches
+
+`upycore/tb` has one testbench per block (ALU, container accelerator,
+decoder, collector, peripherals, register file and memory, the probe
+modulo). `make test-unit` verilates each with the RTL it needs and runs
+it with its inputs; CI runs it as the `unit` job.
+
+```bash
+python3 upycore/tools/unit_tests.py
+python3 upycore/tools/unit_tests.py alu gc
+```
+
 ## Accelerators
 
 Bulk word copies run on the container accelerator while the core goes on
@@ -73,6 +85,16 @@ Set `SYNTH_TOP=…` to limit the run. Logs land in `build/synth/`.
 make synth
 make synth SYNTH_TOP=mpy_core
 make synth-gates SYNTH_TOP=mpy_alu
+```
+
+`mpy_synth.py --depth LEVELS` maps a top flat to generic gates (without
+cross-unit resource sharing) and ranks
+every register endpoint by logic depth (`upycore/tools/depth_report.py`),
+listing those at least `LEVELS` deep with the register each path starts
+from. Levels compare designs; they are not nanoseconds.
+
+```bash
+python3 upycore/tools/mpy_synth.py --depth 100 mpy_core
 ```
 
 Sim-only flash load (`+IMAGE` / `$readmemh`) and the GC table clear loop are

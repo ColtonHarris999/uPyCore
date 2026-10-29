@@ -300,7 +300,7 @@ module mpy_alu (
     logic        small_r;
     logic [63:0] a, b;
     logic [31:0] fa, fb;
-    logic [63:0] fa64, fb64;
+    logic [63:0] fa64, fb64, fa64_r, fb64_r;
 
     // Integer datapath (combinational ops).
     logic [4:0]  iop;
@@ -386,11 +386,9 @@ module mpy_alu (
     upycore_fpu u_fpu (
         .clk_i(clk_i), .rst_n_i(rst_n_i), .start_i(st == A_FPU),
         .op_i(fop), .complex_i(1'b0),
-        .op_a_i({64'd0, fa64}), .op_b_i({64'd0, fb64}),
+        .op_a_i({64'd0, fa64_r}), .op_b_i({64'd0, fb64_r}),
         .result_o(fres), .exception_o(fexc), .done_o(fdone), .stall_o(fstall), .busy_o(fbusy)
     );
-    mpy_f32_widen u_wa (.f_i(fa), .d_o(fa64));
-    mpy_f32_widen u_wb (.f_i(fb), .d_o(fb64));
     mpy_f32_narrow u_narrow (.d_i(fres_r), .q_o(fnarrow));
 
     // Float compare and issue checks. At accept they read the operands
@@ -429,6 +427,12 @@ module mpy_alu (
         f_fpu = (f_err == AE_NONE);
     end
 
+    // The FPU's operands are widened to binary64 in the cycle that decides
+    // the op and registered, so the widening and the FPU's accept decode
+    // (which can finish an op combinationally) never share a cycle.
+    mpy_f32_widen u_wa (.f_i(dxa), .d_o(fa64));
+    mpy_f32_widen u_wb (.f_i(dxb), .d_o(fb64));
+
     // Accept: everything that finishes in one cycle is answered here.
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) begin
@@ -444,6 +448,8 @@ module mpy_alu (
             fa <= '0;
             fb <= '0;
             fres_r <= '0;
+            fa64_r <= '0;
+            fb64_r <= '0;
         end else begin
             done_o <= 1'b0;
             case (st)
@@ -459,6 +465,9 @@ module mpy_alu (
                     xb = b_flt_i ? b_i[31:0] : mpy_i64_to_f32(b_i);
                     fa <= xa;
                     fb <= xb;
+                    // Right when both are floats; A_FCONV rewrites them otherwise.
+                    fa64_r <= fa64;
+                    fb64_r <= fb64;
                     err_o <= AE_NONE;
                     res_o <= '0;
                     rkind_o <= AK_INT;
@@ -561,6 +570,8 @@ module mpy_alu (
                     end
                 end
                 A_FCONV: begin
+                    fa64_r <= fa64;
+                    fb64_r <= fb64;
                     if (op <= ALU_NE) begin
                         rkind_o <= AK_BOOL;
                         res_o <= {63'd0, f_cmp};

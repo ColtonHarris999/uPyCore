@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rank register endpoints by logic depth in a flat gate-level netlist.
+r"""Rank register endpoints by logic depth in a flat gate-level netlist.
 
 Reads the JSON that ``yosys write_json`` produces after ``synth -flatten``
 (generic gates, ABC-mapped). Every combinational gate counts one level;
@@ -14,6 +14,11 @@ the same longest path but reports only one; this lists all of them.
 Usage::
 
     python3 upycore/tools/depth_report.py netlist.json [--min 150] [--top 40]
+    python3 upycore/tools/depth_report.py netlist.json --trace 'u_alu\.st'
+
+``--trace`` prints every named net on the deepest path into the register
+groups that match; on a netlist mapped without ABC (``synth -noabc``) the
+names survive, so that is the one to trace.
 """
 
 from __future__ import annotations
@@ -44,6 +49,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--top-module")
     ap.add_argument("--min", type=int, default=0, help="only endpoints at least this deep")
     ap.add_argument("--top", type=int, default=40, help="register groups to list")
+    ap.add_argument("--trace", metavar="REGEX", help="print the deepest path into matching groups")
     args = ap.parse_args(argv)
 
     with open(args.netlist) as f:
@@ -151,6 +157,22 @@ def main(argv: list[str] | None = None) -> int:
         via = [base_name(n) for n in names[:-1]][::-1]
         via_s = (" via " + " > ".join(dict.fromkeys(via))) if via else ""
         print(f"{d:5d}  {g:<48} from {base_name(start)}{via_s}")
+    if args.trace:
+        for g, (d, label, b) in ranked:
+            if not re.search(args.trace, g):
+                continue
+            print(f"\n{d} levels into {label}:")
+            chain, cur = [(level[b], bitname.get(b, "?"))], b
+            while cur in pred:
+                cur = pred[cur]
+                chain.append((level[cur], bitname.get(cur, "?")))
+            last = None
+            for lv, n in reversed(chain):
+                key = re.sub(r"\$\d+(\[\d+\])?$", "", base_name(n))
+                if key != last:
+                    print(f"  {lv:4d}  {n}")
+                    last = key
+            break
     return 0
 
 

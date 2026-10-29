@@ -119,9 +119,13 @@ def _write_script(
         "stat -hierarchy",
     ]
     if depth:
-        # Flat, so a path is counted across module boundaries.
+        # Flat, so a path is counted across module boundaries. No resource
+        # sharing: after flattening, share can merge operators of different
+        # units (say the integer divider's shifter and the FPU's) into one
+        # cell, which wires up paths the RTL does not have. A hierarchical
+        # backend run does not share across modules.
         lines += [
-            f"synth -flatten -top {top}",
+            f"synth -flatten -noshare -top {top}",
             f"write_json {out_dir.as_posix()}/{top}.json",
         ]
     elif do_synth:
