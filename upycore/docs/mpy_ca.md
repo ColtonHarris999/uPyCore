@@ -29,10 +29,28 @@ append, which is cheaper than a copy.
 A command is "copy `n` words from `src` to `dst`", tags included. Commands
 queue `QDEPTH` deep (2) and run in issue order. When `dst` is above `src`
 the copy runs from the top word down, so a shift inside one item array
-behaves like `memmove`. The engine issues a word's write in the cycle the
-read's ack arrives, and the next read in the cycle the write's ack
-arrives. On an idle port that is four cycles a word. The core's own loop
-takes eight.
+behaves like `memmove`.
+
+The engine streams. Reads run ahead of the writes into a four-word buffer
+(`BUF`, data and tag), and each write takes the oldest buffered word. A
+read goes out only while the buffer has room for it and for every read
+already on its way, so read data never waits for space. Writes go first
+when both are ready, so destination words retire as early as possible.
+Reading ahead is safe for overlapping copies: the reads move away from the
+words the writes have reached. The next command starts once the port has
+taken the last write of the one before, so its reads see those writes.
+
+On the pipelined port (below) a copy on an idle port takes two cycles a
+word, one read and one write, which is all the port can carry. Before the
+port was pipelined it took four, and the core's own loop takes eight.
+`tb_mpy_ca` copies 32 words alone in 66 cycles. With a two-word buffer the
+same copy takes 98 and with one word 162; more than four words gains
+nothing at `SRAM_LATENCY = 1`.
+
+The request to the port comes from flops, held until the arbiter grants
+it, and so do the next addresses and counts. Nothing runs from the port
+through the engine's arithmetic and back to the port in one cycle; the
+deepest path inside `mpy_ca` is 24 generic gates, against 35 before.
 
 The core keeps three rules:
 
@@ -43,16 +61,40 @@ The core keeps three rules:
    No copy is in flight while the collector marks, and no source block is
    freed under the engine.
 
-A faulting CA access (unaligned, flash store, bus) drops its command and
-sets a sticky fault. The core halts with the matching code at its next
-fetch.
+A faulting CA access (unaligned, flash store, bus) sets a sticky fault and
+drops every queued command; commands shipped after it are dropped too. The
+core halts with the matching code at its next fetch.
+
+## Clocking
+
+The CA runs on the core clock. A faster clock for it alone would buy
+nothing and cost a crossing:
+
+- Every step of a copy is a memory access, and the memory port runs on the
+  core clock. The engine already keeps that port full whenever the core
+  leaves it idle. On a faster clock it would wait for the port in more,
+  shorter cycles.
+- The scoreboard answers the core's pending access in the same cycle, in
+  front of the arbiter. In another clock domain each core access would wait
+  out a synchronizer, or the ranges would have to be copied back into the
+  core's domain, which is the same scoreboard again plus the crossing.
+
+What sets the copy rate is the port, so that is what changed: `mpy_mem`
+takes a request every cycle and the engine streams to fill it. Past that,
+the next steps are a wider SRAM port (two words per access) or a second
+bank for the heap, not a faster engine. The engine's own logic is shallow
+enough that it should not limit the core's clock.
 
 ## Scoreboard
 
 Each queued command holds two byte ranges: the destination words it has
 not written yet and the source words it has not read yet. The running
-command shrinks both as each word lands, so the front of a forward copy is
-readable before the copy ends. A core access is busy when it is
+command shrinks a range when the port takes the access for its next word,
+so the front of a forward copy is readable before the copy ends. That is
+safe because the port completes accesses in the order it takes them: a
+core load taken after the copy's write sees the write, and a core store
+taken after the copy's read does not change what was read. A core access
+is busy when it is
 
 - a load or a store of a destination word still owed, or
 - a store to a source word still owed.
@@ -66,14 +108,20 @@ eight 32-bit compares.
 
 ## Port arbitration
 
-`mpy_mem` takes one request at a time and ignores a request that arrives
-while it is busy. The arbiter in `mpy_soc` therefore holds a request until
-the memory is free, then grants the collector, the core, and the CA in
-that order. The CA uses the cycles the core leaves idle. Before this
-change the collector owned the port while busy and the core had it
-otherwise. With the CA idle the core's timing is unchanged: `+CA=0
-+AALU=0` gives the old cycle counts. A core access that arrives while a CA
-access is in flight waits one cycle at most.
+`mpy_mem` is pipelined one deep. It is ready (`rdy_o`) while idle and in
+the last cycle of an access, and a request it takes then starts while the
+previous one completes. With `SRAM_LATENCY = 1` that is one access per
+cycle, each acked two cycles after it was taken. The arbiter in `mpy_soc`
+holds a request until the memory is ready, then grants the collector, the
+core, and the CA in that order. The granted master's id (`id_i`) rides
+with the access and comes back on `id_o` with its ack, so the arbiter
+keeps no owner register.
+
+The CA uses the cycles the core leaves idle. A core access does not wait
+for a CA access to SRAM: the port is ready again one cycle after it takes
+one, and the core wins that cycle. A CA read from flash can hold the core
+for its wait states. The core is latency-bound (one access at a time), so
+the pipelined port does not change its own cycle counts.
 
 ## Async ALU
 
@@ -133,6 +181,27 @@ next instructions, at twice the core's rate. In every benchmark the core
 never stalled on the scoreboard: the copies finished before the core
 touched their words. `ca_copy.py` does stall, on purpose.
 
+The same benchmarks after the streaming engine, the pipelined port, and the
+core's iterative probe modulo (`upycore_umod_seq`):
+
+| Program | off | CA | AALU | both | both vs off |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `dict` | 328,918 | 316,516 | 320,774 | 308,372 | −6.2% |
+| `float` | 763,440 | 763,440 | 650,652 | 650,652 | −14.8% |
+| `intmath` | 867,911 | 867,911 | 809,016 | 809,016 | −6.8% |
+| `listbuild` | 1,524,720 | 1,476,480 | 1,505,334 | 1,457,094 | −4.4% |
+| `listops` | 1,463,938 | 1,248,862 | 1,453,174 | 1,238,098 | −15.4% |
+| `strings` | 7,105,262 | 7,103,492 | 7,059,884 | 7,058,114 | −0.7% |
+
+The "off" columns grew by the modulo's extra cycles (`dict` +3.1%,
+`strings` +1.9%), which buys the clock: the combinational modulo was the
+whole of the Genus top-path report at 20 and 30 ns. The CA columns gained
+0.1% to 0.4%, all of it from the pipelined port: with it a CA access to
+SRAM no longer delays a core access. The streaming engine adds nothing on top here,
+because the benchmarks never wait on a copy. A faster copy shows only
+where the core touches the words soon after shipping: `ca_copy.py` is
+1.5% faster with the port and the engine together.
+
 On the hardware suite (417 programs, 276.5 M cycles before this change)
 the whole change saves 1.8%. The suite is mostly firmware and interpreter
 overhead: 54% of all cycles are the core waiting on memory, 88% are
@@ -155,12 +224,23 @@ not an area in µm². `mpy_core` includes `mpy_alu` and its FPU.
 | `mpy_core`, CA hooks and async ALU off | 421,553 | 12,031 | — |
 | `mpy_core`, CA hooks on | 421,582 | 12,031 | +29 |
 | `mpy_core`, both on | 423,923 | 12,045 | +2,370 (+0.6%) |
-| `mpy_ca` (`QDEPTH = 2`) | 5,933 | 405 | +1.4% |
+| `mpy_core`, both on, iterative probe modulo | 417,720 | 12,181 | −3,833 (−0.9%) |
+| `mpy_ca` (`QDEPTH = 2`), first version | 5,933 | 405 | +1.4% |
+| `mpy_ca` (`QDEPTH = 2`, `BUF = 4`), streaming | 7,077 | 786 | +1.7% |
+
+The iterative modulo replaces an 8,068-cell, 564-level combinational one
+with 2,361 cells and 76 levels. The core's longest path is then 199
+generic levels, in the float result path: `upycore_fp_divrem`'s normalize,
+binary64 pack and round, and the binary32 narrowing in `mpy_alu`, all in
+one cycle. That is the next place for a register.
 
 64 of `mpy_ca`'s flops are the `words_o` and `cmds_o` counters. The
-arbiter in `mpy_soc` adds two pending bits, an owner register and a
-three-way mux on the port. Altogether the change is about 2% of the core's
-gates.
+streaming engine adds the buffer (4 × 36 bits), the request register, the
+next addresses and counts, and the two accesses awaiting acks. The arbiter
+in `mpy_soc` adds two pending bits and a three-way mux on the port; with
+the pipelined port it no longer needs an owner register, and `mpy_mem`
+carries a 2-bit id instead. Altogether the change is about 2% of the
+core's gates.
 
 A first async ALU wrote the result into the register file from outside
 the sequencer's `case`, in the cycle the ALU finished. That cost 50,845
@@ -213,12 +293,12 @@ gives the CA something to do.
   hashes are simple (one read at most), but a key the hardware cannot
   hash (an instance) sends the whole insert to the firmware, so the core
   would have to wait for a first pass over the keys before it could
-  retire the insert. The probe needs `hash % alloc`. The CA should share
-  the core's single-cycle modulo, core first, rather than add one: in the
-  same generic-gate flow a second 32-bit modulo is 7,972 cells (+1.9% of
-  the core, more than `mpy_ca`) and 564 gate levels deep, against 220
-  cells and 18 levels for a 32-bit add. A 32-cycle iterative one is 310
-  cells but makes the rehash slower than the core's.
+  retire the insert. The probe needs `hash % alloc`. The core no longer
+  has a single-cycle modulo to share: that one was 564 gate levels deep
+  and capped the core near 28 MHz in sky130. The core now uses
+  `upycore_umod_seq` (4 bits a clock, 2,361 cells, 76 levels, a few
+  cycles for a 16-bit string hash), and a CA rehash would instantiate its
+  own copy.
 - Byte copies (`_bcopy`). They are 1.6% of the string benchmark, which is
   dominated by firmware call overhead.
 - Scratch-image swaps (`S_SCR`) are 38% of `listbuild`: `FOR_ITER`,

@@ -1,11 +1,18 @@
 `include "mpy_defs.svh"
 
 // Byte-addressed flash and SRAM with a 4-bit tag beside every 32-bit word.
-// Tags live in side arrays, eight per word. One request at a time: a
-// one-cycle req_i pulse starts it and ack_o pulses when it completes,
-// SRAM_LATENCY cycles later (plus FLASH_WAIT_STATES for flash). be_i picks
-// the bytes a store writes; tag_we_i also writes the tag. A flash store, an
-// unaligned word, or an address outside both regions answers with fault_o.
+// Tags live in side arrays, eight per word. A one-cycle req_i pulse starts
+// an access and ack_o pulses when it completes, SRAM_LATENCY + 1 cycles
+// later (plus FLASH_WAIT_STATES for flash). be_i picks the bytes a store
+// writes; tag_we_i also writes the tag. A flash store, an unaligned word,
+// or an address outside both regions answers with fault_o.
+//
+// The port is pipelined one deep: rdy_o is set while the unit is idle or
+// in the last cycle of an access, and a request taken then starts while
+// the previous one completes. With SRAM_LATENCY = 1 that is one SRAM
+// access per cycle. Accesses complete in the order they were taken, so a
+// load taken after a store sees it. id_i rides with the access and comes
+// back on id_o with its ack, which is how mpy_soc routes the answer.
 //
 // +IMAGE=<hex> loads flash words and +TAGS=<hex> the packed flash tags
 // (upycore/tools/mpy_link.py writes both).
@@ -23,7 +30,10 @@ module mpy_mem #(
     input  logic [31:0] addr_i,
     input  logic [31:0] wdata_i,
     input  logic [3:0]  wtag_i,
+    input  logic [1:0]  id_i,
+    output logic        rdy_o,
     output logic        ack_o,
+    output logic [1:0]  id_o,
     output logic [31:0] rdata_o,
     output logic [3:0]  rtag_o,
     output logic        fault_o,
@@ -42,6 +52,7 @@ module mpy_mem #(
     logic [31:0] addr_r;
     logic [31:0] wdata_r;
     logic [3:0]  wtag_r;
+    logic [1:0]  id_r;
 
     logic        aligned;
     logic [2:0]  region;
@@ -50,6 +61,7 @@ module mpy_mem #(
     logic [31:0] sword;
     logic [31:0] merged;
 
+    assign rdy_o   = (phase_r <= 8'd1);
     assign aligned = (addr_r[1:0] == 2'b00);
     assign region  = mpy_region_of(addr_r);
     assign fidx    = 17'((addr_r - MPY_FLASH_BASE) >> 2);
@@ -84,6 +96,8 @@ module mpy_mem #(
             addr_r         <= '0;
             wdata_r        <= '0;
             wtag_r         <= '0;
+            id_r           <= '0;
+            id_o           <= '0;
             ack_o          <= 1'b0;
             rdata_o        <= '0;
             rtag_o         <= '0;
@@ -96,6 +110,7 @@ module mpy_mem #(
             if (phase_r == 8'd1) begin
                 phase_r <= '0;
                 ack_o   <= 1'b1;
+                id_o    <= id_r;
                 rdata_o <= '0;
                 rtag_o  <= '0;
                 if (!aligned) begin
@@ -124,13 +139,17 @@ module mpy_mem #(
                 end
             end else if (phase_r != 8'd0) begin
                 phase_r <= phase_r - 8'd1;
-            end else if (req_i) begin
+            end
+            // Taken in the last cycle of the previous access, a request's
+            // fields replace that access's only after it has used them.
+            if (req_i && rdy_o) begin
                 we_r     <= we_i;
                 tag_we_r <= tag_we_i;
                 be_r     <= be_i;
                 addr_r   <= addr_i;
                 wdata_r  <= wdata_i;
                 wtag_r   <= wtag_i;
+                id_r     <= id_i;
                 if (mpy_region_of(addr_i) == MPY_REGION_FLASH)
                     phase_r <= 8'(SRAM_LATENCY + FLASH_WAIT_STATES);
                 else
