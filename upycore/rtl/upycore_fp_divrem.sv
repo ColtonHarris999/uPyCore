@@ -10,13 +10,15 @@
 //                 FMOD: exponent difference + 1 bits, so S depends on the
 //                 operands and is bounded by ~1050 at RL = 2)
 //   C(S+2)        core registers quotient / remainder
-//   C(S+3)        round / normalize, pack                     -> result_o
+//   C(S+3)        normalize, guard / round / sticky            -> pack regs
+//   C(S+4)        round, pack                                  -> result_o
 //
-// DIV and SQRT therefore take 32 cycles at RL = 2 (accept cycle included),
+// DIV and SQRT therefore take 33 cycles at RL = 2 (accept cycle included),
 // both correctly rounded (the remainder is the sticky bit).  FMOD is
-// exact (no rounding) and takes 4 + ceil((d+1)/2) cycles for exponent
-// difference d >= 0, or 3 cycles when |a| < |b|.  Specials (NaN, inf,
-// zero divisor) finish in 3 cycles.  The divisor-is-zero case returns the
+// exact (no rounding) and takes 5 + ceil((d+1)/2) cycles for exponent
+// difference d >= 0, or 4 cycles when |a| < |b|.  Specials (NaN, inf,
+// zero divisor) finish in 4 cycles.  The normalize and the round each get
+// a cycle so that neither shares one with the other.  The divisor-is-zero case returns the
 // IEEE value; the FPU sequencer raises the Python ZeroDivisionError trap
 // before it ever reaches this unit.  sqrt of a negative number returns
 // NaN (the FPU never asks: a negative base with exponent 0.5 is a complex
@@ -159,6 +161,16 @@ module upycore_fp_divrem #(
     logic signed [13:0] s2_exp_r;            // DIV: ea - eb + 1023; FMOD: eb
     logic        s2_special_r;
     logic [63:0] s2_special_val_r;
+    // Normalized result of the last core cycle.
+    logic signed [13:0] r_exp;
+    logic [52:0]        r_sig;
+    logic               r_g, r_r, r_s;
+    logic [5:0]         rem_lz;
+    // Pack stage: the normalized result, rounded and packed next cycle.
+    logic               p_valid_r, p_special_r, p_sign_r, p_g_r, p_r_r, p_s_r;
+    logic [63:0]        p_special_val_r;
+    logic signed [13:0] p_exp_r;
+    logic [52:0]        p_sig_r;
 
     assign core_start = start_i && !fin_r &&
                         ((s1_valid_r && !s1_special_r && !fmod_small) || core_busy);
@@ -185,10 +197,25 @@ module upycore_fp_divrem #(
             s1_special_r <= 1'b0; s1_special_val_r <= '0; s1_a_r <= '0;
             fin_r <= 1'b0; s2_fmod_r <= 1'b0; s2_sqrt_r <= 1'b0; s2_sign_r <= 1'b0; s2_exp_r <= '0;
             s2_special_r <= 1'b0; s2_special_val_r <= '0;
+            p_valid_r <= 1'b0; p_special_r <= 1'b0; p_sign_r <= 1'b0;
+            p_g_r <= 1'b0; p_r_r <= 1'b0; p_s_r <= 1'b0;
+            p_special_val_r <= '0; p_exp_r <= '0; p_sig_r <= '0;
         end else if (!start_i) begin
             s1_valid_r <= 1'b0;
             fin_r      <= 1'b0;
+            p_valid_r  <= 1'b0;
         end else begin
+            p_valid_r <= core_done || fin_r;
+            if (core_done || fin_r) begin
+                p_special_r     <= s2_special_r;
+                p_special_val_r <= s2_special_val_r;
+                p_sign_r        <= s2_sign_r;
+                p_exp_r         <= r_exp;
+                p_sig_r         <= r_sig;
+                p_g_r           <= r_g;
+                p_r_r           <= r_r;
+                p_s_r           <= r_s;
+            end
             s1_valid_r <= start_i && !busy_o;
             if (start_i && !busy_o) begin
                 s1_fmod_r        <= fmod_i;
@@ -216,11 +243,7 @@ module upycore_fp_divrem #(
         end
     end
 
-    // ---------------- last cycle: normalize / round / pack ----------------
-    logic signed [13:0] r_exp;
-    logic [52:0]        r_sig;
-    logic               r_g, r_r, r_s;
-    logic [5:0]         rem_lz;
+    // ---------------- normalize (pack stage registers it) ----------------
 
     always_comb begin
         rem_lz = upycore_clz53(rem[52:0]);
@@ -260,9 +283,9 @@ module upycore_fp_divrem #(
         end
     end
 
-    assign result_o = s2_special_r ? s2_special_val_r
-                    : upycore_f64_pack_round(s2_sign_r, r_exp, r_sig, r_g, r_r, r_s);
-    assign done_o   = core_done | fin_r;
-    assign busy_o   = s1_valid_r | core_busy | core_done | fin_r;
+    assign result_o = p_special_r ? p_special_val_r
+                    : upycore_f64_pack_round(p_sign_r, p_exp_r, p_sig_r, p_g_r, p_r_r, p_s_r);
+    assign done_o   = p_valid_r;
+    assign busy_o   = s1_valid_r | core_busy | core_done | fin_r | p_valid_r;
 
 endmodule

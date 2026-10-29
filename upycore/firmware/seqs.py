@@ -19,8 +19,24 @@ def _list_of_iter(x):
 
 
 def _list_extend(lst, it):
-    if it is lst:
-        it = _list_of_seq(lst)
+    t = _tag(it)
+    if t == TAG_TUPLE or (t == TAG_MUT and (_pay(it) & 3) == MUT_LIST):
+        # One word copy. The source items are read after the reserve, so
+        # lst.extend(lst) copies the old items.
+        m = _ld(it, 0)
+        if m == 1:
+            # One item is cheaper as the native append than as a copy.
+            lst.append(_ld(it, 1) if t == TAG_TUPLE else _ld(_ld(it, 2), 0))
+        elif m:
+            n = _ld(lst, 0)
+            if n + m > _ld(lst, 1):
+                _list_reserve(lst, n + m)
+            if t == TAG_TUPLE:
+                _wcopy(_ld(lst, 2), n, it, 1, m)
+            else:
+                _wcopy(_ld(lst, 2), n, _ld(it, 2), 0, m)
+            _st(lst, 0, n + m)
+        return None
     for a in it:
         lst.append(a)
     return None
@@ -103,10 +119,8 @@ def list__insert(self, index, value):
         index = n
     _list_reserve(self, n + 1)
     items = _ld(self, 2)
-    i = n
-    while i > index:
-        _st(items, i, _ld(items, i - 1))
-        i -= 1
+    if index < n:
+        _wcopy(items, index + 1, items, index, n - index)
     _st(items, index, value)
     _st(self, 0, n + 1)
     return None
@@ -122,10 +136,8 @@ def list__pop(self, index=-1):
         raise IndexError('pop index out of range')
     items = _ld(self, 2)
     v = _ld(items, index)
-    i = index
-    while i < n - 1:
-        _st(items, i, _ld(items, i + 1))
-        i += 1
+    if index < n - 1:
+        _wcopy(items, index, items, index + 1, n - 1 - index)
     _st(self, 0, n - 1)
     return v
 

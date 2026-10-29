@@ -335,6 +335,9 @@ def run_tests(tests: list[Test], jobs: int, compiler: str = "mpy-cross") -> list
         )
     build.build_sim()
     build.build_firmware()
+    # The workers share the frozen-module cache; fill it before they start so
+    # none links a .mpy another is still writing.
+    build.frozen_runtime_specs()
     lock = threading.Lock()
     results: list[Outcome] = []
 

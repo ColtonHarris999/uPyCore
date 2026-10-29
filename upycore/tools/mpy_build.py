@@ -11,6 +11,7 @@ Usage::
     mpy_build.py sim                 build the simulator
     mpy_build.py fw                  build the firmware .mpy
     mpy_build.py run prog.py [-v]    build and run one program
+    mpy_build.py run prog.py --sim-arg +AALU=0   pass a plusarg to the simulator
     mpy_build.py oracle prog.py      run the program on the MicroPython oracle
 
 ``run`` prints the program's stdout and stderr and exits with its exit
@@ -51,12 +52,12 @@ FW_ORDER = [
 ]
 
 RTL = [
-    "upycore/rtl/upycore_umul_seq.sv", "upycore/rtl/upycore_udiv_seq.sv",
+    "upycore/rtl/upycore_umul_seq.sv", "upycore/rtl/upycore_udiv_seq.sv", "upycore/rtl/upycore_umod_seq.sv",
     "upycore/rtl/upycore_int_alu.sv", "upycore/rtl/upycore_mul.sv", "upycore/rtl/upycore_div.sv",
     "upycore/rtl/upycore_ipow.sv", "upycore/rtl/upycore_fp_add.sv", "upycore/rtl/upycore_fp_mul.sv",
     "upycore/rtl/upycore_fp_divrem.sv", "upycore/rtl/upycore_fp_pow.sv", "upycore/rtl/upycore_fpu.sv",
     "upycore/rtl/mpy_alu.sv", "upycore/rtl/mpy_decode.sv", "upycore/rtl/mpy_core.sv",
-    "upycore/rtl/mpy_gc.sv", "upycore/rtl/mpy_mem.sv", "upycore/rtl/mpy_soc.sv",
+    "upycore/rtl/mpy_gc.sv", "upycore/rtl/mpy_ca.sv", "upycore/rtl/mpy_mem.sv", "upycore/rtl/mpy_soc.sv",
     "upycore/tb/tb_mpy_soc.sv",
 ]
 RTL_INCLUDES = [
@@ -215,7 +216,7 @@ _TIMEOUT_RE = re.compile(r"MPY_TIMEOUT cycles=(\d+) ops=(\d+) gc=(\d+)")
 
 
 def run_image(image: Path, max_cycles: int = 50_000_000, trace: bool = False,
-              timeout: float | None = None) -> SimResult:
+              timeout: float | None = None, sim_args: list[str] | None = None) -> SimResult:
     out = Path(f"{image}.stdout")
     err = Path(f"{image}.stderr")
     # MPY_SIM picks another build of the testbench (for instance one made
@@ -225,6 +226,7 @@ def run_image(image: Path, max_cycles: int = 50_000_000, trace: bool = False,
     cmd += os.environ.get("MPY_SIM_ARGS", "").split()
     if trace:
         cmd.append("+TRACE=1")
+    cmd.extend(sim_args or [])
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     log = r.stdout + r.stderr
     stdout = out.read_bytes() if out.exists() else b""
@@ -309,6 +311,8 @@ def main(argv: list[str] | None = None) -> int:
     rp.add_argument("--trace", action="store_true")
     rp.add_argument("-v", "--verbose", action="store_true", help="print the halt line")
     rp.add_argument("--work", type=Path, default=None)
+    rp.add_argument("--sim-arg", action="append", default=[],
+                    help="simulator plusarg, e.g. +CA=0 or +AALU=0 (repeatable)")
     op = sub.add_parser("oracle")
     op.add_argument("src", type=Path)
     args = ap.parse_args(argv)
@@ -327,7 +331,7 @@ def main(argv: list[str] | None = None) -> int:
         build_sim()
         work = args.work or BUILD / "run" / args.src.stem
         image = build_program(args.src.resolve(), work)
-        res = run_image(image, args.max_cycles, args.trace)
+        res = run_image(image, args.max_cycles, args.trace, sim_args=args.sim_arg)
     except BuildError as exc:
         print(exc, file=sys.stderr)
         return 2

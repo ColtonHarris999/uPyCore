@@ -144,7 +144,10 @@ def _getattr(obj, name):
             if g is not NULL:
                 return _call_member(g, obj, (name,))
     elif k == OB_MODULE:
-        pass
+        hit = _module_attr(obj, name)
+        if hit is NULL:
+            _attr_error(obj, name)
+        return hit
     else:
         found = _tlookup(_ld(obj, 1), name)
         if found is not NULL:
@@ -169,6 +172,10 @@ def _setattr(obj, name, value):
     if k == OB_MODULE or k == OB_TYPE:
         d = _ld(obj, 2)
         if _ld(d, 3) & DICT_FLAG_ROM:
+            # The builtins dict is the one ROM map a store may shadow.
+            # The override lives in SR_FW7; this load still reads d.
+            if k == OB_MODULE and _is_builtins_dict(d):
+                return _builtins_store(name, value)
             _attr_error(obj, name)
         if value is NULL:
             if _lookup(d, name) is NULL:
@@ -335,11 +342,51 @@ def _seq_at(obj, i):
     return _ld(base, off + i)
 
 
+def _module_attr(mod, name):
+    # Miss is NULL, not AttributeError. A stored __dict__ wins over the
+    # special case. __getattr__ is a one-argument function, not a method,
+    # and it is not called for the name __getattr__ itself.
+    g = _ld(mod, 2)
+    hit = _dget(g, name)
+    if hit is not NULL:
+        return hit
+    if _streq(name, '__dict__'):
+        return g
+    if not _streq(name, '__getattr__'):
+        getter = _dget(g, '__getattr__')
+        if getter is not NULL:
+            return getter(name)
+    return NULL
+
+
+def _utf8_off(s, nchars):
+    # Byte offset of character nchars in s, or the byte length at the end.
+    d = _data(s)
+    nbytes = _slen(s)
+    i = 0
+    k = 0
+    while k < nchars and i < nbytes:
+        _cp, w = _utf8_at(d, i)
+        i += w
+        k += 1
+    return i
+
+
+def _slice_step_error():
+    raise NotImplementedError('only slices with step=1 (aka None) are supported')
+
+
 def _getslice(obj, sl):
     t = _tag(obj)
     if _isstr(obj) or t == TAG_BYTES or _isbarr(obj):
-        n = _slen(obj)
+        # Character length only for a non-ASCII str. ASCII stays a byte copy.
+        uni = _isstr(obj) and not _ascii(obj)
+        n = _utf8_len(obj) if uni else _slen(obj)
         a, b, s = _slice_range(sl, n)
+        if s != 1:
+            _slice_step_error()
+        if uni:
+            return _substr(obj, _utf8_off(obj, a), _utf8_off(obj, b), TAG_STR)
         m = _slice_len(a, b, s)
         tag = TAG_BYTES if t == TAG_BYTES or _isbarr(obj) else TAG_STR
         r = _strnew(m, tag)
@@ -356,8 +403,21 @@ def _getslice(obj, sl):
     if t == TAG_TUPLE or _islist(obj):
         n = _ld(obj, 0)
         a, b, s = _slice_range(sl, n)
+        if t == TAG_TUPLE and s != 1:
+            _slice_step_error()
         m = _slice_len(a, b, s)
         base, off = _seq_items(obj)
+        if s == 1:
+            # A plain slice is one word copy.
+            if _islist(obj):
+                r = _newlist(m)
+                if m:
+                    _wcopy(_ld(r, 2), 0, base, off + a, m)
+                return r
+            r = _newtuple(m)
+            if m:
+                _wcopy(r, 1, base, off + a, m)
+            return r
         if _islist(obj):
             r = _newlist(m)
             i = 0
@@ -439,10 +499,8 @@ def _setsubscr(obj, index, value):
 
 def _list_del(lst, i):
     n = _ld(lst, 0)
-    items = _ld(lst, 2)
-    while i < n - 1:
-        _st(items, i, _ld(items, i + 1))
-        i += 1
+    if i < n - 1:
+        _wcopy(_ld(lst, 2), i, _ld(lst, 2), i + 1, n - 1 - i)
     _st(lst, 0, n - 1)
     return None
 
@@ -450,30 +508,24 @@ def _list_del(lst, i):
 def _list_setslice(lst, sl, value):
     n = _ld(lst, 0)
     a, b, s = _slice_range(sl, n)
+    # A delete is an empty assignment, then the same step test. No write.
     if s != 1:
-        raise NotImplementedError('extended slice assignment')
+        raise NotImplementedError()
     if value is NULL:
         value = ()
     src = _list_of_iter(value)
     m = _ld(src, 0)
+    # lst[3:1] = x inserts at 3, as mp_seq_get_fast_slice_indexes clamps stop.
+    if b < a:
+        b = a
     span = b - a
     newn = n - span + m
     _list_reserve(lst, newn)
     items = _ld(lst, 2)
-    if m != span:
-        if m < span:
-            i = a + m
-            while i < newn:
-                _st(items, i, _ld(items, i + (span - m)))
-                i += 1
-        else:
-            i = newn - 1
-            while i >= a + m:
-                _st(items, i, _ld(items, i - (m - span)))
-                i -= 1
-    i = 0
-    while i < m:
-        _st(items, a + i, _ld(_ld(src, 2), i))
-        i += 1
+    # The tail moves first; _wcopy runs the overlapping shift like memmove.
+    if m != span and b < n:
+        _wcopy(items, a + m, items, b, n - b)
+    if m:
+        _wcopy(items, a, _ld(src, 2), 0, m)
     _st(lst, 0, newn)
     return None

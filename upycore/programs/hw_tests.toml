@@ -34,11 +34,13 @@ truth = { file = "hw/alu/truth.py" }
 divzero = { file = "hw/alu/divzero.py" }
 overflow = { file = "hw/alu/overflow.py" }
 floats = { file = "hw/alu/floats.py", cycles = 30_000_000 }
+float_pow = { file = "hw/alu/float_pow.py", cycles = 30_000_000 }
 floatparse = { file = "hw/alu/floatparse.py", cycles = 30_000_000 }
 complex = { file = "hw/alu/complex.py", cycles = 30_000_000 }
 
 bitwise_calls = { file = "hw/alu/bitwise_calls.py" }
 complex_ops = { file = "hw/alu/complex_ops.py" }
+complex_nan_eq = { file = "hw/alu/complex_nan_eq.py" }
 complex_type_trap = { file = "hw/alu/complex_type_trap.py", xfail = "device rejects complex(1, 1j); the unix port returns 0j" }
 unary_invert_float_trap = { file = "hw/alu/unary_invert_float_trap.py" }
 compare_op_type_trap = { file = "hw/alu/compare_op_type_trap.py" }
@@ -52,6 +54,7 @@ branchy = { file = "hw/control/branchy.py" }
 pop_jump_if_none = { file = "hw/control/pop_jump_if_none.py" }
 for_iter_type_trap = { file = "hw/control/for_iter_type_trap.py" }
 for_iter_nested = { file = "hw/control/for_iter_nested.py" }
+getitem_iter = { file = "hw/control/getitem_iter.py" }
 for_iter_edges = { file = "hw/control/for_iter_edges.py" }
 for_iter_branch = { file = "hw/control/for_iter_branch.py" }
 for_iter_mutate = { file = "hw/control/for_iter_mutate.py" }
@@ -111,6 +114,11 @@ call_function_ex = { file = "hw/calls/call_function_ex.py" }
 call_function_ex_kw = { file = "hw/calls/call_function_ex_kw.py" }
 varargs_basic = { file = "hw/calls/varargs_basic.py" }
 call_wide = { file = "hw/calls/call_wide.py", cycles = 40_000_000, timeout = 240 }
+star_wide = { file = "hw/calls/star_wide.py", cycles = 80_000_000, timeout = 240 }
+star_wide_iter = { file = "hw/calls/star_wide_iter.py" }
+star_wide_dir = { file = "hw/calls/star_wide_dir.py", cycles = 40_000_000, timeout = 180 }
+star_wide_spill = { file = "hw/calls/star_wide_spill.py" }
+star_wide_oom = { file = "hw/calls/star_wide_oom.py", cycles = 80_000_000, timeout = 240, oracle = false }
 varargs_empty = { file = "hw/calls/varargs_empty.py" }
 varargs_kwonly = { file = "hw/calls/varargs_kwonly.py" }
 varargs_kwonly2 = { file = "hw/calls/varargs_kwonly2.py" }
@@ -190,6 +198,7 @@ list_del_shift_excore = { file = "hw/containers/list_del_shift_excore.py" }
 dict_grow_basic = { file = "hw/containers/dict_grow_basic.py" }
 dict_grow_large = { file = "hw/containers/dict_grow_large.py" }
 set_grow_basic = { file = "hw/containers/set_grow_basic.py" }
+ca_copy = { file = "hw/containers/ca_copy.py" }
 
 [strings]
 text = { file = "hw/strings/text.py" }
@@ -199,7 +208,9 @@ format = { file = "hw/strings/format.py" }
 
 slice_str_clamp = { file = "hw/strings/slice_str_clamp.py" }
 slice_str_long = { file = "hw/strings/slice_str_long.py" }
-slice_str_unicode = { file = "hw/strings/slice_str_unicode.py", xfail = "unicode slice bounds do not match the unix port" }
+slice_str_unicode = { file = "hw/strings/slice_str_unicode.py" }
+slice_str_step = { file = "hw/strings/slice_str_step.py" }
+slice_list_step = { file = "hw/strings/slice_list_step.py" }
 slice_str_empty = { file = "hw/strings/slice_str_empty.py" }
 slice_str_scan = { file = "hw/strings/slice_str_scan.py" }
 slice_str_neg_trap = { file = "hw/strings/slice_str_neg_trap.py" }
@@ -226,6 +237,7 @@ str_p5e_batch3 = { file = "hw/strings/str_p5e_batch3.py" }
 handling = { file = "hw/exceptions/handling.py" }
 custom = { file = "hw/exceptions/custom.py" }
 with_stmt = { file = "hw/exceptions/with_stmt.py" }
+with_prop = { file = "hw/exceptions/with_prop.py" }
 
 try_syntaxerror = { file = "hw/exceptions/try_syntaxerror.py" }
 try_exc_types = { file = "hw/exceptions/try_exc_types.py" }
@@ -257,6 +269,9 @@ raise_after_call_loop = { file = "hw/exceptions/raise_after_call_loop.py" }
 [objects]
 classes = { file = "hw/objects/classes.py" }
 inherit = { file = "hw/objects/inherit.py" }
+mro_diamond = { file = "hw/objects/mro_diamond.py", oracle = true }
+mro_repeat = { file = "hw/objects/mro_repeat.py", oracle = true }
+mro_native = { file = "hw/objects/mro_native.py", oracle = true }
 props = { file = "hw/objects/props.py" }
 
 attr_basic = { file = "hw/objects/attr_basic.py" }
@@ -336,6 +351,14 @@ import_missing = { file = "hw/modules/import_missing.py" }
 use_helper = { file = "hw/modules/use_helper.py", modules = ["helper=hw/modules/helper.py"], oracle = false }
 use_pkg = { file = "hw/modules/use_pkg.py", modules = ["pkg=hw/modules/pkg/__init__.py", "pkg.sub=hw/modules/pkg/sub.py"], oracle = false }
 use_rel = { file = "hw/modules/use_rel.py", modules = ["rel=hw/modules/rel/__init__.py", "rel.a=hw/modules/rel/a.py", "rel.b=hw/modules/rel/b.py"], oracle = false }
+import_rel_pkg = { file = "hw/modules/import_rel_pkg.py", modules = ["pkg=hw/modules/pkg_rel/__init__.py", "pkg.sub=hw/modules/pkg_rel/sub.py"], oracle = false }
+import_rel_main = { file = "hw/modules/import_rel_main.py", oracle = false }
+import_fail_body = { file = "hw/modules/import_fail_body.py", modules = ["badmod=hw/modules/badmod.py"], oracle = false }
+import_star_all = { file = "hw/modules/import_star_all.py", modules = ["starred=hw/modules/starred.py", "plainstar=hw/modules/plainstar.py"], oracle = false }
+import_getattr = { file = "hw/modules/import_getattr.py", modules = ["getattrmod=hw/modules/getattrmod.py"], oracle = false }
+import_usys = { file = "hw/modules/import_usys.py" }
+builtins_override_import = { file = "hw/modules/builtins_override_import.py" }
+import_from_hook = { file = "hw/modules/import_from_hook.py", modules = ["pkg_hook=hw/modules/pkg_hook/__init__.py", "pkg_hook.sub=hw/modules/pkg_hook/sub.py"], oracle = false }
 
 [integ]
 fib = { file = "hw/integ/fib.py" }
@@ -353,6 +376,7 @@ load_fast_check_unbound = { file = "hw/variables/load_fast_check_unbound.py" }
 builtins_fallback = { file = "hw/variables/builtins_fallback.py" }
 builtins_shadow = { file = "hw/variables/builtins_shadow.py" }
 builtins_null_bit = { file = "hw/variables/builtins_null_bit.py" }
+builtins_override_name = { file = "hw/variables/builtins_override_name.py" }
 load_name_builtin = { file = "hw/variables/load_name_builtin.py" }
 local_hot = { file = "hw/variables/local_hot.py" }
 

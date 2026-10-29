@@ -1,0 +1,9 @@
+True
+hook pkg_hook ('sub',) None 0
+hook pkg_hook.sub True None 0
+4
+hook pkg_hook ('nope',) None 0
+hook pkg_hook.nope True None 0
+ImportError no module named 'pkg_hook.nope'
+hook sys ('nope',) None 0
+ImportError can't import name nope

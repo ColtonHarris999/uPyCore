@@ -333,6 +333,7 @@ HOOKS = [
     "_bind",          # _bind(fun, args, kw): locals tuple for a call the RTL cannot bind
     "_super_method",  # _super_method(type, obj, name): super().name
     "_warn",          # _warn(code): print a runtime warning to stderr
+    "_bind_wide",     # _bind_wide(fun, n_pos, directory): bind a chunked star call
 ]
 HOOK_ID = {name: i for i, name in enumerate(HOOKS)}
 
@@ -523,6 +524,8 @@ CONT = [
     "INIT_ARGS",     # __init__ of an exception subclass returned: must be None, push AUX
     "BIND",          # _bind returned the locals tuple of this frame: store them and start
     "YFROM",         # _yfrom returned (True, value) to yield, or (False, value) to finish
+    "WITH_ATTR",     # descriptor __enter__/__exit__ returned; resume as kind 1
+    "SPILL_REPLACE", # write the value over a spilled stack slot, re-run the opcode
 ]
 
 # One-shot overrides the REPLACE/GETITER/TRUTH continuations hand to the
