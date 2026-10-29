@@ -1634,6 +1634,21 @@ module upycore_fp_divrem (
 	reg signed [13:0] s2_exp_r;
 	reg s2_special_r;
 	reg [63:0] s2_special_val_r;
+	reg signed [13:0] r_exp;
+	reg [52:0] r_sig;
+	reg r_g;
+	reg r_r;
+	reg r_s;
+	reg [5:0] rem_lz;
+	reg p_valid_r;
+	reg p_special_r;
+	reg p_sign_r;
+	reg p_g_r;
+	reg p_r_r;
+	reg p_s_r;
+	reg [63:0] p_special_val_r;
+	reg signed [13:0] p_exp_r;
+	reg [52:0] p_sig_r;
 	assign core_start = (start_i && !fin_r) && (((s1_valid_r && !s1_special_r) && !fmod_small) || core_busy);
 	upycore_udiv_seq #(
 		.DW(56),
@@ -1682,12 +1697,33 @@ module upycore_fp_divrem (
 			s2_exp_r <= 1'sb0;
 			s2_special_r <= 1'b0;
 			s2_special_val_r <= 1'sb0;
+			p_valid_r <= 1'b0;
+			p_special_r <= 1'b0;
+			p_sign_r <= 1'b0;
+			p_g_r <= 1'b0;
+			p_r_r <= 1'b0;
+			p_s_r <= 1'b0;
+			p_special_val_r <= 1'sb0;
+			p_exp_r <= 1'sb0;
+			p_sig_r <= 1'sb0;
 		end
 		else if (!start_i) begin
 			s1_valid_r <= 1'b0;
 			fin_r <= 1'b0;
+			p_valid_r <= 1'b0;
 		end
 		else begin
+			p_valid_r <= core_done || fin_r;
+			if (core_done || fin_r) begin
+				p_special_r <= s2_special_r;
+				p_special_val_r <= s2_special_val_r;
+				p_sign_r <= s2_sign_r;
+				p_exp_r <= r_exp;
+				p_sig_r <= r_sig;
+				p_g_r <= r_g;
+				p_r_r <= r_r;
+				p_s_r <= r_s;
+			end
 			s1_valid_r <= start_i && !busy_o;
 			if (start_i && !busy_o) begin
 				s1_fmod_r <= fmod_i;
@@ -1711,12 +1747,6 @@ module upycore_fp_divrem (
 				s2_special_val_r <= (s1_special_r ? s1_special_val_r : s1_a_r);
 			end
 		end
-	reg signed [13:0] r_exp;
-	reg [52:0] r_sig;
-	reg r_g;
-	reg r_r;
-	reg r_s;
-	reg [5:0] rem_lz;
 	always @(*) begin
 		if (_sv2v_0)
 			;
@@ -1808,9 +1838,9 @@ module upycore_fp_divrem (
 			end
 		end
 	endfunction
-	assign result_o = (s2_special_r ? s2_special_val_r : upycore_f64_pack_round(s2_sign_r, r_exp, r_sig, r_g, r_r, r_s));
-	assign done_o = core_done | fin_r;
-	assign busy_o = ((s1_valid_r | core_busy) | core_done) | fin_r;
+	assign result_o = (p_special_r ? p_special_val_r : upycore_f64_pack_round(p_sign_r, p_exp_r, p_sig_r, p_g_r, p_r_r, p_s_r));
+	assign done_o = p_valid_r;
+	assign busy_o = (((s1_valid_r | core_busy) | core_done) | fin_r) | p_valid_r;
 	initial _sv2v_0 = 0;
 endmodule
 module upycore_fp_pow (
@@ -1856,6 +1886,7 @@ module upycore_fp_pow (
 	localparam [52:0] FOUR_THIRDS = 53'h15555555555555;
 	reg [3:0] state_r;
 	reg done_r;
+	reg rz_r;
 	reg [52:0] mx_r;
 	reg signed [12:0] ex_r;
 	reg [52:0] my_r;
@@ -1969,7 +2000,7 @@ module upycore_fp_pow (
 	reg signed [90:0] acc_next;
 	wire [87:0] exp_c;
 	wire exp_take;
-	assign in_log = state_r == 4'd3;
+	assign in_log = state_r == 4'd4;
 	assign k_idx = (in_log ? j_r : {1'b0, i_r});
 	assign d_pos = !r_r[89] && (r_r[88:87] != 2'b00);
 	assign d_neg = r_r[89] && (r_r[88:87] != 2'b11);
@@ -2004,15 +2035,15 @@ module upycore_fp_pow (
 			;
 		(* full_case, parallel_case *)
 		case (state_r)
-			4'd2: begin
-				pf_k = j0_sel;
+			4'd3: begin
+				pf_k = j0_r;
 				pf_sh = 7'd0;
 			end
-			4'd3: begin
+			4'd4: begin
 				pf_k = j_r + 8'd1;
 				pf_sh = i_r + 7'd1;
 			end
-			4'd10: begin
+			4'd11: begin
 				pf_k = 8'd1;
 				pf_sh = 7'd1;
 			end
@@ -2329,7 +2360,7 @@ module upycore_fp_pow (
 		end
 	end
 	assign lmag_norm = lmag_r << lz_r;
-	assign mul_start_o = state_r == 4'd8;
+	assign mul_start_o = state_r == 4'd9;
 	assign mul_a_o = lm_r;
 	assign mul_b_o = my_r;
 	assign q_prod = mul_product_i;
@@ -2429,6 +2460,7 @@ module upycore_fp_pow (
 			i_r <= 1'sb0;
 			j0_r <= 1'sb0;
 			acc_r <= 1'sb0;
+			rz_r <= 1'b0;
 			v_r <= 1'sb0;
 			lsign_r <= 1'b0;
 			lmag_r <= 1'sb0;
@@ -2469,15 +2501,19 @@ module upycore_fp_pow (
 						state_r <= 4'd2;
 					end
 					4'd2: begin
-						r_r <= -r_r <<< j0_sel;
 						j0_r <= j0_sel;
-						j_r <= j0_sel;
+						rz_r <= r_mag == {88 {1'sb0}};
+						state_r <= 4'd3;
+					end
+					4'd3: begin
+						r_r <= -r_r <<< j0_r;
+						j_r <= j0_r;
 						i_r <= 1'sb0;
 						cpos_r <= pf_pos;
 						cneg_r <= pf_neg;
-						state_r <= (r_mag == {88 {1'sb0}} ? 4'd4 : 4'd3);
+						state_r <= (rz_r ? 4'd5 : 4'd4);
 					end
-					4'd3: begin
+					4'd4: begin
 						r_r <= w_next;
 						acc_r <= acc_next;
 						j_r <= j_r + 8'd1;
@@ -2485,45 +2521,45 @@ module upycore_fp_pow (
 						cpos_r <= pf_pos;
 						cneg_r <= pf_neg;
 						if (i_r == sv2v_cast_7_signed(79))
-							state_r <= 4'd4;
-					end
-					4'd4: begin
-						v_r <= v_sum;
-						lscale_r <= (e_r == 13'sd0 ? j0_r : 8'd0);
-						state_r <= 4'd5;
+							state_r <= 4'd5;
 					end
 					4'd5: begin
-						lsign_r <= v_r[LW];
-						lmag_r <= sv2v_cast_4587C_signed((v_r[LW] ? -v_r : v_r));
+						v_r <= v_sum;
+						lscale_r <= (e_r == 13'sd0 ? j0_r : 8'd0);
 						state_r <= 4'd6;
 					end
 					4'd6: begin
-						lz_r <= lmag_clz;
+						lsign_r <= v_r[LW];
+						lmag_r <= sv2v_cast_4587C_signed((v_r[LW] ? -v_r : v_r));
 						state_r <= 4'd7;
 					end
 					4'd7: begin
+						lz_r <= lmag_clz;
+						state_r <= 4'd8;
+					end
+					4'd8: begin
 						lm_r <= lmag_norm[100:LW - LMW];
 						el_r <= ((sv2v_cast_13_signed(LW - LMW) - sv2v_cast_13(lz_r)) - sv2v_cast_13_signed(FW)) - sv2v_cast_13(lscale_r);
 						psign_r <= ysign_r ^ lsign_r;
-						state_r <= 4'd8;
+						state_r <= 4'd9;
 					end
-					4'd8:
+					4'd9:
 						if (mul_done)
-							state_r <= 4'd9;
-					4'd9: begin
+							state_r <= 4'd10;
+					4'd10: begin
 						pfix_r <= q_shifted[91:0];
 						huge_r <= p_huge;
-						state_r <= 4'd10;
+						state_r <= 4'd11;
 					end
-					4'd10: begin
+					4'd11: begin
 						i_int_r <= pfix_s[PW:FP];
 						f_r <= {pfix_s[79:0], {FW - FP {1'b0}}};
 						z_r <= {1'b1, {FW {1'b0}}};
 						i_r <= 7'd1;
 						cpos_r <= pf_pos;
-						state_r <= (huge_r ? 4'd12 : 4'd11);
+						state_r <= (huge_r ? 4'd13 : 4'd12);
 					end
-					4'd11: begin
+					4'd12: begin
 						if (exp_take) begin
 							f_r <= f_r - exp_c;
 							z_r <= z_r + z_sh;
@@ -2531,9 +2567,9 @@ module upycore_fp_pow (
 						i_r <= i_r + 7'd1;
 						cpos_r <= pf_pos;
 						if (i_r == sv2v_cast_7_signed(NEXP))
-							state_r <= 4'd12;
+							state_r <= 4'd13;
 					end
-					4'd12: begin
+					4'd13: begin
 						if (huge_r)
 							result_r <= (psign_r ? UPY_F64_PZERO : UPY_F64_PINF);
 						else
@@ -3883,6 +3919,8 @@ module mpy_alu (
 	reg [31:0] fb;
 	wire [63:0] fa64;
 	wire [63:0] fb64;
+	reg [63:0] fa64_r;
+	reg [63:0] fb64_r;
 	reg [4:0] iop;
 	wire [63:0] ires;
 	wire izero;
@@ -4019,6 +4057,7 @@ module mpy_alu (
 	reg [4:0] fop;
 	wire [127:0] fres;
 	wire [31:0] fnarrow;
+	reg [63:0] fres_r;
 	wire fexc;
 	wire fdone;
 	wire fstall;
@@ -4053,41 +4092,31 @@ module mpy_alu (
 		.start_i(st == 3'd4),
 		.op_i(fop),
 		.complex_i(1'b0),
-		.op_a_i({64'd0, fa64}),
-		.op_b_i({64'd0, fb64}),
+		.op_a_i({64'd0, fa64_r}),
+		.op_b_i({64'd0, fb64_r}),
 		.result_o(fres),
 		.exception_o(fexc),
 		.done_o(fdone),
 		.stall_o(fstall),
 		.busy_o(fbusy)
 	);
-	mpy_f32_widen u_wa(
-		.f_i(fa),
-		.d_o(fa64)
-	);
-	mpy_f32_widen u_wb(
-		.f_i(fb),
-		.d_o(fb64)
-	);
 	mpy_f32_narrow u_narrow(
-		.d_i(fres[63:0]),
+		.d_i(fres_r),
 		.q_o(fnarrow)
 	);
+	wire [5:0] dop;
+	wire [31:0] dxa;
+	wire [31:0] dxb;
+	reg f_cmp;
+	reg f_fpu;
+	reg [2:0] f_err;
+	assign dop = (st == 3'd6 ? op : op_i);
+	assign dxa = (st == 3'd6 ? fa : a_i[31:0]);
+	assign dxb = (st == 3'd6 ? fb : b_i[31:0]);
 	localparam [2:0] mpy_alu_pkg_AE_COMPLEX = 3'd5;
-	localparam [2:0] mpy_alu_pkg_AE_FTOI = 3'd6;
-	localparam [2:0] mpy_alu_pkg_AE_NEG_SHIFT = 3'd3;
 	localparam [2:0] mpy_alu_pkg_AE_NONE = 3'd0;
-	localparam [2:0] mpy_alu_pkg_AE_OVERFLOW = 3'd2;
 	localparam [2:0] mpy_alu_pkg_AE_UNSUPPORTED = 3'd4;
 	localparam [2:0] mpy_alu_pkg_AE_ZERO_DIV = 3'd1;
-	localparam [1:0] mpy_alu_pkg_AK_BOOL = 2'd3;
-	localparam [1:0] mpy_alu_pkg_AK_FLOAT = 2'd1;
-	localparam [1:0] mpy_alu_pkg_AK_INT = 2'd0;
-	localparam [5:0] mpy_alu_pkg_ALU_ABS = 6'd43;
-	localparam [5:0] mpy_alu_pkg_ALU_F2I = 6'd45;
-	localparam [5:0] mpy_alu_pkg_ALU_I2F = 6'd44;
-	localparam [5:0] mpy_alu_pkg_ALU_MATMUL = 6'd30;
-	localparam [5:0] mpy_alu_pkg_ALU_POS = 6'd41;
 	function automatic mpy_alu_pkg_mpy_f32_nan;
 		input reg [31:0] f;
 		mpy_alu_pkg_mpy_f32_nan = (f[30:23] == 8'hff) && (f[22:0] != 23'd0);
@@ -4128,6 +4157,52 @@ module mpy_alu (
 		else
 			mpy_alu_pkg_mpy_f32_lt = a[30:0] > b[30:0];
 	endfunction
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		case (dop)
+			mpy_alu_pkg_ALU_LT: f_cmp = mpy_alu_pkg_mpy_f32_lt(dxa, dxb);
+			mpy_alu_pkg_ALU_GT: f_cmp = mpy_alu_pkg_mpy_f32_lt(dxb, dxa);
+			mpy_alu_pkg_ALU_LE: f_cmp = mpy_alu_pkg_mpy_f32_lt(dxa, dxb) || mpy_alu_pkg_mpy_f32_eq(dxa, dxb);
+			mpy_alu_pkg_ALU_GE: f_cmp = mpy_alu_pkg_mpy_f32_lt(dxb, dxa) || mpy_alu_pkg_mpy_f32_eq(dxa, dxb);
+			mpy_alu_pkg_ALU_EQ: f_cmp = mpy_alu_pkg_mpy_f32_eq(dxa, dxb);
+			default: f_cmp = !mpy_alu_pkg_mpy_f32_eq(dxa, dxb);
+		endcase
+		f_err = mpy_alu_pkg_AE_NONE;
+		case (dop)
+			mpy_alu_pkg_ALU_ADD, mpy_alu_pkg_ALU_SUB, mpy_alu_pkg_ALU_MUL:
+				;
+			mpy_alu_pkg_ALU_TDIV, mpy_alu_pkg_ALU_FLOOR, mpy_alu_pkg_ALU_MOD:
+				if (mpy_alu_pkg_mpy_f32_zero(dxb))
+					f_err = mpy_alu_pkg_AE_ZERO_DIV;
+			mpy_alu_pkg_ALU_POW:
+				if ((mpy_alu_pkg_mpy_f32_zero(dxa) && dxb[31]) && !((dxb[30:23] == 8'hff) && (dxb[22:0] == 23'd0)))
+					f_err = mpy_alu_pkg_AE_ZERO_DIV;
+				else if (((((dxa[31] && !mpy_alu_pkg_mpy_f32_zero(dxa)) && !mpy_alu_pkg_mpy_f32_nan(dxa)) && !mpy_alu_pkg_mpy_f32_integral(dxb)) && !mpy_alu_pkg_mpy_f32_nan(dxb)) && (dxb[30:23] != 8'hff))
+					f_err = mpy_alu_pkg_AE_COMPLEX;
+			default: f_err = mpy_alu_pkg_AE_UNSUPPORTED;
+		endcase
+		f_fpu = f_err == mpy_alu_pkg_AE_NONE;
+	end
+	mpy_f32_widen u_wa(
+		.f_i(dxa),
+		.d_o(fa64)
+	);
+	mpy_f32_widen u_wb(
+		.f_i(dxb),
+		.d_o(fb64)
+	);
+	localparam [2:0] mpy_alu_pkg_AE_FTOI = 3'd6;
+	localparam [2:0] mpy_alu_pkg_AE_NEG_SHIFT = 3'd3;
+	localparam [2:0] mpy_alu_pkg_AE_OVERFLOW = 3'd2;
+	localparam [1:0] mpy_alu_pkg_AK_BOOL = 2'd3;
+	localparam [1:0] mpy_alu_pkg_AK_FLOAT = 2'd1;
+	localparam [1:0] mpy_alu_pkg_AK_INT = 2'd0;
+	localparam [5:0] mpy_alu_pkg_ALU_ABS = 6'd43;
+	localparam [5:0] mpy_alu_pkg_ALU_F2I = 6'd45;
+	localparam [5:0] mpy_alu_pkg_ALU_I2F = 6'd44;
+	localparam [5:0] mpy_alu_pkg_ALU_MATMUL = 6'd30;
+	localparam [5:0] mpy_alu_pkg_ALU_POS = 6'd41;
 	function automatic [4:0] sv2v_cast_5;
 		input reg [4:0] inp;
 		sv2v_cast_5 = inp;
@@ -4236,6 +4311,9 @@ module mpy_alu (
 			b <= 1'sb0;
 			fa <= 1'sb0;
 			fb <= 1'sb0;
+			fres_r <= 1'sb0;
+			fa64_r <= 1'sb0;
+			fb64_r <= 1'sb0;
 		end
 		else begin
 			done_o <= 1'b0;
@@ -4245,6 +4323,7 @@ module mpy_alu (
 						reg [31:0] xa;
 						reg [31:0] xb;
 						reg isf;
+						reg conv;
 						reg ok;
 						reg [63:0] v;
 						op <= op_i;
@@ -4255,21 +4334,24 @@ module mpy_alu (
 						xb = (b_flt_i ? b_i[31:0] : mpy_alu_pkg_mpy_i64_to_f32(b_i));
 						fa <= xa;
 						fb <= xb;
+						fa64_r <= fa64;
+						fb64_r <= fb64;
 						err_o <= mpy_alu_pkg_AE_NONE;
 						res_o <= 1'sb0;
 						rkind_o <= mpy_alu_pkg_AK_INT;
 						isf = a_flt_i || b_flt_i;
+						conv = !a_flt_i || !b_flt_i;
 						if (op_i == mpy_alu_pkg_ALU_I2F) begin
 							res_o <= {32'd0, xa};
 							rkind_o <= mpy_alu_pkg_AK_FLOAT;
-							st <= 3'd5;
+							st <= 3'd7;
 						end
 						else if (op_i == mpy_alu_pkg_ALU_F2I) begin
 							v = mpy_alu_pkg_mpy_f32_to_i64(a_i[31:0], ok);
 							res_o <= v;
 							if (!ok)
 								err_o <= mpy_alu_pkg_AE_FTOI;
-							st <= 3'd5;
+							st <= 3'd7;
 						end
 						else if (op_i >= mpy_alu_pkg_ALU_NEG) begin
 							if (a_flt_i) begin
@@ -4280,57 +4362,35 @@ module mpy_alu (
 									mpy_alu_pkg_ALU_ABS: res_o <= {33'h000000000, a_i[30:0]};
 									default: err_o <= mpy_alu_pkg_AE_UNSUPPORTED;
 								endcase
-								st <= 3'd5;
+								st <= 3'd7;
 							end
 							else begin
 								if ((op_i == mpy_alu_pkg_ALU_ABS) && !a_i[63])
 									op <= mpy_alu_pkg_ALU_POS;
 								else if (op_i == mpy_alu_pkg_ALU_ABS)
 									op <= mpy_alu_pkg_ALU_NEG;
-								st <= 3'd5;
+								st <= 3'd7;
 							end
 						end
 						else if (op_i <= mpy_alu_pkg_ALU_NE) begin
-							if (isf) begin
+							if (isf && conv)
+								st <= 3'd6;
+							else if (isf) begin
 								rkind_o <= mpy_alu_pkg_AK_BOOL;
-								case (op_i)
-									mpy_alu_pkg_ALU_LT: res_o <= {63'd0, mpy_alu_pkg_mpy_f32_lt(xa, xb)};
-									mpy_alu_pkg_ALU_GT: res_o <= {63'd0, mpy_alu_pkg_mpy_f32_lt(xb, xa)};
-									mpy_alu_pkg_ALU_LE: res_o <= {63'd0, mpy_alu_pkg_mpy_f32_lt(xa, xb) || mpy_alu_pkg_mpy_f32_eq(xa, xb)};
-									mpy_alu_pkg_ALU_GE: res_o <= {63'd0, mpy_alu_pkg_mpy_f32_lt(xb, xa) || mpy_alu_pkg_mpy_f32_eq(xa, xb)};
-									mpy_alu_pkg_ALU_EQ: res_o <= {63'd0, mpy_alu_pkg_mpy_f32_eq(xa, xb)};
-									default: res_o <= {63'd0, !mpy_alu_pkg_mpy_f32_eq(xa, xb)};
-								endcase
+								res_o <= {63'd0, f_cmp};
+								st <= 3'd7;
 							end
-							st <= 3'd5;
+							else
+								st <= 3'd7;
 						end
 						else if ((isf || (op_i == mpy_alu_pkg_ALU_TDIV)) || ((op_i == mpy_alu_pkg_ALU_POW) && b_i[63])) begin
 							rkind_o <= mpy_alu_pkg_AK_FLOAT;
-							case (op_i)
-								mpy_alu_pkg_ALU_ADD, mpy_alu_pkg_ALU_SUB, mpy_alu_pkg_ALU_MUL: st <= 3'd4;
-								mpy_alu_pkg_ALU_TDIV, mpy_alu_pkg_ALU_FLOOR, mpy_alu_pkg_ALU_MOD:
-									if (mpy_alu_pkg_mpy_f32_zero(xb)) begin
-										err_o <= mpy_alu_pkg_AE_ZERO_DIV;
-										st <= 3'd5;
-									end
-									else
-										st <= 3'd4;
-								mpy_alu_pkg_ALU_POW:
-									if ((mpy_alu_pkg_mpy_f32_zero(xa) && xb[31]) && !((xb[30:23] == 8'hff) && (xb[22:0] == 23'd0))) begin
-										err_o <= mpy_alu_pkg_AE_ZERO_DIV;
-										st <= 3'd5;
-									end
-									else if (((((xa[31] && !mpy_alu_pkg_mpy_f32_zero(xa)) && !mpy_alu_pkg_mpy_f32_nan(xa)) && !mpy_alu_pkg_mpy_f32_integral(xb)) && !mpy_alu_pkg_mpy_f32_nan(xb)) && (xb[30:23] != 8'hff)) begin
-										err_o <= mpy_alu_pkg_AE_COMPLEX;
-										st <= 3'd5;
-									end
-									else
-										st <= 3'd4;
-								default: begin
-									err_o <= mpy_alu_pkg_AE_UNSUPPORTED;
-									st <= 3'd5;
-								end
-							endcase
+							if (conv)
+								st <= 3'd6;
+							else begin
+								err_o <= f_err;
+								st <= (f_fpu ? 3'd4 : 3'd7);
+							end
 						end
 						else
 							case (op_i)
@@ -4338,16 +4398,16 @@ module mpy_alu (
 								mpy_alu_pkg_ALU_FLOOR, mpy_alu_pkg_ALU_MOD:
 									if (b_i == 64'd0) begin
 										err_o <= mpy_alu_pkg_AE_ZERO_DIV;
-										st <= 3'd5;
+										st <= 3'd7;
 									end
 									else
 										st <= 3'd2;
 								mpy_alu_pkg_ALU_POW: st <= 3'd3;
 								mpy_alu_pkg_ALU_MATMUL: begin
 									err_o <= mpy_alu_pkg_AE_UNSUPPORTED;
-									st <= 3'd5;
+									st <= 3'd7;
 								end
-								default: st <= 3'd5;
+								default: st <= 3'd7;
 							endcase
 					end
 				3'd1:
@@ -4377,14 +4437,35 @@ module mpy_alu (
 					end
 				3'd4:
 					if (fdone || fexc) begin
-						if (fexc)
+						if (fexc) begin
 							res_o <= {32'd0, fa[31] && mpy_alu_pkg_mpy_f32_odd(fb), 31'h7f800000};
-						else
-							res_o <= {32'd0, fnarrow};
-						st <= 3'd0;
-						done_o <= 1'b1;
+							st <= 3'd0;
+							done_o <= 1'b1;
+						end
+						else begin
+							fres_r <= fres[63:0];
+							st <= 3'd5;
+						end
 					end
+				3'd6: begin
+					fa64_r <= fa64;
+					fb64_r <= fb64;
+					if (op <= mpy_alu_pkg_ALU_NE) begin
+						rkind_o <= mpy_alu_pkg_AK_BOOL;
+						res_o <= {63'd0, f_cmp};
+						st <= 3'd7;
+					end
+					else begin
+						err_o <= f_err;
+						st <= (f_fpu ? 3'd4 : 3'd7);
+					end
+				end
 				3'd5: begin
+					res_o <= {32'd0, fnarrow};
+					st <= 3'd0;
+					done_o <= 1'b1;
+				end
+				3'd7: begin
 					if (((rkind_o == mpy_alu_pkg_AK_INT) && (err_o == mpy_alu_pkg_AE_NONE)) && (op != mpy_alu_pkg_ALU_F2I)) begin
 						res_o <= ires;
 						if (op <= mpy_alu_pkg_ALU_NE)
