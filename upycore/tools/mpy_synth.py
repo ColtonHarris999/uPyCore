@@ -13,6 +13,7 @@ Usage::
     mpy_synth.py                  # elaborate every known top
     mpy_synth.py mpy_core         # one top
     mpy_synth.py --synth mpy_alu  # map to gates and write cell counts
+    mpy_synth.py --depth 150 mpy_core  # flat gates; endpoints >= 150 levels deep
     mpy_synth.py --list
 """
 
@@ -99,6 +100,7 @@ def _write_script(
     do_synth: bool,
     out_dir: Path,
     slang_extra: list[str],
+    depth: bool = False,
 ) -> Path:
     sources = _files(top)
     ys = out_dir / f"{top}.ys"
@@ -116,7 +118,13 @@ def _write_script(
         f"hierarchy -check -top {top}",
         "stat -hierarchy",
     ]
-    if do_synth:
+    if depth:
+        # Flat, so a path is counted across module boundaries.
+        lines += [
+            f"synth -flatten -top {top}",
+            f"write_json {out_dir.as_posix()}/{top}.json",
+        ]
+    elif do_synth:
         # Keep hierarchy for readable area; flatten only inside synth's own passes.
         lines += [
             f"synth -top {top}",
@@ -132,9 +140,10 @@ def run_top(
     do_synth: bool,
     out_dir: Path,
     slang_extra: list[str] | None = None,
+    depth: bool = False,
 ) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
-    ys = _write_script(top, do_synth, out_dir, slang_extra or [])
+    ys = _write_script(top, do_synth, out_dir, slang_extra or [], depth)
     log = out_dir / f"{top}.log"
     cmd = [_yosys(), "-s", str(ys)]
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
@@ -176,6 +185,14 @@ def main() -> int:
         help="override mpy_gc POOL_BYTES (useful with --synth to shrink the ATB)",
     )
     ap.add_argument(
+        "--depth",
+        type=int,
+        metavar="LEVELS",
+        default=None,
+        help="map flat to generic gates and rank register endpoints by logic depth "
+        "(depth_report.py), listing those at least LEVELS deep",
+    )
+    ap.add_argument(
         "-o",
         "--out",
         type=Path,
@@ -192,25 +209,30 @@ def main() -> int:
 
     if args.tops:
         tops = args.tops
-    elif args.synth:
+    elif args.synth or args.depth is not None:
         tops = list(GATES_DEFAULT)
     else:
         tops = list(TOPS.keys())
 
     failed: list[str] = []
     for top in tops:
-        mode = "synth" if args.synth else "elaborate"
+        mode = "depth" if args.depth is not None else "synth" if args.synth else "elaborate"
         print(f"== {mode} {top} ==")
         extra: list[str] = []
         if args.gc_pool_bytes is not None and top in ("mpy_gc", "mpy_soc"):
             extra.append(f"-G POOL_BYTES={args.gc_pool_bytes}")
         try:
-            log = run_top(top, args.synth, args.out, extra)
+            log = run_top(top, args.synth, args.out, extra, args.depth is not None)
         except SynthError as exc:
             print(exc, file=sys.stderr)
             failed.append(top)
             continue
-        _print_stat_tail(log)
+        if args.depth is not None:
+            import depth_report
+
+            depth_report.main([str(args.out / f"{top}.json"), "--top-module", top, "--min", str(args.depth)])
+        else:
+            _print_stat_tail(log)
         print(f"log: {log.relative_to(ROOT)}")
 
     if failed:

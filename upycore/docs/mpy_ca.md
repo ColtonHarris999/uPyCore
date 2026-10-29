@@ -232,7 +232,13 @@ The iterative modulo replaces an 8,068-cell, 564-level combinational one
 with 2,361 cells and 76 levels. The core's longest path is then 199
 generic levels, in the float result path: `upycore_fp_divrem`'s normalize,
 binary64 pack and round, and the binary32 narrowing in `mpy_alu`, all in
-one cycle. That is the next place for a register.
+one cycle. Registers now sit between those steps (`A_FNAR` in `mpy_alu`,
+a pack stage in `upycore_fp_divrem`), and the int-to-float conversion of
+an operand no longer shares a cycle with the float checks (`A_FCONV`).
+With ABC mapping (`mpy_synth.py --depth`), every register endpoint in
+`mpy_core` is then under 150 levels; the deepest, 149, starts in
+`upycore_fp_pow`'s leading-zero count and ROM lookup. The float benchmark
+pays 2.0% in cycles for the three registers.
 
 64 of `mpy_ca`'s flops are the `words_o` and `cmds_o` counters. The
 streaming engine adds the buffer (4 × 36 bits), the request register, the

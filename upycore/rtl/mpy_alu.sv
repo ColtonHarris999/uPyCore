@@ -19,6 +19,12 @@
 // last bit. A float ** that overflows gives inf, as powf does.
 // A negative base with a fractional exponent reports err COMPLEX so the
 // firmware can build the complex result.
+//
+// Timing: the FPU's binary64 result is registered (A_FNAR) before it is
+// rounded back to binary32, and an op that converts an int operand makes
+// its float checks a cycle later from the converted value (A_FCONV). No
+// rounding or conversion shares a cycle with another; each costs one
+// cycle where it applies.
 
 // verilator lint_off DECLFILENAME
 package mpy_alu_pkg;
@@ -287,7 +293,7 @@ module mpy_alu (
 );
     import mpy_alu_pkg::*;
 
-    typedef enum logic [2:0] { A_IDLE, A_MUL, A_DIV, A_POW, A_FPU, A_DONE } astate_e;
+    typedef enum logic [2:0] { A_IDLE, A_MUL, A_DIV, A_POW, A_FPU, A_FNAR, A_FCONV, A_DONE } astate_e;
     astate_e st;
 
     logic [5:0]  op;
@@ -363,6 +369,7 @@ module mpy_alu (
     logic [4:0]   fop;
     logic [127:0] fres;
     logic [31:0]  fnarrow;
+    logic [63:0]  fres_r;
     logic         fexc, fdone, fstall, fbusy;
     always_comb begin
         case (op)
@@ -384,7 +391,43 @@ module mpy_alu (
     );
     mpy_f32_widen u_wa (.f_i(fa), .d_o(fa64));
     mpy_f32_widen u_wb (.f_i(fb), .d_o(fb64));
-    mpy_f32_narrow u_narrow (.d_i(fres[63:0]), .q_o(fnarrow));
+    mpy_f32_narrow u_narrow (.d_i(fres_r), .q_o(fnarrow));
+
+    // Float compare and issue checks. At accept they read the operands
+    // directly, which is only done when both are already floats; an op
+    // that converts an int operand decides in A_FCONV from fa / fb, so the
+    // int-to-float conversion and these checks are never in one cycle.
+    logic [5:0]  dop;
+    logic [31:0] dxa, dxb;
+    logic        f_cmp, f_fpu;
+    logic [2:0]  f_err;
+    assign dop = (st == A_FCONV) ? op : op_i;
+    assign dxa = (st == A_FCONV) ? fa : a_i[31:0];
+    assign dxb = (st == A_FCONV) ? fb : b_i[31:0];
+    always_comb begin
+        case (dop)
+            ALU_LT:  f_cmp = mpy_f32_lt(dxa, dxb);
+            ALU_GT:  f_cmp = mpy_f32_lt(dxb, dxa);
+            ALU_LE:  f_cmp = mpy_f32_lt(dxa, dxb) || mpy_f32_eq(dxa, dxb);
+            ALU_GE:  f_cmp = mpy_f32_lt(dxb, dxa) || mpy_f32_eq(dxa, dxb);
+            ALU_EQ:  f_cmp = mpy_f32_eq(dxa, dxb);
+            default: f_cmp = !mpy_f32_eq(dxa, dxb);
+        endcase
+        f_err = AE_NONE;
+        case (dop)
+            ALU_ADD, ALU_SUB, ALU_MUL: ;
+            ALU_TDIV, ALU_FLOOR, ALU_MOD:
+                if (mpy_f32_zero(dxb)) f_err = AE_ZERO_DIV;
+            ALU_POW:
+                if (mpy_f32_zero(dxa) && dxb[31] && !(dxb[30:23] == 8'hFF && dxb[22:0] == 23'd0))
+                    f_err = AE_ZERO_DIV;
+                else if (dxa[31] && !mpy_f32_zero(dxa) && !mpy_f32_nan(dxa) &&
+                         !mpy_f32_integral(dxb) && !mpy_f32_nan(dxb) && !(dxb[30:23] == 8'hFF))
+                    f_err = AE_COMPLEX;
+            default: f_err = AE_UNSUPPORTED;
+        endcase
+        f_fpu = (f_err == AE_NONE);
+    end
 
     // Accept: everything that finishes in one cycle is answered here.
     always_ff @(posedge clk_i or negedge rst_n_i) begin
@@ -400,12 +443,13 @@ module mpy_alu (
             b <= '0;
             fa <= '0;
             fb <= '0;
+            fres_r <= '0;
         end else begin
             done_o <= 1'b0;
             case (st)
                 A_IDLE: if (start_i) begin
                     logic [31:0] xa, xb;
-                    logic        isf, ok;
+                    logic        isf, conv, ok;
                     logic [63:0] v;
                     op <= op_i;
                     small_r <= small_i;
@@ -419,6 +463,7 @@ module mpy_alu (
                     res_o <= '0;
                     rkind_o <= AK_INT;
                     isf = a_flt_i || b_flt_i;
+                    conv = !a_flt_i || !b_flt_i;
                     if (op_i == ALU_I2F) begin
                         res_o <= {32'd0, xa};
                         rkind_o <= AK_FLOAT;
@@ -445,48 +490,23 @@ module mpy_alu (
                             st <= A_DONE;
                         end
                     end else if (op_i <= ALU_NE) begin
-                        if (isf) begin
+                        if (isf && conv) begin
+                            st <= A_FCONV;
+                        end else if (isf) begin
                             rkind_o <= AK_BOOL;
-                            case (op_i)
-                                ALU_LT: res_o <= {63'd0, mpy_f32_lt(xa, xb)};
-                                ALU_GT: res_o <= {63'd0, mpy_f32_lt(xb, xa)};
-                                ALU_LE: res_o <= {63'd0, mpy_f32_lt(xa, xb) || mpy_f32_eq(xa, xb)};
-                                ALU_GE: res_o <= {63'd0, mpy_f32_lt(xb, xa) || mpy_f32_eq(xa, xb)};
-                                ALU_EQ: res_o <= {63'd0, mpy_f32_eq(xa, xb)};
-                                default: res_o <= {63'd0, !mpy_f32_eq(xa, xb)};
-                            endcase
+                            res_o <= {63'd0, f_cmp};
+                            st <= A_DONE;
+                        end else begin
+                            st <= A_DONE;
                         end
-                        st <= A_DONE;
                     end else if (isf || op_i == ALU_TDIV || (op_i == ALU_POW && b_i[63])) begin
                         rkind_o <= AK_FLOAT;
-                        case (op_i)
-                            ALU_ADD, ALU_SUB, ALU_MUL: st <= A_FPU;
-                            ALU_TDIV, ALU_FLOOR, ALU_MOD: begin
-                                if (mpy_f32_zero(xb)) begin
-                                    err_o <= AE_ZERO_DIV;
-                                    st <= A_DONE;
-                                end else begin
-                                    st <= A_FPU;
-                                end
-                            end
-                            ALU_POW: begin
-                                if (mpy_f32_zero(xa) && xb[31] && !(xb[30:23] == 8'hFF && xb[22:0] == 23'd0)) begin
-                                    err_o <= AE_ZERO_DIV;
-                                    st <= A_DONE;
-                                end else if (xa[31] && !mpy_f32_zero(xa) && !mpy_f32_nan(xa) &&
-                                             !mpy_f32_integral(xb) && !mpy_f32_nan(xb) &&
-                                             !(xb[30:23] == 8'hFF)) begin
-                                    err_o <= AE_COMPLEX;
-                                    st <= A_DONE;
-                                end else begin
-                                    st <= A_FPU;
-                                end
-                            end
-                            default: begin
-                                err_o <= AE_UNSUPPORTED;
-                                st <= A_DONE;
-                            end
-                        endcase
+                        if (conv) begin
+                            st <= A_FCONV;
+                        end else begin
+                            err_o <= f_err;
+                            st <= f_fpu ? A_FPU : A_DONE;
+                        end
                     end else begin
                         case (op_i)
                             ALU_MUL: st <= A_MUL;
@@ -533,9 +553,25 @@ module mpy_alu (
                     if (fexc) begin
                         // Only ** overflow is left; powf gives inf with the sign of the result.
                         res_o <= {32'd0, fa[31] && mpy_f32_odd(fb), 8'hFF, 23'd0};
+                        st <= A_IDLE;
+                        done_o <= 1'b1;
                     end else begin
-                        res_o <= {32'd0, fnarrow};
+                        fres_r <= fres[63:0];
+                        st <= A_FNAR;
                     end
+                end
+                A_FCONV: begin
+                    if (op <= ALU_NE) begin
+                        rkind_o <= AK_BOOL;
+                        res_o <= {63'd0, f_cmp};
+                        st <= A_DONE;
+                    end else begin
+                        err_o <= f_err;
+                        st <= f_fpu ? A_FPU : A_DONE;
+                    end
+                end
+                A_FNAR: begin
+                    res_o <= {32'd0, fnarrow};
                     st <= A_IDLE;
                     done_o <= 1'b1;
                 end
