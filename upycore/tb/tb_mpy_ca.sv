@@ -9,14 +9,17 @@
 // golden model applies a shipped copy at once, as memmove would. Every load
 // the agent makes must match the model, and after a drain the whole window
 // must match it. That is the scoreboard's promise: the core sees the copies
-// as if they had finished when they were shipped.
+// as if they had finished when they were shipped. The agent sometimes idles
+// between accesses so the engine also streams on a free port, and at the
+// end one copy runs alone to measure the engine's rate.
 //
 // Build it with Verilator from the repo root, then run obj_dir/Vtb_mpy_ca:
 //   --binary -Iupycore/rtl upycore/rtl/mpy_ca.sv upycore/rtl/mpy_mem.sv
 //   upycore/tb/tb_mpy_ca.sv --top-module tb_mpy_ca
 // +SEED=<n> picks the random sequence and +OPS=<n> its length. -GQDEPTH=<n>
-// sets the queue depth.
-module tb_mpy_ca #(parameter int QDEPTH = 2);
+// sets the queue depth, -GBUF=<n> the read-ahead buffer and -GLAT=<n> the
+// SRAM latency.
+module tb_mpy_ca #(parameter int QDEPTH = 2, parameter int BUF = 4, parameter int LAT = 1);
     localparam logic [31:0] BASE = MPY_SRAM_BASE + 32'h1000;
     localparam int W = 64;
 
@@ -35,11 +38,12 @@ module tb_mpy_ca #(parameter int QDEPTH = 2);
     logic [31:0] a_addr, a_wdata, a_faddr, a_words, a_cmds;
     logic [3:0]  a_wtag, a_freason;
     // memory
-    logic        m_req, m_we, m_ack, m_fault;
+    logic        m_req, m_we, m_rdy, m_ack, m_fault;
+    logic [1:0]  m_id, m_ack_id;
     logic [31:0] m_addr, m_wdata, m_rdata;
     logic [3:0]  m_wtag, m_rtag, m_freason;
 
-    mpy_ca #(.QDEPTH(QDEPTH)) dut (
+    mpy_ca #(.QDEPTH(QDEPTH), .BUF(BUF)) dut (
         .clk_i(clk), .rst_n_i(rst_n),
         .cmd_valid_i(cmd_valid), .cmd_ready_o(cmd_ready),
         .cmd_dst_i(cmd_dst), .cmd_src_i(cmd_src), .cmd_n_i(cmd_n), .idle_o(idle),
@@ -51,40 +55,35 @@ module tb_mpy_ca #(parameter int QDEPTH = 2);
         .words_o(a_words), .cmds_o(a_cmds)
     );
 
-    mpy_mem mem (
+    mpy_mem #(.SRAM_LATENCY(LAT)) mem (
         .clk_i(clk), .rst_n_i(rst_n),
         .req_i(m_req), .we_i(m_we), .tag_we_i(m_we), .be_i(4'hF),
         .addr_i(m_addr), .wdata_i(m_wdata), .wtag_i(m_wtag),
-        .ack_o(m_ack), .rdata_o(m_rdata), .rtag_o(m_rtag),
+        .id_i(m_id), .rdy_o(m_rdy), .ack_o(m_ack), .id_o(m_ack_id), .rdata_o(m_rdata), .rtag_o(m_rtag),
         .fault_o(m_fault), .fault_reason_o(m_freason)
     );
 
-    // The mpy_soc arbiter without the collector.
-    logic inflight, owner_ca, c_want, free, pick_c, pick_a;
+    // The mpy_soc arbiter without the collector: id 2 is the core, 3 the CA.
+    logic c_want, pick_c, pick_a;
     assign c_want = c_pend || c_req;
-    assign free = !inflight || m_ack;
-    assign pick_c = free && c_want && !busy;
-    assign pick_a = free && !pick_c && a_req;
+    assign pick_c = m_rdy && c_want && !busy;
+    assign pick_a = m_rdy && !pick_c && a_req;
     assign a_gnt = pick_a;
     assign m_req = pick_c || pick_a;
+    assign m_id = pick_a ? 2'd3 : 2'd2;
     assign m_we = pick_a ? a_we : c_we;
     assign m_addr = pick_a ? a_addr : c_addr;
     assign m_wdata = pick_a ? a_wdata : c_wdata;
     assign m_wtag = pick_a ? a_wtag : c_wtag;
-    assign a_ack = m_ack && owner_ca;
-    assign c_ack = m_ack && !owner_ca;
+    assign a_ack = m_ack && m_ack_id == 2'd3;
+    assign c_ack = m_ack && m_ack_id == 2'd2;
     always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            c_pend <= 1'b0; inflight <= 1'b0; owner_ca <= 1'b0;
-        end else begin
-            c_pend <= c_want && !pick_c;
-            if (m_req) begin inflight <= 1'b1; owner_ca <= pick_a; end
-            else if (m_ack) inflight <= 1'b0;
-        end
+        if (!rst_n) c_pend <= 1'b0;
+        else c_pend <= c_want && !pick_c;
     end
 
     logic [35:0] gm [0:W-1];
-    int errors = 0, loads = 0, stores = 0, ships = 0, stall = 0, cyc = 0;
+    int errors = 0, loads = 0, stores = 0, ships = 0, stall = 0, cyc = 0, rate = 0;
 
     always @(posedge clk) begin
         cyc++;
@@ -96,6 +95,7 @@ module tb_mpy_ca #(parameter int QDEPTH = 2);
     endfunction
 
     task automatic core_access(input logic we, input int i, input logic [35:0] v);
+        if ($urandom_range(0, 3) == 0) repeat ($urandom_range(1, 12)) @(negedge clk);
         @(negedge clk);
         c_req = 1'b1; c_we = we; c_addr = BASE + 32'(i * 4); c_wdata = v[31:0]; c_wtag = v[35:32];
         @(negedge clk);
@@ -164,10 +164,25 @@ module tb_mpy_ca #(parameter int QDEPTH = 2);
                 if (errors < 10) $display("FAIL drain [%0d] got %09h want %09h", k, {m_rtag, m_rdata}, gm[k]);
             end
         end
+        // One copy alone on the port, ship to idle.
+        begin
+            int c0;
+            ship(0, 32, 32);
+            c0 = cyc;
+            while (!idle) @(negedge clk);
+            rate = cyc - c0;
+        end
+        for (int k = 0; k < W; k++) begin
+            core_access(1'b0, k, '0);
+            if ({m_rtag, m_rdata} !== gm[k]) begin
+                errors++;
+                if (errors < 10) $display("FAIL alone [%0d] got %09h want %09h", k, {m_rtag, m_rdata}, gm[k]);
+            end
+        end
         if (a_fault) begin errors++; $display("FAIL fault %0h at %08h", a_freason, a_faddr); end
         if (errors == 0)
-            $display("PASS mpy_ca qdepth=%0d seed=%0d ships=%0d words=%0d loads=%0d stores=%0d stall=%0d cycles=%0d",
-                     QDEPTH, seed, ships, a_words, loads, stores, stall, cyc);
+            $display("PASS mpy_ca qdepth=%0d buf=%0d lat=%0d seed=%0d ships=%0d words=%0d loads=%0d stores=%0d stall=%0d cycles=%0d alone=32 words in %0d cycles",
+                     QDEPTH, BUF, LAT, seed, ships, a_words, loads, stores, stall, cyc, rate);
         else
             $display("FAIL %0d checks", errors);
         $finish;

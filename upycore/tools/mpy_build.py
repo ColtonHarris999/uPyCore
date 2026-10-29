@@ -52,7 +52,7 @@ FW_ORDER = [
 ]
 
 RTL = [
-    "upycore/rtl/upycore_umul_seq.sv", "upycore/rtl/upycore_udiv_seq.sv",
+    "upycore/rtl/upycore_umul_seq.sv", "upycore/rtl/upycore_udiv_seq.sv", "upycore/rtl/upycore_umod_seq.sv",
     "upycore/rtl/upycore_int_alu.sv", "upycore/rtl/upycore_mul.sv", "upycore/rtl/upycore_div.sv",
     "upycore/rtl/upycore_ipow.sv", "upycore/rtl/upycore_fp_add.sv", "upycore/rtl/upycore_fp_mul.sv",
     "upycore/rtl/upycore_fp_divrem.sv", "upycore/rtl/upycore_fp_pow.sv", "upycore/rtl/upycore_fpu.sv",

@@ -178,13 +178,20 @@ module mpy_core
     endfunction
 
     // MicroPython's mp_map growth sequence (py/map.c).
+    // py/map.c size table: the first entry >= x, else (x + x/2) | 1. The
+    // table is sorted, so ge[] is a thermometer code; its lowest set bit
+    // picks the entry through a flat AND-OR instead of a 34-deep chain.
     function automatic logic [31:0] next_alloc(input logic [31:0] x);
         logic [31:0] t [0:33];
+        logic [33:0] ge, first;
         logic [31:0] r;
         t = '{0, 2, 4, 6, 8, 10, 12, 17, 23, 29, 37, 47, 59, 73, 97, 127, 167, 223, 293, 389,
               521, 691, 919, 1223, 1627, 2161, 3229, 4831, 7243, 10861, 16273, 24407, 36607, 54907};
-        r = (x + (x >> 1)) | 32'd1;
-        for (int i = 33; i >= 0; i--) if (t[i] >= x) r = t[i];
+        for (int i = 0; i < 34; i++) ge[i] = (t[i] >= x);
+        first = ge & ~{ge[32:0], 1'b0};
+        r = ge[33] ? 32'd0 : ((x + (x >> 1)) | 32'd1);
+        for (int i = 0; i < 34; i++)
+            if (first[i]) r = r | t[i];
         next_alloc = r;
     endfunction
 
@@ -475,6 +482,7 @@ module mpy_core
         S_LK_DEC,
         S_LK_FL,
         S_LK_H,
+        S_LK_HM,
         S_LK_HIT,
         S_LK_INC,
         S_LK_INS,
@@ -589,6 +597,7 @@ module mpy_core
         S_RH_F2,
         S_RH_F3,
         S_RH_H,
+        S_RH_HM,
         S_RH_K,
         S_RH_L,
         S_RH_NX,
@@ -845,6 +854,7 @@ module mpy_core
         S_SCR_CAP,
         S_RH_LKA,
         S_RH_LKB,
+        S_RH_LKC,
         S_RH_F3B,
         S_FI_PRE,
         S_N_SF0B,
@@ -991,6 +1001,8 @@ module mpy_core
     // subroutine registers
     val_t        ty_v, ty_t;                       // TYPEOF
     val_t        hk; logic [31:0] hh; logic hok;   // HASH
+    logic        hm_start, hm_done;                // hh % sA[0] (upycore_umod_seq)
+    logic [31:0] hm_rem;
     val_t        si_v; logic [31:0] si_len, si_hash, si_addr; logic si_na;  // SINFO
     val_t        se_a, se_b; logic se_eq;
     val_t        ke_a, ke_b; logic ke_eq, ke_cx;
@@ -1126,6 +1138,13 @@ module mpy_core
         .clk_i, .rst_n_i, .start_i(alu_start), .op_i(alu_op),
         .a_flt_i(na_f), .b_flt_i(nb_f), .a_i(na), .b_i(nb), .small_i(n_small),
         .done_o(alu_done), .res_o(alu_res), .rkind_o(alu_kind), .err_o(alu_err)
+    );
+
+    // Probe start, pos = hh % alloc. Both callers divide by sA[0]
+    // (`lk_alloc / `rh_alloc), which holds until the probe's done.
+    upycore_umod_seq #(.BPC(4)) u_hmod (
+        .clk_i, .rst_n_i, .start_i(hm_start), .a_i(hh), .d_i(sA[0]),
+        .done_o(hm_done), .rem_o(hm_rem), .busy_o()
     );
 
     // decoder over the fetch window
@@ -1504,7 +1523,7 @@ module mpy_core
             m_req <= 1'b0; m_we <= 1'b0; m_tag_we <= 1'b0; m_be <= 4'hF;
             m_addr <= 32'd0; m_wdata <= 32'd0; m_wtag <= 4'd0;
             gc_alloc_req <= 1'b0; gc_collect_req <= 1'b0;
-            alu_start <= 1'b0; aalu_pend <= 1'b0; aalu_ready <= 1'b0; aalu_slot <= 4'd0; aalu_ret <= S_FETCH;
+            alu_start <= 1'b0; hm_start <= 1'b0; aalu_pend <= 1'b0; aalu_ready <= 1'b0; aalu_slot <= 4'd0; aalu_ret <= S_FETCH;
             ca_valid <= 1'b0; ca_dst <= 32'd0; ca_src <= 32'd0; ca_n <= 32'd0;
             halted <= 1'b0; hcode <= 4'd0; hval <= 32'd0;
             cyc <= 32'd0; nops <= 32'd0; trace <= 1'b0;
@@ -1544,6 +1563,7 @@ module mpy_core
             gc_alloc_req <= 1'b0;
             gc_collect_req <= 1'b0;
             alu_start <= 1'b0;
+            hm_start <= 1'b0;
             ca_valid <= 1'b0;
             trace <= 1'b0;
             if (!halted) cyc <= cyc + 32'd1;
@@ -4256,10 +4276,14 @@ module mpy_core
             end
             S_LK_RH: if (lk_cx) ret(); else st <= S_LK;
             S_LK_H: if (!hok) begin lk_cx <= 1'b1; ret(); end
-                    else begin
-                        `lk_pos <= hh % `lk_alloc; `lk_start <= hh % `lk_alloc; lk_hasav <= 1'b0;
+                    else if (hh < `lk_alloc) begin
+                        `lk_pos <= hh; `lk_start <= hh; lk_hasav <= 1'b0;
                         st <= S_LK_P;
-                    end
+                    end else begin hm_start <= 1'b1; st <= S_LK_HM; end
+            S_LK_HM: if (hm_done) begin
+                         `lk_pos <= hm_rem; `lk_start <= hm_rem; lk_hasav <= 1'b0;
+                         st <= S_LK_P;
+                     end
             S_LK_P: begin
                 `lk_slot <= `lk_tab + (lk_set ? (`lk_pos << 2) : (`lk_pos << 3));
                 rd(`lk_tab + (lk_set ? (`lk_pos << 2) : (`lk_pos << 3)), S_LK_K);
@@ -4323,9 +4347,10 @@ module mpy_core
             S_RH: if (scr_id != SCR_RH) scr_adopt(SCR_RH, S_RH);
                   else st <= S_RH_LKA;
             S_RH_LKA: rd(scr_addr(SCR_LK, 4'd0), S_RH_LKB);
-            S_RH_LKB: begin
-                `rh_alloc <= next_alloc(md + 32'd1);
-                alloc(next_alloc(md + 32'd1) << (lk_set ? 0 : 1), S_RH_A);
+            S_RH_LKB: begin `rh_alloc <= md + 32'd1; st <= S_RH_LKC; end
+            S_RH_LKC: begin
+                `rh_alloc <= next_alloc(`rh_alloc);
+                alloc(next_alloc(`rh_alloc) << (lk_set ? 0 : 1), S_RH_A);
             end
             S_RH_A: begin `rh_tab <= al_a; `rh_i <= 32'd0; `rh_used <= 32'd0; rd(adr(t[4]) + 4, S_RH_A2); end
             S_RH_A2: begin sA[5] <= md; rd(adr(t[4]) + 8, S_RH_A3); end
@@ -4335,7 +4360,9 @@ module mpy_core
             S_RH_K: if (mv == VNULL || mv == VTOMB) begin `rh_i <= `rh_i + 32'd1; st <= S_RH_L; end
                     else begin `rh_k <= mv; hk <= mv; gosub(S_HASH, S_RH_H); end
             S_RH_H: if (!hok) begin lk_cx <= 1'b1; ret(); end
-                    else begin `rh_p <= hh % `rh_alloc; st <= S_RH_P; end
+                    else if (hh < `rh_alloc) begin `rh_p <= hh; st <= S_RH_P; end
+                    else begin hm_start <= 1'b1; st <= S_RH_HM; end
+            S_RH_HM: if (hm_done) begin `rh_p <= hm_rem; st <= S_RH_P; end
             S_RH_P: rd(`rh_tab + (lk_set ? (`rh_p << 2) : (`rh_p << 3)), S_RH_PK);
             S_RH_PK: if (mv != VNULL) begin
                          `rh_p <= (`rh_p + 32'd1 == `rh_alloc) ? 32'd0 : `rh_p + 32'd1; st <= S_RH_P;

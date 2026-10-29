@@ -5,8 +5,11 @@
 //
 // Three masters share the port: the collector, the core, and the container
 // accelerator (mpy_ca). A request waits in the arbiter below until mpy_mem
-// is free, then the highest-priority one goes: collector, core, accelerator.
-// The accelerator therefore runs in the cycles the core leaves idle. A core
+// can take one (rdy), then the highest-priority one goes: collector, core,
+// accelerator. mpy_mem takes a request in the last cycle of the one before
+// and returns the owner on its ack, so the port carries one access per
+// cycle. The accelerator therefore runs in the cycles the core leaves idle,
+// and a streaming copy fills them. A core
 // access that the accelerator's scoreboard marks busy waits until the copy
 // has moved past that word; the core's state machine only sees a longer
 // wait for its ack. The collector and the core never contend: the core
@@ -61,9 +64,10 @@ module mpy_soc #(
     logic [3:0]  gm_wtag, gm_rtag;
 
     // memory
-    logic        m_req, m_we, m_tag_we, m_ack, m_fault;
+    logic        m_req, m_we, m_tag_we, m_rdy, m_ack, m_fault;
     logic [3:0]  m_be, m_wtag, m_rtag, m_fault_reason;
     logic [31:0] m_addr, m_wdata, m_rdata;
+    logic [1:0]  m_id, m_ack_id;
 
     // core <-> container accelerator
     logic        ca_valid, ca_ready, ca_idle, ca_busy, ca_fault;
@@ -134,7 +138,7 @@ module mpy_soc #(
         .clk_i, .rst_n_i,
         .req_i(m_req), .we_i(m_we), .tag_we_i(m_tag_we), .be_i(m_be),
         .addr_i(m_addr), .wdata_i(m_wdata), .wtag_i(m_wtag),
-        .ack_o(m_ack), .rdata_o(m_rdata), .rtag_o(m_rtag),
+        .id_i(m_id), .rdy_o(m_rdy), .ack_o(m_ack), .id_o(m_ack_id), .rdata_o(m_rdata), .rtag_o(m_rtag),
         .fault_o(m_fault), .fault_reason_o(m_fault_reason)
     );
 
@@ -173,16 +177,15 @@ module mpy_soc #(
     end
 
     // Port arbiter. The core and the collector pulse a request and hold its
-    // fields until the ack; the accelerator holds req until am_gnt. mpy_mem
-    // takes a new request in the cycle its previous ack is visible.
+    // fields until the ack; the accelerator holds req until am_gnt. The
+    // granted master's id goes with the access and comes back with its ack.
     localparam logic [1:0] P_NONE = 2'd0, P_GC = 2'd1, P_CORE = 2'd2, P_CA = 2'd3;
-    logic       c_pend, g_pend, inflight, c_want, g_want, mem_free;
-    logic [1:0] owner, pick;
+    logic       c_pend, g_pend, c_want, g_want;
+    logic [1:0] pick;
     assign c_want = c_pend || (c_req && !c_sim);
     assign g_want = g_pend || gm_req;
-    assign mem_free = !inflight || m_ack;
     always_comb begin
-        if (!mem_free) pick = P_NONE;
+        if (!m_rdy) pick = P_NONE;
         else if (g_want) pick = P_GC;
         else if (c_want && !ca_busy) pick = P_CORE;
         else if (am_req) pick = P_CA;
@@ -204,25 +207,24 @@ module mpy_soc #(
             end
         endcase
     end
+    assign m_id = pick;
     assign am_gnt = (pick == P_CA);
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) begin
-            c_pend <= 1'b0; g_pend <= 1'b0; inflight <= 1'b0; owner <= P_NONE;
+            c_pend <= 1'b0; g_pend <= 1'b0;
         end else begin
             c_pend <= c_want && (pick != P_CORE);
             g_pend <= g_want && (pick != P_GC);
-            if (pick != P_NONE) begin inflight <= 1'b1; owner <= pick; end
-            else if (m_ack) inflight <= 1'b0;
         end
     end
-    assign gm_ack = m_ack && (owner == P_GC);
-    assign am_ack = m_ack && (owner == P_CA);
+    assign gm_ack = m_ack && (m_ack_id == P_GC);
+    assign am_ack = m_ack && (m_ack_id == P_CA);
     assign gm_rdata = m_rdata;
     assign gm_rtag = m_rtag;
-    assign c_ack = (m_ack && owner == P_CORE) || sim_ack;
+    assign c_ack = (m_ack && m_ack_id == P_CORE) || sim_ack;
     assign c_rdata = sim_ack ? sim_rdata : m_rdata;
     assign c_rtag = sim_ack ? 4'd0 : m_rtag;
-    assign c_fault = !sim_ack && m_fault && (owner == P_CORE);
+    assign c_fault = !sim_ack && m_fault && (m_ack_id == P_CORE);
     assign c_fault_reason = m_fault_reason;
 
     assign halted_o = core_halted || sim_halt;
