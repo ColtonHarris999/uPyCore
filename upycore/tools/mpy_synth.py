@@ -52,12 +52,13 @@ TOPS: dict[str, list[str]] = {
     "mpy_periph": ["mpy_mmio_pkg.sv", "mpy_irq.sv", "mpy_periph.sv"],
     "mpy_container": ["mpy_container.sv"],
     "mpy_ca": ["mpy_ca.sv"],
+    "upycore_umod_seq": ["upycore_umod_seq.sv"],
     "mpy_alu": ALU_FILES,
     "mpy_gc": ["mpy_gc.sv"],
     "mpy_mem": ["mpy_mem.sv"],
-    "mpy_core": ALU_FILES + ["mpy_decode.sv", "mpy_core.sv"],
+    "mpy_core": ALU_FILES + ["upycore_umod_seq.sv", "mpy_decode.sv", "mpy_core.sv"],
     "mpy_soc": ALU_FILES
-    + ["mpy_decode.sv", "mpy_core.sv", "mpy_gc.sv", "mpy_ca.sv", "mpy_mem.sv", "mpy_soc.sv"],
+    + ["upycore_umod_seq.sv", "mpy_decode.sv", "mpy_core.sv", "mpy_gc.sv", "mpy_ca.sv", "mpy_mem.sv", "mpy_soc.sv"],
 }
 
 # Gate mapping of full-size flash/SRAM/GC tables is a long memory job.
@@ -69,6 +70,7 @@ GATES_DEFAULT = [
     "mpy_periph",
     "mpy_container",
     "mpy_ca",
+    "upycore_umod_seq",
     "mpy_alu",
     "mpy_core",
 ]
