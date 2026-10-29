@@ -194,8 +194,12 @@ The converted files also read cleanly in Yosys's own Verilog parser.
 Vectorless power (Genus guessing how often each net toggles) does not
 compare two different cores fairly. `activity/upycore_pystone.saif.gz` is
 the switching activity of `mpy_core` running perf_bench `misc_pystone`
-(300 loops, MicroPython startup included: 15,235,606 cycles at the
-testbench's 10 ns clock). To regenerate it:
+(300 loops, MicroPython startup included: 14,174,681 cycles at the
+testbench's 10 ns clock; the benchmark itself is 13,513,686, the run less
+the 660,995-cycle `misc_pystone_base.py`). It matches the RTL from the
+iterative probe modulo on. `upycore_pystone_oldrtl.saif.gz` is the same
+run on the earlier RTL (15,235,606 cycles, benchmark 13,409,731), for
+netlists synthesized before that change. To regenerate it:
 
 ```sh
 verilator --trace-saif -DMPY_SAIF ...   # the flags mpy_build.py uses, --Mdir build/mpy_soc_saif/obj
