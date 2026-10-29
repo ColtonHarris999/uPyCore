@@ -59,6 +59,10 @@ the ALU finishes. A scoreboard makes a later access to busy data wait.
 measurements. `python3 upycore/tools/bench.py` compares the switches,
 and `mpy_build.py run --sim-arg +CA=0 --sim-arg +AALU=0` turns both off.
 
+`python3 upycore/tools/pystone.py --mhz <clock>` boots pystone at two loop
+counts and reports cycles per pystone without boot and setup, then
+pystones per second at that clock.
+
 ## Synthesis
 
 The hart and its components are written for a Yosys + yosys-slang backend
