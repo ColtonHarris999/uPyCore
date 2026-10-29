@@ -112,9 +112,13 @@ module tb_mpy_gc;
         repeat (3) @(posedge clk);
         rst_n = 1'b1;
         @(negedge clk);
+        while (busy) @(negedge clk);     // the allocation table clears after reset
 
         // 1. Next-fit allocation of zeroed blocks.
         check(total_blocks == 32'(NB) && free_blocks == 32'(NB), "pool starts empty");
+        // 40 blocks is 8 in the 5-bit block count: the request must still fail.
+        alloc(640, ok, x);
+        check(!ok && free_blocks == 32'(NB), "a request larger than the pool fails");
         put(POOL, MPY_TAG_OBJECT, 32'h1234_5678);        // stale data the alloc must clear
         alloc(20, ok, a);                                // 2 blocks
         check(ok && a == POOL, "first object at the pool base");

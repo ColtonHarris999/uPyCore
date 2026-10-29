@@ -8,7 +8,8 @@
 // engine); the hardware suite's memory area covers them.
 //
 // Build it with Verilator from the repo root, then run obj_dir/Vtb_mpy_value:
-//   --binary -Iupycore/rtl upycore/rtl/mpy_regfile.sv upycore/rtl/mpy_mem.sv
+//   --binary -Iupycore/rtl upycore/rtl/mpy_regfile.sv
+//   upycore/rtl/bsg_mem_1rw_sync_mask_write_bit.sv upycore/rtl/mpy_mem.sv
 //   upycore/tb/tb_mpy_value.sv --top-module tb_mpy_value
 // (upycore/tools/unit_tests.py does this.)
 module tb_mpy_value;
@@ -92,15 +93,15 @@ module tb_mpy_value;
         .rdata_o(rdata),
         .rtag_o(rtag),
         .fault_o(fault),
-        .fault_reason_o(fault_reason)
+        .fault_reason_o(fault_reason),
+        .ld_we_i(1'b0),
+        .ld_idx_i('0),
+        .ld_wdata_i('0),
+        .ld_wtag_i('0),
+        .init_done_o()
     );
 
     assign idx_addr = '0;
-
-    // The packed tag word that holds an SRAM address's nibble.
-    function automatic logic [31:0] sram_tag_word(input logic [31:0] a);
-        sram_tag_word = dut_mem.sram_tags[mpy_sram_word_index(a) >> 3];
-    endfunction
 
     function automatic string tag_name(input logic [3:0] tag);
         case (tag)
@@ -210,7 +211,7 @@ module tb_mpy_value;
             check(ack_id == 2'd2, "ack carries the request's id");
             bus_rdata = rdata;
             bus_rtag = rtag;
-            bus_tag_word = (mpy_region_of(bus_addr) == MPY_REGION_SRAM) ? sram_tag_word(bus_addr) : 32'h0;
+            bus_tag_word = 32'h0;   // SRAM words hold their own tag now
             bus_fault = fault;
             bus_reason = fault_reason;
             bus_region = mpy_region_of(bus_addr);
@@ -297,7 +298,10 @@ module tb_mpy_value;
         check(MPY_SCHED_BASE == MPY_FRAME_RESERVE_BASE + MPY_FRAME_RESERVE_BYTES,
               "the scheduler queue follows the frame reserve");
         check(MPY_GC_POOL_BASE == 32'h2000_8500, "GC pool base");
-        check(MPY_GC_POOL_BYTES == 32'h0003_7B00, "GC pool size");
+        check(MPY_GC_POOL_BYTES == 32'h0000_7B00, "GC pool size");
+        check(MPY_SRAM_WORDS == MPY_SRAM_BLOCKS * MPY_MEM_BLOCK_WORDS, "data SRAM is whole blocks");
+        check(MPY_FLASH_WORDS == MPY_IMAGE_BLOCKS * MPY_MEM_BLOCK_WORDS, "image SRAM is whole blocks");
+        check(MPY_MEM_BLOCKS == 4 && MPY_MEM_BLOCK_WORDS * 4 == 65536, "four 64 KB blocks");
         check((MPY_GC_POOL_BASE + MPY_GC_POOL_BYTES) ==
               (MPY_SRAM_BASE + MPY_SRAM_BYTES), "GC pool ends at SRAM");
         check(MPY_HANDLER_USED_BYTES == 48, "handler table uses 48 bytes");
@@ -320,6 +324,9 @@ module tb_mpy_value;
         tick();
         rst_n = 1'b1;
         tick();
+        // mpy_mem zeroes the data SRAM after reset, one word per cycle.
+        for (int i = 0; i < MPY_MEM_BLOCK_WORDS + 4 && !rdy; i++) tick();
+        check(rdy, "data SRAM clear finished");
 
         rs1_addr = '0;
         settle();
@@ -480,7 +487,7 @@ module tb_mpy_value;
             end
         end
 
-        $display("MEMORY read/write every tag as packed nibbles");
+        $display("MEMORY read/write every tag beside its payload");
         begin
             logic [31:0] got_data;
             logic [3:0]  got_tag;
@@ -500,20 +507,16 @@ module tb_mpy_value;
                 check(!got_fault, "pool store faulted");
                 check(ticks == (1 + MPY_SRAM_LATENCY), "SRAM store latency");
             end
+            // Packed tag words (image tags file, boot stream) put lane 0 in
+            // bits [3:0]. Pack eight loaded tags the same way.
             nibbles = 32'h0;
-            for (int tag = 0; tag < MPY_TAGS_PER_WORD; tag++)
-                nibbles = mpy_nibble_write(nibbles, 3'(tag), 4'(tag));
+            for (int tag = 0; tag < MPY_TAGS_PER_WORD; tag++) begin
+                bus(1'b0, 1'b1, MPY_GC_POOL_BASE + 32'(tag * 4), 32'h0, 4'h0,
+                    got_data, got_tag, got_word, got_fault, got_reason, got_region, ticks);
+                nibbles = mpy_nibble_write(nibbles, 3'(tag), got_tag);
+            end
             check(nibbles == 32'h7654_3210, "nibble lane 0 is bits [3:0]");
-            bus(1'b0, 1'b1, MPY_GC_POOL_BASE, 32'h0, 4'h0,
-                got_data, got_tag, got_word, got_fault, got_reason, got_region, ticks);
-            check(!got_fault && got_word == 32'h7654_3210, "first tag word is 0x76543210");
-            check(got_tag == MPY_TAG_CONTROL, "pool slot 0 tag");
-            $display("  pool tag_word[0]=0x%08h", got_word);
-            bus(1'b0, 1'b1, MPY_GC_POOL_BASE + 32'd32, 32'h0, 4'h0,
-                got_data, got_tag, got_word, got_fault, got_reason, got_region, ticks);
-            check(got_word == 32'hFEDC_BA98, "second tag word is 0xFEDCBA98");
-            check(got_tag == MPY_TAG_STR, "pool slot 8 tag");
-            $display("  pool tag_word[1]=0x%08h", got_word);
+            $display("  pool tags 0..7 packed=0x%08h", nibbles);
             for (int tag = 0; tag < MPY_TAG_SPACE; tag++) begin
                 bus(1'b0, 1'b1, MPY_GC_POOL_BASE + 32'(tag * 4), 32'h0, 4'h0,
                     got_data, got_tag, got_word, got_fault, got_reason, got_region, ticks);
@@ -539,6 +542,8 @@ module tb_mpy_value;
         expect_fault(1'b0, 32'h00F4_0000, MPY_FAULT_BUS, MPY_REGION_NONE);
         expect_fault(1'b0, 32'h0008_0000, MPY_FAULT_BUS, MPY_REGION_NONE);
         expect_fault(1'b0, 32'h2004_0000, MPY_FAULT_BUS, MPY_REGION_NONE);
+        expect_fault(1'b0, MPY_FLASH_BYTES, MPY_FAULT_BUS, MPY_REGION_NONE);
+        expect_fault(1'b0, MPY_SRAM_BASE + MPY_SRAM_BYTES, MPY_FAULT_BUS, MPY_REGION_NONE);
         expect_ok(1'b0, 1'b0, 32'h0000_0000, 32'h0, 4'h0, 32'h0, 4'h0,
                   MPY_REGION_FLASH, 1 + MPY_SRAM_LATENCY + MPY_FLASH_WAIT_STATES);
         expect_ok(1'b0, 1'b0, 32'h0000_0004, 32'h0, 4'h0, 32'h0, 4'h0,

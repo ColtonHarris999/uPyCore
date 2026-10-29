@@ -70,13 +70,13 @@ class Bench:
 
 BENCHES = [
     Bench("mpy_alu", list(mpy_synth.ALU_FILES), r"^PASS mpy_alu "),
-    Bench("mpy_ca", ["mpy_ca.sv", "mpy_mem.sv"], r"^PASS mpy_ca "),
+    Bench("mpy_ca", ["mpy_ca.sv", "bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv"], r"^PASS mpy_ca "),
     Bench("mpy_container", ["mpy_container.sv"], r"^PASS mpy_container"),
     Bench("mpy_decode", ["mpy_decode.sv"], r"^mpy_decode checks: \d+ ok", _decode_args),
     Bench("mpy_gc", ["mpy_gc.sv"], r"^PASS mpy_gc "),
     Bench("mpy_periph", ["mpy_mmio_pkg.sv", "mpy_irq.sv", "mpy_periph.sv"], r"^PASS: mpy periph",
           _periph_args),
-    Bench("mpy_value", ["mpy_regfile.sv", "mpy_mem.sv"], r"^MPY value encoding: ok"),
+    Bench("mpy_value", ["mpy_regfile.sv", "bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv"], r"^MPY value encoding: ok"),
     Bench("upycore_umod_seq", ["upycore_umod_seq.sv"], r"^PASS upycore_umod_seq "),
 ]
 

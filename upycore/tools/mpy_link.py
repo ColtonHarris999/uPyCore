@@ -41,7 +41,7 @@ from mpy_file import (  # noqa: E402
     read_mpy,
 )
 
-FLASH_BYTES = 512 * 1024
+FLASH_BYTES = 192 * 1024  # image SRAM, MPY_FLASH_BYTES
 T = abi.TAG
 NULL = (T["CONTROL"], abi.CTL["NULL"])
 NONE = (T["CONTROL"], abi.CTL["NONE"])

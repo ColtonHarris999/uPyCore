@@ -163,10 +163,14 @@ clock at the same period so its flops are timed.
 - `mpy_alu` and `mpy_decode`: the core's only two submodules. Use them to
   shake out problems and for the per-unit area table. Everything else in
   the core is its interpreter state machine, which does not split further.
-- `mpy_gc`: its allocation table (about 28k bits) would become flip-flops.
-  Leave it out, or later map the table to a `bsg_fakeram` macro (Module 2).
+- `mpy_gc`: its allocation table is 3,936 flip-flops for the 64 KB SRAM's
+  1,968 blocks.
 - Not `mpy_container`: no other module instantiates it.
-- Not `mpy_mem` or `mpy_soc`: 768 KiB of memory arrays.
+- `mpy_soc`: the whole chip, with the four 64 KB SRAM blocks as
+  `fakeram_d16384_w36` macros and the SPI NAND boot loader. The script
+  sets up the SRAM macros; run `make sram` before `make syn`, and add the
+  macro placements. See
+  [`../../docs/mpy_boot.md`](../../docs/mpy_boot.md#ee-477-hammer-flow).
 
 ## If the tool rejects the SystemVerilog
 

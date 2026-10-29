@@ -14,7 +14,8 @@
 // end one copy runs alone to measure the engine's rate.
 //
 // Build it with Verilator from the repo root, then run obj_dir/Vtb_mpy_ca:
-//   --binary -Iupycore/rtl upycore/rtl/mpy_ca.sv upycore/rtl/mpy_mem.sv
+//   --binary -Iupycore/rtl upycore/rtl/mpy_ca.sv
+//   upycore/rtl/bsg_mem_1rw_sync_mask_write_bit.sv upycore/rtl/mpy_mem.sv
 //   upycore/tb/tb_mpy_ca.sv --top-module tb_mpy_ca
 // +SEED=<n> picks the random sequence and +OPS=<n> its length. -GQDEPTH=<n>
 // sets the queue depth, -GBUF=<n> the read-ahead buffer and -GLAT=<n> the
@@ -60,7 +61,8 @@ module tb_mpy_ca #(parameter int QDEPTH = 2, parameter int BUF = 4, parameter in
         .req_i(m_req), .we_i(m_we), .tag_we_i(m_we), .be_i(4'hF),
         .addr_i(m_addr), .wdata_i(m_wdata), .wtag_i(m_wtag),
         .id_i(m_id), .rdy_o(m_rdy), .ack_o(m_ack), .id_o(m_ack_id), .rdata_o(m_rdata), .rtag_o(m_rtag),
-        .fault_o(m_fault), .fault_reason_o(m_freason)
+        .fault_o(m_fault), .fault_reason_o(m_freason),
+        .ld_we_i(1'b0), .ld_idx_i('0), .ld_wdata_i('0), .ld_wtag_i('0), .init_done_o()
     );
 
     // The mpy_soc arbiter without the collector: id 2 is the core, 3 the CA.

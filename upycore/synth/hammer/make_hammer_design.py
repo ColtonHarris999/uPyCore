@@ -46,6 +46,20 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1] / "tools"))
 from mpy_dc_unit import write_unit  # noqa: E402
+from mpy_synth import CORE_FILES, SRAM_BLOCKS, SRAM_MACRO, SRAM_MODEL, TOPS  # noqa: E402
+
+# BaseJump STL sources for the SRAM wrapper, in the class src.yml style.
+# The fakeram hook swaps each 16384 x 36 bsg_mem_1rw_sync_mask_write_bit
+# for the generated macro; the other files are what its synth model and
+# options name.
+BSG_SRAM_FILES = [
+    "${bsg_root}/bsg_misc/bsg_defines.v",
+    "${bsg_root}/bsg_misc/bsg_dff.v",
+    "${bsg_root}/bsg_misc/bsg_dff_en_bypass.v",
+    "${bsg_root}/bsg_misc/bsg_clkgate_optional.v",
+    "${bsg_root}/bsg_mem/bsg_mem_1rw_sync_mask_write_bit.v",
+    "${bsg_root}/bsg_mem/bsg_mem_1rw_sync_mask_write_bit_synth.v",
+]
 
 try:
     import yaml
@@ -161,6 +175,12 @@ def main() -> int:
     ap.add_argument("--no-feedthrough", action="store_true",
                     help="do not time paths from an input straight to an output (bus "
                          "feedthroughs belong to the system's timing, not the core's)")
+    ap.add_argument("--core-v", type=Path, metavar="FILE",
+                    help="for mpy_soc: take mpy_core and its submodules from this converted "
+                         "file (converted/mpy_core.v) and generate SystemVerilog for the rest")
+    ap.add_argument("--die", nargs=2, type=float, metavar=("W", "H"),
+                    help="die width and height in um (the TOP placement constraint); four "
+                         "SRAM macros need far more than a logic-only example")
     ap.add_argument("--force", action="store_true", help="replace dest if it exists")
     args = ap.parse_args()
 
@@ -207,7 +227,19 @@ def main() -> int:
     vdir = dest / "v"
     if vdir.exists():
         shutil.rmtree(vdir)
-    if args.rtl:
+    srams = args.top in TOPS and SRAM_MODEL in TOPS[args.top]
+    extra_v: list[Path] = []
+    if args.core_v:
+        if args.rtl or args.top not in TOPS or not set(CORE_FILES) < set(TOPS[args.top]):
+            sys.exit("--core-v needs a generated top that contains mpy_core (mpy_soc)")
+        vdir.mkdir()
+        core_v = vdir / args.core_v.name
+        shutil.copy(args.core_v, core_v)
+        extra_v.append(core_v)
+        skip = tuple(CORE_FILES) + ((SRAM_MODEL,) if srams else ())
+        unit = write_unit(args.top, vdir, skip=skip)
+        write_unit(args.top, dest / "golden")
+    elif args.rtl:
         vdir.mkdir()
         unit = vdir / args.rtl.name
         shutil.copy(args.rtl, unit)
@@ -216,7 +248,7 @@ def main() -> int:
             # as the golden reference for equivalence checking.
             write_unit(args.top, dest / "golden")
     else:
-        unit = write_unit(args.top, vdir)
+        unit = write_unit(args.top, vdir, skip=(SRAM_MODEL,) if srams else ())
     if args.sv2v:
         # Keep the .sv out of v/, so only the converted file is there. It is
         # the golden reference for equivalence checking (lec_dofile.py).
@@ -243,6 +275,17 @@ def main() -> int:
     if isinstance(old_top, str) and old_top:
         doc = _replace_strings(doc, old_top, args.top)
     _set(doc, "synthesis.inputs.top_module", args.top)
+    if srams:
+        # One macro shape for all four blocks: `make sram` generates it and
+        # the hook swaps every matching instance (docs/mpy_boot.md).
+        _set(doc, "vlsi.inputs.sram_parameters", [dict(SRAM_MACRO)])
+    if args.die:
+        pcs = _get(doc, "vlsi.inputs.placement_constraints")
+        tops = [c for c in pcs or [] if isinstance(c, dict) and c.get("type") == "toplevel"]
+        if tops:
+            tops[0]["width"], tops[0]["height"] = args.die
+        else:
+            warnings.append("example has no toplevel placement constraint; set the die size by hand")
     clocks = _get(doc, "vlsi.inputs.clocks")
     if isinstance(clocks, list) and clocks and isinstance(clocks[0], dict):
         # Only if the example already uses it: keep it consistent with the SDC.
@@ -282,11 +325,21 @@ def main() -> int:
     old_files = _get(src_doc, "synthesis.inputs.input_files") or []
     # The example's own RTL (not basejump_stl files) shows the path style.
     own = [str(f) for f in old_files if "v/" in str(f) and "bsg_root" not in str(f)]
+    vfiles = [*extra_v, unit]
     if own:
-        files = [_swap_basename(own[0], unit.name)]
+        files = [_swap_basename(own[0], f.name) for f in vfiles]
     else:
-        files = [f"v/{unit.name}"]
+        files = [f"v/{f.name}" for f in vfiles]
         warnings.append("example had no input_files; used v/<file>, check the path style")
+    if srams:
+        files = BSG_SRAM_FILES + files
+        # ${bsg_root} needs Hammer's subst; keep the example's other meta.
+        meta = _get(src_doc, "synthesis.inputs.input_files_meta") or []
+        meta = [meta] if isinstance(meta, str) else list(meta)
+        for m in ("append", "subst"):
+            if m not in meta:
+                meta.append(m)
+        _set(src_doc, "synthesis.inputs.input_files_meta", meta)
     if src is None:
         src = cfg_dir / f"{new}_src.yml"
         warnings.append(f"created {src.name}; add it to the Makefile's yml list")
@@ -308,7 +361,11 @@ def main() -> int:
     print(f"  top        {args.top}")
     print(f"  RTL        {unit.relative_to(dest)} ({sum(1 for _ in unit.open())} lines)")
     print(f"  clock      {args.clock} @ {args.period} ns (cfg/constraints.tcl)")
-    print(f"  input file {files[0]}")
+    for f in files:
+        print(f"  input file {f}")
+    if srams:
+        print(f"  SRAM       {SRAM_BLOCKS} x {SRAM_MACRO['name']} (vlsi.inputs.sram_parameters); "
+              "run `make sram`, then place them (README.md, SRAM macros)")
     for w in warnings:
         print(f"  WARNING: {w}")
     print("Next: cd into it and run: make syn")

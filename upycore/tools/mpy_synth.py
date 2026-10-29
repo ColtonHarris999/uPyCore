@@ -56,13 +56,27 @@ TOPS: dict[str, list[str]] = {
     "upycore_umod_seq": ["upycore_umod_seq.sv"],
     "mpy_alu": ALU_FILES,
     "mpy_gc": ["mpy_gc.sv"],
-    "mpy_mem": ["mpy_mem.sv"],
+    "mpy_mem": ["bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv"],
+    "mpy_boot": ["mpy_boot.sv"],
     "mpy_core": ALU_FILES + ["upycore_umod_seq.sv", "mpy_decode.sv", "mpy_core.sv"],
     "mpy_soc": ALU_FILES
-    + ["upycore_umod_seq.sv", "mpy_decode.sv", "mpy_core.sv", "mpy_gc.sv", "mpy_ca.sv", "mpy_mem.sv", "mpy_soc.sv"],
+    + ["upycore_umod_seq.sv", "mpy_decode.sv", "mpy_core.sv", "mpy_gc.sv", "mpy_ca.sv",
+       "bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv", "mpy_boot.sv", "mpy_soc.sv"],
 }
 
-# Gate mapping of full-size flash/SRAM/GC tables is a long memory job.
+# mpy_core and everything under it (upycore/synth/hammer/converted/mpy_core.v).
+CORE_FILES = TOPS["mpy_core"]
+
+# Behavioral stand-in for BaseJump's SRAM wrapper. The EE 477 flow reads
+# BaseJump's file instead and swaps each 16384 x 36 instance for this
+# bsg_fakeram macro (MPY_MEM_BLOCK_WORDS x MPY_MEM_WIDTH in mpy_defs.svh).
+SRAM_MODEL = "bsg_mem_1rw_sync_mask_write_bit.sv"
+SRAM_MACRO = {"name": "fakeram_d16384_w36", "family": "1rw", "depth": 16384, "width": 36,
+              "mask": True, "mux": 1, "vt": ""}
+SRAM_BLOCKS = 4   # MPY_MEM_BLOCKS: one data SRAM block, three image blocks
+
+# Gate mapping the SRAM blocks as flops is a long memory job (the class
+# flow uses macros instead), so mem and soc stay elaborate-only here.
 # Default ``--synth`` covers the logic tops; name gc/mem/soc explicitly.
 GATES_DEFAULT = [
     "mpy_decode",

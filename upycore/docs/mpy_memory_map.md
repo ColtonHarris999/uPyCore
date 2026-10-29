@@ -112,8 +112,8 @@ Word 1 is the type pointer, or 0. Fields start at word 2. Heap words are
 
 | Window | Base | Size | Contents |
 | --- | --- | ---: | --- |
-| Flash | `0x0000_0000` | 512 KB | Linked image. First 8 bytes reserved |
-| SRAM | `0x2000_0000` | 256 KB | Frame reserve, schedule ring, handler table, GC pool |
+| Flash | `0x0000_0000` | 192 KB | Linked image, in the on-chip image SRAM that `mpy_boot` fills from SPI NAND ([`mpy_boot.md`](mpy_boot.md)). First 8 bytes reserved |
+| SRAM | `0x2000_0000` | 64 KB | Frame reserve, schedule ring, handler table, roots, argument buffer, GC pool |
 | MMIO | `0x4000_0000` | 4 KB | UART, GPIO, timer, IRQ |
 | Sim control | `0xE000_0000` | 256 B | Halt reason, cycle counter. Simulation only |
 
@@ -128,15 +128,18 @@ zero; those bytes stay reserved so a pointer payload is never 0 or 4.
 
 | Region | Base | Window | Used |
 | --- | --- | ---: | --- |
-| Frame reserve | `0x2000_0000` | 16 KB | 32 frame records |
-| Schedule ring | `0x2000_4000` | 64 B | 8 entries of function, argument |
-| Handler table | `0x2000_4040` | 64 B | 48 B: 6 sources, function and argument each |
-| GC pool | `0x2000_4080` | 245632 B (`0x3BF80`) | The rest of the 256 KB |
+| Frame reserve | `0x2000_0000` | 32 KB | Frame stack |
+| Schedule ring | `0x2000_8000` | 64 B | 8 entries of function, argument |
+| Handler table | `0x2000_8040` | 64 B | 48 B: 6 sources, function and argument each |
+| System roots | `0x2000_8080` | 128 B | 32 tagged words |
+| Argument buffer | `0x2000_8100` | 1 KB | 256 tagged words |
+| GC pool | `0x2000_8500` | 31488 B (`0x7B00`) | The rest of the 64 KB |
 
-The pool ends at `0x2004_0000`. Sources, in order: timer, UART RX, GPIO,
-soft, `GC_REQ`, sim. The handler table is a GC root. The schedule depth is
-8. The ring and the table are tagged slots; their nibbles live in the SRAM
-side array.
+`upycore/tools/mpy_abi.py` is the source for these bases. The pool ends at
+`0x2001_0000`. Sources, in order: timer, UART RX, GPIO, soft, `GC_REQ`,
+sim. The handler table is a GC root. The schedule depth is 8. The ring and
+the table are tagged slots. Each SRAM word holds its own tag beside the
+payload (36 bits), so there is no separate tag array.
 
 ### Frame record
 

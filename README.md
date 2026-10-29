@@ -2,8 +2,9 @@
 
 uPyCore is a microcontroller-class CPU whose instruction set is MicroPython
 bytecode. Programs are MicroPython source. Host `mpy-cross` compiles them to
-`.mpy`, the linker packs firmware and the program into a flash image, and the
-Verilator model of `mpy_soc` runs that image. `compile`, `exec`, and `eval`
+`.mpy`, the linker packs firmware and the program into an image, and the
+Verilator model of `mpy_soc` boots it into its on-chip image SRAM and runs
+it. `compile`, `exec`, and `eval`
 run the frozen uPy2 compiler on the hart: each stage is its own call, and
 the firmware collects between them.
 
@@ -71,12 +72,31 @@ the ALU finishes. A scoreboard makes a later access to busy data wait.
 measurements. `python3 upycore/tools/bench.py` compares the switches,
 and `mpy_build.py run --sim-arg +CA=0 --sim-arg +AALU=0` turns both off.
 
+## Memory and boot
+
+Both memories are on-chip SRAM built from four 64 KB blocks of 16384 x 36
+bits (payload and tag in one word): a 64 KB data SRAM and a 192 KB image
+SRAM. After reset `mpy_boot` copies the image from an SPI NAND flash into
+the image SRAM, then the core starts. `--nand` boots a run over SPI from
+the testbench's NAND model; without it the simulation streams the image
+files straight into the loader.
+[`upycore/docs/mpy_boot.md`](upycore/docs/mpy_boot.md) has the boot
+stream, the SPI commands, why the blocks are one 36-bit port, and the
+EE 477 SRAM macro setup. The frozen uPy2 compiler does not fit the image
+SRAM, so `compile`, `exec` and `eval` programs do not link.
+
+```bash
+python3 upycore/tools/mpy_build.py run -v --nand upycore/programs/hello.py
+python3 upycore/tools/mpy_nand.py build/mpy/run/hello/image   # image.nand.bin for the flash
+```
+
 ## Synthesis
 
 The hart and its components are written for a Yosys + yosys-slang backend
 pass (OSS CAD Suite). `make synth` elaborates every top; `make synth-gates`
-maps the logic tops (`mpy_core`, `mpy_alu`, decode, peripherals, …). Full-size
-`mpy_gc` / `mpy_mem` / `mpy_soc` stay elaborate-only unless named explicitly
+maps the logic tops (`mpy_core`, `mpy_alu`, decode, peripherals, …). `mpy_gc`,
+`mpy_mem` and `mpy_soc` (whose SRAM blocks are macros in the class flow) stay
+elaborate-only unless named explicitly
 (gate-map a reduced collector with
 `python3 upycore/tools/mpy_synth.py --synth --gc-pool-bytes=4096 mpy_gc`).
 Set `SYNTH_TOP=…` to limit the run. Logs land in `build/synth/`.

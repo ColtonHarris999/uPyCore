@@ -21,6 +21,7 @@ status, like the oracle's unix port does.
 from __future__ import annotations
 
 import argparse
+import ast
 import os
 import re
 import shutil
@@ -33,6 +34,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "upycore" / "tools"))
 
 import mpy_abi as abi  # noqa: E402
+import mpy_nand  # noqa: E402
 
 BUILD = ROOT / "build" / "mpy"
 FW_SRC = ROOT / "upycore" / "firmware"
@@ -57,8 +59,9 @@ RTL = [
     "upycore/rtl/upycore_ipow.sv", "upycore/rtl/upycore_fp_add.sv", "upycore/rtl/upycore_fp_mul.sv",
     "upycore/rtl/upycore_fp_divrem.sv", "upycore/rtl/upycore_fp_pow.sv", "upycore/rtl/upycore_fpu.sv",
     "upycore/rtl/mpy_alu.sv", "upycore/rtl/mpy_decode.sv", "upycore/rtl/mpy_core.sv",
-    "upycore/rtl/mpy_gc.sv", "upycore/rtl/mpy_ca.sv", "upycore/rtl/mpy_mem.sv", "upycore/rtl/mpy_soc.sv",
-    "upycore/tb/tb_mpy_soc.sv",
+    "upycore/rtl/mpy_gc.sv", "upycore/rtl/mpy_ca.sv", "upycore/rtl/bsg_mem_1rw_sync_mask_write_bit.sv",
+    "upycore/rtl/mpy_mem.sv", "upycore/rtl/mpy_boot.sv", "upycore/rtl/mpy_soc.sv",
+    "upycore/tb/tb_spi_nand.sv", "upycore/tb/tb_mpy_soc.sv",
 ]
 RTL_INCLUDES = [
     "upycore/rtl/mpy_abi.svh", "upycore/rtl/mpy_defs.svh", "upycore/rtl/upycore_defs.svh",
@@ -216,12 +219,20 @@ _TIMEOUT_RE = re.compile(r"MPY_TIMEOUT cycles=(\d+) ops=(\d+) gc=(\d+)")
 
 
 def run_image(image: Path, max_cycles: int = 50_000_000, trace: bool = False,
-              timeout: float | None = None, sim_args: list[str] | None = None) -> SimResult:
+              timeout: float | None = None, sim_args: list[str] | None = None,
+              nand: bool = False) -> SimResult:
+    """Run one linked image. ``nand`` boots it over SPI from the testbench's
+    NAND model instead of streaming the image files straight into mpy_boot."""
+
     out = Path(f"{image}.stdout")
     err = Path(f"{image}.stderr")
     # MPY_SIM picks another build of the testbench (for instance one made
     # with --trace-saif); MPY_SIM_ARGS adds plusargs (+SAIF=<path>).
-    cmd = [os.environ.get("MPY_SIM", str(SIM)), f"+IMAGE={image}.hex", f"+TAGS={image}.tags.hex",
+    if nand:
+        boot = [f"+NAND={mpy_nand.write_files(image)[1]}"]
+    else:
+        boot = [f"+IMAGE={image}.hex", f"+TAGS={image}.tags.hex"]
+    cmd = [os.environ.get("MPY_SIM", str(SIM)), *boot,
            f"+STDOUT={out}", f"+STDERR={err}", f"+MAX_CYCLES={max_cycles}"]
     cmd += os.environ.get("MPY_SIM_ARGS", "").split()
     if trace:
@@ -253,8 +264,35 @@ def _cached_mpy(src: Path, source_name: str) -> Path:
     return out
 
 
-def frozen_runtime_specs() -> list[str]:
-    """array, plus the patched uPy2 compiler, frozen into every image."""
+# compile, exec and eval run the frozen uPy2 compiler. It is 167 KB of
+# image, which with the 176 KB firmware does not fit the 192 KB image SRAM,
+# so only programs that name one of them get it.
+_COMPILER_NAMES = {"compile", "exec", "eval"}
+
+
+def uses_compiler(sources: list[Path]) -> bool:
+    """True when a source names compile, exec or eval (not in a string)."""
+
+    for p in sources:
+        text = p.read_bytes()
+        try:
+            tree = ast.parse(text)
+        except (SyntaxError, ValueError):
+            if re.search(rb"\b(compile|exec|eval)\b", text):
+                return True
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name) and node.id in _COMPILER_NAMES:
+                return True
+            if isinstance(node, ast.Attribute) and node.attr in _COMPILER_NAMES:
+                return True
+            if isinstance(node, ast.alias) and node.name.split(".")[-1] in _COMPILER_NAMES:
+                return True
+    return False
+
+
+def frozen_runtime_specs(compiler: bool = True) -> list[str]:
+    """array, plus (with ``compiler``) the patched uPy2 compiler."""
 
     comp = ROOT / "upycore" / "compiler"
     if str(comp) not in sys.path:
@@ -262,7 +300,8 @@ def frozen_runtime_specs() -> list[str]:
     import prepare
 
     rows = [("array", ROOT / "upycore" / "runtime" / "array.py", False, "array.py")]
-    rows.extend(prepare.module_list(prepare.prepare()))
+    if compiler:
+        rows.extend(prepare.module_list(prepare.prepare()))
     specs = []
     for dotted, path, is_pkg, source_name in rows:
         mm = _cached_mpy(path, source_name)
@@ -285,7 +324,7 @@ def build_program(src: Path, work: Path, source_name: str | None = None,
     main_mpy = work / "main.mpy"
     compile_user(src, main_mpy, name, compiler)
     # The compiler is frozen bytecode. It is not compiled by itself.
-    specs = frozen_runtime_specs()
+    specs = frozen_runtime_specs(uses_compiler([src, *(modules or {}).values()]))
     for mname, mpath in (modules or {}).items():
         mm = work / (mname.replace(".", "_") + ".mpy")
         mod_name = mpath.name if mpath.name != "__init__.py" else f"{mname.replace('.', '/')}/__init__.py"
@@ -313,6 +352,8 @@ def main(argv: list[str] | None = None) -> int:
     rp.add_argument("--work", type=Path, default=None)
     rp.add_argument("--sim-arg", action="append", default=[],
                     help="simulator plusarg, e.g. +CA=0 or +AALU=0 (repeatable)")
+    rp.add_argument("--nand", action="store_true",
+                    help="boot over SPI from the testbench's NAND model (mpy_nand.py image)")
     op = sub.add_parser("oracle")
     op.add_argument("src", type=Path)
     args = ap.parse_args(argv)
@@ -331,7 +372,7 @@ def main(argv: list[str] | None = None) -> int:
         build_sim()
         work = args.work or BUILD / "run" / args.src.stem
         image = build_program(args.src.resolve(), work)
-        res = run_image(image, args.max_cycles, args.trace, sim_args=args.sim_arg)
+        res = run_image(image, args.max_cycles, args.trace, sim_args=args.sim_arg, nand=args.nand)
     except BuildError as exc:
         print(exc, file=sys.stderr)
         return 2

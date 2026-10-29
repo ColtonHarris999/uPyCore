@@ -71,6 +71,7 @@ module mpy_gc #(
     localparam logic [1:0] A_MARK = 2'd3;
 
     typedef enum logic [4:0] {
+        G_CLEAR,      // after reset: set every table entry to A_FREE
         G_IDLE,
         G_SCAN,       // alloc: look for a free run
         G_CLAIM,      // alloc: write HEAD/TAIL
@@ -98,6 +99,9 @@ module mpy_gc #(
     logic        ovf;
 
     logic [BW-1:0] rover, idx, run_start, run_len, need, scanned;
+    logic          huge;          // the request is more blocks than the pool has
+    logic [32:0]   need_full;     // requested blocks before narrowing to BW bits
+    assign need_full = ({1'b0, alloc_nbytes_i} + 33'd15) >> 4;
     logic [31:0]   zaddr, zend;
     logic [31:0]   raddr, rhi;
     logic          rsel;          // 0: root range 0, 1: root range 1
@@ -142,15 +146,6 @@ module mpy_gc #(
     assign collections_o  = ncoll;
     assign overflows_o    = novf;
 
-    // A_FREE is 2'b00. Simulation clears the table explicitly; synthesis
-    // relies on the allocation table powering up as zero so Yosys does not
-    // unroll a POOL_BYTES/16 loop at elaboration.
-`ifndef SYNTHESIS
-    initial begin
-        for (int i = 0; i < NB; i++) atb[i] = A_FREE;
-    end
-`endif
-
     // Marks a candidate (registered by the caller state) and pushes it.
     task automatic try_mark(input logic [BW-1:0] b);
         if (atb[b] == A_HEAD) begin
@@ -174,7 +169,7 @@ module mpy_gc #(
 
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) begin
-            st             <= G_IDLE;
+            st             <= G_CLEAR;
             ssp            <= '0;
             ovf            <= 1'b0;
             rover          <= '0;
@@ -182,6 +177,7 @@ module mpy_gc #(
             run_start      <= '0;
             run_len        <= '0;
             need           <= '0;
+            huge           <= 1'b0;
             scanned        <= '0;
             zaddr          <= '0;
             zend           <= '0;
@@ -210,10 +206,23 @@ module mpy_gc #(
             collect_done_o <= 1'b0;
             mem_req_o      <= 1'b0;
             unique case (st)
+                // Flops do not power up as A_FREE. One entry per cycle (NB
+                // cycles, 1968 for the 64 KB SRAM); busy_o is set meanwhile
+                // and mpy_soc keeps the core in reset until it clears.
+                G_CLEAR: begin
+                    atb[idx] <= A_FREE;
+                    idx <= idx + 1'b1;
+                    if (idx == BW'(NB - 1)) begin
+                        idx <= '0;
+                        st  <= G_IDLE;
+                    end
+                end
                 G_IDLE: begin
                     if (alloc_req_i) begin
-                        need    <= (alloc_nbytes_i == 32'd0) ? BW'(1)
-                                 : BW'((alloc_nbytes_i + 32'd15) >> 4);
+                        need    <= (alloc_nbytes_i == 32'd0) ? BW'(1) : BW'(need_full);
+                        // BW'() keeps only the low bits: a request of more
+                        // than 2^BW blocks would otherwise look small.
+                        huge    <= (need_full > 33'(NB));
                         idx     <= rover;
                         run_len <= '0;
                         scanned <= '0;
@@ -229,7 +238,7 @@ module mpy_gc #(
                 end
 
                 G_SCAN: begin
-                    if (need > BW'(NB) || scanned == BW'(NB)) begin
+                    if (huge || need > BW'(NB) || scanned == BW'(NB)) begin
                         alloc_done_o <= 1'b1;
                         alloc_ok_o   <= 1'b0;
                         st           <= G_IDLE;

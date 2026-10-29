@@ -1,7 +1,14 @@
 `include "mpy_defs.svh"
 `include "mpy_abi.svh"
 
-// uPyCore system: mpy_core, mpy_gc, mpy_ca and mpy_mem on one memory port.
+// uPyCore system: mpy_core, mpy_gc, mpy_ca and mpy_mem on one memory port,
+// and mpy_boot, which fills the image SRAM from SPI NAND.
+//
+// Boot: mpy_mem zeroes the data SRAM, mpy_gc clears its allocation table
+// and mpy_boot copies the image from the NAND, all at once. The core and the
+// accelerator stay in reset until all three are done, so the program's cycle
+// count starts at its first instruction. A bad boot stream raises
+// boot_err_o and the core never starts (upycore/docs/mpy_boot.md).
 //
 // Three masters share the port: the collector, the core, and the container
 // accelerator (mpy_ca). A request waits in the arbiter below until mpy_mem
@@ -41,8 +48,17 @@ module mpy_soc #(
     output logic        trace_o,
     output logic [31:0] trace_pc_o,
     output logic [7:0]  trace_op_o,
-    output logic [6:0]  trace_sp_o
+    output logic [6:0]  trace_sp_o,
+
+    // SPI NAND holding the boot image (mode 0, one data line each way).
+    output logic        nand_sck_o,
+    output logic        nand_cs_n_o,
+    output logic        nand_mosi_o,
+    input  logic        nand_miso_i,
+    output logic        boot_done_o,
+    output logic        boot_err_o
 );
+
     // core <-> port
     logic        c_req, c_we, c_tag_we;
     logic [3:0]  c_be, c_wtag;
@@ -81,8 +97,30 @@ module mpy_soc #(
     logic [3:0]  core_hcode;
     logic [31:0] core_hval, core_cycles;
 
-    mpy_core u_core (
+    // mpy_mem, mpy_boot and mpy_gc (which clears its allocation table after
+    // reset) run from rst_n_i; the core and the accelerator wait for all three.
+    logic        mem_ready, boot_done;
+    logic        sys_rst_n;
+    logic        ld_we;
+    logic [MPY_FLASH_IDX_W-1:0] ld_idx;
+    logic [31:0] ld_wdata;
+    logic [3:0]  ld_wtag;
+
+    always_ff @(posedge clk_i or negedge rst_n_i) begin
+        if (!rst_n_i) sys_rst_n <= 1'b0;
+        else if (mem_ready && boot_done && !g_busy) sys_rst_n <= 1'b1;
+    end
+    assign boot_done_o = sys_rst_n;
+
+    mpy_boot u_boot (
         .clk_i, .rst_n_i,
+        .sck_o(nand_sck_o), .cs_n_o(nand_cs_n_o), .mosi_o(nand_mosi_o), .miso_i(nand_miso_i),
+        .ld_we_o(ld_we), .ld_idx_o(ld_idx), .ld_wdata_o(ld_wdata), .ld_wtag_o(ld_wtag),
+        .done_o(boot_done), .err_o(boot_err_o)
+    );
+
+    mpy_core u_core (
+        .clk_i, .rst_n_i(sys_rst_n),
         .m_req_o(c_req), .m_we_o(c_we), .m_tag_we_o(c_tag_we), .m_be_o(c_be),
         .m_addr_o(c_addr), .m_wdata_o(c_wdata), .m_wtag_o(c_wtag),
         .m_ack_i(c_ack), .m_rdata_i(c_rdata), .m_rtag_i(c_rtag),
@@ -120,7 +158,7 @@ module mpy_soc #(
     );
 
     mpy_ca u_ca (
-        .clk_i, .rst_n_i,
+        .clk_i, .rst_n_i(sys_rst_n),
         .cmd_valid_i(ca_valid), .cmd_ready_o(ca_ready),
         .cmd_dst_i(ca_dst), .cmd_src_i(ca_src), .cmd_n_i(ca_n), .idle_o(ca_idle),
         .chk_addr_i(c_addr), .chk_we_i(c_we), .chk_busy_o(ca_busy),
@@ -139,7 +177,9 @@ module mpy_soc #(
         .req_i(m_req), .we_i(m_we), .tag_we_i(m_tag_we), .be_i(m_be),
         .addr_i(m_addr), .wdata_i(m_wdata), .wtag_i(m_wtag),
         .id_i(m_id), .rdy_o(m_rdy), .ack_o(m_ack), .id_o(m_ack_id), .rdata_o(m_rdata), .rtag_o(m_rtag),
-        .fault_o(m_fault), .fault_reason_o(m_fault_reason)
+        .fault_o(m_fault), .fault_reason_o(m_fault_reason),
+        .ld_we_i(ld_we), .ld_idx_i(ld_idx), .ld_wdata_i(ld_wdata), .ld_wtag_i(ld_wtag),
+        .init_done_o(mem_ready)
     );
 
     // Sim-page decode for core requests.
