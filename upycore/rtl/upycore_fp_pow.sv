@@ -29,7 +29,7 @@
 //         Z * 2^I rounded to nearest even (upycore_f64_pack_round), which
 //         also denormalises small results and saturates overflow to +inf.
 //
-// Latency: 3 (reduction) + NLOG + 4 (normalise L) + mul + 2 (align)
+// Latency: 4 (reduction) + NLOG + 4 (normalise L) + mul + 2 (align)
 // + NEXP + 1 (pack) cycles; see docs/alu.md.  The result is +inf when
 // the true value overflows (the FPU turns that into OverflowError) and
 // +0 when it underflows.  Accuracy: better than 0.5 + 2^-11 ulp before
@@ -71,12 +71,13 @@ module upycore_fp_pow #(
     localparam logic [52:0] FOUR_THIRDS = 53'h15555555555555;
 
     typedef enum logic [3:0] {
-        S_IDLE, S_RED1, S_RED2, S_LOG, S_LSUM, S_LABS, S_LCLZ, S_LNORM,
+        S_IDLE, S_RED1, S_RED2, S_RED3, S_LOG, S_LSUM, S_LABS, S_LCLZ, S_LNORM,
         S_MUL, S_PSH, S_PSPLIT, S_EXP, S_PACK
     } state_e;
 
     state_e state_r;
     logic   done_r;
+    logic   rz_r;                         // m' - 1 == 0: no log digits to run
 
     // ---- operands, unpacked in the accept cycle ----
     logic [52:0]        mx_r;             // x significand, normalised
@@ -199,14 +200,14 @@ module upycore_fp_pow #(
     assign exp_take = (f_r >= exp_c);
 
     // Prefetch: constants for the digit handled in the next cycle.
-    //   S_RED2 -> first log digit (j0, i = 0);  S_LOG -> (j + 1, i + 1)
+    //   S_RED3 -> first log digit (j0, i = 0);  S_LOG -> (j + 1, i + 1)
     //   S_PSPLIT -> first exp digit (k = 1);    S_EXP -> k + 1
     logic [7:0]    pf_k;
     logic [6:0]    pf_sh;
     logic [FW+1:0] pf_pos, pf_neg;
     always_comb begin
         unique case (state_r)
-            S_RED2:  begin pf_k = j0_sel;       pf_sh = 7'd0; end
+            S_RED3:  begin pf_k = j0_r;         pf_sh = 7'd0; end
             S_LOG:   begin pf_k = j_r + 8'd1;   pf_sh = i_r + 7'd1; end
             S_PSPLIT: begin pf_k = 8'd1;        pf_sh = 7'd1; end
             default: begin pf_k = {1'b0, i_r} + 8'd1; pf_sh = i_r + 7'd1; end   // S_EXP
@@ -273,7 +274,7 @@ module upycore_fp_pow #(
             state_r  <= S_IDLE;
             done_r   <= 1'b0;
             mx_r <= '0; ex_r <= '0; my_r <= '0; ey_r <= '0; ysign_r <= 1'b0;
-            e_r <= '0; r_r <= '0; j_r <= '0; i_r <= '0; j0_r <= '0; acc_r <= '0;
+            e_r <= '0; r_r <= '0; j_r <= '0; i_r <= '0; j0_r <= '0; acc_r <= '0; rz_r <= 1'b0;
             v_r <= '0; lsign_r <= 1'b0; lmag_r <= '0; lscale_r <= '0; lz_r <= '0; lm_r <= '0; el_r <= '0;
             cpos_r <= '0; cneg_r <= '0;
             pfix_r <= '0; huge_r <= 1'b0; psign_r <= 1'b0; i_int_r <= '0;
@@ -300,14 +301,20 @@ module upycore_fp_pow #(
                         state_r <= S_RED2;
                     end
                     S_RED2: begin
-                        // w_j0 = -r * 2^j0 (exact); digits below j0 are zero
-                        r_r     <= (-r_r) <<< j0_sel;
+                        // j0 gets its own cycle: the leading-zero count and
+                        // the ROM lookup it indexes would not fit in one.
                         j0_r    <= j0_sel;
-                        j_r     <= j0_sel;
+                        rz_r    <= (r_mag == '0);
+                        state_r <= S_RED3;
+                    end
+                    S_RED3: begin
+                        // w_j0 = -r * 2^j0 (exact); digits below j0 are zero
+                        r_r     <= (-r_r) <<< j0_r;
+                        j_r     <= j0_r;
                         i_r     <= '0;
                         cpos_r  <= pf_pos;
                         cneg_r  <= pf_neg;
-                        state_r <= (r_mag == '0) ? S_LSUM : S_LOG;
+                        state_r <= rz_r ? S_LSUM : S_LOG;
                     end
                     S_LOG: begin
                         r_r    <= w_next;

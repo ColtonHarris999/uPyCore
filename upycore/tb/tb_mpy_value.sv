@@ -1,7 +1,16 @@
 `include "mpy_defs.svh"
 
-// Reads and writes every tag, spills one frame as 32-bit words plus packed
-// nibbles, and checks a MUT_COLLEC address with the low bits cleared.
+// Reads and writes every tag in the register file and in memory (tags as
+// packed nibbles beside the words), checks a MUT_COLLEC address with the
+// low bits cleared, and the memory map's faults and latencies.
+//
+// Frame spills are the core's microcode now (mpy_mem no longer has a spill
+// engine); the hardware suite's memory area covers them.
+//
+// Build it with Verilator from the repo root, then run obj_dir/Vtb_mpy_value:
+//   --binary -Iupycore/rtl upycore/rtl/mpy_regfile.sv upycore/rtl/mpy_mem.sv
+//   upycore/tb/tb_mpy_value.sv --top-module tb_mpy_value
+// (upycore/tools/unit_tests.py does this.)
 module tb_mpy_value;
     logic clk;
     logic rst_n;
@@ -33,24 +42,13 @@ module tb_mpy_value;
     logic [31:0] addr;
     logic [31:0] wdata;
     logic [3:0]  wtag;
+    logic        rdy;
     logic        ack;
+    logic [1:0]  ack_id;
     logic [31:0] rdata;
     logic [3:0]  rtag;
-    logic [31:0] tag_word;
     logic        fault;
     logic [3:0]  fault_reason;
-    logic [2:0]  region;
-
-    logic        spill;
-    logic [31:0] spill_pc;
-    logic [15:0] spill_nstate;
-    logic [MPY_RF_ADDR_W-1:0] spill_idx;
-    logic [MPY_ENTRY_WIDTH-1:0] spill_entry;
-    logic        spill_busy;
-    logic        spill_done;
-    logic        spill_fault;
-    logic [5:0]  frame_depth;
-    logic [4:0]  spill_frame;
 
     mpy_regfile dut_rf (
         .clk_i(clk),
@@ -82,31 +80,27 @@ module tb_mpy_value;
         .rst_n_i(rst_n),
         .req_i(req),
         .we_i(we),
-        .tag_acc_i(tag_acc),
+        .tag_we_i(tag_acc),
+        .be_i(4'hF),
         .addr_i(addr),
         .wdata_i(wdata),
         .wtag_i(wtag),
+        .id_i(2'd2),
+        .rdy_o(rdy),
         .ack_o(ack),
+        .id_o(ack_id),
         .rdata_o(rdata),
         .rtag_o(rtag),
-        .tag_word_o(tag_word),
         .fault_o(fault),
-        .fault_reason_o(fault_reason),
-        .region_o(region),
-        .spill_i(spill),
-        .spill_pc_i(spill_pc),
-        .spill_nstate_i(spill_nstate),
-        .spill_idx_o(spill_idx),
-        .spill_entry_i(spill_entry),
-        .spill_busy_o(spill_busy),
-        .spill_done_o(spill_done),
-        .spill_fault_o(spill_fault),
-        .frame_depth_o(frame_depth),
-        .spill_frame_o(spill_frame)
+        .fault_reason_o(fault_reason)
     );
 
-    assign idx_addr   = spill_idx;
-    assign spill_entry = idx_entry;
+    assign idx_addr = '0;
+
+    // The packed tag word that holds an SRAM address's nibble.
+    function automatic logic [31:0] sram_tag_word(input logic [31:0] a);
+        sram_tag_word = dut_mem.sram_tags[mpy_sram_word_index(a) >> 3];
+    endfunction
 
     function automatic string tag_name(input logic [3:0] tag);
         case (tag)
@@ -147,32 +141,6 @@ module tb_mpy_value;
             (tag == MPY_TAG_OBJECT);
     endfunction
 
-    function automatic logic [MPY_ENTRY_WIDTH-1:0] spill_entry_at(input int slot);
-        logic [3:0] tag;
-        logic [31:0] payload;
-        begin
-            tag = 4'(slot);
-            payload = 32'hA500_0000 | 32'(slot);
-            if (slot == 0)
-                payload = {28'b0, MPY_CTL_FALSE};
-            else if (slot == 16)
-                payload = {28'b0, MPY_CTL_TRUE};
-            else if (slot == 32)
-                payload = {28'b0, MPY_CTL_NONE};
-            else if (slot == 48)
-                payload = {28'b0, MPY_CTL_TOMBSTONE};
-            else if (slot == 10)
-                payload = mpy_mut_payload(MPY_MUT_LIST, MPY_GC_POOL_BASE);
-            else if (slot == 26)
-                payload = mpy_mut_payload(MPY_MUT_DICT, MPY_GC_POOL_BASE);
-            else if (slot == 42)
-                payload = mpy_mut_payload(MPY_MUT_SET, MPY_GC_POOL_BASE);
-            else if (slot == 58)
-                payload = mpy_mut_payload(MPY_MUT_BYTEARRAY, MPY_GC_POOL_BASE);
-            spill_entry_at = mpy_make_entry(tag, payload);
-        end
-    endfunction
-
     task automatic check(input logic cond, input string msg);
         if (!cond) begin
             $error("%s", msg);
@@ -203,6 +171,8 @@ module tb_mpy_value;
         end
     endtask
 
+    // One access: a one-cycle req pulse, then wait for its ack. ticks counts
+    // the cycles from the request to the ack.
     task automatic bus(
         input logic        do_we,
         input logic        do_tag,
@@ -219,13 +189,17 @@ module tb_mpy_value;
     );
         int guard;
         begin
+            guard = 0;
+            while (!rdy && (guard < 16)) begin tick(); guard = guard + 1; end
             req = 1'b1;
             we = do_we;
             tag_acc = do_tag;
             addr = bus_addr;
             wdata = bus_wdata;
             wtag = bus_wtag;
-            ticks = 0;
+            tick();
+            req = 1'b0;
+            ticks = 1;
             guard = 0;
             while (!ack && (guard < 16)) begin
                 tick();
@@ -233,13 +207,13 @@ module tb_mpy_value;
                 guard = guard + 1;
             end
             check(ack, "bus request timed out");
+            check(ack_id == 2'd2, "ack carries the request's id");
             bus_rdata = rdata;
             bus_rtag = rtag;
-            bus_tag_word = tag_word;
+            bus_tag_word = (mpy_region_of(bus_addr) == MPY_REGION_SRAM) ? sram_tag_word(bus_addr) : 32'h0;
             bus_fault = fault;
             bus_reason = fault_reason;
-            bus_region = region;
-            req = 1'b0;
+            bus_region = mpy_region_of(bus_addr);
             tick();
         end
     endtask
@@ -295,35 +269,6 @@ module tb_mpy_value;
         end
     endtask
 
-    task automatic do_spill(
-        input logic [31:0] pc,
-        input logic [15:0] nstate,
-        input logic        reject
-    );
-        int guard;
-        begin
-            spill = 1'b1;
-            spill_pc = pc;
-            spill_nstate = nstate;
-            tick();
-            spill = 1'b0;
-            if (reject) begin
-                check(spill_fault, "expected a full frame stack");
-                check(!spill_busy, "a rejected spill must stay idle");
-                tick();
-            end else begin
-                check(spill_busy, "spill did not start");
-                guard = 0;
-                while (!spill_done && (guard < 200)) begin
-                    tick();
-                    guard = guard + 1;
-                end
-                check(spill_done, "spill did not finish");
-                check(!spill_busy, "spill still busy after done");
-            end
-        end
-    endtask
-
     initial begin
         clk = 1'b0;
         rst_n = 1'b0;
@@ -344,17 +289,15 @@ module tb_mpy_value;
         addr = '0;
         wdata = '0;
         wtag = '0;
-        spill = 1'b0;
-        spill_pc = '0;
-        spill_nstate = '0;
 
         check(MPY_RF_DEPTH == 16, "register file is 16 entries");
         check(MPY_ENTRY_WIDTH == 36, "an entry is 36 bits");
-        check(MPY_FRAME_DEPTH == 32, "frame stack is 32");
-        check(32'(MPY_FRAME_DEPTH * MPY_FRAME_STRIDE) == MPY_FRAME_RESERVE_BYTES,
-              "32 frames fill the 16 KB reserve");
-        check(MPY_GC_POOL_BASE == 32'h2000_4080, "GC pool base");
-        check(MPY_GC_POOL_BYTES == 32'h0003_BF80, "GC pool size");
+        check(MPY_FRAME_RESERVE_BASE == MPY_SRAM_BASE, "frame reserve starts SRAM");
+        check(MPY_FRAME_RESERVE_BYTES == 32'h0000_8000, "frame reserve is 32 KB");
+        check(MPY_SCHED_BASE == MPY_FRAME_RESERVE_BASE + MPY_FRAME_RESERVE_BYTES,
+              "the scheduler queue follows the frame reserve");
+        check(MPY_GC_POOL_BASE == 32'h2000_8500, "GC pool base");
+        check(MPY_GC_POOL_BYTES == 32'h0003_7B00, "GC pool size");
         check((MPY_GC_POOL_BASE + MPY_GC_POOL_BYTES) ==
               (MPY_SRAM_BASE + MPY_SRAM_BYTES), "GC pool ends at SRAM");
         check(MPY_HANDLER_USED_BYTES == 48, "handler table uses 48 bytes");
@@ -381,7 +324,6 @@ module tb_mpy_value;
         rs1_addr = '0;
         settle();
         check(rs1 == mpy_make_control(MPY_CTL_EMPTY), "reset entry is empty CONTROL");
-        check(frame_depth == 6'd0, "reset frame depth is 0");
 
         $display("REGFILE read/write every tag");
         for (int tag = 0; tag < MPY_TAG_SPACE; tag++) begin
@@ -590,92 +532,6 @@ module tb_mpy_value;
             $display("  tag_acc=0 left nibble %04b beside payload 0x%08h", got_tag, got_data);
         end
 
-        $display("SPILL one frame as 32-bit words plus nibbles");
-        for (int slot = 0; slot < MPY_RF_DEPTH; slot++)
-            write_rf(MPY_RF_ADDR_W'(slot), spill_entry_at(slot));
-        do_spill(32'h0000_0108, 16'd7, 1'b0);
-        check(spill_frame == 5'd0, "first spill is frame 0");
-        check(frame_depth == 6'd1, "depth is 1 after one spill");
-        begin
-            logic [31:0] got_data;
-            logic [3:0]  got_tag;
-            logic [31:0] got_word;
-            logic        got_fault;
-            logic [3:0]  got_reason;
-            logic [2:0]  got_region;
-            int          ticks;
-            logic [31:0] expect_word;
-            $display("  frame 0: 16 payload words, 2 packed tag words");
-            for (int word = 0; word < (MPY_RF_DEPTH / MPY_TAGS_PER_WORD); word++) begin
-                expect_word = 32'h0;
-                for (int lane = 0; lane < MPY_TAGS_PER_WORD; lane++) begin
-                    expect_word = mpy_nibble_write(
-                        expect_word, 3'(lane), mpy_entry_tag(spill_entry_at(word * 8 + lane)));
-                end
-                bus(1'b0, 1'b0,
-                    mpy_frame_base(5'd0) + 32'(MPY_FRAME_TAG_OFFSET) + 32'(word * 4),
-                    32'h0, 4'h0,
-                    got_data, got_tag, got_word, got_fault, got_reason, got_region, ticks);
-                check(!got_fault, "tag-word load faulted");
-                check(got_data == expect_word, "packed nibble word mismatch");
-                $display("  SPILL tag_word[%0d]=0x%08h", word, got_data);
-            end
-            for (int slot = 0; slot < MPY_RF_DEPTH; slot++) begin
-                logic [MPY_ENTRY_WIDTH-1:0] expect_entry;
-                expect_entry = spill_entry_at(slot);
-                bus(1'b0, 1'b1, mpy_frame_payload_addr(5'd0, MPY_RF_ADDR_W'(slot)), 32'h0, 4'h0,
-                    got_data, got_tag, got_word, got_fault, got_reason, got_region, ticks);
-                check(!got_fault, "payload load faulted");
-                check(got_data == mpy_entry_payload(expect_entry), "spilled payload mismatch");
-                check(got_tag == mpy_entry_tag(expect_entry), "spilled tag mismatch");
-                $display("  SPILL payload[%0d]=0x%08h tag=%04b %s",
-                         slot, got_data, got_tag, tag_name(got_tag));
-                if (mpy_entry_tag(expect_entry) == MPY_TAG_MUT_COLLEC) begin
-                    $display("  MUT_COLLEC %-9s payload=0x%08h addr=0x%08h",
-                             mut_name(mpy_mut_kind(got_data)), got_data,
-                             mpy_pointer_addr(got_tag, got_data));
-                    check(mpy_pointer_addr(got_tag, got_data) == MPY_GC_POOL_BASE,
-                          "spilled MUT_COLLEC address");
-                    check(mpy_pointer_addr(got_tag, got_data)[1:0] == 2'b00,
-                          "spilled MUT_COLLEC low bits are clear");
-                end
-            end
-            bus(1'b0, 1'b0, mpy_frame_header_addr(5'd0, 2'(MPY_FRAME_HDR_PC)),
-                32'h0, 4'h0, got_data, got_tag, got_word, got_fault, got_reason, got_region, ticks);
-            check(got_data == 32'h0000_0108, "spilled return PC");
-            bus(1'b0, 1'b0, mpy_frame_header_addr(5'd0, 2'(MPY_FRAME_HDR_NSTATE)),
-                32'h0, 4'h0, got_data, got_tag, got_word, got_fault, got_reason, got_region, ticks);
-            check(got_data == 32'd7, "spilled n_state");
-        end
-
-        for (int frame = 1; frame < MPY_FRAME_DEPTH; frame++)
-            do_spill(32'h0, 16'd0, 1'b0);
-        check(frame_depth == 6'(MPY_FRAME_DEPTH), "stack holds 32 frames");
-        $display("STACK depth=%0d next spill raises RuntimeError: maximum recursion depth exceeded",
-                 frame_depth);
-        do_spill(32'h0, 16'd0, 1'b1);
-        check(frame_depth == 6'(MPY_FRAME_DEPTH), "rejected spill does not grow the stack");
-        begin
-            logic [31:0] got_data;
-            logic [3:0]  got_tag;
-            logic [31:0] got_word;
-            logic        got_fault;
-            logic [3:0]  got_reason;
-            logic [2:0]  got_region;
-            int          ticks;
-            bus(1'b0, 1'b1, mpy_frame_payload_addr(5'd0, MPY_RF_ADDR_W'(10)), 32'h0, 4'h0,
-                got_data, got_tag, got_word, got_fault, got_reason, got_region, ticks);
-            check(got_tag == MPY_TAG_MUT_COLLEC, "frame 0 survived the full stack");
-            check(mpy_mut_kind(got_data) == MPY_MUT_LIST, "frame 0 list kind");
-            check(mpy_mut_addr(got_data) == MPY_GC_POOL_BASE, "frame 0 list address");
-            $display("  MUT_COLLEC list payload=0x%08h addr=0x%08h",
-                     got_data, mpy_mut_addr(got_data));
-            bus(1'b0, 1'b1, mpy_frame_payload_addr(5'd31, MPY_RF_ADDR_W'(0)), 32'h0, 4'h0,
-                got_data, got_tag, got_word, got_fault, got_reason, got_region, ticks);
-            check(got_data == mpy_entry_payload(spill_entry_at(0)), "frame 31 payload");
-            check(got_tag == MPY_TAG_CONTROL, "frame 31 tag");
-        end
-
         $display("MAP faults");
         expect_fault(1'b0, 32'h2000_0001, MPY_FAULT_UNALIGNED, MPY_REGION_SRAM);
         expect_fault(1'b1, 32'h0000_0000, MPY_FAULT_FLASH_STORE, MPY_REGION_FLASH);
@@ -689,14 +545,10 @@ module tb_mpy_value;
                   MPY_REGION_FLASH, 1 + MPY_SRAM_LATENCY + MPY_FLASH_WAIT_STATES);
         $display("  flash[0]=0 flash[4]=0 reserved, store faults, wait states=%0d",
                  MPY_FLASH_WAIT_STATES);
-        expect_ok(1'b1, 1'b0, MPY_MMIO_BASE + MPY_MMIO_UART_TX, 32'h0000_0041, 4'h0,
-                  32'h0, 4'h0, MPY_REGION_MMIO, 1 + MPY_SRAM_LATENCY);
-        expect_ok(1'b0, 1'b0, MPY_MMIO_BASE + MPY_MMIO_UART_TX, 32'h0, 4'h0,
-                  32'h0000_0041, 4'h0, MPY_REGION_MMIO, 1 + MPY_SRAM_LATENCY);
-        expect_ok(1'b1, 1'b0, MPY_SIM_BASE, 32'h0000_0001, 4'h0,
-                  32'h0, 4'h0, MPY_REGION_SIM, 1 + MPY_SRAM_LATENCY);
-        expect_ok(1'b0, 1'b0, MPY_SIM_BASE, 32'h0, 4'h0,
-                  32'h0000_0001, 4'h0, MPY_REGION_SIM, 1 + MPY_SRAM_LATENCY);
+        // mpy_soc answers the simulator page and mpy_periph the MMIO page
+        // before the memory port; mpy_mem itself faults them.
+        expect_fault(1'b1, MPY_MMIO_BASE + MPY_MMIO_UART_TX, MPY_FAULT_BUS, MPY_REGION_MMIO);
+        expect_fault(1'b0, MPY_SIM_BASE, MPY_FAULT_BUS, MPY_REGION_SIM);
         expect_ok(1'b1, 1'b1, MPY_SRAM_BASE + MPY_SRAM_BYTES - 32'd4, 32'h5A5A_5A5A,
                   MPY_TAG_INT, 32'h0, 4'h0, MPY_REGION_SRAM, 1 + MPY_SRAM_LATENCY);
         expect_ok(1'b0, 1'b1, MPY_SRAM_BASE + MPY_SRAM_BYTES - 32'd4, 32'h0, 4'h0,
