@@ -79,7 +79,7 @@ def _bind(fun, args, kw):
         if nkwo:
             raise TypeError('function missing keyword-only argument')
         if n < npos - ndef:
-            raise TypeError(_s('function missing required positional argument #', _istr(n)))
+            _arg_count(npos - ndef, n)
         defs = _ld(fun, 4)
         i = n
         while i < npos:

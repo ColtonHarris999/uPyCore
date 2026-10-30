@@ -41,7 +41,7 @@ complex = { file = "hw/alu/complex.py", cycles = 30_000_000 }
 bitwise_calls = { file = "hw/alu/bitwise_calls.py" }
 complex_ops = { file = "hw/alu/complex_ops.py" }
 complex_nan_eq = { file = "hw/alu/complex_nan_eq.py" }
-complex_type_trap = { file = "hw/alu/complex_type_trap.py", xfail = "device rejects complex(1, 1j); the unix port returns 0j" }
+complex_type_trap = { file = "hw/alu/complex_type_trap.py" }
 unary_invert_float_trap = { file = "hw/alu/unary_invert_float_trap.py" }
 compare_op_type_trap = { file = "hw/alu/compare_op_type_trap.py" }
 
@@ -95,10 +95,10 @@ recursion = { file = "hw/calls/recursion.py", cycles = 40_000_000, timeout = 240
 
 call_chain = { file = "hw/calls/call_chain.py" }
 noncallable = { file = "hw/calls/noncallable.py" }
-bad_argc = { file = "hw/calls/bad_argc.py", xfail = "TypeError text differs from the unix port" }
+bad_argc = { file = "hw/calls/bad_argc.py" }
 deep_callgraph = { file = "hw/calls/deep_callgraph.py" }
 default_arg = { file = "hw/calls/default_arg.py" }
-default_arg_argc_trap = { file = "hw/calls/default_arg_argc_trap.py", xfail = "TypeError text differs from the unix port" }
+default_arg_argc_trap = { file = "hw/calls/default_arg_argc_trap.py" }
 default_none = { file = "hw/calls/default_none.py" }
 default_false_zero = { file = "hw/calls/default_false_zero.py" }
 default_empty_tuple = { file = "hw/calls/default_empty_tuple.py" }
@@ -140,6 +140,7 @@ varkw_dup_trap = { file = "hw/calls/varkw_dup_trap.py" }
 varkw_kwonly_missing_trap = { file = "hw/calls/varkw_kwonly_missing_trap.py" }
 
 [containers]
+tuple_index_bounds = { cycles = 80_000_000 }
 lists = { file = "hw/containers/lists.py" }
 tuples = { file = "hw/containers/tuples.py" }
 dicts = { file = "hw/containers/dicts.py" }
@@ -302,6 +303,8 @@ class_const = { file = "hw/objects/class_const.py" }
 class_two_instances = { file = "hw/objects/class_two_instances.py" }
 
 [builtins]
+array_slice_bounds = { cycles = 80_000_000 }
+int_bytes_bounds = { cycles = 80_000_000 }
 builtin_fns = { file = "hw/builtins/funcs.py" }
 method_getattr = { file = "hw/builtins/method_getattr.py" }
 sysmod = { file = "hw/builtins/sysmod.py" }
@@ -320,8 +323,8 @@ builtin_len_obj_missing = { file = "hw/builtins/builtin_len_obj_missing.py" }
 builtin_ord_unicode = { file = "hw/builtins/builtin_ord_unicode.py" }
 builtin_ord_scan = { file = "hw/builtins/builtin_ord_scan.py" }
 builtin_ord_len_trap = { file = "hw/builtins/builtin_ord_len_trap.py" }
-builtin_ord_type_trap = { file = "hw/builtins/builtin_ord_type_trap.py", xfail = "TypeError text differs from the unix port" }
-builtin_chr_range_trap = { file = "hw/builtins/builtin_chr_range_trap.py", xfail = "ValueError text differs from the unix port" }
+builtin_ord_type_trap = { file = "hw/builtins/builtin_ord_type_trap.py" }
+builtin_chr_range_trap = { file = "hw/builtins/builtin_chr_range_trap.py" }
 builtin_chr_surrogate_trap = { file = "hw/builtins/builtin_chr_surrogate_trap.py" }
 builtin_int_type_trap = { file = "hw/builtins/builtin_int_type_trap.py" }
 builtin_max_float = { file = "hw/builtins/builtin_max_float.py" }
@@ -383,6 +386,7 @@ local_hot = { file = "hw/variables/local_hot.py" }
 
 # Deep frames and many locals. Register-file spill counters are not portable.
 [memory]
+alloc_size_bounds = { cycles = 80_000_000, heapsize = 228096 }
 code_ram_call_rom = { file = "hw/memory/code_ram_call_rom.py" }
 locals_40_uninit = { file = "hw/memory/locals_40_uninit.py" }
 rf_deep_recursion = { file = "hw/memory/rf_deep_recursion.py", cycles = 40_000_000, timeout = 240 }
@@ -451,6 +455,7 @@ cs_t5_t6 = { file = "hw/compiler/cs_t5_t6.py" }
 
 # Collector behavior expressed with gc.collect(). Byte-count oracles are not portable.
 [gc]
+gc_list_shrink_reclaims = { cycles = 80_000_000 }
 gc_verify_containers = { file = "hw/gc/gc_verify_containers.py", cycles = 40_000_000, timeout = 240 }
 gc_verify_cycles = { file = "hw/gc/gc_verify_cycles.py", cycles = 40_000_000, timeout = 240 }
 gc_reuse_after_collect = { file = "hw/gc/gc_reuse_after_collect.py", cycles = 40_000_000, timeout = 240 }

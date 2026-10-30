@@ -1374,7 +1374,9 @@ module mpy_core
     assign m_addr_o = m_addr;
     assign m_wdata_o = m_wdata;
     assign m_wtag_o = m_wtag;
-    assign gc_alloc_nbytes_o = al_n << 2;
+    // Preserve an oversized request as a miss instead of wrapping its bytes.
+    assign gc_alloc_nbytes_o = (al_n > ABI_GC_POOL_BYTES / 4) ?
+                              (ABI_GC_POOL_BYTES + 32'd16) : (al_n << 2);
     assign gc_root0_lo_o = ABI_FRAME_BASE;
     // The resident ring is snapshotted at ftop before a collection.
     assign gc_root0_hi_o = noframe ? ABI_FRAME_BASE : (ftop + {23'd0, sp, 2'b00});
@@ -3609,7 +3611,9 @@ module mpy_core
                         else wr(ab_ptr(8'd0), mv, S_NAT_CALL);
                     ABI_N_WCOPY: rd(ab_ptr(ab_lo + 8'd1), S_NAT_WC1);
                     ABI_N_BCOPY: rd(ab_ptr(ab_lo + 8'd2), S_NAT_BC0);
-                    ABI_N_STRNEW: alloc(32'd3 + ((v1 + 32'd3) >> 2), S_N_STRNEW);
+                    ABI_N_STRNEW: if (!intlike(mv) || v1[31] || v1 > ABI_GC_POOL_BYTES - 32'd12)
+                                      alloc(ABI_GC_POOL_BYTES / 4 + 32'd1, S_N_STRNEW);
+                                  else alloc(32'd3 + ((v1 + 32'd3) >> 2), S_N_STRNEW);
                     ABI_N_STRFIN: rd(adr(mv), S_N_SF0);
                     ABI_N_LOOKUP: rd(ab_ptr(ab_lo + 8'd1), S_NAT_LK);
                     ABI_N_TICKS: deliver(vint({2'b00, cyc[29:0]}), crk);

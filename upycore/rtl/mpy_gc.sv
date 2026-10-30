@@ -99,9 +99,6 @@ module mpy_gc #(
     logic        ovf;
 
     logic [BW-1:0] rover, idx, run_start, run_len, need, scanned;
-    logic          huge;          // the request is more blocks than the pool has
-    logic [32:0]   need_full;     // requested blocks before narrowing to BW bits
-    assign need_full = ({1'b0, alloc_nbytes_i} + 33'd15) >> 4;
     logic [31:0]   zaddr, zend;
     logic [31:0]   raddr, rhi;
     logic          rsel;          // 0: root range 0, 1: root range 1
@@ -177,7 +174,6 @@ module mpy_gc #(
             run_start      <= '0;
             run_len        <= '0;
             need           <= '0;
-            huge           <= 1'b0;
             scanned        <= '0;
             zaddr          <= '0;
             zend           <= '0;
@@ -219,14 +215,19 @@ module mpy_gc #(
                 end
                 G_IDLE: begin
                     if (alloc_req_i) begin
-                        need    <= (alloc_nbytes_i == 32'd0) ? BW'(1) : BW'(need_full);
-                        // BW'() keeps only the low bits: a request of more
-                        // than 2^BW blocks would otherwise look small.
-                        huge    <= (need_full > 33'(NB));
-                        idx     <= rover;
-                        run_len <= '0;
-                        scanned <= '0;
-                        st      <= G_SCAN;
+                        // Check the full byte count before rounding/narrowing.
+                        // Otherwise a large request can wrap to a small need.
+                        if (alloc_nbytes_i > 32'(POOL_BYTES)) begin
+                            alloc_done_o <= 1'b1;
+                            alloc_ok_o <= 1'b0;
+                        end else begin
+                            need    <= (alloc_nbytes_i == 32'd0) ? BW'(1)
+                                     : BW'(({1'b0, alloc_nbytes_i} + 33'd15) >> 4);
+                            idx     <= rover;
+                            run_len <= '0;
+                            scanned <= '0;
+                            st      <= G_SCAN;
+                        end
                     end else if (collect_req_i) begin
                         raddr <= root0_lo_i;
                         rhi   <= root0_hi_i;
@@ -238,7 +239,7 @@ module mpy_gc #(
                 end
 
                 G_SCAN: begin
-                    if (huge || need > BW'(NB) || scanned == BW'(NB)) begin
+                    if (need > BW'(NB) || scanned == BW'(NB)) begin
                         alloc_done_o <= 1'b1;
                         alloc_ok_o   <= 1'b0;
                         st           <= G_IDLE;

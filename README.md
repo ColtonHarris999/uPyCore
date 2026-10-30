@@ -4,9 +4,10 @@ uPyCore is a microcontroller-class CPU whose instruction set is MicroPython
 bytecode. Programs are MicroPython source. Host `mpy-cross` compiles them to
 `.mpy`, the linker packs firmware and the program into an image, and the
 Verilator model of `mpy_soc` boots it into its on-chip image SRAM and runs
-it. `compile`, `exec`, and `eval`
-run the frozen uPy2 compiler on the hart: each stage is its own call, and
-the firmware collects between them.
+it. `compile`, `exec`, and `eval` run the frozen uPy2 compiler on the hart:
+each stage is its own call, and the firmware collects between them. The
+compiler does not fit the 192 KB image SRAM next to the firmware, so those
+programs do not link with the current memory map (see Memory and boot).
 
 The unix oracle is MicroPython v1.29.0 built as the `upycore` variant
 (`sys.platform` and `sys.implementation.name` are `upycore`).
@@ -37,9 +38,11 @@ Those files are the unix oracle's output. `make test` runs the suite twice:
 once from `mpy-cross` bytecode and once from the vendored uPy2 compiler
 (`vendor/upy2`, `mpyc`). `make test-compiler` is the second run on its own,
 plus a byte compare of the two compilers.
-`make regen-goldens` rewrites the goldens after `make oracle`. An `xfail`
-entry is a known mismatch: the run is expected to fail, and a pass fails
-the suite so the marker is removed with the fix. The `compiler` area calls
+`make regen-goldens` rewrites the goldens after `make oracle`. The manifest
+checks reject expected-failure and disabled entries: every listed program
+must pass. Remaining runtime limitations are documented in
+[`upycore/docs/known_limitations.md`](upycore/docs/known_limitations.md).
+The `compiler` area calls
 `compile`, `exec`, and `eval` on the hart, including `yield` and `yield from`.
 Those programs take minutes each; `make test-hw-compiler` runs that area
 on its own. The `generators` area is the runtime suite. Host uPy2 matches
@@ -76,10 +79,11 @@ and `mpy_build.py run --sim-arg +CA=0 --sim-arg +AALU=0` turns both off.
 
 Both memories are on-chip SRAM built from four 64 KB blocks of 16384 x 36
 bits (payload and tag in one word): a 64 KB data SRAM and a 192 KB image
-SRAM, interleaved by word across the four blocks. The collector, the core
-and the container accelerator each have a memory port, and ports that
-touch different blocks run in the same cycle. After reset `mpy_boot` copies the image from an SPI NAND flash into
-the image SRAM, then the core starts. `--nand` boots a run over SPI from
+SRAM, interleaved by word across the four blocks. The collector, the core,
+the core's instruction fetch and the container accelerator each have a
+memory port, and ports that touch different blocks run in the same cycle.
+Fetch reads three words ahead of `pc`. After reset `mpy_boot` copies the
+image from an SPI NAND flash into the image SRAM, then the core starts. `--nand` boots a run over SPI from
 the testbench's NAND model; without it the simulation streams the image
 files straight into the loader.
 [`upycore/docs/mpy_boot.md`](upycore/docs/mpy_boot.md) has the boot

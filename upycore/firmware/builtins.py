@@ -138,47 +138,52 @@ def int____new__(cls, *args):
     return v
 
 
-def int__to_bytes(self, length, byteorder='little'):
+def int__to_bytes(self, length=1, byteorder='big', *, signed=False):
     if length < 0:
-        raise ValueError('length argument must be non-negative')
+        raise ValueError()
     n = self
-    neg = n < 0
-    if neg:
-        n = -n
+    if n < 0 and not signed:
+        raise OverflowError("can't convert negative int to unsigned")
+    fits = True
+    if n != 0 and length < 8:
+        if length == 0:
+            fits = False
+        elif signed:
+            edge = 1 << (length * 8 - 1)
+            fits = -edge <= n < edge
+        else:
+            fits = n < (1 << (length * 8))
+    if not fits:
+        raise OverflowError(_s('value would overflow a ', _istr(length), ' byte buffer'))
     b = _strnew(length, TAG_BYTES)
-    little = _streq(byteorder, 'little')
+    little = byteorder == 'little'
     i = 0
+    # Arithmetic right shift supplies sign-extension without negating INT64_MIN.
     while i < length:
         _poke8(_data(b), i if little else length - 1 - i, n & 255)
         n >>= 8
         i += 1
-    if n:
-        raise OverflowError('int too big to convert')
-    if neg:
-        # two's complement
-        i = 0
-        carry = 1
-        while i < length:
-            at = i if little else length - 1 - i
-            v = ((~_byte(b, at)) & 255) + carry
-            _poke8(_data(b), at, v & 255)
-            carry = 1 if v > 255 else 0
-            i += 1
     return _strfin(b)
 
 
-def _int_from_bytes(cls, data, byteorder='little'):
+def _int_from_bytes(cls, data, byteorder='big', _ignored=None):
     if _isstr(data):
         raise TypeError("cannot convert 'str' object to bytes")
     b = _barr_bytes(data) if _isbarr(data) else data
     if _tag(b) != TAG_BYTES:
         b = _bytes_from_args((data,))
-    n = 0
-    little = _streq(byteorder, 'little')
+    little = byteorder == 'little'
     ln = _slen(b)
+    # The longlong oracle retains the low 64 bits, interpreted as signed.
+    count = ln if ln < 8 else 8
+    n = 0
     i = 0
-    while i < ln:
-        n = (n << 8) | _byte(b, i if not little else ln - 1 - i)
+    while i < count:
+        v = _byte(b, count - 1 - i if little else ln - count + i)
+        if i == 0 and count == 8 and v >= 128:
+            n = v - 256
+        else:
+            n = (n << 8) | v
         i += 1
     if cls is not int:
         return cls(n)
@@ -209,7 +214,7 @@ def any(iterable):
 
 def chr(i):
     if i < 0 or i > 1114111:
-        raise ValueError('chr() arg not in range(0x110000)')
+        raise ValueError('char not in range(0x110000)')
     return _chr_code(i)
 
 
@@ -219,7 +224,7 @@ def ord(c):
             raise TypeError('ord() expected a character, but string of length %d found' if False else 'ord() expected a character')
         return _byte(c, 0)
     if not _isstr(c):
-        raise TypeError('ord() expected string of length 1')
+        raise TypeError(_s("can't convert '", _tname(c), "' object to str implicitly"))
     n = _slen(c)
     if n == 0:
         raise TypeError('ord() expected a character, but string of length 0 found')

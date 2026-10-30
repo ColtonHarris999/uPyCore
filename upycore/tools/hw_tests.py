@@ -249,7 +249,7 @@ def run_oracle(t: Test) -> tuple[bytes, bytes, int]:
         )
     cmd = [str(build.ORACLE)]
     if t.heapsize is not None:
-        cmd.append(f"-X heapsize={t.heapsize}")
+        cmd += ["-X", f"heapsize={t.heapsize}"]
     cmd.append(t.source.name)
     proc = subprocess.run(
         cmd, cwd=t.source.parent, capture_output=True, timeout=t.timeout,

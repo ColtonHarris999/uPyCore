@@ -501,6 +501,7 @@ def _list_del(lst, i):
     n = _ld(lst, 0)
     if i < n - 1:
         _wcopy(_ld(lst, 2), i, _ld(lst, 2), i + 1, n - 1 - i)
+    _st(_ld(lst, 2), n - 1, NULL)
     _st(lst, 0, n - 1)
     return None
 
@@ -527,5 +528,7 @@ def _list_setslice(lst, sl, value):
         _wcopy(items, a + m, items, b, n - b)
     if m:
         _wcopy(items, a, _ld(src, 2), 0, m)
+    if newn < n:
+        _list_clear_slots(lst, newn, n)
     _st(lst, 0, newn)
     return None

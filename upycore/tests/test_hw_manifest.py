@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sys
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -38,6 +40,20 @@ class MaskTest(unittest.TestCase):
 
 
 class ManifestTest(unittest.TestCase):
+    def test_oracle_heap_option_is_two_arguments(self) -> None:
+        t = hw_tests.Test(name="heap", area="memory", file="hw/memory/alloc_size_bounds.py",
+                          heapsize=228096)
+        with patch.object(hw_tests, "oracle_ready", return_value=True), patch.object(
+            hw_tests.subprocess, "run", return_value=SimpleNamespace(stdout=b"", stderr=b"", returncode=0)
+        ) as run:
+            hw_tests.run_oracle(t)
+        self.assertEqual(run.call_args.args[0][1:3], ["-X", "heapsize=228096"])
+
+    def test_suite_has_no_expected_failures_or_disabled_programs(self) -> None:
+        for t in hw_tests.load_manifest():
+            self.assertIsNone(t.xfail, t.name)
+            self.assertIsNone(t.disabled, t.name)
+
     def test_every_program_exists_and_names_are_unique(self) -> None:
         tests = hw_tests.load_manifest()
         self.assertGreaterEqual(len(tests), 30)

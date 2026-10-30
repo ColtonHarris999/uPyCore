@@ -167,6 +167,17 @@ module tb_mpy_gc;
         alloc(POOL_BYTES + 16, ok, x);
         check(!ok, "an allocation larger than the pool fails");
         check(free_blocks == 32'(free0), "a failed allocation commits nothing");
+        // Count-width and byte-rounding overflow must also be harmless misses.
+        for (int k = 0; k < 4; k++) begin
+            case (k)
+                0: alloc(528, ok, x);  // 33 blocks would truncate to 1
+                1: alloc(1024, ok, x); // block count would truncate to 0
+                2: alloc(32'hFFFF_FFF0, ok, x);
+                3: alloc(32'hFFFF_FFFF, ok, x); // +15 would wrap
+            endcase
+            check(!ok, "oversized count does not wrap into an allocation");
+            check(free_blocks == 32'(free0), "oversized count leaves pool unchanged");
+        end
 
         // 7. Six children of one object overflow the 2-entry mark stack.
         collect(ROOTS, ROOTS);                           // no roots: empty the pool
