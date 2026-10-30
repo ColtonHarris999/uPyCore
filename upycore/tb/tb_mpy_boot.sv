@@ -37,9 +37,10 @@ module tb_mpy_boot;
             @(negedge clk); rst_n = 0;
             repeat (3) @(negedge clk);
             writes = 0;
-            n = trial == 1 ? 49160 : 16; // second image exceeds old 192 KiB cap
+            n = trial == 1 ? (MPY_MEM_BYTES - (MPY_GC_POOL_BASE - MPY_SRAM_BASE) - 32) / 4 : 16;
+            // Exercise the largest valid image, including its tag stream.
             stream_word(0, trial == 5 ? 32'd0 : MPY_BOOT_MAGIC);
-            stream_word(4, trial == 2 ? 32'd0 : trial == 3 ? 32'd57024 :
+            stream_word(4, trial == 2 ? 32'd0 : trial == 3 ? 32'((MPY_MEM_BYTES - (MPY_GC_POOL_BASE - MPY_SRAM_BASE)) / 4) :
                            trial == 4 ? 32'h80000000 : 32'(n));
             offset = 8;
             for (int g = 0; g < n / 8; g++) begin
@@ -60,6 +61,6 @@ module tb_mpy_boot;
         $finish;
     end
     initial begin
-        #150000000; $fatal(1, "boot timeout");
+        #250000000; $fatal(1, "boot timeout");
     end
 endmodule

@@ -66,7 +66,7 @@ status)
         fi
         slack=- path=- minp=- area=- macros=-
         net=$(ls "$d"/build/syn-rundir/*.mapped.v 2>/dev/null | head -1)
-        [ "$TOP" = mpy_soc ] && [ -n "$net" ] && macros=$(grep -c fakeram_d16384_w36 "$net")
+        [ "$TOP" = mpy_soc ] && [ -n "$net" ] && macros=$(grep -c fakeram_d32768_w36 "$net")
         if [ "$state" = done ] && [ -f "$rpt" ]; then
             slack=$(awk '/Slack:=/{print $2/1000; exit}' "$rpt")
             path=$(awk '/Data Path:-/{print $3/1000; exit}' "$rpt")
@@ -76,7 +76,7 @@ status)
         printf "%-22s %-8s %10s %10s %10s %12s %7s\n" "${d##*/}" "$state" "$slack" "$path" "$minp" "$area" "$macros"
     done
     if [ "$TOP" = mpy_soc ]; then
-        lef=$(find "$DESIGNS"/${PREFIX}_p* -name 'fakeram_d16384_w36.lef' 2>/dev/null | head -1)
+        lef=$(find "$DESIGNS"/${PREFIX}_p* -name 'fakeram_d32768_w36.lef' 2>/dev/null | head -1)
         [ -n "$lef" ] && echo "SRAM macro footprint (um): $(grep -m1 -o 'SIZE.*' "$lef")"
     fi
     echo "min ns = period - slack: the shortest clock that run's netlist would meet."

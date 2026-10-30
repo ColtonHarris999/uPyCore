@@ -449,7 +449,7 @@ UNOP = {
 # SRAM map beyond upycore/docs/mpy_memory_map.md: the system root area and the
 # argument staging buffer sit between the handler table and the GC pool.
 SRAM_BASE = 0x2000_0000
-SRAM_BYTES = 4 * 64 * 1024  # maximum shared SRAM; boot subtracts the image
+SRAM_BYTES = 4 * 128 * 1024  # maximum shared SRAM; boot subtracts the image
 FRAME_BASE = SRAM_BASE
 FRAME_BYTES = 0x8000      # frame stack; a call that would cross the end raises RuntimeError
 SCHED_BASE = SRAM_BASE + FRAME_BYTES

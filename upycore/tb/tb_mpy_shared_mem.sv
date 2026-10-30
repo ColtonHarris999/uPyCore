@@ -43,11 +43,11 @@ module tb_mpy_shared_mem;
         int aligned_words, data_bytes;
         req = 0; we = 0; tag_we = 0; addr = 0; data = 0; tag = 0;
         ld_we = 0; ld_idx = 0; ld_data = 0; ld_tag = 0;
-        for (int layout = 0; layout < 3; layout++) begin
+        for (int layout = 0; layout < 4; layout++) begin
             @(negedge clk); rst_n = 0;
             // Include an image above the previous 192 KiB cap, and an
             // unaligned image size whose padding must remain protected.
-            image_words = layout == 0 ? 9 : layout == 1 ? 8192 : 49160;
+            image_words = layout == 0 ? 9 : layout == 1 ? 8192 : layout == 2 ? 49160 : 65544;
             aligned_words = (image_words + 7) & ~7;
             data_bytes = MPY_MEM_BYTES - 4 * aligned_words;
             repeat (3) @(negedge clk); rst_n = 1;

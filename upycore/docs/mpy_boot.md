@@ -1,6 +1,6 @@
 # On-chip memory and boot
 
-uPyCore has four interleaved 16,384 x 36-bit SRAM banks, sharing 256 KiB
+uPyCore has four interleaved 32,768 x 36-bit SRAM banks, sharing 512 KiB
 of payload capacity between the linked image and mutable data. Each word
 stores a 32-bit payload and its 4-bit tag together. There is no fixed
 image/data partition. SPI NAND supplies the image at boot.
@@ -10,7 +10,7 @@ Let `I = align_up(image_bytes, 32)`. Boot maps:
 | Window | Logical base | Capacity | Physical byte offset |
 | --- | --- | ---: | ---: |
 | Image ("flash") | `0x0000_0000` | `I` | `0` |
-| Mutable data | `0x2000_0000` | `262144 - I` | `I` |
+| Mutable data | `0x2000_0000` | `524288 - I` | `I` |
 
 Physical word `w` selects bank `w % 4` and row `w / 4`. The split is
 aligned to eight words, preserving word interleaving and 16-byte GC blocks.
@@ -20,7 +20,7 @@ boot-selected window fault instead of aliasing the other window.
 
 Runtime reservations occupy the first `0x8500` bytes of mutable data.
 The GC pool starts at logical `0x2000_8500` and normally uses everything
-remaining: `262144 - I - 0x8500` bytes. A nonzero image header `POOL_BYTES`
+remaining: `524288 - I - 0x8500` bytes. A nonzero image header `POOL_BYTES`
 may cap that pool; boot rejects unaligned caps or caps beyond the physical
 space. At least one GC block must fit. `mpy_abi.memory_layout` applies the
 same checks in the linker and NAND packer. The linker reports the aligned
@@ -32,15 +32,22 @@ checks their actual boot-selected ends. GC metadata is sized for the
 maximum possible pool, while allocation, marking, sweeping and free-space
 counters use the runtime pool size.
 
+Heap capacity does not equal the largest payload every constructor can build.
+Currently `bytearray(n)` creates a temporary bytes buffer and copies it, so
+its peak allocation is roughly twice `n` plus headers. With a roughly 305 KB
+heap, `bytes(262144)` fits while `bytearray(262144)` can raise MemoryError.
+The large-address regression uses one bytes payload; RTL tests independently
+verify writes above the old 256 KiB boundary and across all four banks.
+
 ## SRAM blocks
 
 Every block is `bsg_mem_1rw_sync_mask_write_bit` from BaseJump STL with
-`els_p = 16384` and `width_p = 36`: one read/write port and a per-bit write
+`els_p = 32768` and `width_p = 36`: one read/write port and a per-bit write
 mask. A word is `{tag[3:0], payload[31:0]}`, so one access reads a value
 and its tag together, and one write stores both. The mask turns a byte
 store, or a payload store that keeps the tag, into one write instead of a
 read and a write. In the EE 477 flow each block becomes a
-`fakeram_d16384_w36` macro.
+`fakeram_d32768_w36` macro.
 
 Why one 36-bit port per block:
 
@@ -119,7 +126,7 @@ idle, since a copy in flight may be writing it. Image reads never wait.
 ## Reset
 
 After reset `mpy_mem` clears every physical SRAM row, all four banks at
-once (16,384 cycles). Boot waits for this clear before writing the image,
+once (32,768 cycles). Boot waits for this clear before writing the image,
 so clearing cannot overwrite loaded words. When loading finishes, the
 layout is fixed and `mpy_gc` clears its maximum-capacity allocation table.
 The core and accelerator leave reset only after all three steps complete.
@@ -180,23 +187,20 @@ cycles over SPI, 73 ms at 100 MHz. Not done yet:
   guarantee block 0
 - a checksum over the stream
 
-## The frozen compiler does not fit
+## Resident compiler capacity
 
-The firmware and `array` link to 176 KB. The frozen uPy2 compiler that
-`compile`, `exec` and `eval` run is another 167 KB, so images with it
-(about 346 KB) exceed the entire 256 KiB shared SRAM before runtime
-reservations. Removing the partition does not make these images fit. `mpy_build.py` links the
-compiler only into programs that name one of the three builtins (an AST
-check, so a string or comment does not count). Those programs (the
-`compiler` area of the hardware suite) fail to link with this memory map.
-Running them on chip needs a smaller resident image, more physical
-memory, or compiler code paged in from NAND. These are capacity failures,
-not expected-failure entries in the test manifest.
+The 512 KiB shared SRAM holds the frozen uPy2 compiler and firmware together.
+A typical compiler-area image is about 355 KB, leaving about 135 KB of GC
+heap after the fixed runtime reservations. `mpy_build.py` freezes the compiler
+only for programs that name `compile`, `exec` or `eval` (an AST check, so a
+string or comment does not count). Images still must fit together with runtime
+reservations; the linker reports a capacity error before producing an image
+if they do not.
 
 ## Capacity-sensitive acceptance results
 
-The shared split does not change physical capacity. On this four-bank target,
-firmware leaves roughly 42 KiB of heap for a small program. A complete
+At the previous 256 KiB capacity, firmware left roughly 42 KiB of heap
+for a small program. A complete
 mpy-cross run of the 425 noncompiler acceptance programs passed 419. The
 remaining programs were `star_wide_dir`, `star_wide_oom`, `ca_copy`,
 `gc_list_shrink_reclaims`, `gc_live_exceeds_heap`, and `gc_memoryerror_recover`.
@@ -208,8 +212,8 @@ this smaller heap; it must not be hidden by an expected-failure marker.
 Of 53 compiler-area programs, 9 passed and 44 were rejected by the linker
 because their images exceed total SRAM capacity with runtime reservations.
 These results are failures, not accepted exceptions: no programs are disabled
-or marked expected-failure. Fitting every acceptance program requires further
-memory-footprint work or more storage; a dynamic split alone cannot guarantee it.
+or marked expected-failure. These measurements describe the 256 KiB baseline, before increasing each
+bank to 128 KiB.
 
 ## Simulation
 
@@ -237,7 +241,7 @@ The halt line reports `boot=<cycles>`. `--nand` writes the `.nand.bin` and
 - leaves the stand-in model out of `v/`
 - lists BaseJump's `bsg_mem_1rw_sync_mask_write_bit.v`, its synth model
   and helpers in `src.yml` (with the `subst` meta for `${bsg_root}`)
-- adds `fakeram_d16384_w36` to `vlsi.inputs.sram_parameters`
+- adds `fakeram_d32768_w36` to `vlsi.inputs.sram_parameters`
 
 ```bash
 python3 upycore/synth/hammer/make_hammer_design.py \
@@ -254,7 +258,7 @@ cannot parse `mpy_core.sv`, and writes the rest (`mpy_gc`, `mpy_ca`,
 those modules, convert the whole `mpy_soc` with `convert_rtl.sh` instead.
 
 After `make sram`, read the macro size from the generated
-`fakeram_d16384_w36.lef` (`SIZE w BY h`) and pick a die that holds four
+`fakeram_d32768_w36.lef` (`SIZE w BY h`) and pick a die that holds four
 macros plus the logic. `--die` is a starting guess. Then follow Module 2
 Task 3:
 
@@ -277,7 +281,7 @@ the exact names from Innovus.
 
 Mirror (`mx`, `my`) but do not rotate the macros: rotating them breaks
 their power rails. After `make syn`, the mapped netlist should instantiate
-`fakeram_d16384_w36` four times (`grep -c fakeram_d16384_w36
+`fakeram_d32768_w36` four times (`grep -c fakeram_d32768_w36
 build/syn-rundir/mpy_soc.mapped.v`). If a block shows up as
 `notmacro.synth`, its depth or width does not match the `sram_parameters`
 entry and Genus is building 590K bits of flops. A run that takes far

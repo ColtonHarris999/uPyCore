@@ -12,10 +12,10 @@ import mpy_nand
 
 class MemoryLayoutTest(unittest.TestCase):
     def test_capacity_follows_image_size(self):
-        for image in (65, 32 * 1024, 192 * 1024 + 32):
+        for image in (65, 32 * 1024, 256 * 1024 + 32):
             aligned, data, heap = abi.memory_layout(image)
             self.assertEqual(aligned % 32, 0)
-            self.assertEqual(aligned + data, 256 * 1024)
+            self.assertEqual(aligned + data, abi.SRAM_BYTES)
             self.assertEqual(heap + abi.GC_POOL_BASE - abi.SRAM_BASE, data)
         self.assertEqual(abi.memory_layout(65)[0], 96)
 
@@ -32,7 +32,7 @@ class MemoryLayoutTest(unittest.TestCase):
                 abi.memory_layout(1024, heap)
 
     def test_stream_accepts_image_above_old_image_cap(self):
-        n = (192 * 1024 + 32) // 4
+        n = (256 * 1024 + 32) // 4
         words = [0] * n
         words[abi.HDR["IMAGE_BYTES"]] = n * 4
         words[abi.HDR["POOL_BYTES"]] = abi.memory_layout(n * 4)[2]

@@ -6197,7 +6197,7 @@ module mpy_core (
 	);
 	localparam [2:0] MPY_REGION_SRAM = 3'd2;
 	localparam signed [31:0] MPY_MEM_BLOCKS = 4;
-	localparam signed [31:0] MPY_MEM_BLOCK_WORDS = 16384;
+	localparam signed [31:0] MPY_MEM_BLOCK_WORDS = 32768;
 	localparam signed [31:0] MPY_MEM_WORDS = MPY_MEM_BLOCKS * MPY_MEM_BLOCK_WORDS;
 	localparam signed [31:0] MPY_MEM_BYTES = MPY_MEM_WORDS * 4;
 	localparam [31:0] MPY_FLASH_BYTES = MPY_MEM_BYTES;
@@ -6490,8 +6490,8 @@ module mpy_core (
 	assign m_addr_o = m_addr;
 	assign m_wdata_o = m_wdata;
 	assign m_wtag_o = m_wtag;
-	localparam signed [31:0] ABI_GC_POOL_BYTES = 228096;
-	assign gc_alloc_nbytes_o = (al_n > 57024 ? ABI_GC_POOL_BYTES + 32'd16 : al_n << 2);
+	localparam signed [31:0] ABI_GC_POOL_BYTES = 490240;
+	assign gc_alloc_nbytes_o = (al_n > 122560 ? ABI_GC_POOL_BYTES + 32'd16 : al_n << 2);
 	localparam [31:0] ABI_FRAME_BASE = 32'h20000000;
 	assign gc_root0_lo_o = ABI_FRAME_BASE;
 	assign gc_root0_hi_o = (noframe ? ABI_FRAME_BASE : ftop + {23'd0, sp, 2'b00});
@@ -10559,7 +10559,7 @@ module mpy_core (
 								rd(ab_ptr(ab_lo + 8'd2), 10'd604);
 							ABI_N_STRNEW:
 								if ((!intlike(mv) || v1[31]) || (v1 > (ABI_GC_POOL_BYTES - 32'd12)))
-									alloc(57025, 10'd347);
+									alloc(122561, 10'd347);
 								else
 									alloc(32'd3 + ((v1 + 32'd3) >> 2), 10'd347);
 							ABI_N_STRFIN:
@@ -12797,7 +12797,7 @@ module mpy_gc (
 	localparam [31:0] MPY_GC_POOL_BASE = MPY_ARGBUF_BASE + 32'h00000400;
 	parameter [31:0] POOL_BASE = MPY_GC_POOL_BASE;
 	localparam signed [31:0] MPY_MEM_BLOCKS = 4;
-	localparam signed [31:0] MPY_MEM_BLOCK_WORDS = 16384;
+	localparam signed [31:0] MPY_MEM_BLOCK_WORDS = 32768;
 	localparam signed [31:0] MPY_MEM_WORDS = MPY_MEM_BLOCKS * MPY_MEM_BLOCK_WORDS;
 	localparam signed [31:0] MPY_MEM_BYTES = MPY_MEM_WORDS * 4;
 	localparam [31:0] MPY_SRAM_BYTES = MPY_MEM_BYTES;
@@ -13663,29 +13663,30 @@ module mpy_mem (
 	output reg [NP - 1:0] fault_o;
 	output reg [(NP * 4) - 1:0] fault_reason_o;
 	input wire ld_we_i;
-	localparam signed [31:0] MPY_FLASH_IDX_W = 16;
-	input wire [15:0] ld_idx_i;
+	localparam signed [31:0] MPY_MEM_BLOCKS = 4;
+	localparam signed [31:0] MPY_MEM_BLOCK_WORDS = 32768;
+	localparam signed [31:0] MPY_MEM_WORDS = MPY_MEM_BLOCKS * MPY_MEM_BLOCK_WORDS;
+	localparam signed [31:0] MPY_MEM_WORD_AW = $clog2(MPY_MEM_WORDS);
+	localparam signed [31:0] MPY_FLASH_IDX_W = MPY_MEM_WORD_AW;
+	input wire [MPY_FLASH_IDX_W - 1:0] ld_idx_i;
 	input wire [31:0] ld_wdata_i;
 	input wire [3:0] ld_wtag_i;
 	output wire init_done_o;
-	localparam signed [31:0] MPY_MEM_BLOCK_AW = 14;
+	localparam signed [31:0] MPY_MEM_BLOCK_AW = 15;
 	localparam signed [31:0] AW = MPY_MEM_BLOCK_AW;
 	localparam signed [31:0] MPY_MEM_WIDTH = 36;
 	localparam signed [31:0] W = MPY_MEM_WIDTH;
-	localparam signed [31:0] MPY_MEM_BLOCKS = 4;
 	localparam signed [31:0] NB = MPY_MEM_BLOCKS;
 	localparam signed [31:0] BS = 2;
-	localparam signed [31:0] MPY_MEM_BLOCK_WORDS = 16384;
 	localparam signed [31:0] SROWS = MPY_MEM_BLOCK_WORDS;
-	localparam signed [31:0] CW = 14;
+	localparam signed [31:0] CW = 15;
 	wire [31:0] image_words;
 	wire [31:0] data_words;
 	assign image_words = (image_words_i + 32'd7) & 32'hfffffff8;
-	localparam signed [31:0] MPY_MEM_WORDS = MPY_MEM_BLOCKS * MPY_MEM_BLOCK_WORDS;
 	assign data_words = (image_words <= MPY_MEM_WORDS ? MPY_MEM_WORDS - image_words : 0);
 	reg blk_v [0:3];
 	reg blk_w [0:3];
-	reg [13:0] blk_addr [0:3];
+	reg [14:0] blk_addr [0:3];
 	reg [35:0] blk_data [0:3];
 	reg [35:0] blk_mask [0:3];
 	wire [35:0] blk_q [0:3];
@@ -13731,13 +13732,13 @@ module mpy_mem (
 	localparam [2:0] MPY_REGION_FLASH = 3'd1;
 	localparam [2:0] MPY_REGION_SRAM = 3'd2;
 	localparam [31:0] MPY_FLASH_BASE = 32'h00000000;
-	function automatic [16:0] sv2v_cast_17;
-		input reg [16:0] inp;
-		sv2v_cast_17 = inp;
+	function automatic [MPY_MEM_WORD_AW - 1:0] sv2v_cast_EA15C;
+		input reg [MPY_MEM_WORD_AW - 1:0] inp;
+		sv2v_cast_EA15C = inp;
 	endfunction
-	function automatic [16:0] mpy_flash_word_index;
+	function automatic [MPY_MEM_WORD_AW - 1:0] mpy_flash_word_index;
 		input reg [31:0] addr;
-		mpy_flash_word_index = sv2v_cast_17((addr - MPY_FLASH_BASE) >> 2);
+		mpy_flash_word_index = sv2v_cast_EA15C((addr - MPY_FLASH_BASE) >> 2);
 	endfunction
 	localparam signed [31:0] MPY_MEM_BYTES = MPY_MEM_WORDS * 4;
 	localparam [31:0] MPY_FLASH_BYTES = MPY_MEM_BYTES;
@@ -13763,21 +13764,21 @@ module mpy_mem (
 		else
 			mpy_region_of = MPY_REGION_NONE;
 	endfunction
-	function automatic [15:0] sv2v_cast_16;
-		input reg [15:0] inp;
-		sv2v_cast_16 = inp;
-	endfunction
-	function automatic [15:0] mpy_sram_word_index;
+	function automatic [MPY_MEM_WORD_AW - 1:0] mpy_sram_word_index;
 		input reg [31:0] addr;
-		mpy_sram_word_index = sv2v_cast_16((addr - MPY_SRAM_BASE) >> 2);
+		mpy_sram_word_index = sv2v_cast_EA15C((addr - MPY_SRAM_BASE) >> 2);
+	endfunction
+	function automatic [MPY_FLASH_IDX_W - 1:0] sv2v_cast_6DF93;
+		input reg [MPY_FLASH_IDX_W - 1:0] inp;
+		sv2v_cast_6DF93 = inp;
 	endfunction
 	function automatic [31:0] sv2v_cast_32;
 		input reg [31:0] inp;
 		sv2v_cast_32 = inp;
 	endfunction
-	function automatic [13:0] sv2v_cast_14;
-		input reg [13:0] inp;
-		sv2v_cast_14 = inp;
+	function automatic [14:0] sv2v_cast_DE851;
+		input reg [14:0] inp;
+		sv2v_cast_DE851 = inp;
 	endfunction
 	function automatic [1:0] sv2v_cast_62836;
 		input reg [1:0] inp;
@@ -13791,11 +13792,11 @@ module mpy_mem (
 			for (p = 0; p < NP; p = p + 1)
 				begin : sv2v_autoblock_2
 					reg [2:0] region;
-					reg [15:0] sw;
-					reg [15:0] iw;
+					reg [MPY_MEM_WORD_AW - 1:0] sw;
+					reg [MPY_FLASH_IDX_W - 1:0] iw;
 					region = mpy_region_of(addr_i[p * 32+:32]);
 					sw = mpy_sram_word_index(addr_i[p * 32+:32]);
-					iw = sv2v_cast_16(mpy_flash_word_index(addr_i[p * 32+:32]));
+					iw = sv2v_cast_6DF93(mpy_flash_word_index(addr_i[p * 32+:32]));
 					ready[p] = !clr_busy && (phase_r[p * 8+:8] <= 8'd1);
 					if (addr_i[(p * 32) + 1-:2] != 2'b00)
 						p_fault[p * 4+:4] = MPY_FAULT_UNALIGNED;
@@ -13809,11 +13810,11 @@ module mpy_mem (
 					p_img[p] = region == MPY_REGION_FLASH;
 					if (p_img[p]) begin
 						p_blk[p * BS+:BS] = iw[1:0];
-						p_row[p * AW+:AW] = sv2v_cast_14(sv2v_cast_32(iw) >> BS);
+						p_row[p * AW+:AW] = sv2v_cast_DE851(sv2v_cast_32(iw) >> BS);
 					end
 					else begin
 						p_blk[p * BS+:BS] = sv2v_cast_62836(sv2v_cast_32(sw) + image_words);
-						p_row[p * AW+:AW] = sv2v_cast_14((sv2v_cast_32(sw) + image_words) >> BS);
+						p_row[p * AW+:AW] = sv2v_cast_DE851((sv2v_cast_32(sw) + image_words) >> BS);
 					end
 					begin : sv2v_autoblock_3
 						reg signed [31:0] k;
@@ -13825,9 +13826,9 @@ module mpy_mem (
 		end
 	end
 	wire [1:0] ld_blk;
-	wire [13:0] ld_row;
+	wire [14:0] ld_row;
 	assign ld_blk = ld_idx_i[1:0];
-	assign ld_row = sv2v_cast_14(sv2v_cast_32(ld_idx_i) >> BS);
+	assign ld_row = sv2v_cast_DE851(sv2v_cast_32(ld_idx_i) >> BS);
 	function automatic signed [1:0] sv2v_cast_62836_signed;
 		input reg signed [1:0] inp;
 		sv2v_cast_62836_signed = inp;
@@ -13850,7 +13851,7 @@ module mpy_mem (
 					if (clr_busy) begin
 						blk_v[b] = 1'b1;
 						blk_w[b] = 1'b1;
-						blk_addr[b] = sv2v_cast_14(clr_idx[13:0]);
+						blk_addr[b] = sv2v_cast_DE851(clr_idx[14:0]);
 						blk_mask[b] = 1'sb1;
 						taken[b] = 1'b1;
 					end
@@ -13882,8 +13883,8 @@ module mpy_mem (
 				end
 		end
 	end
-	function automatic signed [14:0] sv2v_cast_89787_signed;
-		input reg signed [14:0] inp;
+	function automatic signed [15:0] sv2v_cast_89787_signed;
+		input reg signed [15:0] inp;
 		sv2v_cast_89787_signed = inp;
 	endfunction
 	function automatic signed [7:0] sv2v_cast_8_signed;
@@ -13909,7 +13910,7 @@ module mpy_mem (
 		else begin
 			if (clr_busy && !ld_we_i) begin
 				clr_idx <= clr_idx + 1'b1;
-				if (clr_idx == sv2v_cast_89787_signed(16383))
+				if (clr_idx == sv2v_cast_89787_signed(32767))
 					clr_busy <= 1'b0;
 			end
 			begin : sv2v_autoblock_7
@@ -13977,8 +13978,12 @@ module mpy_boot (
 	output reg mosi_o;
 	input wire miso_i;
 	output reg ld_we_o;
-	localparam signed [31:0] MPY_FLASH_IDX_W = 16;
-	output reg [15:0] ld_idx_o;
+	localparam signed [31:0] MPY_MEM_BLOCKS = 4;
+	localparam signed [31:0] MPY_MEM_BLOCK_WORDS = 32768;
+	localparam signed [31:0] MPY_MEM_WORDS = MPY_MEM_BLOCKS * MPY_MEM_BLOCK_WORDS;
+	localparam signed [31:0] MPY_MEM_WORD_AW = $clog2(MPY_MEM_WORDS);
+	localparam signed [31:0] MPY_FLASH_IDX_W = MPY_MEM_WORD_AW;
+	output reg [MPY_FLASH_IDX_W - 1:0] ld_idx_o;
 	output reg [31:0] ld_wdata_o;
 	output reg [3:0] ld_wtag_o;
 	output wire [31:0] image_words_o;
@@ -14013,9 +14018,6 @@ module mpy_boot (
 	localparam [31:0] MPY_SYSROOT_BASE = MPY_HANDLER_BASE + MPY_HANDLER_BYTES;
 	localparam [31:0] MPY_ARGBUF_BASE = MPY_SYSROOT_BASE + 32'h00000080;
 	localparam [31:0] MPY_GC_POOL_BASE = MPY_ARGBUF_BASE + 32'h00000400;
-	localparam signed [31:0] MPY_MEM_BLOCKS = 4;
-	localparam signed [31:0] MPY_MEM_BLOCK_WORDS = 16384;
-	localparam signed [31:0] MPY_MEM_WORDS = MPY_MEM_BLOCKS * MPY_MEM_BLOCK_WORDS;
 	localparam signed [31:0] MPY_MEM_BYTES = MPY_MEM_WORDS * 4;
 	function automatic [31:0] sv2v_cast_32;
 		input reg [31:0] inp;
@@ -14056,7 +14058,7 @@ module mpy_boot (
 						if (widx == 14)
 							pool_bytes_o <= src_w;
 						ld_we_o <= 1'b1;
-						ld_idx_o <= widx[15:0];
+						ld_idx_o <= widx[MPY_FLASH_IDX_W - 1:0];
 						ld_wdata_o <= src_w;
 						ld_wtag_o <= tagw[4 * k+:4];
 						widx <= widx + 1'b1;
@@ -14390,7 +14392,7 @@ module mpy_soc (
 	wire layout_error;
 	localparam [31:0] ABI_GC_POOL_BASE = 32'h20008500;
 	localparam signed [31:0] MPY_MEM_BLOCKS = 4;
-	localparam signed [31:0] MPY_MEM_BLOCK_WORDS = 16384;
+	localparam signed [31:0] MPY_MEM_BLOCK_WORDS = 32768;
 	localparam signed [31:0] MPY_MEM_WORDS = MPY_MEM_BLOCKS * MPY_MEM_BLOCK_WORDS;
 	localparam signed [31:0] MPY_MEM_BYTES = MPY_MEM_WORDS * 4;
 	localparam [31:0] MPY_SRAM_BASE = 32'h20000000;
@@ -14401,8 +14403,9 @@ module mpy_soc (
 	assign boot_err_o = boot_error || layout_error;
 	reg sys_rst_n;
 	wire ld_we;
-	localparam signed [31:0] MPY_FLASH_IDX_W = 16;
-	wire [15:0] ld_idx;
+	localparam signed [31:0] MPY_MEM_WORD_AW = $clog2(MPY_MEM_WORDS);
+	localparam signed [31:0] MPY_FLASH_IDX_W = MPY_MEM_WORD_AW;
+	wire [MPY_FLASH_IDX_W - 1:0] ld_idx;
 	wire [31:0] ld_wdata;
 	wire [3:0] ld_wtag;
 	always @(posedge clk_i or negedge rst_n_i)
@@ -14482,7 +14485,7 @@ module mpy_soc (
 		.trace_op_o(trace_op_o),
 		.trace_sp_o(trace_sp_o)
 	);
-	localparam signed [31:0] ABI_GC_POOL_BYTES = 228096;
+	localparam signed [31:0] ABI_GC_POOL_BYTES = 490240;
 	mpy_gc #(
 		.POOL_BASE(ABI_GC_POOL_BASE),
 		.POOL_BYTES(ABI_GC_POOL_BYTES)

@@ -94,12 +94,13 @@ localparam int MPY_TAGS_PER_WORD = 8;
 // constants below describe maximum address windows, not a fixed partition.
 // Boot places the image first (rounded to 32 bytes), then maps data offset
 // zero immediately after it. Logical pointers retain their existing bases.
-localparam int MPY_MEM_BLOCK_WORDS = 16384;
-localparam int MPY_MEM_BLOCK_AW    = 14;
+localparam int MPY_MEM_BLOCK_WORDS = 32768;
+localparam int MPY_MEM_BLOCK_AW    = $clog2(MPY_MEM_BLOCK_WORDS);
 localparam int MPY_MEM_WIDTH       = 36;
 localparam int MPY_MEM_BLOCKS      = 4;
 localparam int MPY_MEM_WORDS       = MPY_MEM_BLOCKS * MPY_MEM_BLOCK_WORDS;
 localparam int MPY_MEM_BYTES       = MPY_MEM_WORDS * 4;
+localparam int MPY_MEM_WORD_AW     = $clog2(MPY_MEM_WORDS);
 localparam logic [31:0] MPY_FLASH_BASE = 32'h0000_0000;
 localparam logic [31:0] MPY_FLASH_BYTES = MPY_MEM_BYTES;
 localparam logic [31:0] MPY_FLASH_RESERVED_BYTES = 32'd8;
@@ -117,7 +118,7 @@ localparam int MPY_FLASH_WAIT_STATES  = 1;
 
 localparam int MPY_SRAM_WORDS      = MPY_MEM_WORDS;  // maximum, reduced by image at boot
 localparam int MPY_FLASH_WORDS     = MPY_MEM_WORDS; // maximum image window
-localparam int MPY_FLASH_IDX_W     = 16; // $clog2(MPY_FLASH_WORDS)
+localparam int MPY_FLASH_IDX_W     = MPY_MEM_WORD_AW;
 
 // Boot stream in SPI NAND (upycore/docs/mpy_boot.md): magic, image word
 // count, then groups of one packed tag word and eight image words.
@@ -399,16 +400,16 @@ function automatic logic mpy_flash_addr_reserved(
     mpy_flash_addr_reserved = (addr < MPY_FLASH_RESERVED_BYTES);
 endfunction
 
-function automatic logic [15:0] mpy_sram_word_index(
+function automatic logic [MPY_MEM_WORD_AW-1:0] mpy_sram_word_index(
     input logic [31:0] addr
 );
-    mpy_sram_word_index = 16'((addr - MPY_SRAM_BASE) >> 2);
+    mpy_sram_word_index = MPY_MEM_WORD_AW'((addr - MPY_SRAM_BASE) >> 2);
 endfunction
 
-function automatic logic [16:0] mpy_flash_word_index(
+function automatic logic [MPY_MEM_WORD_AW-1:0] mpy_flash_word_index(
     input logic [31:0] addr
 );
-    mpy_flash_word_index = 17'((addr - MPY_FLASH_BASE) >> 2);
+    mpy_flash_word_index = MPY_MEM_WORD_AW'((addr - MPY_FLASH_BASE) >> 2);
 endfunction
 
 // SHORT_STR: length in the first payload's low byte, then up to 15 bytes

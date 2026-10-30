@@ -6197,7 +6197,7 @@ module mpy_core (
 	);
 	localparam [2:0] MPY_REGION_SRAM = 3'd2;
 	localparam signed [31:0] MPY_MEM_BLOCKS = 4;
-	localparam signed [31:0] MPY_MEM_BLOCK_WORDS = 16384;
+	localparam signed [31:0] MPY_MEM_BLOCK_WORDS = 32768;
 	localparam signed [31:0] MPY_MEM_WORDS = MPY_MEM_BLOCKS * MPY_MEM_BLOCK_WORDS;
 	localparam signed [31:0] MPY_MEM_BYTES = MPY_MEM_WORDS * 4;
 	localparam [31:0] MPY_FLASH_BYTES = MPY_MEM_BYTES;
@@ -6490,8 +6490,8 @@ module mpy_core (
 	assign m_addr_o = m_addr;
 	assign m_wdata_o = m_wdata;
 	assign m_wtag_o = m_wtag;
-	localparam signed [31:0] ABI_GC_POOL_BYTES = 228096;
-	assign gc_alloc_nbytes_o = (al_n > 57024 ? ABI_GC_POOL_BYTES + 32'd16 : al_n << 2);
+	localparam signed [31:0] ABI_GC_POOL_BYTES = 490240;
+	assign gc_alloc_nbytes_o = (al_n > 122560 ? ABI_GC_POOL_BYTES + 32'd16 : al_n << 2);
 	localparam [31:0] ABI_FRAME_BASE = 32'h20000000;
 	assign gc_root0_lo_o = ABI_FRAME_BASE;
 	assign gc_root0_hi_o = (noframe ? ABI_FRAME_BASE : ftop + {23'd0, sp, 2'b00});
@@ -10559,7 +10559,7 @@ module mpy_core (
 								rd(ab_ptr(ab_lo + 8'd2), 10'd604);
 							ABI_N_STRNEW:
 								if ((!intlike(mv) || v1[31]) || (v1 > (ABI_GC_POOL_BYTES - 32'd12)))
-									alloc(57025, 10'd347);
+									alloc(122561, 10'd347);
 								else
 									alloc(32'd3 + ((v1 + 32'd3) >> 2), 10'd347);
 							ABI_N_STRFIN:

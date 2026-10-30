@@ -2,7 +2,7 @@
 
 // Byte-addressed image ("flash") and data SRAM, with one port per master.
 //
-// Storage: four interleaved 16384 x 36 single-port SRAM banks. Physical
+// Storage: four interleaved 32768 x 36 single-port SRAM banks. Physical
 // words [0, image_words_i rounded to 8) hold the image; the remainder holds
 // mutable data. Bank = physical word[1:0], row = physical word >> 2.
 // image_words_i is fixed before masters leave reset. All SRAM is cleared
@@ -116,7 +116,7 @@ module mpy_mem #(
     always_comb begin
         for (int p = 0; p < NP; p++) begin
             logic [2:0]  region;
-            logic [15:0] sw;
+            logic [MPY_MEM_WORD_AW-1:0] sw;
             logic [MPY_FLASH_IDX_W-1:0] iw;
             region = mpy_region_of(addr_i[p]);
             sw = mpy_sram_word_index(addr_i[p]);
