@@ -92,8 +92,11 @@ localparam int MPY_TAGS_PER_WORD = 8;
 //
 // Both on-chip memories are built from MPY_MEM_BLOCKS identical 64 KB SRAM
 // blocks of MPY_MEM_BLOCK_WORDS x MPY_MEM_WIDTH bits: a 32-bit payload and
-// its 4-bit tag in one word, so one access reads or writes both. The
-// "flash" window is the image SRAM. mpy_boot fills it from SPI NAND before
+// its 4-bit tag in one word, so one access reads or writes both. Words are
+// interleaved: word w of either window is in block w % 4. MPY_SRAM_BLOCKS
+// and MPY_IMAGE_BLOCKS size the windows in blocks' worth of words (mpy_mem
+// puts the data SRAM in the low rows of every block). The "flash" window is
+// the image SRAM. mpy_boot fills it from SPI NAND before
 // the hart leaves reset, and the hart can only read it.
 localparam int MPY_MEM_BLOCK_WORDS = 16384;
 localparam int MPY_MEM_BLOCK_AW    = 14; // $clog2(MPY_MEM_BLOCK_WORDS)

@@ -2,17 +2,19 @@
 
 uPyCore's two memories are on-chip SRAM: a 64 KB data SRAM and a 192 KB
 image SRAM that holds the linked image (the window at address 0 that the
-rest of the docs call flash). Both are built from four identical 64 KB
-blocks. The image comes from an SPI NAND flash: `mpy_boot` copies it into
-the image SRAM after reset, before the hart starts.
+rest of the docs call flash). Both live in four identical 64 KB blocks,
+interleaved by word. The image comes from an SPI NAND flash: `mpy_boot`
+copies it into the image SRAM after reset, before the hart starts.
 
-| Window | Base | Size | Blocks |
+| Window | Base | Size | Rows of every block |
 | --- | --- | ---: | --- |
-| Image SRAM ("flash") | `0x0000_0000` | 192 KB | 3 |
-| Data SRAM | `0x2000_0000` | 64 KB | 1 |
+| Data SRAM | `0x2000_0000` | 64 KB | 0 to 4095 |
+| Image SRAM ("flash") | `0x0000_0000` | 192 KB | 4096 to 16383 |
 
-The constants are in `upycore/rtl/mpy_defs.svh` (`MPY_MEM_*`,
-`MPY_SRAM_BLOCKS`, `MPY_IMAGE_BLOCKS`), `upycore/tools/mpy_abi.py`
+Word `w` of either window is in block `w % 4` (address bits `[3:2]`), so
+consecutive words sit in different blocks. The constants are in
+`upycore/rtl/mpy_defs.svh` (`MPY_MEM_*`, `MPY_SRAM_BLOCKS`,
+`MPY_IMAGE_BLOCKS` give the sizes), `upycore/tools/mpy_abi.py`
 (`SRAM_BYTES`) and `upycore/tools/mpy_link.py` (`FLASH_BYTES`). The frame
 stack, root area and argument buffer keep their 0x8500 bytes at the bottom
 of the data SRAM, so the GC pool is 31,488 bytes (1,968 blocks).
@@ -33,23 +35,46 @@ Why one 36-bit port per block:
   two 4-byte read/write ports per block cannot be generated. A two-port
   SRAM would also be about twice the area of a one-port SRAM of the same
   size.
-- The core, the collector and the accelerator share one memory port that
-  moves one tagged word per cycle. A 16-byte (144-bit) port would read
-  four words to use one in nearly every access, costing energy, and it
-  needs line buffers in the core before it saves any cycles. Both options
-  give the same capacity from the same macro area. If instruction fetch
-  later reads a whole 12-byte window at once, a wider image SRAM is the
-  place to start.
+- The core, the collector and the accelerator each move one tagged word
+  per access. A 16-byte (144-bit) port would read four words to use one in
+  nearly every access, costing energy, and it needs line buffers in the
+  core before it saves any cycles. Both options give the same capacity
+  from the same macro area. If instruction fetch later reads a whole
+  12-byte window at once, a wider image SRAM is the place to start.
 - Payload and tag in one word is what saves the cycles: the old layout
   kept tags packed eight per word in a separate array.
 
-`mpy_mem` starts the SRAM access in the cycle it takes a request and
-registers the word on the next edge, so the port timing is the same as
-before: one access per cycle, ack `SRAM_LATENCY + 1` cycles after the
-request (plus the image wait state). A store's ack carries zero data.
+## Ports and interleaving
 
-After reset `mpy_mem` writes zero to every data SRAM word, 16,384 cycles,
-and holds `rdy_o` low until it is done. `mpy_gc` clears its allocation
+`mpy_mem` has one port per master: the collector, the core and the
+accelerator. Each block takes one access per cycle. When two ports want
+the same block, the collector goes first, then the core, then the
+accelerator; ports that want different blocks run in the same cycle, so
+up to three accesses happen at once. The accelerator's scoreboard still
+holds a core access to a word that a copy has not passed.
+
+A load still takes two cycles: the SRAM samples the address on one edge
+and the word is registered on the next, and the payload and tag come back
+together on the 36-bit ack. Each port takes a new access every cycle. A
+store's ack carries zero data.
+
+What interleaving buys. Before it, all masters shared one port that took
+one access per cycle, and the core had priority over the accelerator. The
+core waits for each ack before its next access, so it never waited for the
+port; the accelerator used the cycles in between. Now the accelerator can
+run in the same cycle as the core. In `tb_mpy_ca`, where the core keeps
+touching words a copy owns, that is 24% fewer cycles (54,389 to 41,090).
+On the `bench.py` programs the cycle counts are identical to the cycle:
+the core rarely waits for a copy to finish. Interleaving pays off once a
+master issues more than one access per cycle or does not wait for each
+ack (instruction fetch running ahead, for example).
+
+## Reset
+
+After reset `mpy_mem` writes zero to every data SRAM word, all four blocks
+at once (4,096 rows), and grants nothing until it is done. A loader write
+during the clear takes its block for that cycle and the clear repeats the
+row, so the clear finishes after 4,096 cycles without a loader write. `mpy_gc` clears its allocation
 table (one entry per cycle, 1,968 cycles) at the same time. A real SRAM
 or flop does not power up as zero, so neither can rely on an `initial`
 block.
@@ -169,7 +194,8 @@ Task 3:
 2. Add a `hardmacro` entry per block under `vlsi.inputs.placement_constraints`.
 
 The paths look something like `mpy_soc/u_mem/g_blk[0].ram/macro.mem` to
-`g_blk[3]`; block 0 is the data SRAM and blocks 1 to 3 are the image. Copy
+`g_blk[3]`; every block holds a quarter of the data SRAM and of the image,
+so they are equally busy and the core's logic should sit near all four. Copy
 the exact names from Innovus.
 
 ```yaml

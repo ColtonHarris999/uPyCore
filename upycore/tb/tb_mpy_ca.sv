@@ -39,10 +39,10 @@ module tb_mpy_ca #(parameter int QDEPTH = 2, parameter int BUF = 4, parameter in
     logic [31:0] a_addr, a_wdata, a_faddr, a_words, a_cmds;
     logic [3:0]  a_wtag, a_freason;
     // memory
-    logic        m_req, m_we, m_rdy, m_ack, m_fault;
-    logic [1:0]  m_id, m_ack_id;
-    logic [31:0] m_addr, m_wdata, m_rdata;
-    logic [3:0]  m_wtag, m_rtag, m_freason;
+    // memory ports: 0 core, 1 accelerator
+    logic [1:0]       m_req, m_we, m_gnt, m_ack, m_fault;
+    logic [1:0][31:0] m_addr, m_wdata, m_rdata;
+    logic [1:0][3:0]  m_wtag, m_rtag, m_freason;
 
     mpy_ca #(.QDEPTH(QDEPTH), .BUF(BUF)) dut (
         .clk_i(clk), .rst_n_i(rst_n),
@@ -50,38 +50,37 @@ module tb_mpy_ca #(parameter int QDEPTH = 2, parameter int BUF = 4, parameter in
         .cmd_dst_i(cmd_dst), .cmd_src_i(cmd_src), .cmd_n_i(cmd_n), .idle_o(idle),
         .chk_addr_i(c_addr), .chk_we_i(c_we), .chk_busy_o(busy),
         .req_o(a_req), .we_o(a_we), .addr_o(a_addr), .wdata_o(a_wdata), .wtag_o(a_wtag),
-        .gnt_i(a_gnt), .ack_i(a_ack), .fault_i(m_fault), .fault_reason_i(m_freason),
-        .rdata_i(m_rdata), .rtag_i(m_rtag),
+        .gnt_i(a_gnt), .ack_i(a_ack), .fault_i(m_fault[1]), .fault_reason_i(m_freason[1]),
+        .rdata_i(m_rdata[1]), .rtag_i(m_rtag[1]),
         .fault_o(a_fault), .fault_reason_o(a_freason), .fault_addr_o(a_faddr),
         .words_o(a_words), .cmds_o(a_cmds)
     );
 
-    mpy_mem #(.SRAM_LATENCY(LAT)) mem (
+    mpy_mem #(.NP(2), .SRAM_LATENCY(LAT)) mem (
         .clk_i(clk), .rst_n_i(rst_n),
-        .req_i(m_req), .we_i(m_we), .tag_we_i(m_we), .be_i(4'hF),
+        .req_i(m_req), .we_i(m_we), .tag_we_i(m_we), .be_i({4'hF, 4'hF}),
         .addr_i(m_addr), .wdata_i(m_wdata), .wtag_i(m_wtag),
-        .id_i(m_id), .rdy_o(m_rdy), .ack_o(m_ack), .id_o(m_ack_id), .rdata_o(m_rdata), .rtag_o(m_rtag),
+        .gnt_o(m_gnt), .ack_o(m_ack), .rdata_o(m_rdata), .rtag_o(m_rtag),
         .fault_o(m_fault), .fault_reason_o(m_freason),
         .ld_we_i(1'b0), .ld_idx_i('0), .ld_wdata_i('0), .ld_wtag_i('0), .init_done_o()
     );
 
-    // The mpy_soc arbiter without the collector: id 2 is the core, 3 the CA.
-    logic c_want, pick_c, pick_a;
+    // The mpy_soc ports without the collector: the core holds its request
+    // pending until granted and waits on the scoreboard; both may be granted
+    // in one cycle when they touch different blocks.
+    logic c_want;
     assign c_want = c_pend || c_req;
-    assign pick_c = m_rdy && c_want && !busy;
-    assign pick_a = m_rdy && !pick_c && a_req;
-    assign a_gnt = pick_a;
-    assign m_req = pick_c || pick_a;
-    assign m_id = pick_a ? 2'd3 : 2'd2;
-    assign m_we = pick_a ? a_we : c_we;
-    assign m_addr = pick_a ? a_addr : c_addr;
-    assign m_wdata = pick_a ? a_wdata : c_wdata;
-    assign m_wtag = pick_a ? a_wtag : c_wtag;
-    assign a_ack = m_ack && m_ack_id == 2'd3;
-    assign c_ack = m_ack && m_ack_id == 2'd2;
+    assign m_req = {a_req, c_want && !busy};
+    assign m_we = {a_we, c_we};
+    assign m_addr = {a_addr, c_addr};
+    assign m_wdata = {a_wdata, c_wdata};
+    assign m_wtag = {a_wtag, c_wtag};
+    assign a_gnt = m_gnt[1];
+    assign a_ack = m_ack[1];
+    assign c_ack = m_ack[0];
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) c_pend <= 1'b0;
-        else c_pend <= c_want && !pick_c;
+        else c_pend <= c_want && !m_gnt[0];
     end
 
     logic [35:0] gm [0:W-1];
@@ -142,7 +141,7 @@ module tb_mpy_ca #(parameter int QDEPTH = 2, parameter int BUF = 4, parameter in
                 3, 4, 5, 6: begin
                     i = $urandom_range(0, W - 1);
                     core_access(1'b0, i, '0);
-                    got = {m_rtag, m_rdata};
+                    got = {m_rtag[0], m_rdata[0]};
                     loads++;
                     if (got !== gm[i]) begin
                         errors++;
@@ -161,9 +160,9 @@ module tb_mpy_ca #(parameter int QDEPTH = 2, parameter int BUF = 4, parameter in
         while (!idle) @(negedge clk);
         for (int k = 0; k < W; k++) begin
             core_access(1'b0, k, '0);
-            if ({m_rtag, m_rdata} !== gm[k]) begin
+            if ({m_rtag[0], m_rdata[0]} !== gm[k]) begin
                 errors++;
-                if (errors < 10) $display("FAIL drain [%0d] got %09h want %09h", k, {m_rtag, m_rdata}, gm[k]);
+                if (errors < 10) $display("FAIL drain [%0d] got %09h want %09h", k, {m_rtag[0], m_rdata[0]}, gm[k]);
             end
         end
         // One copy alone on the port, ship to idle.
@@ -176,9 +175,9 @@ module tb_mpy_ca #(parameter int QDEPTH = 2, parameter int BUF = 4, parameter in
         end
         for (int k = 0; k < W; k++) begin
             core_access(1'b0, k, '0);
-            if ({m_rtag, m_rdata} !== gm[k]) begin
+            if ({m_rtag[0], m_rdata[0]} !== gm[k]) begin
                 errors++;
-                if (errors < 10) $display("FAIL alone [%0d] got %09h want %09h", k, {m_rtag, m_rdata}, gm[k]);
+                if (errors < 10) $display("FAIL alone [%0d] got %09h want %09h", k, {m_rtag[0], m_rdata[0]}, gm[k]);
             end
         end
         if (a_fault) begin errors++; $display("FAIL fault %0h at %08h", a_freason, a_faddr); end

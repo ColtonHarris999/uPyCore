@@ -1,8 +1,8 @@
 `include "mpy_defs.svh"
 `include "mpy_abi.svh"
 
-// uPyCore system: mpy_core, mpy_gc, mpy_ca and mpy_mem on one memory port,
-// and mpy_boot, which fills the image SRAM from SPI NAND.
+// uPyCore system: mpy_core, mpy_gc and mpy_ca, each on its own mpy_mem
+// port, and mpy_boot, which fills the image SRAM from SPI NAND.
 //
 // Boot: mpy_mem zeroes the data SRAM, mpy_gc clears its allocation table
 // and mpy_boot copies the image from the NAND, all at once. The core and the
@@ -10,15 +10,13 @@
 // count starts at its first instruction. A bad boot stream raises
 // boot_err_o and the core never starts (upycore/docs/mpy_boot.md).
 //
-// Three masters share the port: the collector, the core, and the container
-// accelerator (mpy_ca). A request waits in the arbiter below until mpy_mem
-// can take one (rdy), then the highest-priority one goes: collector, core,
-// accelerator. mpy_mem takes a request in the last cycle of the one before
-// and returns the owner on its ack, so the port carries one access per
-// cycle. The accelerator therefore runs in the cycles the core leaves idle,
-// and a streaming copy fills them. A core
-// access that the accelerator's scoreboard marks busy waits until the copy
-// has moved past that word; the core's state machine only sees a longer
+// Memory: words are interleaved across four SRAM blocks, and each block
+// takes one access per cycle. The collector, the core and the container
+// accelerator (mpy_ca) each have a port; when two want the same block the
+// collector goes first, then the core, then the accelerator. A streaming copy
+// therefore runs alongside the core whenever they touch different blocks. A
+// core access that the accelerator's scoreboard marks busy waits until the
+// copy has moved past that word; the core's state machine only sees a longer
 // wait for its ack. The collector and the core never contend: the core
 // waits on every allocation and collection, and it lets the accelerator
 // drain before a collection. Core accesses
@@ -80,10 +78,11 @@ module mpy_soc #(
     logic [3:0]  gm_wtag, gm_rtag;
 
     // memory
-    logic        m_req, m_we, m_tag_we, m_rdy, m_ack, m_fault;
-    logic [3:0]  m_be, m_wtag, m_rtag, m_fault_reason;
-    logic [31:0] m_addr, m_wdata, m_rdata;
-    logic [1:0]  m_id, m_ack_id;
+    // memory: one port per master
+    localparam int P_GC = 0, P_CORE = 1, P_CA = 2;
+    logic [2:0]       m_req, m_we, m_tag_we, m_gnt, m_ack, m_fault;
+    logic [2:0][3:0]  m_be, m_wtag, m_rtag, m_fault_reason;
+    logic [2:0][31:0] m_addr, m_wdata, m_rdata;
 
     // core <-> container accelerator
     logic        ca_valid, ca_ready, ca_idle, ca_busy, ca_fault;
@@ -163,8 +162,9 @@ module mpy_soc #(
         .cmd_dst_i(ca_dst), .cmd_src_i(ca_src), .cmd_n_i(ca_n), .idle_o(ca_idle),
         .chk_addr_i(c_addr), .chk_we_i(c_we), .chk_busy_o(ca_busy),
         .req_o(am_req), .we_o(am_we), .addr_o(am_addr), .wdata_o(am_wdata), .wtag_o(am_wtag),
-        .gnt_i(am_gnt), .ack_i(am_ack), .fault_i(m_fault), .fault_reason_i(m_fault_reason),
-        .rdata_i(m_rdata), .rtag_i(m_rtag),
+        .gnt_i(am_gnt), .ack_i(am_ack), .fault_i(m_fault[P_CA]),
+        .fault_reason_i(m_fault_reason[P_CA]),
+        .rdata_i(m_rdata[P_CA]), .rtag_i(m_rtag[P_CA]),
         .fault_o(ca_fault), .fault_reason_o(ca_fault_reason), .fault_addr_o(ca_fault_addr),
         .words_o(ca_words), .cmds_o(ca_cmds)
     );
@@ -176,7 +176,7 @@ module mpy_soc #(
         .clk_i, .rst_n_i,
         .req_i(m_req), .we_i(m_we), .tag_we_i(m_tag_we), .be_i(m_be),
         .addr_i(m_addr), .wdata_i(m_wdata), .wtag_i(m_wtag),
-        .id_i(m_id), .rdy_o(m_rdy), .ack_o(m_ack), .id_o(m_ack_id), .rdata_o(m_rdata), .rtag_o(m_rtag),
+        .gnt_o(m_gnt), .ack_o(m_ack), .rdata_o(m_rdata), .rtag_o(m_rtag),
         .fault_o(m_fault), .fault_reason_o(m_fault_reason),
         .ld_we_i(ld_we), .ld_idx_i(ld_idx), .ld_wdata_i(ld_wdata), .ld_wtag_i(ld_wtag),
         .init_done_o(mem_ready)
@@ -216,56 +216,43 @@ module mpy_soc #(
         end
     end
 
-    // Port arbiter. The core and the collector pulse a request and hold its
-    // fields until the ack; the accelerator holds req until am_gnt. The
-    // granted master's id goes with the access and comes back with its ack.
-    localparam logic [1:0] P_NONE = 2'd0, P_GC = 2'd1, P_CORE = 2'd2, P_CA = 2'd3;
-    logic       c_pend, g_pend, c_want, g_want;
-    logic [1:0] pick;
+    // Memory ports. The core and the collector pulse a request and hold its
+    // fields until the ack, so a request mpy_mem does not grant at once is
+    // kept pending here; the accelerator holds req until am_gnt. mpy_mem
+    // grants each of the four interleaved blocks to one port per cycle
+    // (collector first, then core, then accelerator), so masters that touch
+    // different blocks run in the same cycle. The core's request waits while
+    // the accelerator's scoreboard marks its word busy.
+    logic c_pend, g_pend, c_want, g_want;
     assign c_want = c_pend || (c_req && !c_sim);
     assign g_want = g_pend || gm_req;
-    always_comb begin
-        if (!m_rdy) pick = P_NONE;
-        else if (g_want) pick = P_GC;
-        else if (c_want && !ca_busy) pick = P_CORE;
-        else if (am_req) pick = P_CA;
-        else pick = P_NONE;
-    end
-    always_comb begin
-        case (pick)
-            P_GC: begin
-                m_req = 1'b1; m_we = gm_we; m_tag_we = gm_tag_we; m_be = 4'hF;
-                m_addr = gm_addr; m_wdata = gm_wdata; m_wtag = gm_wtag;
-            end
-            P_CA: begin
-                m_req = 1'b1; m_we = am_we; m_tag_we = am_we; m_be = 4'hF;
-                m_addr = am_addr; m_wdata = am_wdata; m_wtag = am_wtag;
-            end
-            default: begin
-                m_req = (pick == P_CORE); m_we = c_we; m_tag_we = c_tag_we; m_be = c_be;
-                m_addr = c_addr; m_wdata = c_wdata; m_wtag = c_wtag;
-            end
-        endcase
-    end
-    assign m_id = pick;
-    assign am_gnt = (pick == P_CA);
+
+    assign m_req     = {am_req, c_want && !ca_busy, g_want};
+    assign m_we      = {am_we, c_we, gm_we};
+    assign m_tag_we  = {am_we, c_tag_we, gm_tag_we};
+    assign m_be      = {4'hF, c_be, 4'hF};
+    assign m_addr    = {am_addr, c_addr, gm_addr};
+    assign m_wdata   = {am_wdata, c_wdata, gm_wdata};
+    assign m_wtag    = {am_wtag, c_wtag, gm_wtag};
+    assign am_gnt    = m_gnt[P_CA];
+
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) begin
             c_pend <= 1'b0; g_pend <= 1'b0;
         end else begin
-            c_pend <= c_want && (pick != P_CORE);
-            g_pend <= g_want && (pick != P_GC);
+            c_pend <= c_want && !m_gnt[P_CORE];
+            g_pend <= g_want && !m_gnt[P_GC];
         end
     end
-    assign gm_ack = m_ack && (m_ack_id == P_GC);
-    assign am_ack = m_ack && (m_ack_id == P_CA);
-    assign gm_rdata = m_rdata;
-    assign gm_rtag = m_rtag;
-    assign c_ack = (m_ack && m_ack_id == P_CORE) || sim_ack;
-    assign c_rdata = sim_ack ? sim_rdata : m_rdata;
-    assign c_rtag = sim_ack ? 4'd0 : m_rtag;
-    assign c_fault = !sim_ack && m_fault && (m_ack_id == P_CORE);
-    assign c_fault_reason = m_fault_reason;
+    assign gm_ack = m_ack[P_GC];
+    assign am_ack = m_ack[P_CA];
+    assign gm_rdata = m_rdata[P_GC];
+    assign gm_rtag = m_rtag[P_GC];
+    assign c_ack = m_ack[P_CORE] || sim_ack;
+    assign c_rdata = sim_ack ? sim_rdata : m_rdata[P_CORE];
+    assign c_rtag = sim_ack ? 4'd0 : m_rtag[P_CORE];
+    assign c_fault = !sim_ack && m_fault[P_CORE];
+    assign c_fault_reason = m_fault_reason[P_CORE];
 
     assign halted_o = core_halted || sim_halt;
     assign halt_code_o = core_halted ? core_hcode : ABI_HALT_SYSEXIT;

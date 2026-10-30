@@ -45,7 +45,7 @@ module tb_mpy_value;
     logic [3:0]  wtag;
     logic        rdy;
     logic        ack;
-    logic [1:0]  ack_id;
+    logic        gnt;
     logic [31:0] rdata;
     logic [3:0]  rtag;
     logic        fault;
@@ -76,7 +76,7 @@ module tb_mpy_value;
         .idx_wdata_i(idx_wdata)
     );
 
-    mpy_mem dut_mem (
+    mpy_mem #(.NP(1)) dut_mem (
         .clk_i(clk),
         .rst_n_i(rst_n),
         .req_i(req),
@@ -86,10 +86,8 @@ module tb_mpy_value;
         .addr_i(addr),
         .wdata_i(wdata),
         .wtag_i(wtag),
-        .id_i(2'd2),
-        .rdy_o(rdy),
+        .gnt_o(gnt),
         .ack_o(ack),
-        .id_o(ack_id),
         .rdata_o(rdata),
         .rtag_o(rtag),
         .fault_o(fault),
@@ -98,7 +96,7 @@ module tb_mpy_value;
         .ld_idx_i('0),
         .ld_wdata_i('0),
         .ld_wtag_i('0),
-        .init_done_o()
+        .init_done_o(rdy)
     );
 
     assign idx_addr = '0;
@@ -208,7 +206,6 @@ module tb_mpy_value;
                 guard = guard + 1;
             end
             check(ack, "bus request timed out");
-            check(ack_id == 2'd2, "ack carries the request's id");
             bus_rdata = rdata;
             bus_rtag = rtag;
             bus_tag_word = 32'h0;   // SRAM words hold their own tag now

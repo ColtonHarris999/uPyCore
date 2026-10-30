@@ -76,7 +76,9 @@ and `mpy_build.py run --sim-arg +CA=0 --sim-arg +AALU=0` turns both off.
 
 Both memories are on-chip SRAM built from four 64 KB blocks of 16384 x 36
 bits (payload and tag in one word): a 64 KB data SRAM and a 192 KB image
-SRAM. After reset `mpy_boot` copies the image from an SPI NAND flash into
+SRAM, interleaved by word across the four blocks. The collector, the core
+and the container accelerator each have a memory port, and ports that
+touch different blocks run in the same cycle. After reset `mpy_boot` copies the image from an SPI NAND flash into
 the image SRAM, then the core starts. `--nand` boots a run over SPI from
 the testbench's NAND model; without it the simulation streams the image
 files straight into the loader.
