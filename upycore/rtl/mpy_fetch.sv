@@ -27,7 +27,7 @@
 // It is high in reset, so the system must not grant it while this unit is
 // held in reset (mpy_soc masks it with the core's reset).
 module mpy_fetch #(
-    parameter int QD = 4    // queue depth in words (the window is 4 * QD bytes)
+    parameter int QD = 3    // queue depth in words (the window is 4 * QD bytes); at least 3
 ) (
     input  logic        clk_i,
     input  logic        rst_n_i,

@@ -47,6 +47,7 @@ compare_op_type_trap = { file = "hw/alu/compare_op_type_trap.py" }
 
 [control]
 branch = { file = "hw/control/branch.py" }
+fetch_long_insn = { file = "hw/control/fetch_long_insn.py" }
 loops = { file = "hw/control/loops.py" }
 for_iter = { file = "hw/control/for_iter.py" }
 

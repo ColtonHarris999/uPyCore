@@ -68,7 +68,7 @@ The gain comes from instruction fetch, which reads ahead on its own port.
 
 ## Instruction fetch
 
-`mpy_fetch` (inside `mpy_core`) keeps a queue of four bytecode words and
+`mpy_fetch` (inside `mpy_core`) keeps a queue of three bytecode words and
 requests the next word whenever there is room, so the next instructions
 arrive while the core executes the current one. The decoder reads up to 8
 bytes from `pc` out of the queue; an instruction that needs bytes still on
@@ -90,8 +90,12 @@ whenever `pc` left it, and stalled meanwhile: 6 to 26% of all cycles in
 | listops | 1,265,797 | 1,148,082 | -9.3% |
 | strings | 7,058,114 | 6,396,303 | -9.4% |
 
-A two-word queue is within 0.2% of four on intmath, float and strings.
-Four keeps 8 decodable bytes available at any `pc` offset.
+Those numbers are for a four-word queue; three words, the size used, are
+within 0.13% of them on every program. Three is the least that always
+holds 8 bytes from `pc`: at the last byte of a word, two words leave only
+5 bytes, and a 6-byte instruction (a 30-bit integer constant, for one)
+would wait forever. `control/fetch_long_insn` in the hardware suite puts
+such instructions at every offset.
 
 Reading ahead is speculative. A read past the end of the image faults;
 the fault only matters if the decoder needs that word, and then the core

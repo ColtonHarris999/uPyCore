@@ -12,7 +12,7 @@
 //
 // +SEED=<n> +STEPS=<n>. Pass line: "PASS mpy_fetch ...".
 module tb_mpy_fetch;
-    localparam int QD = 4;
+    localparam int QD = 3;   // mpy_core's FE_QD
     localparam int N = MPY_FLASH_WORDS;               // image words
     localparam logic [31:0] END = MPY_FLASH_BYTES;    // first byte past the image
 

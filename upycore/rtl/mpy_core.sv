@@ -997,8 +997,10 @@ module mpy_core
     logic [31:0] hval, cyc, nops;
     logic        trace;
 
-    // fetch queue (mpy_fetch): FE_QD words read ahead of pc
-    localparam int FE_QD = 4;
+    // fetch queue (mpy_fetch): FE_QD words read ahead of pc. Three is the
+    // least that always holds the longest instruction (8 bytes) from pc at
+    // any byte offset; two can leave a long one waiting forever.
+    localparam int FE_QD = 3;
     localparam int FE_OW = $clog2(4 * FE_QD);   // byte offset bits into the queue
     logic [32*FE_QD-1:0] fe_win;
     logic [31:0]  fe_base, fe_fault_addr;
