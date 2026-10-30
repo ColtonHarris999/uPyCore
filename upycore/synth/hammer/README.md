@@ -263,3 +263,10 @@ after you log out). `sweep.sh status` lists every folder with its state,
 slack, critical-path delay, the shortest period its netlist meets
 (period - slack) and the cell area. `DESIGNS`, `PREFIX`, `TOP` and `RTL`
 override the defaults.
+
+`TOP=mpy_soc sweep.sh start 20 15` does the same for the whole chip:
+each `upycore_soc_p<period>` folder gets the four SRAM macros, and the
+background job runs `make sram` and then `make syn`. `DIE="w h"` sets the
+die (default 4000 x 3000 um) and `SOC_RTL=converted` takes the chip from
+`converted/mpy_soc.v`. `TOP=mpy_soc sweep.sh status` adds the macro count
+of each netlist (it must be 4) and the macro footprint from its LEF.
