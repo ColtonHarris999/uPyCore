@@ -68,6 +68,11 @@ python3 upycore/tools/unit_tests.py alu gc
 
 ## Accelerators
 
+[`upycore/docs/mpy_hash.md`](upycore/docs/mpy_hash.md) describes the standalone
+MicroPython hash engine and pipelined hash-to-slot unit for future rehashing,
+their equivalence tests, and the hash/modulo/memory tradeoffs. They are not
+yet connected to the SoC.
+
 Bulk word copies run on the container accelerator while the core goes on
 to the next instruction, and a binary op that cannot fail retires before
 the ALU finishes. A scoreboard makes a later access to busy data wait.

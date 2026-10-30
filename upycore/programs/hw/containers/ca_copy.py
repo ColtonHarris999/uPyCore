@@ -33,6 +33,11 @@ check("tuple of list", t[-1], 999)
 e = list(t)
 check("list of tuple", (e[0], e[-1], len(e)), (0, 999, 1000))
 
+# Those copy checks are complete. Release their arrays before the growth
+# checks so this accelerator test fits the current 64 KB data SRAM.
+del b, c, d, t, e
+gc.collect()
+
 # Overlapping shifts inside one item array, both directions.
 f = list(range(10))
 f.insert(0, "first")

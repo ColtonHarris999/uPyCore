@@ -303,6 +303,7 @@ class_const = { file = "hw/objects/class_const.py" }
 class_two_instances = { file = "hw/objects/class_two_instances.py" }
 
 [builtins]
+hash_equivalence = { file = "hw/builtins/hash_equivalence.py", cycles = 100_000_000 }
 array_slice_bounds = { cycles = 80_000_000 }
 int_bytes_bounds = { cycles = 80_000_000 }
 builtin_fns = { file = "hw/builtins/funcs.py" }

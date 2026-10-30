@@ -60,15 +60,30 @@ def _periph_args(work: Path) -> list[str]:
     return r.stdout.split()
 
 
+def _hash_args(work: Path) -> list[str]:
+    subprocess.run([sys.executable, str(TB / "mpy_hash_oracle.py"), str(work)],
+                   cwd=ROOT, check=True)
+    return [f"+VECTORS={work / 'vectors.txt'}"]
+
+
 @dataclass
 class Bench:
     name: str
     rtl: list[str]
     passed: str                      # regex on the bench's output
     args: Callable[[Path], list[str]] = field(default=lambda work: [])
+    top: str | None = None
+    parameters: dict[str, int] = field(default_factory=dict)
 
 
 BENCHES = [
+    Bench("mpy_hash4", ["mpy_hash.sv"], r"^PASS mpy_hash", _hash_args,
+          top="tb_mpy_hash", parameters={"BYTES_PER_CYCLE": 4}),
+    Bench("mpy_hash_slot4", ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_hash_slot.sv"],
+          r"^PASS mpy_hash_slot", _hash_args, top="tb_mpy_hash_slot",
+          parameters={"BYTES_PER_CYCLE": 4}),
+    Bench("mpy_hash_slot", ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_hash_slot.sv"], r"^PASS mpy_hash_slot", _hash_args),
+    Bench("mpy_hash", ["mpy_hash.sv"], r"^PASS mpy_hash", _hash_args),
     Bench("mpy_alu", list(mpy_synth.ALU_FILES), r"^PASS mpy_alu "),
     Bench("mpy_ca", ["mpy_ca.sv", "bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv"], r"^PASS mpy_ca "),
     Bench("mpy_container", ["mpy_container.sv"], r"^PASS mpy_container"),
@@ -86,9 +101,10 @@ BENCHES = [
 def run_bench(b: Bench) -> tuple[bool, str]:
     work = BUILD / b.name
     work.mkdir(parents=True, exist_ok=True)
-    top = f"tb_{b.name}"
+    top = b.top or f"tb_{b.name}"
     cmd = [os.environ.get("VERILATOR", "verilator"), *FLAGS, f"-I{RTL}", "--Mdir", str(work / "obj"),
-           *[str(RTL / f) for f in b.rtl], str(TB / f"{top}.sv"), "--top-module", top]
+           *[str(RTL / f) for f in b.rtl], str(TB / f"{top}.sv"), "--top-module", top,
+           *[f"-G{k}={v}" for k, v in b.parameters.items()]]
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
     if r.returncode != 0:
         return False, "verilator failed:\n" + (r.stdout + r.stderr)[-3000:]
