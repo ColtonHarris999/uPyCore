@@ -171,6 +171,10 @@ clock at the same period so its flops are timed.
   sets up the SRAM macros; run `make sram` before `make syn`, and add the
   macro placements. See
   [`../../docs/mpy_boot.md`](../../docs/mpy_boot.md#ee-477-hammer-flow).
+  If Genus rejects the SystemVerilog that `--core-v` writes for the
+  rest of the chip, use the whole chip converted instead:
+  `--rtl upycore/synth/hammer/converted/mpy_soc.v` (no `--core-v`; it
+  leaves out the SRAM stand-in, so BaseJump's file and the macro are used).
 
 ## If the tool rejects the SystemVerilog
 
