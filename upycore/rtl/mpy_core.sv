@@ -83,6 +83,15 @@ module mpy_core
     input  logic        m_fault_i,
     input  logic [3:0]  m_fault_reason_i,
 
+    // Instruction fetch reads ahead on its own memory port (mpy_fetch).
+    output logic        f_req_o,
+    output logic [31:0] f_addr_o,
+    input  logic        f_gnt_i,
+    input  logic        f_ack_i,
+    input  logic [31:0] f_rdata_i,
+    input  logic        f_fault_i,
+    input  logic [3:0]  f_fault_reason_i,
+
     output logic        gc_alloc_req_o,
     output logic [31:0] gc_alloc_nbytes_o,
     input  logic        gc_alloc_done_i,
@@ -362,7 +371,6 @@ module mpy_core
         S_FL_R,
         S_FL_X,
         S_FL_X0,
-        S_FW,
         S_GSAVE,
         S_GSAVE1,
         S_GSAVE1B,
@@ -989,11 +997,14 @@ module mpy_core
     logic [31:0] hval, cyc, nops;
     logic        trace;
 
-    // fetch window
-    logic [95:0] fwin;
-    logic [31:0] fw_base;
-    logic        fw_ok;
-    logic [1:0]  fw_i;
+    // fetch queue (mpy_fetch): FE_QD words read ahead of pc
+    localparam int FE_QD = 4;
+    localparam int FE_OW = $clog2(4 * FE_QD);   // byte offset bits into the queue
+    logic [32*FE_QD-1:0] fe_win;
+    logic [31:0]  fe_base, fe_fault_addr;
+    logic [5:0]   fe_avail;
+    logic         fe_fault, fe_req, fe_flush;
+    logic [3:0]   fe_fault_reason;
 
     // scratch
     logic [31:0] x0, x1, x2, x3, x4;
@@ -1150,7 +1161,20 @@ module mpy_core
         .done_o(hm_done), .rem_o(hm_rem), .busy_o()
     );
 
-    // decoder over the fetch window
+    mpy_fetch #(.QD(FE_QD)) u_fetch (
+        .clk_i, .rst_n_i,
+        .pc_i(pc), .flush_i(fe_flush),
+        .req_o(fe_req), .addr_o(f_addr_o), .gnt_i(f_gnt_i), .ack_i(f_ack_i),
+        .rdata_i(f_rdata_i), .fault_i(f_fault_i), .fault_reason_i(f_fault_reason_i),
+        .win_o(fe_win), .base_o(fe_base), .avail_o(fe_avail),
+        .fault_o(fe_fault), .fault_addr_o(fe_fault_addr), .fault_reason_o(fe_fault_reason)
+    );
+    // Code in the data SRAM (compile/exec) may be the destination of a copy
+    // still in flight, so fetch reads there wait for the accelerator to go
+    // idle. Image reads never wait.
+    assign f_req_o = fe_req && !((mpy_region_of(f_addr_o) == MPY_REGION_SRAM) && !ca_idle_i);
+
+    // decoder over the fetch queue
     logic [31:0] f_off;
     logic [63:0] d_bytes;
     logic [3:0]  d_n;
@@ -1160,11 +1184,9 @@ module mpy_core
     logic [1:0]  d_fmt;
     entry_e      d_entry;
     logic signed [31:0] d_arg;
-    logic        in_win;
-    assign f_off = pc - fw_base;
-    assign in_win = fw_ok && (pc >= fw_base) && (f_off < 32'd12);
-    assign d_bytes = 64'(fwin >> {f_off[3:0], 3'b000});
-    assign d_n = (f_off[3:0] > 4'd4) ? 4'(4'd12 - f_off[3:0]) : 4'd8;
+    assign f_off = pc - fe_base;
+    assign d_bytes = 64'(fe_win >> {f_off[FE_OW-1:0], 3'b000});
+    assign d_n = (fe_avail > 6'd8) ? 4'd8 : 4'(fe_avail);
 
     mpy_decode u_dec (
         .instr_valid_i(1'b1), .bytes_i(d_bytes), .nbytes_i(d_n),
@@ -1384,6 +1406,14 @@ module mpy_core
     // ------------------------------------------------------------------
     // Microcode helpers
     // ------------------------------------------------------------------
+    // The fetch queue could not read the word the decoder needs.
+    task automatic fetch_fault();
+        case (fe_fault_reason)
+            MPY_FAULT_UNALIGNED: halt(ABI_HALT_UNALIGNED, fe_fault_addr);
+            MPY_FAULT_FLASH_STORE: halt(ABI_HALT_FLASH_STORE, fe_fault_addr);
+            default: halt(ABI_HALT_BUS, fe_fault_addr);
+        endcase
+    endtask
     task automatic rd(input logic [31:0] a, input state_e nxt);
         m_addr <= a; m_we <= 1'b0; m_tag_we <= 1'b0; m_be <= 4'hF; m_req <= 1'b1;
         wret <= nxt; st <= S_MWAIT;
@@ -1530,7 +1560,7 @@ module mpy_core
             ca_valid <= 1'b0; ca_dst <= 32'd0; ca_src <= 32'd0; ca_n <= 32'd0;
             halted <= 1'b0; hcode <= 4'd0; hval <= 32'd0;
             cyc <= 32'd0; nops <= 32'd0; trace <= 1'b0;
-            fw_ok <= 1'b0; fw_base <= 32'd0;
+            fe_flush <= 1'b0;
             h_nq <= 32'd0; h_qext <= 32'd0; h_qextn <= 32'd0; qd_nxt <= S_BOOT;
             sp <= 7'd0; nloc <= 8'd0; rf_base <= 6'd0; spilled_reals <= 16'd0;
             spill_hp <= MPY_CORE_SCRATCH_BASE; rf_pend <= 1'b0;
@@ -1563,6 +1593,7 @@ module mpy_core
             lc_fi <= 4'd0;
         end else begin
             m_req <= 1'b0;
+            fe_flush <= 1'b0;
             gc_alloc_req <= 1'b0;
             gc_collect_req <= 1'b0;
             alu_start <= 1'b0;
@@ -1908,7 +1939,7 @@ module mpy_core
                     end
 
             S_FILL: begin
-                fl_i <= 32'd0; fw_ok <= 1'b0; lc_inval();
+                fl_i <= 32'd0; fe_flush <= 1'b1; lc_inval();
                 if (!fl_img) fbase <= fl_base;
                 rd(fl_base, S_FL_H);
             end
@@ -2150,19 +2181,15 @@ module mpy_core
                          rf_resume <= S_FETCH; st <= S_RF_SPILL;
                      end else if (has_link && sp <= 7'(RF_RELOAD_AT)) begin
                          rf_resume <= S_FETCH; st <= S_RF_RELOAD;
-                     end else if (in_win) st <= S_DEC;
-                     else begin
-                         fw_base <= {pc[31:2], 2'b00}; fw_i <= 2'd0; fw_ok <= 1'b0;
-                         rd({pc[31:2], 2'b00}, S_FW);
-                     end
-            S_FW: begin
-                fwin[32 * fw_i +: 32] <= md;
-                if (fw_i == 2'd2) begin fw_ok <= 1'b1; st <= S_DEC; end
-                else begin fw_i <= fw_i + 2'd1; rd(fw_base + 4 * (fw_i + 2'd1), S_FW); end
-            end
+                     end else if (fe_avail != 6'd0) st <= S_DEC;
+                     else if (fe_fault && fe_fault_addr[31:2] == pc[31:2]) fetch_fault();
+                     // otherwise the word at pc is still on its way
+            // The decoder sees the bytes the fetch queue has from pc on (up
+            // to 8). A truncated instruction with fewer waits for the rest.
             S_DEC: if (d_trunc) begin
-                       if (fw_base == {pc[31:2], 2'b00}) halt(ABI_HALT_BAD_OPCODE, pc);
-                       else begin fw_ok <= 1'b0; st <= S_FETCH; end
+                       if (fe_avail >= 6'd8) halt(ABI_HALT_BAD_OPCODE, pc);
+                       else if (fe_fault) fetch_fault();
+                       else st <= S_FETCH;
                    end else if (d_illegal || !d_valid) halt(ABI_HALT_BAD_OPCODE, pc);
                    else begin
                        op <= d_op; arg <= d_arg; ext <= d_ext;

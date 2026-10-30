@@ -35,22 +35,21 @@ Why one 36-bit port per block:
   two 4-byte read/write ports per block cannot be generated. A two-port
   SRAM would also be about twice the area of a one-port SRAM of the same
   size.
-- The core, the collector and the accelerator each move one tagged word
-  per access. A 16-byte (144-bit) port would read four words to use one in
-  nearly every access, costing energy, and it needs line buffers in the
-  core before it saves any cycles. Both options give the same capacity
-  from the same macro area. If instruction fetch later reads a whole
-  12-byte window at once, a wider image SRAM is the place to start.
+- Every master moves one tagged word per access. A 16-byte (144-bit) port
+  would read four words to use one in nearly every access, costing energy.
+  Instruction fetch, the one master that reads sequential words, gets its
+  bandwidth from its own port and the interleaving instead.
 - Payload and tag in one word is what saves the cycles: the old layout
   kept tags packed eight per word in a separate array.
 
 ## Ports and interleaving
 
-`mpy_mem` has one port per master: the collector, the core and the
-accelerator. Each block takes one access per cycle. When two ports want
-the same block, the collector goes first, then the core, then the
-accelerator; ports that want different blocks run in the same cycle, so
-up to three accesses happen at once. The accelerator's scoreboard still
+`mpy_mem` has one port per master: the collector, the core's data
+accesses, the core's instruction fetch, and the accelerator, in that
+priority order. Each block takes one access per cycle. When two ports
+want the same block, the higher-priority one goes first; ports that want
+different blocks run in the same cycle, so up to four accesses happen at
+once. The accelerator's scoreboard still
 holds a core access to a word that a copy has not passed.
 
 A load still takes two cycles: the SRAM samples the address on one edge
@@ -58,16 +57,47 @@ and the word is registered on the next, and the payload and tag come back
 together on the 36-bit ack. Each port takes a new access every cycle. A
 store's ack carries zero data.
 
-What interleaving buys. Before it, all masters shared one port that took
-one access per cycle, and the core had priority over the accelerator. The
-core waits for each ack before its next access, so it never waited for the
-port; the accelerator used the cycles in between. Now the accelerator can
-run in the same cycle as the core. In `tb_mpy_ca`, where the core keeps
-touching words a copy owns, that is 24% fewer cycles (54,389 to 41,090).
-On the `bench.py` programs the cycle counts are identical to the cycle:
-the core rarely waits for a copy to finish. Interleaving pays off once a
-master issues more than one access per cycle or does not wait for each
-ack (instruction fetch running ahead, for example).
+What interleaving buys. On its own, little: before it, all masters shared
+one port that took one access per cycle with the core first, and the core
+waits for each ack before its next access, so it never waited for the
+port. The accelerator can now run in the same cycle as the core (24% fewer
+cycles in `tb_mpy_ca`, 54,389 to 41,090), but the `bench.py` programs ran
+in the same cycle counts, because the core rarely waits for a copy.
+
+The gain comes from instruction fetch, which reads ahead on its own port.
+
+## Instruction fetch
+
+`mpy_fetch` (inside `mpy_core`) keeps a queue of four bytecode words and
+requests the next word whenever there is room, so the next instructions
+arrive while the core executes the current one. The decoder reads up to 8
+bytes from `pc` out of the queue; an instruction that needs bytes still on
+their way waits for them. When `pc` leaves the queued range (a jump, a
+call, a return) the queue restarts at `pc` and drops reads still in
+flight. It also restarts when the core loads a frame, as the old fetch
+window was dropped then.
+
+Before this the core refilled a 12-byte window with three dependent loads
+whenever `pc` left it, and stalled meanwhile: 6 to 26% of all cycles in
+`bench.py`. With the queue (both accelerators on):
+
+| Program | Before | After | |
+| --- | ---: | ---: | ---: |
+| dict | 316,370 | 293,130 | -7.3% |
+| float | 663,409 | 540,697 | -18.5% |
+| intmath | 809,016 | 638,999 | -21.0% |
+| listbuild | 1,465,020 | 1,415,550 | -3.4% |
+| listops | 1,265,797 | 1,148,082 | -9.3% |
+| strings | 7,058,114 | 6,396,303 | -9.4% |
+
+A two-word queue is within 0.2% of four on intmath, float and strings.
+Four keeps 8 decodable bytes available at any `pc` offset.
+
+Reading ahead is speculative. A read past the end of the image faults;
+the fault only matters if the decoder needs that word, and then the core
+halts with the same code and address the old fetch did. Code in the data
+SRAM (built by `compile`/`exec`) is read only while the accelerator is
+idle, since a copy in flight may be writing it. Image reads never wait.
 
 ## Reset
 

@@ -58,9 +58,9 @@ TOPS: dict[str, list[str]] = {
     "mpy_gc": ["mpy_gc.sv"],
     "mpy_mem": ["bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv"],
     "mpy_boot": ["mpy_boot.sv"],
-    "mpy_core": ALU_FILES + ["upycore_umod_seq.sv", "mpy_decode.sv", "mpy_core.sv"],
+    "mpy_core": ALU_FILES + ["upycore_umod_seq.sv", "mpy_decode.sv", "mpy_fetch.sv", "mpy_core.sv"],
     "mpy_soc": ALU_FILES
-    + ["upycore_umod_seq.sv", "mpy_decode.sv", "mpy_core.sv", "mpy_gc.sv", "mpy_ca.sv",
+    + ["upycore_umod_seq.sv", "mpy_decode.sv", "mpy_fetch.sv", "mpy_core.sv", "mpy_gc.sv", "mpy_ca.sv",
        "bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv", "mpy_boot.sv", "mpy_soc.sv"],
 }
 

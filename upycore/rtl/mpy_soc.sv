@@ -1,8 +1,9 @@
 `include "mpy_defs.svh"
 `include "mpy_abi.svh"
 
-// uPyCore system: mpy_core, mpy_gc and mpy_ca, each on its own mpy_mem
-// port, and mpy_boot, which fills the image SRAM from SPI NAND.
+// uPyCore system: mpy_core (data and instruction fetch), mpy_gc and mpy_ca,
+// each on its own mpy_mem port, and mpy_boot, which fills the image SRAM
+// from SPI NAND.
 //
 // Boot: mpy_mem zeroes the data SRAM, mpy_gc clears its allocation table
 // and mpy_boot copies the image from the NAND, all at once. The core and the
@@ -11,10 +12,11 @@
 // boot_err_o and the core never starts (upycore/docs/mpy_boot.md).
 //
 // Memory: words are interleaved across four SRAM blocks, and each block
-// takes one access per cycle. The collector, the core and the container
-// accelerator (mpy_ca) each have a port; when two want the same block the
-// collector goes first, then the core, then the accelerator. A streaming copy
-// therefore runs alongside the core whenever they touch different blocks. A
+// takes one access per cycle. The collector, the core's data accesses, the
+// core's instruction fetch and the container accelerator (mpy_ca) each have
+// a port; when two want the same block they go in that order. Fetch reads
+// ahead and a streaming copy runs alongside the core whenever they touch
+// different blocks. A
 // core access that the accelerator's scoreboard marks busy waits until the
 // copy has moved past that word; the core's state machine only sees a longer
 // wait for its ack. The collector and the core never contend: the core
@@ -79,10 +81,13 @@ module mpy_soc #(
 
     // memory
     // memory: one port per master
-    localparam int P_GC = 0, P_CORE = 1, P_CA = 2;
-    logic [2:0]       m_req, m_we, m_tag_we, m_gnt, m_ack, m_fault;
-    logic [2:0][3:0]  m_be, m_wtag, m_rtag, m_fault_reason;
-    logic [2:0][31:0] m_addr, m_wdata, m_rdata;
+    localparam int P_GC = 0, P_CORE = 1, P_FETCH = 2, P_CA = 3;
+    logic [3:0]       m_req, m_we, m_tag_we, m_gnt, m_ack, m_fault;
+    logic [3:0][3:0]  m_be, m_wtag, m_rtag, m_fault_reason;
+    logic [3:0][31:0] m_addr, m_wdata, m_rdata;
+    // core instruction fetch
+    logic        f_req;
+    logic [31:0] f_addr;
 
     // core <-> container accelerator
     logic        ca_valid, ca_ready, ca_idle, ca_busy, ca_fault;
@@ -124,6 +129,9 @@ module mpy_soc #(
         .m_addr_o(c_addr), .m_wdata_o(c_wdata), .m_wtag_o(c_wtag),
         .m_ack_i(c_ack), .m_rdata_i(c_rdata), .m_rtag_i(c_rtag),
         .m_fault_i(c_fault), .m_fault_reason_i(c_fault_reason),
+        .f_req_o(f_req), .f_addr_o(f_addr), .f_gnt_i(m_gnt[P_FETCH]), .f_ack_i(m_ack[P_FETCH]),
+        .f_rdata_i(m_rdata[P_FETCH]), .f_fault_i(m_fault[P_FETCH]),
+        .f_fault_reason_i(m_fault_reason[P_FETCH]),
         .gc_alloc_req_o(g_alloc_req), .gc_alloc_nbytes_o(g_alloc_nbytes),
         .gc_alloc_done_i(g_alloc_done), .gc_alloc_ok_i(g_alloc_ok), .gc_alloc_addr_i(g_alloc_addr),
         .gc_collect_req_o(g_collect_req),
@@ -170,6 +178,7 @@ module mpy_soc #(
     );
 
     mpy_mem #(
+        .NP(4),
         .FLASH_WAIT_STATES(FLASH_WAIT_STATES),
         .SRAM_LATENCY(SRAM_LATENCY)
     ) u_mem (
@@ -227,13 +236,13 @@ module mpy_soc #(
     assign c_want = c_pend || (c_req && !c_sim);
     assign g_want = g_pend || gm_req;
 
-    assign m_req     = {am_req, c_want && !ca_busy, g_want};
-    assign m_we      = {am_we, c_we, gm_we};
-    assign m_tag_we  = {am_we, c_tag_we, gm_tag_we};
-    assign m_be      = {4'hF, c_be, 4'hF};
-    assign m_addr    = {am_addr, c_addr, gm_addr};
-    assign m_wdata   = {am_wdata, c_wdata, gm_wdata};
-    assign m_wtag    = {am_wtag, c_wtag, gm_wtag};
+    assign m_req     = {am_req, f_req && sys_rst_n, c_want && !ca_busy, g_want};
+    assign m_we      = {am_we, 1'b0, c_we, gm_we};
+    assign m_tag_we  = {am_we, 1'b0, c_tag_we, gm_tag_we};
+    assign m_be      = {4'hF, 4'hF, c_be, 4'hF};
+    assign m_addr    = {am_addr, f_addr, c_addr, gm_addr};
+    assign m_wdata   = {am_wdata, 32'd0, c_wdata, gm_wdata};
+    assign m_wtag    = {am_wtag, 4'd0, c_wtag, gm_wtag};
     assign am_gnt    = m_gnt[P_CA];
 
     always_ff @(posedge clk_i or negedge rst_n_i) begin
