@@ -517,7 +517,13 @@ def complex____new__(cls, *args):
         else:
             re = float(a)
     if n == 2:
-        im = float(args[1])
+        b = args[1]
+        if _tag(b) == TAG_COMPLEX:
+            bre, bim = _cparts(b)
+            re -= bim
+            im += bre
+        else:
+            im += float(b)
     c = _complex(re, im)
     if cls is not complex:
         return _native_sub_new(cls, c)

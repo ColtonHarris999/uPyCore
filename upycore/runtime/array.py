@@ -109,6 +109,8 @@ class array:
 
     def _setslice(self, sl, value):
         a, b = self._bounds(sl)
+        if b < a:
+            b = a
         mid = []
         if value is not None:
             for v in value:
