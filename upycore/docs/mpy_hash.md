@@ -209,3 +209,6 @@ The broader builtins/containers/objects/strings run passes 167/167. Its copy
 test releases completed large fixtures before growth checks so the test
 fits the current 64 KB data SRAM; no copy checks or golden output were
 removed.
+The container unit bench uses blocking stores for its associative-array
+memory model; nonblocking stores to dynamically sized variables are rejected
+by current Verilator. This changes only the testbench, not container RTL.
