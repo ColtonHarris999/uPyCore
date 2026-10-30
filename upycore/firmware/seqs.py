@@ -70,8 +70,18 @@ def _list__append_fb(self, *args):
 
 
 def list__clear(self):
+    _list_clear_slots(self, 0, _ld(self, 0))
     _st(self, 0, 0)
     return None
+
+
+def _list_clear_slots(lst, start, stop):
+    # GC scans the full allocation, including slots beyond the list length.
+    # Port scoreboarding orders these stores after any pending CA copies.
+    items = _ld(lst, 2)
+    while start < stop:
+        _st(items, start, NULL)
+        start += 1
 
 
 def list__copy(self):
@@ -138,6 +148,7 @@ def list__pop(self, index=-1):
     v = _ld(items, index)
     if index < n - 1:
         _wcopy(items, index, items, index + 1, n - 1 - index)
+    _st(items, n - 1, NULL)
     _st(self, 0, n - 1)
     return v
 
@@ -222,10 +233,18 @@ def tuple__index(self, value, start=0, stop=_MISSING):
     n = _ld(self, 0)
     if start < 0:
         start += n
+        if start < 0:
+            start = 0
+    elif start > n:
+        start = n
     if stop == _MISSING:
         stop = n
     elif stop < 0:
         stop += n
+        if stop < 0:
+            stop = 0
+    elif stop > n:
+        stop = n
     i = start
     while i < stop and i < n:
         if _ld(self, 1 + i) == value:

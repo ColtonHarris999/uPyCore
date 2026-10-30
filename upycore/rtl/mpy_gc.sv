@@ -212,12 +212,19 @@ module mpy_gc #(
             unique case (st)
                 G_IDLE: begin
                     if (alloc_req_i) begin
-                        need    <= (alloc_nbytes_i == 32'd0) ? BW'(1)
-                                 : BW'((alloc_nbytes_i + 32'd15) >> 4);
-                        idx     <= rover;
-                        run_len <= '0;
-                        scanned <= '0;
-                        st      <= G_SCAN;
+                        // Check the full byte count before rounding/narrowing.
+                        // Otherwise a large request can wrap to a small need.
+                        if (alloc_nbytes_i > 32'(POOL_BYTES)) begin
+                            alloc_done_o <= 1'b1;
+                            alloc_ok_o <= 1'b0;
+                        end else begin
+                            need    <= (alloc_nbytes_i == 32'd0) ? BW'(1)
+                                     : BW'(({1'b0, alloc_nbytes_i} + 33'd15) >> 4);
+                            idx     <= rover;
+                            run_len <= '0;
+                            scanned <= '0;
+                            st      <= G_SCAN;
+                        end
                     end else if (collect_req_i) begin
                         raddr <= root0_lo_i;
                         rhi   <= root0_hi_i;

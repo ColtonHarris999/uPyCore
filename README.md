@@ -36,9 +36,11 @@ Those files are the unix oracle's output. `make test` runs the suite twice:
 once from `mpy-cross` bytecode and once from the vendored uPy2 compiler
 (`vendor/upy2`, `mpyc`). `make test-compiler` is the second run on its own,
 plus a byte compare of the two compilers.
-`make regen-goldens` rewrites the goldens after `make oracle`. An `xfail`
-entry is a known mismatch: the run is expected to fail, and a pass fails
-the suite so the marker is removed with the fix. The `compiler` area calls
+`make regen-goldens` rewrites the goldens after `make oracle`. The manifest
+checks reject expected-failure and disabled entries: every listed program
+must pass. Remaining runtime limitations are documented in
+[`upycore/docs/known_limitations.md`](upycore/docs/known_limitations.md).
+The `compiler` area calls
 `compile`, `exec`, and `eval` on the hart, including `yield` and `yield from`.
 Those programs take minutes each; `make test-hw-compiler` runs that area
 on its own. The `generators` area is the runtime suite. Host uPy2 matches
