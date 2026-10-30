@@ -140,8 +140,8 @@ module tb_mpy_container;
                     rdata <= 32'd0;
                     rtag  <= 4'd0;
                 end else if (we) begin
-                    mem_d[addr] <= wdata;
-                    mem_t[addr] <= wtag;
+                    mem_d[addr] = wdata;
+                    mem_t[addr] = wtag;
                     writes      <= writes + 1;
                 end else begin
                     rlog.push_back(addr);
