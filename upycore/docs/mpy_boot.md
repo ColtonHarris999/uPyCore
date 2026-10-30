@@ -187,3 +187,9 @@ build/syn-rundir/mpy_soc.mapped.v`). If a block shows up as
 `notmacro.synth`, its depth or width does not match the `sram_parameters`
 entry and Genus is building 590K bits of flops. A run that takes far
 longer than the core alone is the same symptom.
+
+The design folder is set up for synthesis and place and route (`make sram`,
+`make syn`, `make par-to-floorplan`, `make par`). Its testbench lists are
+empty, so the class simulation targets (`make sim-rtl-hard`, `make
+sim-par`) do not run there yet. Simulate with this repo's Verilator flow
+(`mpy_build.py run`, `--nand`) instead.

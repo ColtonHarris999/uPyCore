@@ -24,7 +24,7 @@ creates contains the class Makefile and cfg files, so keep it in your
 ```sh
 git clone https://github.com/coltonharris999/upycore.git ~/upycore
 cd ~/upycore
-git checkout claude/project-thread-sh2efy      # until it is merged
+git checkout synth      # until it is merged
 
 # Start with the ALU: smaller, so tool problems show up fast.
 python3 upycore/synth/hammer/make_hammer_design.py \
