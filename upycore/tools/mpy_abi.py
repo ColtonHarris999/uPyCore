@@ -449,7 +449,7 @@ UNOP = {
 # SRAM map beyond upycore/docs/mpy_memory_map.md: the system root area and the
 # argument staging buffer sit between the handler table and the GC pool.
 SRAM_BASE = 0x2000_0000
-SRAM_BYTES = 0x0001_0000  # one 64 KB SRAM block (MPY_SRAM_BYTES)
+SRAM_BYTES = 4 * 64 * 1024  # maximum shared SRAM; boot subtracts the image
 FRAME_BASE = SRAM_BASE
 FRAME_BYTES = 0x8000      # frame stack; a call that would cross the end raises RuntimeError
 SCHED_BASE = SRAM_BASE + FRAME_BYTES
@@ -461,6 +461,28 @@ ARGBUF_WORDS = 256
 ARGBUF_ARGS = 32          # first argument word; words 1..31 take prepended self and cells
 GC_POOL_BASE = ARGBUF_BASE + 4 * ARGBUF_WORDS
 GC_POOL_BYTES = SRAM_BASE + SRAM_BYTES - GC_POOL_BASE
+
+
+def memory_layout(image_bytes: int, pool_bytes: int = 0) -> tuple[int, int, int]:
+    """Return aligned image bytes, usable data bytes, and GC bytes.
+
+    Image/data pointers retain their logical bases. Only the physical split
+    varies; at least one GC block must remain after runtime reservations.
+    A nonzero pool_bytes optionally caps the heap for constrained tests.
+    """
+    if image_bytes < 4 * (max(HDR.values()) + 1):
+        raise ValueError("image is smaller than its header")
+    image = (image_bytes + 31) & ~31
+    data = SRAM_BYTES - image
+    available = data - (GC_POOL_BASE - SRAM_BASE)
+    if available < 16:
+        raise ValueError(f"image is {image_bytes} bytes ({image} aligned); shared SRAM "
+                         f"is {SRAM_BYTES} bytes and runtime reserves "
+                         f"{GC_POOL_BASE - SRAM_BASE} bytes plus at least 16 heap bytes")
+    if pool_bytes < 0 or pool_bytes % 16 or pool_bytes > available:
+        raise ValueError(f"requested heap {pool_bytes} bytes; available {available} (16-byte alignment required)")
+    return image, data, pool_bytes or available
+
 GC_BLOCK_BYTES = 16
 
 # System root words (all tagged, all GC roots).

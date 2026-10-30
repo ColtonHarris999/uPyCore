@@ -6,7 +6,7 @@ bytecode. Programs are MicroPython source. Host `mpy-cross` compiles them to
 Verilator model of `mpy_soc` boots it into its on-chip image SRAM and runs
 it. `compile`, `exec`, and `eval` run the frozen uPy2 compiler on the hart:
 each stage is its own call, and the firmware collects between them. The
-compiler does not fit the 192 KB image SRAM next to the firmware, so those
+compiler and firmware together exceed the entire 256 KiB shared SRAM, so those
 programs do not link with the current memory map (see Memory and boot).
 
 The unix oracle is MicroPython v1.29.0 built as the `upycore` variant
@@ -78,8 +78,10 @@ and `mpy_build.py run --sim-arg +CA=0 --sim-arg +AALU=0` turns both off.
 ## Memory and boot
 
 Both memories are on-chip SRAM built from four 64 KB blocks of 16384 x 36
-bits (payload and tag in one word): a 64 KB data SRAM and a 192 KB image
-SRAM, interleaved by word across the four blocks. The collector, the core,
+bits (payload and tag in one word), interleaved by word. Image and data
+share their 256 KiB payload capacity: boot rounds the actual image size
+up to 32 bytes and gives all remaining space to mutable data. Logical
+image/data addresses stay unchanged; there is no fixed partition. The collector, the core,
 the core's instruction fetch and the container accelerator each have a
 memory port, and ports that touch different blocks run in the same cycle.
 Fetch reads three words ahead of `pc`. After reset `mpy_boot` copies the

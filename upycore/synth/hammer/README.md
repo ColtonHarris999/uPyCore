@@ -163,8 +163,9 @@ clock at the same period so its flops are timed.
 - `mpy_alu` and `mpy_decode`: the core's only two submodules. Use them to
   shake out problems and for the per-unit area table. Everything else in
   the core is its interpreter state machine, which does not split further.
-- `mpy_gc`: its allocation table is 3,936 flip-flops for the 64 KB SRAM's
-  1,968 blocks.
+- `mpy_gc`: its allocation table reserves 28,512 bits for the maximum
+  14,256-block pool. Boot selects the active subset after subtracting the
+  image from shared SRAM; smaller images can use more heap.
 - Not `mpy_container`: no other module instantiates it.
 - `mpy_soc`: the whole chip, with the four 64 KB SRAM blocks as
   `fakeram_d16384_w36` macros and the SPI NAND boot loader. The script

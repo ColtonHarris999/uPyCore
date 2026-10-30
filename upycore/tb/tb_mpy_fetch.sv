@@ -13,8 +13,8 @@
 // +SEED=<n> +STEPS=<n>. Pass line: "PASS mpy_fetch ...".
 module tb_mpy_fetch;
     localparam int QD = 3;   // mpy_core's FE_QD
-    localparam int N = MPY_FLASH_WORDS;               // image words
-    localparam logic [31:0] END = MPY_FLASH_BYTES;    // first byte past the image
+    localparam int N = 1024;               // image words
+    localparam logic [31:0] END = N * 4;    // first byte past the image
 
     logic clk = 1'b0;
     logic rst_n = 1'b0;
@@ -35,7 +35,7 @@ module tb_mpy_fetch;
     logic [31:0] ld_data;
 
     mpy_mem #(.NP(1)) mem (
-        .clk_i(clk), .rst_n_i(rst_n),
+        .clk_i(clk), .rst_n_i(rst_n), .image_words_i(N),
         .req_i(req && ready), .we_i(1'b0), .tag_we_i(1'b0), .be_i(4'hF),
         .addr_i(addr), .wdata_i(32'd0), .wtag_i(4'd0),
         .gnt_o(gnt), .ack_o(ack), .rdata_o(rdata), .rtag_o(rtag),
@@ -93,6 +93,8 @@ module tb_mpy_fetch;
         pc = 32'd0; flush = 1'b0; ld_we = 1'b0; ld_idx = '0; ld_data = '0; ready = 1'b0;
         repeat (3) @(negedge clk);
         rst_n = 1'b1;
+        wait (mem.init_done_o);
+        @(negedge clk);
         // Load the image, then let the fetch unit out of reset.
         for (int i = 0; i < N; i++) begin
             ld_we = 1'b1; ld_idx = MPY_FLASH_IDX_W'(i); ld_data = word_of(i);
