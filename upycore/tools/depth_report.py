@@ -29,10 +29,15 @@ import re
 import sys
 from collections import defaultdict
 
-CLOCKISH = {"C", "CLK", "R", "S", "AD", "L"}   # clock and async set/reset/load pins
+CLOCKISH = {"C", "CLK", "R", "S", "AD", "L",   # clock and async set/reset/load pins
+            "clk_i", "reset_i", "rst_n_i"}       # the same on black boxes
 
 
 def is_ff(ctype: str) -> bool:
+    """Flip-flops, and black boxes (an SRAM macro, a core left out of the
+    run): their inputs end paths and their outputs start them."""
+    if not ctype.startswith("$"):
+        return True
     return bool(re.match(r"\$_(S?DFF|DFFE|SDFFE|SDFFCE|ALDFF|DFFSR|DLATCH|SR)", ctype)) or ctype in (
         "$dff", "$adff", "$dffe", "$adffe", "$sdff", "$sdffe", "$aldff", "$dffsr")
 
@@ -78,6 +83,8 @@ def main(argv: list[str] | None = None) -> int:
         if is_ff(c["type"]):
             q = [b for p, bits in conns.items() if dirs.get(p) == "output" for b in bits]
             qname = bitname.get(q[0], cname) if q and isinstance(q[0], int) else cname
+            if not c["type"].startswith("$"):
+                qname = cname.lstrip("\\")        # a black box: name the instance
             for p, bits in conns.items():
                 if dirs.get(p) == "input" and p not in CLOCKISH:
                     for b in bits:
