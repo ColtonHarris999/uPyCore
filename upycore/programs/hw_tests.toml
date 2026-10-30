@@ -386,7 +386,8 @@ local_hot = { file = "hw/variables/local_hot.py" }
 
 # Deep frames and many locals. Register-file spill counters are not portable.
 [memory]
-alloc_size_bounds = { cycles = 80_000_000, heapsize = 228096 }
+large_sram = { cycles = 80_000_000, heapsize = 490240 }
+alloc_size_bounds = { cycles = 80_000_000, heapsize = 490240 }
 code_ram_call_rom = { file = "hw/memory/code_ram_call_rom.py" }
 locals_40_uninit = { file = "hw/memory/locals_40_uninit.py" }
 rf_deep_recursion = { file = "hw/memory/rf_deep_recursion.py", cycles = 40_000_000, timeout = 240 }

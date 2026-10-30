@@ -45,6 +45,8 @@ module mpy_boot #(
     output logic [31:0]                ld_wdata_o,
     output logic [3:0]                 ld_wtag_o,
 
+    output logic [31:0] image_words_o,
+    output logic [31:0] pool_bytes_o, // optional image-requested heap cap (0: all remaining)
     output logic        done_o,
     output logic        err_o
 );
@@ -70,6 +72,7 @@ module mpy_boot #(
     logic [2:0]  k;
     logic [MPY_FLASH_IDX_W:0] widx;
 
+    assign image_words_o = (nwords + 32'd7) & 32'hfffffff8;
     assign stop  = (cst == C_DONE) || (cst == C_ERR);
     assign err_o = (cst == C_ERR);
 
@@ -77,6 +80,7 @@ module mpy_boot #(
         if (!rst_n_i) begin
             cst        <= C_MAGIC;
             nwords     <= '0;
+            pool_bytes_o <= '0;
             tagw       <= '0;
             k          <= '0;
             widx       <= '0;
@@ -94,7 +98,7 @@ module mpy_boot #(
                     C_MAGIC: cst <= (src_w == MPY_BOOT_MAGIC) ? C_COUNT : C_ERR;
                     C_COUNT: begin
                         nwords <= src_w;
-                        cst <= (src_w == 32'd0 || src_w > 32'(MPY_FLASH_WORDS)) ? C_ERR : C_TAG;
+                        cst <= (src_w < 32'd16 || src_w > 32'((MPY_MEM_BYTES - (MPY_GC_POOL_BASE - MPY_SRAM_BASE) - 16) / 32 * 8)) ? C_ERR : C_TAG;
                     end
                     C_TAG: begin
                         tagw <= src_w;
@@ -102,6 +106,7 @@ module mpy_boot #(
                         cst  <= C_DATA;
                     end
                     C_DATA: begin
+                        if (widx == 14) pool_bytes_o <= src_w;
                         ld_we_o    <= 1'b1;
                         ld_idx_o   <= widx[MPY_FLASH_IDX_W-1:0];
                         ld_wdata_o <= src_w;
@@ -287,7 +292,7 @@ module mpy_boot #(
     logic [31:0] sim_img [0:MPY_FLASH_WORDS-1];
     logic [31:0] sim_tag [0:MPY_FLASH_WORDS/8-1];
     logic        sim_on;
-    int          sim_n;      // image words
+    int unsigned sim_n;      // image words
     int          sim_len;    // stream words
     int          sim_k;
 
@@ -302,8 +307,8 @@ module mpy_boot #(
             $readmemh(path, sim_img);
             if ($value$plusargs("TAGS=%s", path)) $readmemh(path, sim_tag);
             // Image header word 2 is the image size in bytes.
-            sim_n = (int'(sim_img[2]) + 3) / 4;
-            if (sim_n > MPY_FLASH_WORDS) sim_n = MPY_FLASH_WORDS;
+            sim_n = 32'((64'(sim_img[2]) + 64'd3) >> 2);
+            // Preserve an oversized count so simulation rejects it, just like SPI.
             sim_len = 2 + 9 * ((sim_n + 7) / 8);
             sim_on = 1'b1;
         end
@@ -315,6 +320,7 @@ module mpy_boot #(
         if (i == 1) return 32'(sim_n);
         g = (i - 2) / 9;
         j = (i - 2) % 9;
+        if (g >= MPY_FLASH_WORDS / 8) return 0;
         return (j == 0) ? sim_tag[g] : sim_img[8 * g + j - 1];
     endfunction
 

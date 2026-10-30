@@ -2,13 +2,11 @@
 
 // Byte-addressed image ("flash") and data SRAM, with one port per master.
 //
-// Storage. Four 64 KB blocks of bsg_mem_1rw_sync_mask_write_bit (16384 x 36,
-// one read/write port, per-bit write mask); the EE 477 flow swaps each for a
-// fakeram_d16384_w36 macro. A word is 36 bits: the 32-bit payload and its
-// 4-bit tag side by side, so one access reads or writes both. Words are
-// interleaved: word w of either memory lives in block w[1:0], so consecutive
-// words sit in different blocks. The data SRAM is rows 0 .. 4095 of every
-// block and the image is rows 4096 .. 16383.
+// Storage: four interleaved 32768 x 36 single-port SRAM banks. Physical
+// words [0, image_words_i rounded to 8) hold the image; the remainder holds
+// mutable data. Bank = physical word[1:0], row = physical word >> 2.
+// image_words_i is fixed before masters leave reset. All SRAM is cleared
+// before boot writes begin; init_done_o is the clear completion signal.
 //
 // Ports. Port p is one master (mpy_soc: 0 collector, 1 core, 2 accelerator).
 // A master holds req_i[p] and its fields until gnt_o[p]. Each block takes
@@ -27,11 +25,6 @@
 // store's ack carries zero data. The SRAM sees an access in the cycle it is
 // granted, so an access granted later, on any port, sees it.
 //
-// After reset the unit writes zero (payload and tag) to every data SRAM
-// word, all four blocks at once (4096 cycles, plus one for every load write
-// that lands meanwhile), and grants nothing until init_done_o. The image is written only through the ld_* port, which
-// mpy_boot drives while the masters are held in reset; a load write takes
-// its block ahead of any port.
 module mpy_mem #(
     parameter int NP = 3,
     parameter int FLASH_WAIT_STATES = MPY_FLASH_WAIT_STATES,
@@ -39,6 +32,7 @@ module mpy_mem #(
 ) (
     input  logic                 clk_i,
     input  logic                 rst_n_i,
+    input  logic [31:0]          image_words_i,
 
     input  logic [NP-1:0]        req_i,
     input  logic [NP-1:0]        we_i,
@@ -67,8 +61,12 @@ module mpy_mem #(
     localparam int W  = MPY_MEM_WIDTH;
     localparam int NB = MPY_MEM_BLOCKS;       // 4, interleaved by word
     localparam int BS = $clog2(NB);
-    localparam int SROWS = MPY_SRAM_WORDS / NB;  // data SRAM rows per block
+    localparam int SROWS = MPY_MEM_BLOCK_WORDS; // clear every physical row
     localparam int CW = $clog2(SROWS);
+
+    logic [31:0] image_words, data_words;
+    assign image_words = (image_words_i + 32'd7) & 32'hfffffff8;
+    assign data_words = (image_words <= MPY_MEM_WORDS) ? MPY_MEM_WORDS - image_words : 0;
 
     // ---------------------------------------------------------------- blocks
     logic          blk_v    [0:NB-1];
@@ -118,7 +116,7 @@ module mpy_mem #(
     always_comb begin
         for (int p = 0; p < NP; p++) begin
             logic [2:0]  region;
-            logic [15:0] sw;
+            logic [MPY_MEM_WORD_AW-1:0] sw;
             logic [MPY_FLASH_IDX_W-1:0] iw;
             region = mpy_region_of(addr_i[p]);
             sw = mpy_sram_word_index(addr_i[p]);
@@ -127,19 +125,20 @@ module mpy_mem #(
             if (addr_i[p][1:0] != 2'b00)
                 p_fault[p] = MPY_FAULT_UNALIGNED;
             else if (region == MPY_REGION_FLASH)
-                p_fault[p] = we_i[p] ? MPY_FAULT_FLASH_STORE : MPY_FAULT_NONE;
+                p_fault[p] = (32'(iw) >= image_words) ? MPY_FAULT_BUS :
+                             we_i[p] ? MPY_FAULT_FLASH_STORE : MPY_FAULT_NONE;
             else if (region == MPY_REGION_SRAM)
-                p_fault[p] = MPY_FAULT_NONE;
+                p_fault[p] = (32'(sw) >= data_words) ? MPY_FAULT_BUS : MPY_FAULT_NONE;
             else
                 p_fault[p] = MPY_FAULT_BUS;
             p_mem[p] = (p_fault[p] == MPY_FAULT_NONE);
             p_img[p] = (region == MPY_REGION_FLASH);
             if (p_img[p]) begin
                 p_blk[p] = iw[BS-1:0];
-                p_row[p] = AW'(SROWS + (32'(iw) >> BS));
+                p_row[p] = AW'(32'(iw) >> BS);
             end else begin
-                p_blk[p] = sw[BS-1:0];
-                p_row[p] = AW'(sw >> BS);
+                p_blk[p] = BS'(32'(sw) + image_words);
+                p_row[p] = AW'((32'(sw) + image_words) >> BS);
             end
             for (int k = 0; k < 4; k++)
                 p_mask[p][8*k +: 8] = {8{be_i[p][k]}};
@@ -151,7 +150,7 @@ module mpy_mem #(
     logic [BS-1:0] ld_blk;
     logic [AW-1:0] ld_row;
     assign ld_blk = ld_idx_i[BS-1:0];
-    assign ld_row = AW'(SROWS + (32'(ld_idx_i) >> BS));
+    assign ld_row = AW'(32'(ld_idx_i) >> BS);
 
     always_comb begin
         logic [NB-1:0] taken;

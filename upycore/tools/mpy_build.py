@@ -265,8 +265,8 @@ def _cached_mpy(src: Path, source_name: str) -> Path:
 
 
 # compile, exec and eval run the frozen uPy2 compiler. It is 167 KB of
-# image, which with the 176 KB firmware does not fit the 192 KB image SRAM,
-# so only programs that name one of them get it.
+# image. Freeze it only for programs that name one of them; the linker
+# checks their combined image and runtime reservations against shared SRAM.
 _COMPILER_NAMES = {"compile", "exec", "eval"}
 
 

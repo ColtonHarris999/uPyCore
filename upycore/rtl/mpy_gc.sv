@@ -30,6 +30,7 @@ module mpy_gc #(
 ) (
     input  logic        clk_i,
     input  logic        rst_n_i,
+    input  logic [31:0] pool_bytes_i, // stable from reset release until next reset
 
     input  logic        alloc_req_i,
     input  logic [31:0] alloc_nbytes_i,
@@ -63,6 +64,10 @@ module mpy_gc #(
 
     localparam int NB = POOL_BYTES / 16;
     localparam int BW = $clog2(NB + 1);
+    logic [BW-1:0] active_blocks;
+    logic [31:0] active_bytes;
+    assign active_blocks = BW'(((pool_bytes_i > POOL_BYTES) ? POOL_BYTES : pool_bytes_i) >> 4);
+    assign active_bytes = 32'(active_blocks) << 4;
     localparam int SW = $clog2(STACK_DEPTH + 1);
 
     localparam logic [1:0] A_FREE = 2'd0;
@@ -130,7 +135,7 @@ module mpy_gc #(
         cand_addr = {mem_rdata_i[31:2], 2'b00};
         cand_off  = cand_addr - POOL_BASE;
         cand_blk  = BW'(cand_off >> 4);
-        if (cand_addr < POOL_BASE || cand_off >= 32'(POOL_BYTES))
+        if (cand_addr < POOL_BASE || cand_off >= active_bytes)
             cand_ptr = 1'b0;
     end
 
@@ -139,7 +144,7 @@ module mpy_gc #(
 
     assign busy_o         = (st != G_IDLE);
     assign free_blocks_o  = free_cnt;
-    assign total_blocks_o = 32'(NB);
+    assign total_blocks_o = 32'(active_blocks);
     assign collections_o  = ncoll;
     assign overflows_o    = novf;
 
@@ -184,7 +189,7 @@ module mpy_gc #(
             oword          <= '0;
             rescanning     <= 1'b0;
             freeing        <= 1'b0;
-            free_cnt       <= 32'(NB);
+            free_cnt       <= '0; // runtime capacity is installed when G_CLEAR finishes
             ncoll          <= '0;
             novf           <= '0;
             alloc_done_o   <= 1'b0;
@@ -203,13 +208,14 @@ module mpy_gc #(
             mem_req_o      <= 1'b0;
             unique case (st)
                 // Flops do not power up as A_FREE. One entry per cycle (NB
-                // cycles, 1968 for the 64 KB SRAM); busy_o is set meanwhile
+                // cycles for maximum metadata capacity); busy_o is set meanwhile
                 // and mpy_soc keeps the core in reset until it clears.
                 G_CLEAR: begin
                     atb[idx] <= A_FREE;
                     idx <= idx + 1'b1;
                     if (idx == BW'(NB - 1)) begin
                         idx <= '0;
+                        free_cnt <= 32'(active_blocks);
                         st  <= G_IDLE;
                     end
                 end
@@ -217,7 +223,7 @@ module mpy_gc #(
                     if (alloc_req_i) begin
                         // Check the full byte count before rounding/narrowing.
                         // Otherwise a large request can wrap to a small need.
-                        if (alloc_nbytes_i > 32'(POOL_BYTES)) begin
+                        if (active_blocks == 0 || alloc_nbytes_i > active_bytes) begin
                             alloc_done_o <= 1'b1;
                             alloc_ok_o <= 1'b0;
                         end else begin
@@ -239,7 +245,7 @@ module mpy_gc #(
                 end
 
                 G_SCAN: begin
-                    if (need > BW'(NB) || scanned == BW'(NB)) begin
+                    if (need > active_blocks || scanned == active_blocks) begin
                         alloc_done_o <= 1'b1;
                         alloc_ok_o   <= 1'b0;
                         st           <= G_IDLE;
@@ -256,7 +262,7 @@ module mpy_gc #(
                                 run_len <= '0;
                             end
                             // Blocks NB-1 and 0 are not adjacent.
-                            if (idx == BW'(NB - 1)) begin
+                            if (idx == (active_blocks - 1'b1)) begin
                                 idx     <= '0;
                                 run_len <= '0;
                             end else begin
@@ -274,7 +280,7 @@ module mpy_gc #(
                         zaddr    <= POOL_BASE + {run_start, 4'b0000};
                         zend     <= POOL_BASE + {run_start, 4'b0000} + {need, 4'b0000};
                         free_cnt <= free_cnt - 32'(need);
-                        rover    <= (run_start + need >= BW'(NB)) ? '0 : run_start + need;
+                        rover    <= (run_start + need >= active_blocks) ? '0 : run_start + need;
                         st       <= G_ZERO;
                     end else begin
                         atb[idx] <= A_TAIL;
@@ -382,10 +388,10 @@ module mpy_gc #(
                     if (mpy_tag_is_pointer(lnk_tags[lnk_i])) begin
                         if (lnk_tags[lnk_i] == MPY_TAG_MUT_COLLEC) begin
                             if ({mem_rdata_i[31:2], 2'b00} >= POOL_BASE &&
-                                ({mem_rdata_i[31:2], 2'b00} - POOL_BASE) < 32'(POOL_BYTES))
+                                ({mem_rdata_i[31:2], 2'b00} - POOL_BASE) < active_bytes)
                                 try_mark(BW'(({mem_rdata_i[31:2], 2'b00} - POOL_BASE) >> 4));
                         end else if (mem_rdata_i >= POOL_BASE &&
-                                     (mem_rdata_i - POOL_BASE) < 32'(POOL_BYTES)) begin
+                                     (mem_rdata_i - POOL_BASE) < active_bytes) begin
                             try_mark(BW'((mem_rdata_i - POOL_BASE) >> 4));
                         end
                     end
@@ -432,7 +438,7 @@ module mpy_gc #(
                         if (oword != 2'd3) begin
                             oword <= oword + 1'b1;
                             st    <= G_OBJ;
-                        end else if (oblk + 1'b1 < BW'(NB) && atb[oblk + 1'b1] == A_TAIL) begin
+                        end else if (oblk + 1'b1 < active_blocks && atb[oblk + 1'b1] == A_TAIL) begin
                             oblk  <= oblk + 1'b1;
                             oword <= '0;
                             st    <= G_OBJ;
@@ -443,7 +449,7 @@ module mpy_gc #(
                 end
 
                 G_RESCAN: begin
-                    if (idx == BW'(NB)) begin
+                    if (idx == active_blocks) begin
                         if (ovf) begin
                             ovf <= 1'b0;
                             idx <= '0;
@@ -463,7 +469,7 @@ module mpy_gc #(
                 end
 
                 G_SWEEP: begin
-                    if (idx == BW'(NB)) begin
+                    if (idx == active_blocks) begin
                         st <= G_DONE;
                     end else begin
                         unique case (atb[idx])

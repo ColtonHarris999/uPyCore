@@ -11,7 +11,7 @@
 // of bytes (upycore/tools/mpy_nand.py); erased bytes read FFh.
 module tb_spi_nand #(
     parameter int PAGE_BYTES = 2048,
-    parameter int PAGES = 256,
+    parameter int PAGES = 512, // boot stream includes packed tags as well as payload
     parameter int BUSY_POLLS = 2
 ) (
     input  logic sck,

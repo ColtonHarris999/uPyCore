@@ -57,7 +57,7 @@ module tb_mpy_ca #(parameter int QDEPTH = 2, parameter int BUF = 4, parameter in
     );
 
     mpy_mem #(.NP(2), .SRAM_LATENCY(LAT)) mem (
-        .clk_i(clk), .rst_n_i(rst_n),
+        .clk_i(clk), .rst_n_i(rst_n), .image_words_i(32'd0),
         .req_i(m_req), .we_i(m_we), .tag_we_i(m_we), .be_i({4'hF, 4'hF}),
         .addr_i(m_addr), .wdata_i(m_wdata), .wtag_i(m_wtag),
         .gnt_o(m_gnt), .ack_o(m_ack), .rdata_o(m_rdata), .rtag_o(m_rtag),
