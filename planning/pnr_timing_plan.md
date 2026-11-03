@@ -1,4 +1,4 @@
-# Place-and-route timing plan (draft 2)
+# Place-and-route timing plan (draft 3, ranked targets pending)
 
 Goal: make the uPyCore core (`mpy_core`) close timing after place and route
 in the EE 477 flow (Innovus, sky130_fd_sc_hd, setup corner ss_100C_1v60)
@@ -155,12 +155,15 @@ never starts a probe with alloc 0) every subtraction succeeds and only
 this order matches the original, which then just shifts bits in.
 
 Why the values match: a radix-4 restoring step is two radix-2 restoring
-steps. When `r < d`, `t4 = 4r + b < 4d`, so at most one of `3d, 2d, d`
-fits as the largest, and the result is the same remainder the two radix-2
-steps leave. `r_r < d_r` holds on every reachable state: reset sets both to
-0 (the `d == 0` case above), the accept cycle loads `r = a >> kr`, which
-has fewer significant bits than `d` (module header comment), and each step
-keeps `r < d`.
+steps. When `r < d`, `t4 = 4r + b < 4d`, so the largest of `3d, 2d, d`
+that fits is unique, and the result is the same remainder the two radix-2
+steps leave. The invariant is **`n_r != 0` implies (`d_r == 0` or
+`r_r < d_r`)**. A start with `a_i < d_i` reloads `d_r` but leaves `r_r`
+stale, so `r_r >= d_r` is reachable. That only happens while `n_r == 0`,
+and then no step result is used. Steps run only after an accept with
+`a >= d`, which loads `r = a >> kr`. That value has fewer significant bits
+than `d` (module header comment), and each step keeps `r < d`. Reset sets
+everything to 0.
 
 Checks for this step (the same-registers equivalence fails by design,
 because the new step is only equal on reachable states):
@@ -269,6 +272,17 @@ the same code), and run
 It passes for all `r, q, d` with `d == 0 || r < d` in about 3 minutes, and
 it fails on a planted off-by-one in the 3d difference. Make a BPC 2 copy
 (two radix-2 steps against one radix-4 step) and prove that too.
+
+Gold reference for every proof: in each commit, prove against the version
+from the previous step's commit, so each commit is proven on its own. In the
+final checker pass, prove again against the original `origin/main` version
+of the file, so a proof can't silently compare two already-changed files.
+Name the gold commit in each commit message.
+
+Trace and cycle count together: the `+TRACE=1` opcode trace has no cycle
+numbers, so it shows the same instructions ran in the same order. The
+`bench.py` cycle counts show they took the same number of cycles. Neither
+check alone is enough. Both must match.
 
 Time limit: if an equivalence proof does not finish in 30 minutes, the
 change is dropped (reverted), not committed unproven.
