@@ -1,4 +1,4 @@
-# Place-and-route timing plan (draft 1)
+# Place-and-route timing plan (draft 2)
 
 Goal: make the uPyCore core (`mpy_core`) close timing after place and route
 in the EE 477 flow (Innovus, sky130_fd_sc_hd, setup corner ss_100C_1v60)
@@ -57,11 +57,26 @@ on every output port on every clock cycle as the code it replaces.
   `converted/mpy_core.v`) is running and will be appended here as the
   ranked list of the next targets.
 
-## Step 0: baseline (no RTL change)
+## Step 0: tools and baseline (no RTL change)
+
+Tools, if the machine lacks them: `pip install yowasp-yosys` gives
+`yowasp-yosys` (use it wherever this plan says `yosys`). Verilator 5 is
+needed for `make test`; in the cloud container it is `verilator-cli`, so run
+`make test VERILATOR=verilator-cli` (or export `VERILATOR`). If neither is
+present, build Verilator from source or use `make docker-test`.
 
 - `make test` and save the summary (pass/fail counts) to
   `build/timing_baseline/test.txt`.
 - `python3 upycore/tools/bench.py > build/timing_baseline/bench.txt`.
+- Opcode traces: for each program in `upycore/programs/bench`, run the SoC
+  simulator with `+TRACE=1` (`tb_mpy_soc.sv:10`) in the same way `bench.py`
+  runs it, and save each trace to `build/timing_baseline/trace_<prog>.txt`.
+  After every RTL step these must be byte-identical.
+- The umod testbench at the widths `make test` skips (it only runs BPC 4,
+  `unit_tests.py:82`): build `upycore/tb/tb_upycore_umod_seq.sv` by hand
+  with the same Verilator flags as `unit_tests.py` plus `-GBPC=1`, and again
+  with `-GBPC=2`, and run each with `+SEED=1`, `+SEED=2`, `+SEED=3`. Do not
+  edit the testbench.
 - `python3 upycore/tools/mpy_synth.py --depth 0 mpy_core` (or the
   `read_verilog` fallback in "Checks" if the slang plugin is missing) and
   save the top 60 endpoints to `build/timing_baseline/depth.txt`.
@@ -79,12 +94,15 @@ diff = {1'b0, t} - {2'b0, d_r};
 r_nx = diff[33] ? t[31:0] : diff[31:0];
 ```
 
-Same values as before: `t >= d` exactly when the subtraction does not
-borrow, and when it does not borrow `diff[31:0] == 32'(t - d)`. The
-invariant `r < d` keeps `t < 2d`, so the result still fits in 32 bits.
+Same values as before for every input (no invariant needed): `t >= d`
+exactly when the 34-bit subtraction does not borrow, and then
+`diff[31:0] == 32'(t - d)`. The reviewer proved this with the
+same-registers recipe below for BPC 1, 2 and 4 in seconds, and the recipe
+catches a planted bug (`diff[32]` for `diff[33]`).
 
-Checks: equivalence vs the original module (all three `BPC` values),
-`make test`, bench cycle counts, depth report for `u_hmod` endpoints.
+Checks: same-registers equivalence vs the original for BPC 1, 2 and 4;
+`make test`; the hand-built umod testbench at BPC 1 and 2; bench cycle
+counts and opcode traces identical; depth report for `u_hmod` endpoints.
 Commit.
 
 ## Step 2: `upycore_umod_seq`, radix 4 within the same cycle
@@ -93,23 +111,75 @@ With `BPC = 4` a cycle still does four dependent subtractions. Replace the
 four radix-2 steps with two radix-4 steps that produce exactly the same
 `r_nx` and `q_nx`:
 
-- Each radix-4 step brings down two bits: `t4 = {r, q[31:30]}` (34 bits).
-- Compare `t4` against `d`, `2d` and `3d` **in parallel** (three
-  subtractors, each with a borrow bit as in Step 1) and pick the largest
-  multiple that does not borrow. The new remainder is the matching
-  difference, or `t4` if all three borrow.
-- `3d` needs an adder. Hold it in a new register `d3_r` loaded at
-  `start_i` with `d_i + (d_i << 1)` (35 bits). This adds one register and
-  an adder on the start path, but no cycle.
-- `BPC = 2` uses one radix-4 step and `BPC = 1` keeps the radix-2 step.
+The step logic, exactly (from the reviewer's prototype, which passes the
+checks below):
 
-This cuts the serial chain per cycle from four subtractions to two. The
-register values each cycle are the same as before because a radix-4
-restoring step is two radix-2 restoring steps by definition.
+```systemverilog
+logic [33:0] d3_r;   // 3 * d_r, loaded with d_r; reset to 0
 
-Checks: as Step 1. The equivalence check has to cope with the extra
-register `d3_r` (see "Checks": use the miter with bounded proof plus
-induction). Commit.
+// On start_i, next to d_r <= d_i:
+//     d3_r <= {2'b0, d_i} + {1'b0, d_i, 1'b0};
+// and d3_r <= '0 in the reset branch.
+
+always_comb begin
+    logic [32:0] t;
+    logic [33:0] t4;
+    logic [33:0] dif2;
+    logic [34:0] e1, e2, e3;
+    r_nx = r_r;
+    q_nx = q_r;
+    if (BPC == 1) begin
+        t = {r_nx, q_nx[31]};
+        q_nx = {q_nx[30:0], 1'b0};
+        dif2 = {1'b0, t} - {2'b0, d_r};
+        r_nx = dif2[33] ? t[31:0] : dif2[31:0];
+    end else begin
+        for (int j = 0; j < BPC/2; j++) begin
+            t4 = {r_nx, q_nx[31:30]};
+            q_nx = {q_nx[29:0], 2'b0};
+            e1 = {1'b0, t4} - {3'b0, d_r};
+            e2 = {1'b0, t4} - {2'b0, d_r, 1'b0};
+            e3 = {1'b0, t4} - {1'b0, d3_r};
+            if (!e3[34])      r_nx = e3[31:0];
+            else if (!e2[34]) r_nx = e2[31:0];
+            else if (!e1[34]) r_nx = e1[31:0];
+            else              r_nx = t4[31:0];
+        end
+    end
+end
+```
+
+The priority 3d, then 2d, then d, then none is required, not a style
+choice. With `d_r == 0` (which can reach the ports even though the core
+never starts a probe with alloc 0) every subtraction succeeds and only
+this order matches the original, which then just shifts bits in.
+
+Why the values match: a radix-4 restoring step is two radix-2 restoring
+steps. When `r < d`, `t4 = 4r + b < 4d`, so at most one of `3d, 2d, d`
+fits as the largest, and the result is the same remainder the two radix-2
+steps leave. `r_r < d_r` holds on every reachable state: reset sets both to
+0 (the `d == 0` case above), the accept cycle loads `r = a >> kr`, which
+has fewer significant bits than `d` (module header comment), and each step
+keeps `r < d`.
+
+Checks for this step (the same-registers equivalence fails by design,
+because the new step is only equal on reachable states):
+
+1. Step proof under the invariant: the combinational module
+   `stepeq.sv` (reviewer's, in `/mnt/project-files/plans/review/`; copy it
+   to `build/equiv/`) computes four radix-2 steps and two radix-4 steps
+   from free `r, q, d` and asserts they agree whenever `d == 0 || r < d`.
+   Prove with `yosys -p "read_verilog -sv stepeq.sv; proc; flatten;
+   sat -prove ok 1 -verify stepeq"`. Repeat for one radix-4 step vs two
+   radix-2 steps (BPC 2).
+2. The invariant argument above, written in the commit message.
+3. Smoke check: the bounded miter from reset at depth 40 (recipe in
+   "Checks"), BPC 1, 2 and 4. It passes in about 30 s. Do not run
+   `sat -tempinduct` here; it does not converge.
+4. `make test`, the hand-built umod testbench at BPC 1 and 2, bench cycle
+   counts and opcode traces identical.
+
+Commit.
 
 If the depth report shows the start-cycle logic (`clz32` on `a_i` and
 `d_i`, the `a_i < d_i` compare, and the 64-bit shifts by `kr`) is now
@@ -119,31 +189,45 @@ change to values. Commit separately.
 
 ## Step 3: next targets from the depth report
 
-Take the deepest endpoint groups outside `u_hmod` from the depth report
-(appended here before implementation starts), in order. Expected
-candidates are the `u_alu` result path (`res_o_reg[63]`) and the
-`lc_v_reg` enable logic. For each group, one commit, using only
-cycle-exact techniques:
+The ranked targets (file, line, transform, and the module the
+equivalence check runs on) are appended below before implementation
+starts. Each target is one commit and must name, in the plan and the
+commit message, the module the proof runs on. That has to be a small
+module (for example `mpy_alu` or a submodule of it, never all of
+`mpy_core`, where a proof will not finish).
 
-- Merge compare and subtract (as Step 1). Compute several candidates in
+Allowed transforms, all cycle-exact:
+
+- Merge compare and subtract (as in Step 1). Compute several candidates in
   parallel and select late, instead of computing in series.
 - Move a slow select off the critical input. For example, precompute
   both outcomes and mux by the late signal.
 - Replace priority chains (`if / else if` ladders, `casez` on wide keys)
   with parallel one-hot selects where the conditions are mutually
-  exclusive. Prove the exclusivity with an assertion or a short argument
-  in the commit message.
-- Duplicate a register that has very high fanout. The copies must load
-  the same value under the same enable, so behavior stays identical.
-  Mark it with a comment so synthesis keeps it.
-- Precompute a value one cycle early into a new register **only** when
-  its inputs are already registered and stable that earlier cycle in
-  every case. The new register must not change any existing register's
-  value or timing. Prove this with the equivalence check.
+  exclusive. Prove exclusivity inside the module's equivalence check.
+- Precompute a value one cycle early into a new register, **only** inside
+  a module small enough for a Step 2 style step proof under a stated
+  invariant. Its inputs must already be registered and stable in that
+  earlier cycle in every case.
+
+Not allowed: register duplication for fanout. Genus merges equivalent
+flops, and keeping the copies would need a synthesis constraint, which
+Rule 6 rules out.
+
+`lc_v_reg[0]` → clock gate enable (−3.265 ns at 20 ns): the endpoint is the
+enable of a clock gate that Genus inserted for a register bank's load
+enable. Shortening the RTL logic that computes that load enable is in
+scope if it is one of the transforms above. Changing clock-gating
+settings is a synthesis setting and out of scope.
 
 Stop when the depth report's deepest group outside `u_hmod` is no deeper
 than the deepest path in `u_hmod` after Step 2. Also stop after five
-groups, whichever comes first. Then hand off for a real P&R run.
+targets, whichever comes first. Then hand off for a real P&R run.
+
+### Ranked targets
+
+(Pending: the flat depth ranking of `mpy_core` is still running and will be
+appended here, each with file, line, transform and proof module.)
 
 ## Step 4: hand-off for place and route
 
@@ -163,18 +247,31 @@ Equivalence, same registers (Step 1, and most of Step 3):
 ```
 yosys -p "read_verilog -sv build/equiv/upycore_umod_seq_ref.sv; rename upycore_umod_seq gold;
           read_verilog -sv upycore/rtl/upycore_umod_seq.sv; rename upycore_umod_seq gate;
-          proc; opt_clean; async2sync;
+          chparam -set BPC 4 gold gate; proc; opt_clean; async2sync;
           equiv_make gold gate equiv; hierarchy -top equiv;
           equiv_simple -seq 5; equiv_induct -seq 5; equiv_status -assert"
 ```
 
-Equivalence, added registers (Step 2): build a miter and prove the outputs
-equal from reset. `miter -equiv -flatten -make_assert gold gate miter`,
-then `sat -verify -prove-asserts -set-init-zero -seq 40 -show-ports miter`
-(40 cycles covers a full operation, at most 9 cycles). Then also run
-`sat -tempinduct -prove-asserts -set-init-zero miter`. If the induction
-fails only because of unreachable states (for example `d3_r != 3 * d_r`),
-say so and rely on the bounded proof plus the full test suite.
+Run it three times, with `BPC` set to 1, 2 and 4.
+
+Bounded miter from reset (Step 2 smoke check, and any change that adds
+registers): `miter -equiv -flatten -make_assert gold gate miter`, then
+`sat -verify -prove-asserts -set-init-zero -seq 40 -show-ports miter`.
+40 cycles covers a full operation (at most 9 cycles). It is a smoke
+check, not a proof; the proof for such a change is a combinational step
+proof under a stated invariant, like `stepeq.sv`.
+
+Step proof under an invariant (Step 2): copy
+`/mnt/project-files/plans/review/stepeq.sv` to `build/equiv/`, change its
+second `always_comb` to match the step logic actually written (it must be
+the same code), and run
+`yowasp-yosys -p "read_verilog -sv stepeq.sv; proc; flatten; sat -prove ok 1 -verify stepeq"`.
+It passes for all `r, q, d` with `d == 0 || r < d` in about 3 minutes, and
+it fails on a planted off-by-one in the 3d difference. Make a BPC 2 copy
+(two radix-2 steps against one radix-4 step) and prove that too.
+
+Time limit: if an equivalence proof does not finish in 30 minutes, the
+change is dropped (reverted), not committed unproven.
 
 For a module that includes `.svh` headers, run `upycore/tools/mpy_dc_unit.py`
 first to get a single self-contained `.sv` for both versions.
@@ -191,8 +288,9 @@ use it for a single module (`upycore_umod_seq`, `mpy_alu`) when possible.
   result.
 - `git diff origin/main -- upycore/tests upycore/tb upycore/programs` is
   empty. Goldens are unchanged.
-- `make test` matches the baseline. `bench.py` cycle counts are identical
-  for every benchmark and configuration.
+- `make test` matches the baseline, and so does the hand-built umod
+  testbench at BPC 1 and 2. `bench.py` cycle counts and the `+TRACE=1`
+  opcode traces are identical for every benchmark.
 - Rerun the equivalence checks independently from the commit messages.
 - Read each rewrite for hidden behavior changes: widths, signedness,
   reset values, X handling, and `BPC = 1` and `2`, which the core does not
