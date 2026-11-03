@@ -229,8 +229,29 @@ targets, whichever comes first. Then hand off for a real P&R run.
 
 ### Ranked targets
 
-(Pending: the flat depth ranking of `mpy_core` is still running and will be
-appended here, each with file, line, transform and proof module.)
+Yosys logic levels (flat generic gates, ripple-carry adders; they compare
+designs, they are not nanoseconds; Genus builds faster adders):
+
+| Netlist | Deepest endpoint | Levels |
+|---|---|---|
+| `upycore_umod_seq` today | `r_r` from `d_r` | 249 |
+| after Step 1 (reviewer's s1.sv) | `r_r` from `d_r` | 253 |
+| after Step 2 (reviewer's s2.sv) | `r_r` from `d3_r` | 112 |
+
+Step 1 does not shorten the Yosys netlist (its ripple adders already share
+the compare and the subtract). It is kept because Genus builds the compare
+and the subtract as separate operators (`gte_*` and `SUB_UNS_OP*` in the
+post-route path), and as the base for Step 2. The P&R rerun is the
+measure.
+
+Deepest groups in `mpy_alu` (Yosys levels, from `converted/mpy_alu.v`):
+`u_fpu.u_pow.z_r` 181, `u_fpu.u_pow.acc_r` 174, `u_fpu.u_pow.r_r` 165,
+`u_fpu.u_sig_mul.acc_r` 151, `u_fpu.sm_product` 145, `u_mul.acc_r` 138,
+`mul_hi` 136, `fb` 134, `res_o` 132, `rem` 131. These are candidates
+only. Post-route data for the paths after `u_hmod` has been requested
+from the lab machine (worst path per endpoint, `u_hmod` filtered out).
+Targets are picked from that, with file, line, transform and proof
+module for each, in draft 4.
 
 ## Step 4: hand-off for place and route
 
