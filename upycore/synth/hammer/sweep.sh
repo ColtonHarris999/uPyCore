@@ -134,25 +134,34 @@ status)
     echo "Critical path of one run: awk '/Startpoint/{n++} n==1' <folder>/build/syn-rundir/reports/final_time_ss_100C_1v60.setup_view.rpt | less"
     ;;
 par-status)
-    printf "%-22s %-8s %10s %10s %14s %s\n" folder state "slack ns" "min ns" "power" "reports"
+    printf "%-20s %-8s %9s %9s %9s %9s %12s %s\n" folder state "slack ns" "min ns" "r2r slk" "r2r min" "area um2" "power mW (vectorless)"
     for d in "$DESIGNS"/${par_prefix}_p*; do
         [ -d "$d" ] || continue
         p=${d##*_p}
         run=$d/build/par-rundir
         tim=$run/timingReports/${TOP}_postRoute_all.tarpt.gz
+        r2r=$run/timingReports/${TOP}_postRoute_reg2reg.tarpt.gz
         pwr=$run/${TOP}_power.rpt
+        are=$run/${TOP}_area.rpt
         state=$(state_of "$d" "$pwr")
-        slack=- minp=- power=-
+        slack=- minp=- rslack=- rminp=- power=- area=-
+        # Innovus: "Slack:=   -4.175" on the worst path first, in ns.
         if [ -f "$tim" ]; then
-            # Innovus: "= Slack Time   -0.123" on the worst path, in ns.
-            slack=$(zcat "$tim" | awk '/Slack Time/{print $NF; exit}')
+            slack=$(zcat "$tim" | awk '/Slack:=/{print $2; exit}')
             [ -n "$slack" ] && minp=$(awk -v p="$p" -v s="$slack" 'BEGIN{printf "%.2f", p - s}')
         fi
-        [ -f "$pwr" ] && power=$(awk -F: '/Total Power/{gsub(/^ +/, "", $2); print $2; exit}' "$pwr")
-        printf "%-22s %-8s %10s %10s %14s %s\n" "${d##*/}" "$state" "${slack:--}" "$minp" "${power:--}" \
-            "$( [ -d "$run" ] && echo "${run#$HOME/}" || echo -)"
+        if [ -f "$r2r" ]; then
+            rslack=$(zcat "$r2r" | awk '/Slack:=/{print $2; exit}')
+            [ -n "$rslack" ] && rminp=$(awk -v p="$p" -v s="$rslack" 'BEGIN{printf "%.2f", p - s}')
+        fi
+        [ -f "$pwr" ] && power=$(awk '/^Total Power:/{printf "%.2f", $3; exit}' "$pwr")
+        # First data row of report_area: the whole design, total area in column 3.
+        [ -f "$are" ] && area=$(awk -v t="$TOP" '$1 == t && $3 ~ /^[0-9.]+$/{printf "%.0f", $3; exit}' "$are")
+        printf "%-20s %-8s %9s %9s %9s %9s %12s %s\n" "${d##*/}" "$state" "${slack:--}" "${minp:--}" \
+            "${rslack:--}" "${rminp:--}" "${area:--}" "${power:--}"
     done
-    echo "Area: <reports>/${TOP}_area.rpt (first row is the whole design). Power: <reports>/${TOP}_power.rpt."
+    echo "Reports: <folder>/build/par-rundir. r2r = register-to-register paths only (no I/O)."
+    echo "Power here is Innovus's guess (20% toggle, slow corner); use the SAIF power for the paper."
     echo "Worst path: zcat <reports>/timingReports/${TOP}_postRoute_all.tarpt.gz | less"
     echo "A failed run: tail -50 <folder>/syn.out"
     ;;
