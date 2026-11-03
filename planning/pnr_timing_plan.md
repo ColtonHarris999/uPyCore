@@ -330,8 +330,11 @@ use it for a single module (`upycore_umod_seq`, `mpy_alu`) when possible.
 - Read each rewrite for hidden behavior changes: widths, signedness,
   reset values, X handling, and `BPC = 1` and `2`, which the core does not
   instantiate but which must still be correct.
-- The depth report improved for the targeted endpoints, and nothing else
-  got deeper by more than a few levels.
+- Depth: Step 1 must not get deeper by more than a few levels (it is not
+  expected to gain in Yosys). Step 2 must show the gain (`u_hmod` about
+  249 down to about 112 levels). Each Step 3 target must get shallower at
+  its endpoints, and nothing else may get deeper by more than a few
+  levels.
 
 ## Ideas that change timing behavior (not in this plan; need approval)
 
