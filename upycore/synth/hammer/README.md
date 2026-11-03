@@ -262,10 +262,22 @@ starts `make syn` in each at once, in the background (they keep running
 after you log out). `sweep.sh status` lists every folder with its state,
 slack, critical-path delay, the shortest period its netlist meets
 (period - slack) and the cell area. `DESIGNS`, `PREFIX`, `TOP` and `RTL`
-override the defaults.
+override the defaults (`RTL` is gone: the core comes from
+`converted/$TOP.v`).
+
+`sweep.sh par 20 15` does the same but runs `make par` after `make syn`, in
+`upycore_par_p<period>` folders (default die 1500 x 1500 um for the core).
+`sweep.sh par-status` lists each one's post-route slack, shortest period and
+total power, and where its area, power and timing reports are.
+
+Before starting runs, `sweep.sh` pulls the branch and compares
+`converted/RTL_STAMP` with a hash of `upycore/rtl` and the converter
+scripts. If the RTL changed and `converted/*.v` were not regenerated, it
+stops instead of building old RTL; `convert_rtl.sh` (where sv2v runs)
+rewrites the files and the stamp.
 
 `TOP=mpy_soc sweep.sh start 20 15` does the same for the whole chip:
-each `upycore_soc_p<period>` folder gets the four SRAM macros, and the
+each `upycore_soc_p<period>` folder (`upycore_socpar_p<period>` with `par`) gets the four SRAM macros, and the
 background job runs `make sram` and then `make syn`. `DIE="w h"` sets the
 die (default 4000 x 3000 um) and `SOC_RTL=converted` takes the chip from
 `converted/mpy_soc.v`. `TOP=mpy_soc sweep.sh status` adds the macro count

@@ -22,3 +22,6 @@ write_unit('$top', Path('$tmp'), skip=(SRAM_MODEL,) if '$top' == 'mpy_soc' else 
     echo "wrote $out"
 done
 rm -rf "$tmp"
+# Which RTL these files came from; sweep.sh refuses to run on stale files.
+./upycore/synth/hammer/sweep.sh rtl-stamp > upycore/synth/hammer/converted/RTL_STAMP
+echo "wrote upycore/synth/hammer/converted/RTL_STAMP"

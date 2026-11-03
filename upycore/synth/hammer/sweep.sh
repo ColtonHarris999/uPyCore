@@ -1,69 +1,120 @@
 #!/bin/bash
-# Clock sweep: synthesize mpy_core at several periods at once, then list the
-# result of each. Runs survive logging out (nohup), so no tmux is needed.
+# Run several clock periods of the class flow at once, then list the results.
+# Runs survive logging out (nohup), so no tmux is needed.
 #
-#   sweep.sh start 12 10 8      one design folder and one `make syn` per period
-#   sweep.sh status             every folder: running or done, slack, min period
+#   sweep.sh start 12 10 8      synthesis only: one folder and one `make syn` per period
+#   sweep.sh par 20 15          synthesis, then place and route (`make par`)
+#   sweep.sh status             synthesis results of the `start` folders
+#   sweep.sh par-status         post-route results of the `par` folders
 #
-# Folders are $DESIGNS/$PREFIX_p<period> (default
-# ~/ee477/ee477-designs-module1/upycore_v2_p12 ...). Each run takes one Genus
-# license and several cores, so start three or four at a time.
+# Folders are $DESIGNS/<prefix>_p<period>: upycore_v2_p12 for `start`,
+# upycore_par_p20 for `par` (prefix set by PREFIX). Each run takes a Genus or
+# Innovus license and several cores, so start three or four at a time.
 #
 # The whole chip with its four SRAM macros: TOP=mpy_soc sweep.sh start 20 15
-# runs `make sram` and then `make syn` in each folder (upycore_soc_p20 ...),
-# with the core from converted/mpy_core.v and the die DIE="w h" in um
-# (default 4000 3000). SOC_RTL=converted takes the whole chip from
-# converted/mpy_soc.v instead, for when Genus rejects the generated
-# SystemVerilog. status then also counts the macros in each netlist (want 4).
+# (folders upycore_soc_p20, or upycore_socpar_p20 with `par`) runs `make sram`
+# first, with the core from converted/mpy_core.v. SOC_RTL=converted takes the
+# whole chip from converted/mpy_soc.v instead. status then also counts the
+# macros in each netlist (want 4).
+#
+# Die size: DIE="w h" in um, default 1500 1500 for the core, 4000 3000 for
+# the chip.
+#
+# Before starting, the script pulls the current branch and checks that
+# converted/*.v were generated from the RTL in this checkout. When the RTL
+# changed and they were not regenerated, it stops: run convert_rtl.sh where
+# sv2v works (not the lab machines) and push. NO_PULL=1 skips the pull.
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../../.." && pwd)
 DESIGNS=${DESIGNS:-$HOME/ee477/ee477-designs-module1}
 TOP=${TOP:-mpy_core}
-RTL=${RTL:-$here/converted/$TOP.v}
-DIE=${DIE:-4000 3000}
-if [ "$TOP" = mpy_soc ]; then
-    PREFIX=${PREFIX:-upycore_soc}
-    if [ "$SOC_RTL" = converted ]; then
-        src=(--rtl "$here/converted/mpy_soc.v")
-    else
-        src=(--core-v "$here/converted/mpy_core.v")
-    fi
-    src+=(--die $DIE)
-    steps="make sram && make syn"
-else
-    PREFIX=${PREFIX:-upycore_v2}
-    src=(--rtl "$RTL")
-    steps="make syn"
-fi
 TEMPLATE=${TEMPLATE:-$DESIGNS/pow2}
 
-case "$1" in
-start)
-    shift
-    [ $# -gt 0 ] || { echo "usage: $0 start <period ns>..."; exit 1; }
+# Hash of everything converted/*.v is generated from.
+rtl_stamp() {
+    (cd "$repo" && find upycore/rtl -type f | LC_ALL=C sort |
+        xargs cat upycore/tools/mpy_dc_unit.py upycore/tools/mpy_synth.py | sha1sum | cut -d' ' -f1)
+}
+
+check_fresh() {
+    if [ -z "$NO_PULL" ]; then
+        git -C "$repo" pull --ff-only -q || echo "warning: git pull failed; using the checkout as it is"
+        # The pull may have changed this script; run the new copy.
+        if [ -z "$SWEEP_REEXEC" ]; then SWEEP_REEXEC=1 NO_PULL=1 exec "$0" "$@"; fi
+    fi
+    want=$(cat "$here/converted/RTL_STAMP" 2>/dev/null || true)
+    if [ "$want" != "$(rtl_stamp)" ]; then
+        echo "converted/*.v are older than the RTL in $repo/upycore/rtl."
+        echo "Regenerate them with convert_rtl.sh (needs sv2v) and push, then run this again."
+        exit 1
+    fi
+    echo "RTL: $(git -C "$repo" log -1 --format='%h %s' 2>/dev/null) (converted files up to date)"
+}
+
+launch() {  # launch <prefix> <steps> <periods>...
+    prefix=$1 steps=$2
+    shift 2
+    [ $# -gt 0 ] || { echo "usage: $0 start|par <period ns>..."; exit 1; }
     for p in "$@"; do
-        d=$DESIGNS/${PREFIX}_p$p
+        d=$DESIGNS/${prefix}_p$p
         python3 "$here/make_hammer_design.py" "$TEMPLATE" "$d" --top "$TOP" \
             --period "$p" "${src[@]}" --force > /dev/null
         (cd "$d" && { nohup bash -c "$steps" > syn.out 2>&1 & echo $! > syn.pid; })
         echo "started $steps at $p ns in $d (log: $d/syn.out)"
     done
+}
+
+state_of() {  # running, done or failed; done means the file $2 exists
+    if [ -f "$1/syn.pid" ] && kill -0 "$(cat "$1/syn.pid")" 2>/dev/null; then
+        echo running
+    elif [ -f "$2" ]; then
+        echo done
+    else
+        echo failed
+    fi
+}
+
+if [ "$TOP" = mpy_soc ]; then
+    syn_prefix=${PREFIX:-upycore_soc}
+    par_prefix=${PREFIX:-upycore_socpar}
+    if [ "$SOC_RTL" = converted ]; then
+        src=(--rtl "$here/converted/mpy_soc.v")
+    else
+        src=(--core-v "$here/converted/mpy_core.v")
+    fi
+    src+=(--die ${DIE:-4000 3000})
+    syn_steps="make sram && make syn"
+else
+    syn_prefix=${PREFIX:-upycore_v2}
+    par_prefix=${PREFIX:-upycore_par}
+    src=(--rtl "$here/converted/$TOP.v" --die ${DIE:-1500 1500})
+    syn_steps="make syn"
+fi
+
+case "$1" in
+rtl-stamp)
+    rtl_stamp
+    ;;
+start)
+    check_fresh "$@"
+    shift
+    launch "$syn_prefix" "$syn_steps" "$@"
+    ;;
+par)
+    check_fresh "$@"
+    shift
+    launch "$par_prefix" "$syn_steps && make par" "$@"
+    echo "place and route takes much longer than synthesis; check with: $0 par-status"
     ;;
 status)
     printf "%-22s %-8s %10s %10s %10s %12s %7s\n" folder state "slack ns" "path ns" "min ns" "area um2" macros
-    for d in "$DESIGNS"/${PREFIX}_p*; do
+    for d in "$DESIGNS"/${syn_prefix}_p*; do
         [ -d "$d" ] || continue
         p=${d##*_p}
         rpt=$d/build/syn-rundir/reports/final_time_ss_100C_1v60.setup_view.rpt
         qor=$d/build/syn-rundir/reports/final_qor.rpt
-        if [ -f "$d/syn.pid" ] && kill -0 "$(cat "$d/syn.pid")" 2>/dev/null; then
-            state=running
-        elif grep -q "Normal exit" "$d/syn.out" 2>/dev/null; then
-            state=done
-        else
-            state=failed
-        fi
+        state=$(state_of "$d" "$qor")
         slack=- path=- minp=- area=- macros=-
         net=$(ls "$d"/build/syn-rundir/*.mapped.v 2>/dev/null | head -1)
         [ "$TOP" = mpy_soc ] && [ -n "$net" ] && macros=$(grep -c fakeram_d16384_w36 "$net")
@@ -76,14 +127,37 @@ status)
         printf "%-22s %-8s %10s %10s %10s %12s %7s\n" "${d##*/}" "$state" "$slack" "$path" "$minp" "$area" "$macros"
     done
     if [ "$TOP" = mpy_soc ]; then
-        lef=$(find "$DESIGNS"/${PREFIX}_p* -name 'fakeram_d16384_w36.lef' 2>/dev/null | head -1)
+        lef=$(find "$DESIGNS"/${syn_prefix}_p* -name 'fakeram_d16384_w36.lef' 2>/dev/null | head -1)
         [ -n "$lef" ] && echo "SRAM macro footprint (um): $(grep -m1 -o 'SIZE.*' "$lef")"
     fi
     echo "min ns = period - slack: the shortest clock that run's netlist would meet."
     echo "Critical path of one run: awk '/Startpoint/{n++} n==1' <folder>/build/syn-rundir/reports/final_time_ss_100C_1v60.setup_view.rpt | less"
     ;;
+par-status)
+    printf "%-22s %-8s %10s %10s %14s %s\n" folder state "slack ns" "min ns" "power" "reports"
+    for d in "$DESIGNS"/${par_prefix}_p*; do
+        [ -d "$d" ] || continue
+        p=${d##*_p}
+        run=$d/build/par-rundir
+        tim=$run/timingReports/${TOP}_postRoute_all.tarpt.gz
+        pwr=$run/${TOP}_power.rpt
+        state=$(state_of "$d" "$pwr")
+        slack=- minp=- power=-
+        if [ -f "$tim" ]; then
+            # Innovus: "= Slack Time   -0.123" on the worst path, in ns.
+            slack=$(zcat "$tim" | awk '/Slack Time/{print $NF; exit}')
+            [ -n "$slack" ] && minp=$(awk -v p="$p" -v s="$slack" 'BEGIN{printf "%.2f", p - s}')
+        fi
+        [ -f "$pwr" ] && power=$(awk -F: '/Total Power/{gsub(/^ +/, "", $2); print $2; exit}' "$pwr")
+        printf "%-22s %-8s %10s %10s %14s %s\n" "${d##*/}" "$state" "${slack:--}" "$minp" "${power:--}" \
+            "$( [ -d "$run" ] && echo "${run#$HOME/}" || echo -)"
+    done
+    echo "Area: <reports>/${TOP}_area.rpt (first row is the whole design). Power: <reports>/${TOP}_power.rpt."
+    echo "Worst path: zcat <reports>/timingReports/${TOP}_postRoute_all.tarpt.gz | less"
+    echo "A failed run: tail -50 <folder>/syn.out"
+    ;;
 *)
-    sed -n '2,17p' "$0"
+    sed -n '2,26p' "$0"
     exit 1
     ;;
 esac
