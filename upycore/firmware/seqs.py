@@ -89,6 +89,9 @@ def list__copy(self):
 
 
 def list__count(self, value):
+    result = _seqscan(_ld(self, 2), 0, _ld(self, 0), value, 0)
+    if result >= 0:
+        return result
     n = 0
     for a in self:
         if a == value:
@@ -111,6 +114,13 @@ def list__index(self, value, start=0, stop=_MISSING):
     elif stop < 0:
         stop += n
     items = _ld(self, 2)
+    limit = stop if stop < n else n
+    if start < limit:
+        result = _seqscan(items, start, limit - start, value, 1)
+        if result >= 0:
+            return start + result
+        if result == -1:
+            start = limit
     i = start
     while i < stop and i < n:
         if _ld(items, i) == value:
@@ -161,6 +171,8 @@ def list__remove(self, value):
 
 def list__reverse(self):
     items = _ld(self, 2)
+    if _seqreverse(items, _ld(self, 0)):
+        return None
     a = 0
     b = _ld(self, 0) - 1
     while a < b:
@@ -222,6 +234,9 @@ def tuple____new__(cls, *args):
 
 
 def tuple__count(self, value):
+    result = _seqscan(self, 1, _ld(self, 0), value, 0)
+    if result >= 0:
+        return result
     n = 0
     for a in self:
         if a == value:
@@ -245,6 +260,13 @@ def tuple__index(self, value, start=0, stop=_MISSING):
             stop = 0
     elif stop > n:
         stop = n
+    limit = stop if stop < n else n
+    if start < limit:
+        result = _seqscan(self, 1 + start, limit - start, value, 1)
+        if result >= 0:
+            return start + result
+        if result == -1:
+            start = limit
     i = start
     while i < stop and i < n:
         if _ld(self, 1 + i) == value:

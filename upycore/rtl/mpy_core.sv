@@ -107,9 +107,18 @@ module mpy_core
     input  logic [31:0] gc_total_i,
     input  logic [31:0] gc_collections_i,
 
+    output logic mb_valid_o,
+    input logic mb_ready_i, mb_return_i, mb_ok_i,
+    input logic [31:0] mb_used_i,
+    output logic [2:0] mb_op_o,
+    output logic mb_set_o,
+    output logic [31:0] mb_src_o, mb_sn_o, mb_dst_o, mb_dn_o, mb_used_o,
+    output logic [31:0] mb_header_o, mb_source_header_o, mb_hashes_o,
+    output logic [31:0] mb_qcount_o, mb_qbase_o, mb_qext_o,
     output logic        ca_valid_o,
     input  logic        ca_ready_i,
     output logic [31:0] ca_dst_o,
+    output logic ca_byte_o,ca_reverse_o,
     output logic [31:0] ca_src_o,
     output logic [31:0] ca_n_o,
     input  logic        ca_idle_i,
@@ -566,6 +575,10 @@ module mpy_core
         S_N_FTOI_B,
         S_N_FTOI_W,
         S_N_HASH,
+        S_NS_START,S_NS_N,S_NS_MODE, S_NR_N,S_NR_SHIP, S_MH_TAB, S_MH_N, S_MH_HASH, S_MH_USED,
+        S_MB_SRC, S_MB_OP, S_MB_D0, S_MB_D1, S_MB_D2, S_MB_FLAGS,
+        S_MB_S1, S_MB_S2, S_MB_SHIP, S_MB_WAIT,
+        S_RH_MB, S_RH_MBW,
         S_N_IN_D,
         S_N_IN_LD,
         S_N_IN_LD2,
@@ -1290,7 +1303,7 @@ module mpy_core
     endtask
 `ifndef SYNTHESIS
     initial begin
-        int grow_v, adapt_v, lc_n_v, lc_wb_v, lc_dm_v, ca_v, aalu_v;
+        int grow_v, adapt_v, lc_n_v, lc_wb_v, lc_dm_v, ca_v, aalu_v, bulk_v;
         grow_v = GROW_CHUNK;
         adapt_v = GROW_ADAPT;
         lc_n_v = LC_N;
@@ -1312,6 +1325,8 @@ module mpy_core
         cfg_lc_n = lc_n_v[3:0];
         cfg_lc_wb = (lc_wb_v != 0);
         cfg_lc_dm = (lc_dm_v != 0);
+        if (!$value$plusargs("BULK=%d", bulk_v)) bulk_v = 1;
+        cfg_bulk = (bulk_v != 0);
         cfg_ca = (ca_v != 0);
         cfg_aalu = (aalu_v != 0);
     end
@@ -1323,6 +1338,7 @@ module mpy_core
     assign cfg_lc_n = LC_N[3:0];
     assign cfg_lc_wb = (LC_WB != 0);
     assign cfg_lc_dm = 1'b0;
+    assign cfg_bulk = 1'b1;
     assign cfg_ca = (CA_EN != 0);
     assign cfg_aalu = (AALU != 0);
 `endif
@@ -1398,9 +1414,13 @@ module mpy_core
 
     // Accelerator command, a one-cycle pulse. A ship still landing counts
     // as a full queue, so two ships one cycle apart cannot overrun it.
+    logic cfg_bulk;
     logic        ca_valid;
     logic [31:0] ca_dst, ca_src, ca_n;
     logic        ca_ok;
+    assign mb_qcount_o = h_nq;
+    assign mb_qbase_o = h_qdesc;
+    assign mb_qext_o = h_qext;
     assign ca_valid_o = ca_valid;
     assign ca_dst_o = ca_dst;
     assign ca_src_o = ca_src;
@@ -1543,7 +1563,7 @@ module mpy_core
     endtask
     // Copy n words from src to dst on the accelerator. The caller checked ca_ok.
     task automatic ca_ship(input logic [31:0] dst, input logic [31:0] src, input logic [31:0] n);
-        ca_valid <= 1'b1; ca_dst <= dst; ca_src <= src; ca_n <= n;
+        ca_byte_o<=0;ca_reverse_o<=0; ca_valid <= 1'b1; ca_dst <= dst; ca_src <= src; ca_n <= n;
     endtask
 
     // ------------------------------------------------------------------
@@ -1561,7 +1581,10 @@ module mpy_core
             m_addr <= 32'd0; m_wdata <= 32'd0; m_wtag <= 4'd0;
             gc_alloc_req <= 1'b0; gc_collect_req <= 1'b0;
             alu_start <= 1'b0; hm_start <= 1'b0; aalu_pend <= 1'b0; aalu_ready <= 1'b0; aalu_slot <= 4'd0; aalu_ret <= S_FETCH;
-            ca_valid <= 1'b0; ca_dst <= 32'd0; ca_src <= 32'd0; ca_n <= 32'd0;
+            mb_valid_o <= 0; mb_op_o <= 0; mb_set_o <= 0;
+            mb_src_o <= 0; mb_sn_o <= 0; mb_dst_o <= 0; mb_dn_o <= 0; mb_used_o <= 0;
+            mb_header_o <= 0; mb_source_header_o <= 0; mb_hashes_o <= 0;
+            ca_byte_o<=0;ca_reverse_o<=0; ca_valid <= 1'b0; ca_dst <= 32'd0; ca_src <= 32'd0; ca_n <= 32'd0;
             halted <= 1'b0; hcode <= 4'd0; hval <= 32'd0;
             cyc <= 32'd0; nops <= 32'd0; trace <= 1'b0;
             fe_flush <= 1'b0;
@@ -1603,6 +1626,7 @@ module mpy_core
             alu_start <= 1'b0;
             hm_start <= 1'b0;
             ca_valid <= 1'b0;
+            mb_valid_o <= 1'b0;
             trace <= 1'b0;
             if (!halted) cyc <= cyc + 32'd1;
             // A spill or a reload moves sp without a push or a pop.
@@ -3631,6 +3655,29 @@ module mpy_core
                             rd(ab_ptr(ab_lo + 8'd1), S_NAT_GR1);
                         end
                     ABI_N_BCMP: begin si_v <= mv; gosub(S_SINFO, S_N_BCMP1); end
+                    ABI_N_SEQSCAN: if(!cfg_ca || !cfg_bulk || v0!=5)deliver(vint(32'hfffffffe),crk);
+                        else begin
+                            mb_op_o<=7;mb_set_o<=1;mb_src_o<=ab_ptr(ab_lo+8'd3);mb_sn_o<=1;
+                            mb_header_o<=0;mb_source_header_o<=0;mb_hashes_o<=0;
+                            rd(ab_ptr(ab_lo+8'd1),S_NS_START);
+                        end
+                    ABI_N_SEQREVERSE: if(!cfg_ca || !cfg_bulk || v0!=2)deliver(VFALSE,crk);
+                        else rd(ab_ptr(ab_lo+8'd1),S_NR_N);
+                    ABI_N_MAPINSERT_HASHED: if (!cfg_ca || !cfg_bulk || v0 != 6 ||
+                        !(is_mut(mv, ABI_MUT_DICT) || is_mut(mv, ABI_MUT_SET))) deliver(VFALSE, crk);
+                        else begin
+                            mb_header_o<=adr(mv);mb_set_o<=is_mut(mv,ABI_MUT_SET);mb_op_o<=0;
+                            mb_source_header_o<=0;mb_src_o<=ab_ptr(ab_lo+8'd3);mb_sn_o<=1;
+                            mb_hashes_o<=ab_ptr(ab_lo+8'd5);
+                            rd(ab_ptr(ab_lo+8'd1),S_MH_TAB);
+                        end
+                    ABI_N_MAPBULK, ABI_N_MAPRELATION: if (!cfg_ca || !cfg_bulk || v0 != 3 || tg(mv) != ABI_TAG_MUT ||
+                         !(is_mut(mv, ABI_MUT_DICT) || is_mut(mv, ABI_MUT_SET))) deliver(nid==ABI_N_MAPRELATION ? vint(32'hffffffff) : VFALSE, crk);
+                         else begin
+                             mb_hashes_o <= 0;
+                             mb_header_o <= adr(mv); mb_set_o <= is_mut(mv, ABI_MUT_SET);
+                             rd(ab_ptr(ab_lo + 8'd1), S_MB_SRC);
+                         end
                     ABI_N_HASH: begin hk <= mv; gosub(S_HASH, S_N_HASH); end
                     ABI_N_DATA: begin si_v <= mv; gosub(S_DADDR, S_N_DATA); end
                     ABI_N_FGET: if (fprev == 32'd0) deliver(VNULL, crk);
@@ -3658,6 +3705,45 @@ module mpy_core
                         else begin t[0] <= mv; alloc(32'd3, S_N_OBJ); end
                     default: st <= S_NAT_FB;
                 endcase
+            end
+            S_NS_START:if(tg(mv)!=ABI_TAG_INT || mv[31])deliver(vint(32'hfffffffe),crk);
+                else begin mb_dst_o<=padr(ab_q)+(mv[31:0]<<2);rd(ab_ptr(ab_lo+8'd2),S_NS_N);end
+            S_NS_N:if(tg(mv)!=ABI_TAG_INT || mv[31])deliver(vint(32'hfffffffe),crk);
+                else begin mb_dn_o<=mv[31:0];rd(ab_ptr(ab_lo+8'd4),S_NS_MODE);end
+            S_NS_MODE:begin mb_used_o<=mv[31:0];st<=S_MB_SHIP;end
+            S_NR_N:begin x0<=mv[31:0];st<=S_NR_SHIP;end
+            S_NR_SHIP:if(x0<2)deliver(VTRUE,crk);
+                else if(ca_ok)begin
+                    ca_ship(padr(ab_q),padr(ab_q),x0<<2);ca_byte_o<=1;ca_reverse_o<=1;
+                    deliver(VTRUE,crk);
+                end
+            S_MH_TAB:begin mb_dst_o<=padr(mv);rd(ab_ptr(ab_lo+8'd2),S_MH_N);end
+            S_MH_N:if(tg(mv)!=ABI_TAG_INT || mv[31:0]==0 || mv[31])deliver(VFALSE,crk);
+                   else begin mb_dn_o<=mv[31:0];rd(ab_ptr(ab_lo+8'd5),S_MH_HASH);end
+            S_MH_HASH:if(tg(mv)!=ABI_TAG_INT)deliver(VFALSE,crk);else rd(mb_header_o,S_MH_USED);
+            S_MH_USED:begin mb_used_o<=md;st<=S_MB_SHIP;end
+            S_MB_SRC: if (tg(mv) != ABI_TAG_MUT ||
+                              !(mb_set_o ? is_mut(mv, ABI_MUT_SET) : is_mut(mv, ABI_MUT_DICT))) deliver(nid==ABI_N_MAPRELATION ? vint(32'hffffffff) : VFALSE,crk);
+                       else begin mb_source_header_o <= adr(mv); rd(ab_ptr(ab_lo + 8'd2), S_MB_OP); end
+            S_MB_OP: if (tg(mv) != ABI_TAG_INT || (nid==ABI_N_MAPRELATION ? (mv[31:0]<5 || mv[31:0]>6) : (mv[31:0]<1 || mv[31:0]>4)) || (!mb_set_o && mv[31:0] != 1)) deliver(nid==ABI_N_MAPRELATION ? vint(32'hffffffff) : VFALSE,crk);
+                     else begin mb_op_o <= mv[2:0]; rd(mb_header_o,S_MB_D0); end
+            S_MB_D0: begin mb_used_o<=md; rd(mb_header_o+4,S_MB_D1); end
+            S_MB_D1: begin mb_dn_o<=md; rd(mb_header_o+8,S_MB_D2); end
+            S_MB_D2: begin mb_dst_o<=md; rd(mb_header_o+12,S_MB_FLAGS); end
+            S_MB_FLAGS: if (mb_op_o<5 && (md & (mb_set_o ? ABI_SET_FLAG_FROZEN : ABI_DICT_FLAG_ROM)) != 0) deliver(nid==ABI_N_MAPRELATION ? vint(32'hffffffff) : VFALSE,crk);
+                        else rd(mb_source_header_o+4,S_MB_S1);
+            S_MB_S1: begin mb_sn_o<=md; rd(mb_source_header_o+8,S_MB_S2); end
+            S_MB_S2: begin mb_src_o<=md; st<=S_MB_SHIP; end
+            S_MB_SHIP: if (mb_ready_i) begin mb_valid_o<=1;st<=S_MB_WAIT;end
+            S_MB_WAIT: if (mb_return_i) deliver(nid==ABI_N_SEQSCAN ? vint(mb_ok_i ? mb_used_i : 32'hfffffffe) : nid==ABI_N_MAPRELATION ? vint(mb_ok_i ? mb_used_i : 32'hffffffff) : (mb_ok_i ? VTRUE : VFALSE),crk);
+            S_RH_MB: if (mb_ready_i) begin
+                mb_valid_o<=1;mb_op_o<=0;mb_set_o<=lk_set;
+                mb_src_o<=sA[6];mb_sn_o<=sA[5];mb_dst_o<=`rh_tab;mb_dn_o<=`rh_alloc;
+                mb_used_o<=0;mb_header_o<=0;mb_hashes_o<=0;mb_source_header_o<=adr(t[4]);st<=S_RH_MBW;
+            end
+            S_RH_MBW: if (mb_return_i) begin
+                if(mb_ok_i) begin `rh_used<=mb_used_i;`rh_i<=sA[5];st<=S_RH_L;end
+                else begin lk_cx<=1;ret();end
             end
             S_NAT_ISI: if (tg(mv) != ABI_TAG_OBJECT) st <= S_NAT_FB;
                        else begin ab_s[0] <= mv; rd(adr(mv), S_N_ISI); end
@@ -3773,6 +3859,12 @@ module mpy_core
                 `la_i <= 32'd0; st <= S_N_BC;
             end
             S_N_BC: if (`la_i == `la_len) deliver(VNONE, crk);
+                    else if(cfg_ca && cfg_bulk)begin
+                        if(ca_ok)begin
+                            ca_ship(`la_new,`la_items,`la_len);ca_byte_o<=1;
+                            deliver(VNONE,crk);
+                        end
+                    end
                     else begin
                         v2 = b1 ? (`la_items + `la_len - 32'd1 - `la_i) : (`la_items + `la_i);
                         x3 <= v2; rd({v2[31:2], 2'b00}, S_N_BC3);
@@ -4390,7 +4482,7 @@ module mpy_core
             end
             S_RH_A: begin `rh_tab <= al_a; `rh_i <= 32'd0; `rh_used <= 32'd0; rd(adr(t[4]) + 4, S_RH_A2); end
             S_RH_A2: begin sA[5] <= md; rd(adr(t[4]) + 8, S_RH_A3); end
-            S_RH_A3: begin sA[6] <= md; st <= S_RH_L; end
+            S_RH_A3: begin sA[6] <= md; st <= cfg_ca && cfg_bulk && sA[5] != 0 ? S_RH_MB : S_RH_L; end
             S_RH_L: if (`rh_i == sA[5]) wr(adr(t[4]) + 4, vint(`rh_alloc), S_RH_F1);
                     else rd(sA[6] + (lk_set ? (`rh_i << 2) : (`rh_i << 3)), S_RH_K);
             S_RH_K: if (mv == VNULL || mv == VTOMB) begin `rh_i <= `rh_i + 32'd1; st <= S_RH_L; end

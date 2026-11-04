@@ -1,0 +1,191 @@
+{
+  "status": "expanded collection paths; physical PPA blocked on lab tools and PDK; guarded software fallbacks retained",
+  "baseline_ref": "839b0114982749883f9a4e0fbdf3861182868055",
+  "comparison": "prior_rtl_bulk uses the exact prior RTL and firmware in an isolated checkout; historical_off/copy columns use historical firmware on current RTL; all AALU=1; default TYPE_CACHE=0",
+  "cycles": [
+    {
+      "program": "set_relations.py",
+      "compiler": "mpy-cross",
+      "off": 17377357,
+      "copy_only": 17376921,
+      "bulk": 14422223,
+      "historical_ref": "839b0114982749883f9a4e0fbdf3861182868055",
+      "historical_off": 17330803,
+      "historical_copy": 17330367,
+      "bulk_vs_copy": -0.1700357618015298,
+      "prior_rtl_bulk": 14637909,
+      "bulk_vs_prior_rtl": -0.014734754806851158
+    },
+    {
+      "program": "sequence_ops.py",
+      "compiler": "mpy-cross",
+      "off": 6667410,
+      "copy_only": 6638272,
+      "bulk": 6149319,
+      "historical_ref": "839b0114982749883f9a4e0fbdf3861182868055",
+      "historical_off": 6502456,
+      "historical_copy": 6473318,
+      "bulk_vs_copy": -0.07365666848240027,
+      "prior_rtl_bulk": 6472750,
+      "bulk_vs_prior_rtl": -0.04996809702213123
+    },
+    {
+      "program": "byte_moves.py",
+      "compiler": "mpy-cross",
+      "off": 9661736,
+      "copy_only": 9592491,
+      "bulk": 9427276,
+      "historical_ref": "839b0114982749883f9a4e0fbdf3861182868055",
+      "historical_off": 9660831,
+      "historical_copy": 9591586,
+      "bulk_vs_copy": -0.017223367736284523,
+      "prior_rtl_bulk": 9591308,
+      "bulk_vs_prior_rtl": -0.017102151239434704
+    }
+  ],
+  "optional_type_cache": {
+    "default_enabled": false,
+    "generic_cells_added": 3109,
+    "set_relations_cycles": 14415533,
+    "set_relations_cycles_saved": 6690,
+    "decision": "disable by default: 6.7% generic-cell cost for 0.046% cycle reduction on this workload"
+  },
+  "synthesis": {
+    "tool": "Yosys 0.70",
+    "flow": "read_slang; synth -noabc -flatten; stat; ltp -noff",
+    "top": "mpy_collection",
+    "generic_cells": 46162,
+    "logic_levels": 76,
+    "cache_enabled_generic_cells": 49271,
+    "physical_ppa": false
+  },
+  "validation": {
+    "containers_and_strings_per_compiler": 91,
+    "compilers": [
+      "mpy-cross",
+      "mpyc"
+    ],
+    "targeted_hash_and_gc": 3,
+    "manifest_checks": 13,
+    "byte_reverse_unit_checks": 675,
+    "map_unit_checks": 260,
+    "cache_variant_checks": 267,
+    "key_equal_checks": 1415,
+    "rehash_stream_checks": 18,
+    "mixed_queue_cycles": 2842
+  },
+  "previous_queue_implementation": {
+    "status": "unified queue, pipelined rehash, builtin equality and ordered prepared hashes; remaining scope in collection_accelerator.md",
+    "baseline_ref": "59143bb5d9eb7abe7e98659dae673b7832321644",
+    "comparison": "same simulator; historical columns use original firmware and BULK=0; AALU=1 in all configurations",
+    "cycles": [
+      {
+        "program": "bulk_maps.py",
+        "off": 3670450,
+        "copy_only": 3670043,
+        "bulk": 1439340,
+        "historical_ref": "59143bb5d9eb7abe7e98659dae673b7832321644",
+        "historical_off": 3635933,
+        "historical_copy": 3635526,
+        "bulk_vs_copy": -0.6078138594016473,
+        "compiler": "mpy-cross"
+      },
+      {
+        "program": "dict.py",
+        "off": 306291,
+        "copy_only": 293889,
+        "bulk": 277648,
+        "historical_ref": "59143bb5d9eb7abe7e98659dae673b7832321644",
+        "historical_off": 305640,
+        "historical_copy": 293238,
+        "bulk_vs_copy": -0.05526236095940984,
+        "compiler": "mpy-cross"
+      },
+      {
+        "program": "bulk_extended_keys.py",
+        "off": 7103823,
+        "copy_only": 7096414,
+        "bulk": 6705074,
+        "historical_ref": "59143bb5d9eb7abe7e98659dae673b7832321644",
+        "historical_off": 7088263,
+        "historical_copy": 7080854,
+        "bulk_vs_copy": -0.05514616255477767,
+        "compiler": "mpy-cross"
+      }
+    ],
+    "mpyc_callback_cycles": [
+      {
+        "program": "bulk_extended_keys.py",
+        "compiler": "mpyc",
+        "off": 7103823,
+        "copy_only": 7096414,
+        "bulk": 6705074,
+        "bulk_vs_copy": -0.05514616255477767
+      }
+    ],
+    "synthesis": {
+      "tool": "Yosys 0.70",
+      "flow": "read_slang; synth -noabc -flatten; stat; ltp -noff",
+      "top": "mpy_collection",
+      "generic_cells": 40439,
+      "logic_levels": 76,
+      "physical_ppa": false
+    },
+    "unit_tests": {
+      "key_equal_checks": 1415,
+      "rehash_stream_checks": 18,
+      "rehash_stream_cycles": 24277,
+      "rehash_serial_cycles": 30711,
+      "rehash_peak_inflight": 3,
+      "map_engine_checks": 163,
+      "collection_cycles": 2778,
+      "bulk_cycles": 678,
+      "copy_cycles": 43325
+    },
+    "previous_prototype": {
+      "status": "prototype; not full paper implementation",
+      "baseline_ref": "59143bb5d9eb7abe7e98659dae673b7832321644",
+      "comparison": "same simulator; historical columns use original firmware and BULK=0; AALU=1 in all configurations",
+      "cycles": [
+        {
+          "program": "dict.py",
+          "off": 306291,
+          "copy_only": 293889,
+          "bulk": 292322,
+          "historical_ref": "59143bb5d9eb7abe7e98659dae673b7832321644",
+          "historical_off": 305640,
+          "historical_copy": 293238,
+          "bulk_vs_copy": -0.005331945054085074
+        },
+        {
+          "program": "bulk_maps.py",
+          "off": 3648573,
+          "copy_only": 3648166,
+          "bulk": 1608098,
+          "historical_ref": "59143bb5d9eb7abe7e98659dae673b7832321644",
+          "historical_off": 3635933,
+          "historical_copy": 3635526,
+          "bulk_vs_copy": -0.5592037204447385
+        }
+      ],
+      "synthesis": {
+        "top": "mpy_bulk",
+        "tool": "yowasp-yosys 0.70",
+        "recipe": "read_slang -j 1 --single-unit; synth -noabc -flatten; stat; ltp -noff",
+        "generic_cells": 17180,
+        "logic_levels": 76,
+        "physical_ppa": false,
+        "hash_depth": 1
+      },
+      "validation": {
+        "map_unit_cases": 163,
+        "bulk_scoreboard_unit": "pass",
+        "existing_copy_unit": "pass",
+        "container_programs": 60,
+        "bulk_maps_mpy_cross": "pass: 14284022 cycles",
+        "bulk_maps_upy2": "pass: 14284022 cycles",
+        "broader_suite": "incomplete; 82 additional passes logged; gc_list_shrink_reclaims MemoryError also reproduced with CA=0"
+      }
+    }
+  }
+}

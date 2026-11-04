@@ -304,6 +304,11 @@ NATIVES = [
     "list.append", "object.__init__", "BaseException.__init__",
     # constructors
     "new.range", "new.object",
+    "_mapbulk",  # _mapbulk(dst, src, op): admitted bulk table operation, or False
+    "_mapinsert_hashed",  # (collection, captured_table, captured_alloc, key, value, hash)
+    "_maprelation",  # (a, b, op): 0/1 result, -1 requests software fallback
+    "_seqreverse",  # (items, count): queued tagged-word reversal, or False
+    "_seqscan",  # (items, start, count, value, find_first): result, -2 fallback
 ]
 NATIVE_ID = {name: i for i, name in enumerate(NATIVES)}
 
