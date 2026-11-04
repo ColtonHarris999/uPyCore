@@ -271,13 +271,15 @@ override the defaults (`RTL` is gone: the core comes from
 total power, and where its area, power and timing reports are.
 
 `sweep.sh collect` gathers the finished `par` runs into one file,
-`~/par_<prefix>.txt`: constraints, the flow's timing reports (50 paths
+`~/par_data/par_<prefix>.txt` (set `PAR_DATA` to use another folder): constraints, the flow's timing reports (50 paths
 each), area and power by module, the Innovus log's density and clock lines,
 and Genus's QoR. For more, first run
 `source ~/upycore/upycore/synth/hammer/deep_reports.tcl` in a run's Innovus
-console (`make open-chip`). It writes `~/deep_<folder>/` with 3000 setup and
+console (`make open-chip`). It writes `~/par_data/<folder>/deep/` with 3000 setup and
 register-to-register paths, hold, DRC, connectivity and clock-tree reports,
-and `collect` then adds those, grouped by register bank. `DESIGN_ARGS`
+and `collect` then adds those, grouped by register bank. `collect` also
+copies each run's reports to `~/par_data/<folder>/flow/`, so they outlive
+the run folder. `DESIGN_ARGS`
 passes options to `make_hammer_design.py`, for example
 `DESIGN_ARGS=--no-feedthrough` so input-to-output paths are not timed.
 

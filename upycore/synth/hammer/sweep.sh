@@ -2,9 +2,10 @@
 # Run several clock periods of the class flow at once, then list the results.
 # Runs survive logging out (nohup), so no tmux is needed.
 #
-#   sweep.sh collect [periods]  one file ~/par_<prefix>.txt with the timing, area,
-#                               power, constraints and logs of done par runs, plus
-#                               ~/deep_<folder>/ from deep_reports.tcl when present
+#   sweep.sh collect [periods]  one file ~/par_data/par_<prefix>.txt with the timing,
+#                               area, power, constraints and logs of done par runs (plus
+#                               deep_reports.tcl output), and a copy of each run's
+#                               reports in ~/par_data/<folder>/ (PAR_DATA moves it)
 #   sweep.sh start 12 10 8      synthesis only: one folder and one `make syn` per period
 #   sweep.sh par 20 15          synthesis, then place and route (`make par`)
 #   sweep.sh status             synthesis results of the `start` folders
@@ -171,9 +172,12 @@ par-status)
     echo "A failed run: tail -50 <folder>/syn.out"
     ;;
 collect)
+    set +e   # missing reports are normal here; keep going
     # One text file with what an RTL timing review needs from finished par runs.
     # Run deep_reports.tcl in a run's Innovus first for 3000 paths instead of 50.
-    out=$HOME/par_${par_prefix}.txt
+    data=${PAR_DATA:-$HOME/par_data}
+    mkdir -p "$data"
+    out=$data/par_${par_prefix}.txt
     shift
     paths() { awk '/Startpoint/{s=$NF} /Endpoint/{e=$NF} /Slack:=/{print $2, s, e}'; }
     full() { awk -v k="$1" '/^ *Path [0-9]+:/{n++} n>=1 && n<=k'; }
@@ -194,7 +198,15 @@ collect)
             if [ $# -gt 0 ] && ! printf '%s\n' "$@" | grep -qx "$p"; then continue; fi
             run=$d/build/par-rundir
             [ -f "$run/${TOP}_power.rpt" ] || continue
-            deep=$HOME/deep_${d##*/}
+            keep=$data/${d##*/}
+            deep=$keep/deep
+            # Keep a copy of the run's reports, so they outlive the run folder.
+            mkdir -p "$keep/flow"
+            cp -p "$run/${TOP}_power.rpt" "$run/${TOP}_area.rpt" "$keep/flow/" 2>/dev/null || true
+            cp -rp "$run/timingReports" "$keep/flow/" 2>/dev/null || true
+            find "$d" -maxdepth 3 -name '*.sdc' -exec cp -p {} "$keep/flow/" \; 2>/dev/null || true
+            cp -rp "$d/build/syn-rundir/reports" "$keep/flow/syn_reports" 2>/dev/null || true
+            if [ -f "$d/syn.out" ]; then tail -200 "$d/syn.out" > "$keep/flow/syn.out.tail"; fi
             echo; echo "==================== ${d##*/} ===================="
             echo; echo "== constraints (sdc in the run folder)"
             find "$d" -maxdepth 3 -name '*.sdc' -exec sh -c 'echo "-- $1"; grep -v "^ *#" "$1" | grep -v "^ *$"' _ {} \; | head -80
@@ -226,9 +238,7 @@ collect)
                 f=$run/timingReports/${TOP}_postRoute_reg2reg.tarpt.gz
                 [ -f "$f" ] && { echo; echo "== reg2reg: worst 5 paths in full"; zcat "$f" | full 5; }
                 echo; echo "(no $deep: source deep_reports.tcl in this run's Innovus for 3000 paths, hold, DRC, clock tree)"
-                for f in "$HOME"/drc_${d##*/}.rpt; do
-                    [ -f "$f" ] && { echo; echo "== DRC summary"; tail -25 "$f"; }
-                done
+                [ -f "$keep/drc.rpt" ] && { echo; echo "== DRC summary"; tail -25 "$keep/drc.rpt"; }
             fi
             echo; echo "== area by module"; head -120 "$run/${TOP}_area.rpt"
             echo; echo "== power"; head -200 "$run/${TOP}_power.rpt"
@@ -246,6 +256,7 @@ collect)
         done
     } > "$out" 2>&1
     echo "wrote $out ($(wc -c < "$out") bytes); upload that one file"
+    echo "copies of each run's reports are in $data/<folder>/flow (deep reports in .../deep)"
     ;;
 *)
     sed -n '2,30p' "$0"

@@ -1,10 +1,12 @@
 # Extra post-route reports for an RTL timing review. In the Innovus console
 # of a finished run (make open-chip in its folder):
 #     source ~/upycore/upycore/synth/hammer/deep_reports.tcl
-# It writes ~/deep_<folder>/ (a few minutes); sweep.sh collect then folds
-# those files into ~/par_<prefix>.txt. A command this Innovus does not have
+# It writes ~/par_data/<folder>/deep/ (a few minutes; PAR_DATA moves
+# ~/par_data); sweep.sh collect then folds those files into
+# ~/par_data/par_<prefix>.txt. A command this Innovus does not have
 # is skipped and noted in <name>.err; the rest still run.
-set deep_dir $env(HOME)/deep_[file tail [file dirname [file dirname [file normalize [pwd]]]]]
+if {[info exists env(PAR_DATA)]} { set deep_root $env(PAR_DATA) } else { set deep_root $env(HOME)/par_data }
+set deep_dir $deep_root/[file tail [file dirname [file dirname [file normalize [pwd]]]]]/deep
 file mkdir $deep_dir
 proc deep_try {name cmd} {
     global deep_dir
