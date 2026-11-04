@@ -181,7 +181,7 @@ module upycore_fpu #(
     logic        a_nan, b_nan, a_inf, b_inf, a_zero, b_zero, b_int;
     logic        a_abs_one, a_abs_gt_one;
     logic        b_odd, b_gt0, b_lt0;
-    logic [63:0] a_abs, b_trunc_int;
+    logic [63:0] a_abs;
     logic        b_trunc_ok;
     logic [63:0] br_abs, bi_abs;
     logic [3:0]  cmp_rb;                   // |br| vs |bi|
@@ -195,7 +195,7 @@ module upycore_fpu #(
     assign a_abs  = {1'b0, ar[62:0]};
     assign a_abs_one    = (a_abs == UPY_F64_ONE);
     assign a_abs_gt_one = upycore_f64_gt(a_abs, UPY_F64_ONE);
-    assign b_int  = upycore_f64_is_finite(br) && (upycore_f64_floor(br) == br);
+    assign b_int  = upycore_f64_is_integer(br);
     assign b_odd  = upycore_f64_is_odd_integer(br);
     assign b_gt0  = upycore_f64_gt(br, UPY_F64_PZERO);
     assign b_lt0  = upycore_f64_lt_zero(br);
@@ -257,10 +257,17 @@ module upycore_fpu #(
 
     logic [63:0] b_trunc_abs;
     logic        pow_n_small;
-    always_comb begin
-        b_trunc_ok = upycore_float_trunc_int64(br, b_trunc_int);
-    end
-    assign b_trunc_abs = b_trunc_int[63] ? (~b_trunc_int + 64'd1) : b_trunc_int;
+    logic [10:0] b_uexp;
+    logic [63:0] b_sig;
+    // Exponent magnitude directly: converting to signed and taking abs
+    // would put two dependent 64-bit negations in the accept path.
+    assign b_uexp = br[62:52] - 11'd1023;
+    assign b_sig = {11'd0, 1'b1, br[51:0]};
+    assign b_trunc_ok = (br[62:52] != 11'h7ff) &&
+                        ((br[62:52] < 11'd1023) || (b_uexp < 11'd63));
+    assign b_trunc_abs = !b_trunc_ok || (br[62:52] < 11'd1023) ? 64'd0 :
+                         (b_uexp < 11'd52) ? b_sig >> (11'd52 - b_uexp) :
+                                            b_sig << (b_uexp - 11'd52);
     assign pow_n_small = (b_trunc_abs <= 64'(POW_CHAIN_MAX));
 
     always_comb begin

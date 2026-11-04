@@ -1,13 +1,14 @@
 `include "upycore_defs.svh"
 
-// Signed 64 x 64 -> 128 integer multiplier, STEP multiplier bits per clock
-// (64/STEP + 1 cycles from accept to done_o; 5 cycles at the default
-// STEP = 16).  Each cycle multiplies the full 64-bit multiplicand by one
-// STEP-bit chunk of the multiplier and folds it into a shift-right
-// accumulator, so the per-cycle datapath is one 65 x (STEP+1) signed
-// multiply-accumulate.  The multiplier is treated as unsigned chunks with
-// the top chunk signed, which makes the running sum the exact signed
-// product without a final correction step.
+// Signed 64 x 64 -> 128 integer multiplier, STEP multiplier bits per chunk.
+// Accept loads the operands; each of 64/STEP chunks crosses two stages:
+//   product: two independent 33 x (STEP+1) signed limb products
+//   accumulate: carry-save merge with the shifted accumulator, then one add
+// There is no combinational path through a multiply AND an accumulator add,
+// and no external operand/power mux in front of a multiply on accept.
+// The top multiplier chunk is signed; all other chunks are unsigned.
+// Products are independent of the accumulator, so the two stages overlap:
+// one chunk per clock, result 64/STEP + 1 clocks after accept (5 at STEP=16).
 //
 // Handshake: see upycore_umul_seq.sv (level start_i, one-cycle done_o,
 // withdrawing start_i aborts).  stall_o is start_i && !done_o, so the
@@ -29,7 +30,7 @@ module upycore_mul #(
 
     localparam int NSTEP = 64 / STEP;
     localparam int ACC_W = 64 + STEP + 2;
-    localparam int CNT_W = (NSTEP > 1) ? $clog2(NSTEP) : 1;
+    localparam int CNT_W = (NSTEP > 1) ? $clog2(NSTEP + 1) : 1;
 
     // Elaboration check: keep out of the synthesis initial-procedure path.
     generate
@@ -48,32 +49,33 @@ module upycore_mul #(
     logic [63:0]             lo_result_r;
     logic [63:0]             hi_result_r;
 
-    logic [63:0]             a_cur;
-    logic [63:0]             b_cur;
-    logic signed [ACC_W-1:0] acc_cur;
+    logic                    product_valid;
     logic                    last_step;
-    logic signed [STEP:0]    chunk_s;        // unsigned chunk, signed on top
-    logic signed [64:0]      a_s;
-    logic signed [64+STEP+1:0] pp;
+    logic signed [STEP:0]    chunk_s;
+    logic signed [32:0]      a_low, a_high;
+    logic signed [STEP+33:0] pp_low_r, pp_high_r;
+    logic [ACC_W-1:0]        x, y, z, csa_s, csa_c;
     logic signed [ACC_W-1:0] sum;
     logic [63:0]             lo_next;
     logic                    accept;
 
-    // No re-accept in the done cycle: the requester still holds start_i
-    // while it consumes the result.
     assign accept    = start_i && !busy_r && !done_r;
-    assign a_cur     = busy_r ? a_r : op_a_i;
-    assign b_cur     = busy_r ? b_r : op_b_i;
-    assign acc_cur   = busy_r ? acc_r : '0;
-    assign last_step = busy_r ? (cnt_r == CNT_W'(NSTEP - 1)) : (NSTEP == 1);
-    assign chunk_s   = {last_step ? b_cur[STEP-1] : 1'b0, b_cur[STEP-1:0]};
-    assign a_s       = {a_cur[63], a_cur};
-    assign pp        = a_s * chunk_s;
-    assign sum       = (acc_cur >>> STEP) + ACC_W'(pp);
+    assign last_step = cnt_r == CNT_W'(NSTEP - 1);
+    assign chunk_s   = {last_step ? b_r[STEP-1] : 1'b0, b_r[STEP-1:0]};
+    assign a_low     = {1'b0, a_r[31:0]};
+    assign a_high    = {a_r[63], a_r[63:32]};
+    assign x         = ACC_W'(pp_low_r);
+    assign y         = ACC_W'(pp_high_r) << 32;
+    assign z         = acc_r >>> STEP;
+    assign csa_s     = x ^ y ^ z;
+    assign csa_c     = (x & y) | (x & z) | (y & z);
+    assign sum       = csa_s + (csa_c << 1);
     assign lo_next   = 64'(lo_r >> STEP) | 64'(64'(sum[STEP-1:0]) << (64 - STEP));
 
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) begin
+            product_valid <= 1'b0;
+            pp_low_r <= '0; pp_high_r <= '0;
             busy_r      <= 1'b0;
             done_r      <= 1'b0;
             cnt_r       <= '0;
@@ -85,23 +87,33 @@ module upycore_mul #(
             hi_result_r <= '0;
         end else begin
             done_r <= 1'b0;
-            if (accept || busy_r) begin
-                if (busy_r && !start_i) begin
-                    busy_r <= 1'b0;
-                end else begin
-                    a_r   <= a_cur;
-                    b_r   <= b_cur >> STEP;
+            if (!start_i) begin
+                busy_r <= 1'b0;
+            end else if (accept) begin
+                a_r <= op_a_i;
+                b_r <= op_b_i;
+                acc_r <= '0;
+                lo_r <= '0;
+                cnt_r <= '0;
+                busy_r <= 1'b1;
+                product_valid <= 1'b0;
+            end else if (busy_r) begin
+                // Issue the next product while accumulating the previous one.
+                if (cnt_r < CNT_W'(NSTEP)) begin
+                    pp_low_r <= a_low * chunk_s;
+                    pp_high_r <= a_high * chunk_s;
+                    b_r <= b_r >> STEP;
+                    cnt_r <= cnt_r + 1'b1;
+                    product_valid <= 1'b1;
+                end else product_valid <= 1'b0;
+                if (product_valid) begin
                     acc_r <= sum;
-                    lo_r  <= lo_next;
-                    if (last_step) begin
-                        busy_r      <= 1'b0;
-                        done_r      <= 1'b1;
-                        cnt_r       <= '0;
+                    lo_r <= lo_next;
+                    if (cnt_r == CNT_W'(NSTEP)) begin
+                        busy_r <= 1'b0;
+                        done_r <= 1'b1;
                         lo_result_r <= lo_next;
                         hi_result_r <= 64'(sum >>> STEP);
-                    end else begin
-                        busy_r <= 1'b1;
-                        cnt_r  <= busy_r ? cnt_r + 1'b1 : CNT_W'(1);
                     end
                 end
             end
