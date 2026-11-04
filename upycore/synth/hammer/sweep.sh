@@ -2,6 +2,8 @@
 # Run several clock periods of the class flow at once, then list the results.
 # Runs survive logging out (nohup), so no tmux is needed.
 #
+#   sweep.sh collect [periods]  one file ~/par_<prefix>.txt with the timing, area,
+#                               power (and ~/drc_<folder>.rpt if present) of done par runs
 #   sweep.sh start 12 10 8      synthesis only: one folder and one `make syn` per period
 #   sweep.sh par 20 15          synthesis, then place and route (`make par`)
 #   sweep.sh status             synthesis results of the `start` folders
@@ -167,8 +169,44 @@ par-status)
     echo "Worst path: zcat <reports>/timingReports/${TOP}_postRoute_all.tarpt.gz | less"
     echo "A failed run: tail -50 <folder>/syn.out"
     ;;
+collect)
+    # One text file with what an RTL timing review needs from finished par runs.
+    out=$HOME/par_${par_prefix}.txt
+    shift
+    {
+        echo "== sweep.sh collect: $par_prefix, $(date), RTL $(cd "$repo" && git log --oneline -1)"
+        "$0" par-status
+        for d in "$DESIGNS"/${par_prefix}_p*; do
+            [ -d "$d" ] || continue
+            p=${d##*_p}
+            if [ $# -gt 0 ] && ! printf '%s\n' "$@" | grep -qx "$p"; then continue; fi
+            run=$d/build/par-rundir
+            [ -f "$run/${TOP}_power.rpt" ] || continue
+            echo; echo "==================== ${d##*/} ===================="
+            for g in all reg2reg; do
+                f=$run/timingReports/${TOP}_postRoute_$g.tarpt.gz
+                [ -f "$f" ] || continue
+                echo; echo "== $g: slack start end, worst path per endpoint"
+                zcat "$f" | awk '/Startpoint/{s=$NF} /Endpoint/{e=$NF} /Slack:=/{print $2, s, e}' | head -300
+                echo; echo "== $g: worst 3 paths in full"
+                zcat "$f" | awk '/^ *Path [0-9]+:/{n++} n>=1 && n<=3'
+            done
+            for f in "$run"/timingReports/*hold*.tarpt.gz; do
+                [ -f "$f" ] || continue
+                echo; echo "== hold (${f##*/}): slack start end"
+                zcat "$f" | awk '/Startpoint/{s=$NF} /Endpoint/{e=$NF} /Slack:=/{print $2, s, e}' | head -30
+            done
+            echo; echo "== area by module"; head -80 "$run/${TOP}_area.rpt"
+            echo; echo "== power"; head -150 "$run/${TOP}_power.rpt"
+            for f in "$HOME"/drc_${d##*/}.rpt; do
+                [ -f "$f" ] && { echo; echo "== DRC summary"; tail -25 "$f"; }
+            done
+        done
+    } > "$out" 2>&1
+    echo "wrote $out ($(wc -c < "$out") bytes); upload that one file"
+    ;;
 *)
-    sed -n '2,26p' "$0"
+    sed -n '2,30p' "$0"
     exit 1
     ;;
 esac
