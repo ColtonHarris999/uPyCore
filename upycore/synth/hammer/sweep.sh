@@ -18,7 +18,9 @@
 # macros in each netlist (want 4).
 #
 # Die size: DIE="w h" in um, default 1500 1500 for the core, 4000 3000 for
-# the chip.
+# the chip. DESIGN_ARGS passes extra make_hammer_design.py options, for example
+# DESIGN_ARGS=--no-feedthrough (input-to-output paths are not timed; with the
+# class I/O delays of half the period each way they get no time at any clock).
 #
 # Before starting, the script pulls the current branch and checks that
 # converted/*.v were generated from the RTL in this checkout. When the RTL
@@ -59,7 +61,7 @@ launch() {  # launch <prefix> <steps> <periods>...
     for p in "$@"; do
         d=$DESIGNS/${prefix}_p$p
         python3 "$here/make_hammer_design.py" "$TEMPLATE" "$d" --top "$TOP" \
-            --period "$p" "${src[@]}" --force > /dev/null
+            --period "$p" "${src[@]}" ${DESIGN_ARGS:-} --force > /dev/null
         (cd "$d" && { nohup bash -c "$steps" > syn.out 2>&1 & echo $! > syn.pid; })
         echo "started $steps at $p ns in $d (log: $d/syn.out)"
     done
