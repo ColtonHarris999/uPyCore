@@ -159,11 +159,9 @@ module upycore_fp_pow #(
 
     // ------------------------------------------------------------------
     // Shared recurrence datapath
-    //   shifter A: w >>> j (log) or Z >> k (exp)
+    //   shifter A: w >>> j (log), shifter A': Z >> k (exp)
     //   shifter B: next ROM constant >> next shift (prefetch register)
     // ------------------------------------------------------------------
-    logic                 in_log;
-    logic [7:0]           k_idx;          // j (log) or k (exp)
     logic                 d_pos, d_neg;   // log digit
     logic signed [WW-1:0] w_sh;           // w >>> j
     logic [FW:0]          z_sh;           // Z >> k
@@ -172,18 +170,19 @@ module upycore_fp_pow #(
     logic [FW-1:0]        exp_c;          // log2(1 + 2^-k), FW fraction bits
     logic                 exp_take;
 
-    assign in_log = (state_r == S_LOG);
-    assign k_idx  = in_log ? j_r : {1'b0, i_r};
     // digit: +1 for w >= 1/2, -1 for w < -1/2, else 0
     assign d_pos  = !r_r[WW-1] && (r_r[WW-2:WW-3] != 2'b00);
     assign d_neg  =  r_r[WW-1] && (r_r[WW-2:WW-3] != 2'b11);
 
+    // Each shift takes its own index straight from a register: w_sh is
+    // used only in S_LOG (through w_next), where the index is j, and z_sh
+    // only in S_EXP, where it is k = i. No mux on state_r sits in front.
     // (kept as its own signed assignment: inside an unsigned context the
     // arithmetic shift would silently turn logical)
     logic signed [WW-1:0] w_sh_full;
-    assign w_sh_full = r_r >>> k_idx[6:0];
-    assign w_sh      = (k_idx >= 8'(WW)) ? $signed({WW{r_r[WW-1]}}) : w_sh_full;
-    assign z_sh      = z_r >> k_idx[6:0];
+    assign w_sh_full = r_r >>> j_r[6:0];
+    assign w_sh      = (j_r >= 8'(WW)) ? $signed({WW{r_r[WW-1]}}) : w_sh_full;
+    assign z_sh      = z_r >> i_r;
 
     always_comb begin
         // w' = 2 (w - d + d (w >>> j))
