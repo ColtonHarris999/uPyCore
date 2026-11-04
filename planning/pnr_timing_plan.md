@@ -1,4 +1,4 @@
-# Place-and-route timing plan (draft 3, ranked targets pending)
+# Place-and-route timing plan (draft 4)
 
 Goal: make the uPyCore core (`mpy_core`) close timing after place and route
 in the EE 477 flow (Innovus, sky130_fd_sc_hd, setup corner ss_100C_1v60)
@@ -244,14 +244,88 @@ and the subtract as separate operators (`gte_*` and `SUB_UNS_OP*` in the
 post-route path), and as the base for Step 2. The P&R rerun is the
 measure.
 
-Deepest groups in `mpy_alu` (Yosys levels, from `converted/mpy_alu.v`):
-`u_fpu.u_pow.z_r` 181, `u_fpu.u_pow.acc_r` 174, `u_fpu.u_pow.r_r` 165,
-`u_fpu.u_sig_mul.acc_r` 151, `u_fpu.sm_product` 145, `u_mul.acc_r` 138,
-`mul_hi` 136, `fb` 134, `res_o` 132, `rem` 131. These are candidates
-only. Post-route data for the paths after `u_hmod` has been requested
-from the lab machine (worst path per endpoint, `u_hmod` filtered out).
-Targets are picked from that, with file, line, transform and proof
-module for each, in draft 4.
+Post-route data beyond `u_hmod` (p15 run, worst path per endpoint,
+`u_hmod` filtered out, 300 endpoints): the next worst is −1.03 ns, so
+after Steps 1 and 2 the core should close at about 16 ns. Caveat: that run
+failed routing (100,000+ DRC violations, mostly met1 to met3 shorts, die
+too small), so these slacks are approximate. justin is rerunning on a
+2200×2200 die; re-rank from that run if the order changes.
+
+| # | Start → end (p15) | Worst slack | Endpoints within 0.3 ns |
+|---|---|---|---|
+| T1 | `lc_v_reg` → clock-gate enables, `m_addr`, `lc_dirty`, `st`, `m_we`, `m_req` | −1.034 | about 70 |
+| T2 | `nexc_reg` / `sp_reg` → output `gc_root0_hi_o` | −0.952 | 20 |
+| T3 | `u_alu/u_fpu/u_pow/state_r_reg` → `u_pow/r_r` | −0.771 | 8 |
+| T4 | `u_alu/fb64_r_reg` → `u_sig_mul` clock gates, `u_div/u_div/rem_r`, `fres_r` | −0.749 | about 80 |
+| – | `sp_reg` → `x0_reg` | −0.725 | not targeted |
+
+**T1. Line-cache way select** (`mpy_core.sv`, `lc_is_hit`, `lc_hit_way`,
+`lc_pick` and `lc_fill`, lines 1223 to 1290). Today `w` is muxed from the
+hit way or the LRU pick, and then `lc_v[w]`, `lc_dirty[w]` and
+`lc_ix[w] == idx` are read through that mux to decide install versus
+evict. Transform:
+
+- One match vector, `m[k] = k < cfg_lc_n && lc_v[k] && lc_ix[k] == idx`,
+  computed once. `hit = |m`. `lc_hit_way` stays a priority encoder that
+  returns the **highest** matching `k`, as today (the last-wins loop);
+  do not replace it with a one-hot OR, which differs if two ways match.
+- Per way, in parallel: `ev[k] = lc_v[k] && lc_dirty[k] && lc_ix[k] != idx`.
+- The install condition becomes
+  `!( !hit && cfg_lc_wb && ev[lc_pick(idx)] )`. This equals today's
+  `hit || !lc_v[w] || !lc_dirty[w] || !cfg_lc_wb || lc_ix[w] == idx`
+  (when `hit`, both are true; when not, `w` is the pick).
+- Every assignment inside `lc_fill` stays as it is; only the condition and
+  the way computation change.
+
+Proof module: `build/equiv/lcsel_eq.sv`, a combinational module with free
+inputs `lc_v[8]`, `lc_dirty[8]`, `lc_ix[8]`, `lc_age[8]`, `cfg_lc_n`,
+`cfg_lc_dm`, `cfg_lc_wb`, `idx`. It holds the old functions and the new
+ones (copied byte for byte from the RTL; the checker diffs them) and
+asserts the old and new `w` and install condition are equal. Prove with
+`sat -prove ok 1 -verify`. Then `make test`, bench cycle counts and traces.
+
+**T2. `gc_root0_hi_o` sum** (`mpy_core.sv:1382`, uses `ftop` from line
+1205). Today it is `fbase + ((17 + nloc + 3*nexc) << 2)` followed by a
+second 32-bit add of `sp << 2`. Transform: add the small fields first,
+`gc_off = 10'(17 + nloc + 3*nexc + sp)` (all narrow, no overflow: at most
+17 + 255 + 93 + 127 = 492), and use one 32-bit add,
+`fbase + {20'd0, gc_off, 2'b00}`. Keep `ftop` itself unchanged for its
+other users. The `noframe` mux stays last. Lines 1809 and 3992 compute the
+same value and may use the same `gc_off`.
+Proof module: `build/equiv/gcroot_eq.sv`, combinational, free `fbase`,
+`nloc`, `nexc`, `sp`, `noframe`, asserting old == new. Note this is an
+output port in the core-only run, so its slack also depends on the output
+delay the flow sets. In the SoC it feeds `mpy_gc`.
+
+**T3. `u_pow` log recurrence** (`upycore_fp_pow.sv:184-185`). `w_sh`
+shifts `r_r` by `k_idx`, which muxes `j_r` and `i_r` on
+`state_r == S_LOG`; that puts `state_r` at the head of the path. `w_sh`
+feeds only `w_next` (lines 190-191), and `r_r <= w_next` happens only in
+`S_LOG` (line 320), where `k_idx == j_r`. Transform: shift by `j_r`
+directly (`r_r >>> j_r[6:0]`, and the `>= WW` test on `j_r`). Leave
+`z_sh` (exp path, `i_r`) as it is. The implementer must first confirm
+with grep that `w_sh` and `w_next` have no other users.
+Proof module: `upycore_fp_pow`, same registers, so the `equiv_make` /
+`equiv_simple` / `equiv_induct` recipe. If `equiv_induct` does not close
+in 30 minutes (the unused `w_next` values outside `S_LOG` differ, which
+is fine but can block induction), use the bounded miter at depth 40 plus
+a written argument, and say so in the commit.
+
+**T4. `fb64_r` fan-out in `mpy_alu`.** Not specified yet. The p15 list
+gives only endpoints, not the path. Before changing anything, the
+implementer asks for one path from the new run
+(`report_timing -from u_alu/fb64_r_reg[56]/CLK -max_paths 1`), and picks
+a transform from the allowed list only if the path is clear. Otherwise
+skip it. Proof module: the submodule the change is in (`upycore_fpu`,
+`upycore_fp_divrem` or `upycore_udiv_seq`), never `mpy_alu` as a whole
+if that does not finish.
+
+Not targeted: `sp_reg` → `x0_reg` (register file read indexed by `sp`,
+then a subtract; shortening it needs a read-port register, which changes
+latency), and the `op_reg` → clock-gate paths (decode fan-out, −0.58).
+
+Order: Steps 1 and 2 first (they are 3 ns of the 4), then T1, T2, T3,
+then T4 if the path is clear. The stop rule above still applies.
 
 ## Step 4: hand-off for place and route
 
