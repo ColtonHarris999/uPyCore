@@ -1220,15 +1220,21 @@ module mpy_core
     function automatic logic [31:0] ab_ptr(input logic [7:0] idx);
         ab_ptr = ABI_ARGBUF_BASE + {22'd0, idx, 2'b00};
     endfunction
-    function automatic logic lc_is_hit(input logic [7:0] idx);
-        lc_is_hit = 1'b0;
+    // Ways whose line holds idx, as one vector shared by the hit test and
+    // the hit way. lc_hit_way keeps the highest matching way.
+    function automatic logic [7:0] lc_match(input logic [7:0] idx);
         for (int k = 0; k < 8; k++)
-            if (k < cfg_lc_n && lc_v[k] && lc_ix[k] == idx) lc_is_hit = 1'b1;
+            lc_match[k] = k < cfg_lc_n && lc_v[k] && lc_ix[k] == idx;
+    endfunction
+    function automatic logic lc_is_hit(input logic [7:0] idx);
+        lc_is_hit = |lc_match(idx);
     endfunction
     function automatic logic [2:0] lc_hit_way(input logic [7:0] idx);
+        logic [7:0] m;
+        m = lc_match(idx);
         lc_hit_way = 3'd0;
         for (int k = 0; k < 8; k++)
-            if (k < cfg_lc_n && lc_v[k] && lc_ix[k] == idx) lc_hit_way = k[2:0];
+            if (m[k]) lc_hit_way = k[2:0];
     endfunction
     function automatic logic [2:0] lc_pick(input logic [7:0] idx);
         logic [2:0] best;
@@ -1267,13 +1273,21 @@ module mpy_core
     // the install. set_st is clear when the caller already started a memory op.
     task automatic lc_fill(input logic [7:0] idx, input val_t v, input logic dirty,
                            input logic set_st, input state_e done);
-        logic [2:0] w;
+        logic [2:0] w, p;
         logic hit;
+        logic [7:0] ev;
         hit = lc_is_hit(idx);
-        w = hit ? lc_hit_way(idx) : lc_pick(idx);
+        p = lc_pick(idx);
+        w = hit ? lc_hit_way(idx) : p;
+        // Whether each way holds a dirty line of another local, computed in
+        // parallel instead of through the way select. A miss installs into
+        // the pick, so only a miss with write-back on can evict, and then
+        // it evicts the pick.
+        for (int k = 0; k < 8; k++)
+            ev[k] = lc_v[k] && lc_dirty[k] && lc_ix[k] != idx;
         if (cfg_lc_n == 4'd0) begin
             if (set_st) st <= done;
-        end else if (hit || !lc_v[w] || !lc_dirty[w] || !cfg_lc_wb || lc_ix[w] == idx) begin
+        end else if (!(!hit && cfg_lc_wb && ev[p])) begin
             lc_v[w] <= 1'b1;
             lc_ix[w] <= idx;
             lc_d[w] <= v;
@@ -1281,11 +1295,11 @@ module mpy_core
             lc_note(w);
             if (set_st) st <= done;
         end else begin
-            lc_ev_way <= w;
+            lc_ev_way <= p;
             lc_ev_idx <= idx;
             lc_ev_val <= v;
             lc_ev_dirty <= dirty && cfg_lc_wb;
-            wr(loc_ptr(lc_ix[w]), lc_d[w], S_LC_EV);
+            wr(loc_ptr(lc_ix[p]), lc_d[p], S_LC_EV);
         end
     endtask
 `ifndef SYNTHESIS
