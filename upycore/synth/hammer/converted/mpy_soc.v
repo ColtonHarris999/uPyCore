@@ -1990,8 +1990,6 @@ module upycore_fp_pow (
 		end
 	end
 	assign j0_sel = (r_clz < 8'd2 ? 8'd2 : r_clz);
-	wire in_log;
-	wire [7:0] k_idx;
 	wire d_pos;
 	wire d_neg;
 	wire signed [89:0] w_sh;
@@ -2000,14 +1998,12 @@ module upycore_fp_pow (
 	reg signed [90:0] acc_next;
 	wire [87:0] exp_c;
 	wire exp_take;
-	assign in_log = state_r == 4'd4;
-	assign k_idx = (in_log ? j_r : {1'b0, i_r});
 	assign d_pos = !r_r[89] && (r_r[88:87] != 2'b00);
 	assign d_neg = r_r[89] && (r_r[88:87] != 2'b11);
 	wire signed [89:0] w_sh_full;
-	assign w_sh_full = r_r >>> k_idx[6:0];
-	assign w_sh = (k_idx >= sv2v_cast_8_signed(WW) ? $signed({WW {r_r[89]}}) : w_sh_full);
-	assign z_sh = z_r >> k_idx[6:0];
+	assign w_sh_full = r_r >>> j_r[6:0];
+	assign w_sh = (j_r >= sv2v_cast_8_signed(WW) ? $signed({WW {r_r[89]}}) : w_sh_full);
+	assign z_sh = z_r >> i_r;
 	always @(*) begin
 		if (_sv2v_0)
 			;
@@ -4527,6 +4523,7 @@ module upycore_umod_seq (
 		end
 	endfunction
 	reg [31:0] d_r;
+	reg [33:0] d3_r;
 	reg [31:0] r_r;
 	reg [31:0] q_r;
 	reg [5:0] n_r;
@@ -4548,23 +4545,40 @@ module upycore_umod_seq (
 	assign kr = (k + sv2v_cast_7_signed(BPC - 1)) & ~sv2v_cast_7_signed(BPC - 1);
 	reg [31:0] r_nx;
 	reg [31:0] q_nx;
-	function automatic [31:0] sv2v_cast_32;
-		input reg [31:0] inp;
-		sv2v_cast_32 = inp;
-	endfunction
 	always @(*) begin : sv2v_autoblock_2
 		reg [32:0] t;
+		reg [33:0] t4;
+		reg [33:0] dif2;
+		reg [34:0] e1;
+		reg [34:0] e2;
+		reg [34:0] e3;
 		if (_sv2v_0)
 			;
 		r_nx = r_r;
 		q_nx = q_r;
-		begin : sv2v_autoblock_3
+		if (BPC == 1) begin
+			t = {r_nx, q_nx[31]};
+			q_nx = {q_nx[30:0], 1'b0};
+			dif2 = {1'b0, t} - {2'b00, d_r};
+			r_nx = (dif2[33] ? t[31:0] : dif2[31:0]);
+		end
+		else begin : sv2v_autoblock_3
 			reg signed [31:0] j;
-			for (j = 0; j < BPC; j = j + 1)
+			for (j = 0; j < (BPC / 2); j = j + 1)
 				begin
-					t = {r_nx, q_nx[31]};
-					q_nx = {q_nx[30:0], 1'b0};
-					r_nx = (t >= {1'b0, d_r} ? sv2v_cast_32(t - {1'b0, d_r}) : t[31:0]);
+					t4 = {r_nx, q_nx[31:30]};
+					q_nx = {q_nx[29:0], 2'b00};
+					e1 = {1'b0, t4} - {3'b000, d_r};
+					e2 = {1'b0, t4} - {2'b00, d_r, 1'b0};
+					e3 = {1'b0, t4} - {1'b0, d3_r};
+					if (!e3[34])
+						r_nx = e3[31:0];
+					else if (!e2[34])
+						r_nx = e2[31:0];
+					else if (!e1[34])
+						r_nx = e1[31:0];
+					else
+						r_nx = t4[31:0];
 				end
 		end
 	end
@@ -4573,6 +4587,10 @@ module upycore_umod_seq (
 		input reg [63:0] inp;
 		sv2v_cast_64 = inp;
 	endfunction
+	function automatic [31:0] sv2v_cast_32;
+		input reg [31:0] inp;
+		sv2v_cast_32 = inp;
+	endfunction
 	function automatic [5:0] sv2v_cast_6;
 		input reg [5:0] inp;
 		sv2v_cast_6 = inp;
@@ -4580,6 +4598,7 @@ module upycore_umod_seq (
 	always @(posedge clk_i or negedge rst_n_i)
 		if (!rst_n_i) begin
 			d_r <= 1'sb0;
+			d3_r <= 1'sb0;
 			r_r <= 1'sb0;
 			q_r <= 1'sb0;
 			n_r <= 1'sb0;
@@ -4590,6 +4609,7 @@ module upycore_umod_seq (
 			done_o <= 1'b0;
 			if (start_i) begin
 				d_r <= d_i;
+				d3_r <= {2'b00, d_i} + {1'b0, d_i, 1'b0};
 				if (a_i < d_i) begin
 					n_r <= 1'sb0;
 					done_o <= 1'b1;
@@ -6268,6 +6288,14 @@ module mpy_core (
 		sv2v_cast_32 = inp;
 	endfunction
 	assign ftop = fbase + (((32'd17 + sv2v_cast_32(nloc)) + (32'd3 * {27'd0, nexc})) << 2);
+	wire [9:0] stk_off;
+	wire [31:0] stk_top;
+	function automatic [9:0] sv2v_cast_10;
+		input reg [9:0] inp;
+		sv2v_cast_10 = inp;
+	endfunction
+	assign stk_off = ((10'd17 + sv2v_cast_10(nloc)) + (10'd3 * sv2v_cast_10(nexc))) + sv2v_cast_10(sp);
+	assign stk_top = fbase + {20'd0, stk_off, 2'b00};
 	function automatic [31:0] loc_ptr;
 		input reg [7:0] idx;
 		loc_ptr = (fbase + 32'h00000044) + {22'd0, idx, 2'b00};
@@ -6286,26 +6314,26 @@ module mpy_core (
 		input reg [7:0] idx;
 		ab_ptr = ABI_ARGBUF_BASE + {22'd0, idx, 2'b00};
 	endfunction
+	function automatic [7:0] lc_match;
+		input reg [7:0] idx;
+		reg signed [31:0] k;
+		for (k = 0; k < 8; k = k + 1)
+			lc_match[k] = ((k < cfg_lc_n) && lc_v[k]) && (lc_ix[k] == idx);
+	endfunction
 	function automatic lc_is_hit;
 		input reg [7:0] idx;
-		begin
-			lc_is_hit = 1'b0;
-			begin : sv2v_autoblock_4
-				reg signed [31:0] k;
-				for (k = 0; k < 8; k = k + 1)
-					if (((k < cfg_lc_n) && lc_v[k]) && (lc_ix[k] == idx))
-						lc_is_hit = 1'b1;
-			end
-		end
+		lc_is_hit = |lc_match(idx);
 	endfunction
 	function automatic [2:0] lc_hit_way;
 		input reg [7:0] idx;
+		reg [7:0] m;
 		begin
+			m = lc_match(idx);
 			lc_hit_way = 3'd0;
-			begin : sv2v_autoblock_5
+			begin : sv2v_autoblock_4
 				reg signed [31:0] k;
 				for (k = 0; k < 8; k = k + 1)
-					if (((k < cfg_lc_n) && lc_v[k]) && (lc_ix[k] == idx))
+					if (m[k])
 						lc_hit_way = k[2:0];
 			end
 		end
@@ -6320,7 +6348,7 @@ module mpy_core (
 			if (cfg_lc_dm && (cfg_lc_n != 4'd0))
 				lc_pick = idx[2:0] & (cfg_lc_n[2:0] - 3'd1);
 			else begin
-				begin : sv2v_autoblock_6
+				begin : sv2v_autoblock_5
 					reg signed [31:0] k;
 					for (k = 0; k < 8; k = k + 1)
 						if (((k < cfg_lc_n) && !lc_v[k]) && !any_inv) begin
@@ -6328,7 +6356,7 @@ module mpy_core (
 							any_inv = 1'b1;
 						end
 				end
-				if (!any_inv) begin : sv2v_autoblock_7
+				if (!any_inv) begin : sv2v_autoblock_6
 					reg signed [31:0] k;
 					for (k = 1; k < 8; k = k + 1)
 						if ((k < cfg_lc_n) && (lc_age[k] < lc_age[best]))
@@ -6381,15 +6409,23 @@ module mpy_core (
 		input reg set_st;
 		input reg [9:0] done;
 		reg [2:0] w;
+		reg [2:0] p;
 		reg hit;
+		reg [7:0] ev;
 		begin
 			hit = lc_is_hit(idx);
-			w = (hit ? lc_hit_way(idx) : lc_pick(idx));
+			p = lc_pick(idx);
+			w = (hit ? lc_hit_way(idx) : p);
+			begin : sv2v_autoblock_7
+				reg signed [31:0] k;
+				for (k = 0; k < 8; k = k + 1)
+					ev[k] = (lc_v[k] && lc_dirty[k]) && (lc_ix[k] != idx);
+			end
 			if (cfg_lc_n == 4'd0) begin
 				if (set_st)
 					st <= done;
 			end
-			else if ((((hit || !lc_v[w]) || !lc_dirty[w]) || !cfg_lc_wb) || (lc_ix[w] == idx)) begin
+			else if (!((!hit && cfg_lc_wb) && ev[p])) begin
 				lc_v[w] <= 1'b1;
 				lc_ix[w] <= idx;
 				lc_d[w] <= v;
@@ -6399,11 +6435,11 @@ module mpy_core (
 					st <= done;
 			end
 			else begin
-				lc_ev_way <= w;
+				lc_ev_way <= p;
 				lc_ev_idx <= idx;
 				lc_ev_val <= v;
 				lc_ev_dirty <= dirty && cfg_lc_wb;
-				wr(loc_ptr(lc_ix[w]), lc_d[w], 10'd468);
+				wr(loc_ptr(lc_ix[p]), lc_d[p], 10'd468);
 			end
 		end
 	endtask
@@ -6488,7 +6524,7 @@ module mpy_core (
 	assign gc_alloc_nbytes_o = (al_n > 7872 ? ABI_GC_POOL_BYTES + 32'd16 : al_n << 2);
 	localparam [31:0] ABI_FRAME_BASE = 32'h20000000;
 	assign gc_root0_lo_o = ABI_FRAME_BASE;
-	assign gc_root0_hi_o = (noframe ? ABI_FRAME_BASE : ftop + {23'd0, sp, 2'b00});
+	assign gc_root0_hi_o = (noframe ? ABI_FRAME_BASE : stk_top);
 	localparam [31:0] ABI_SCHED_BASE = 32'h20008000;
 	assign gc_root1_lo_o = ABI_SCHED_BASE;
 	localparam [31:0] ABI_GC_POOL_BASE = 32'h20008500;
@@ -7584,7 +7620,7 @@ module mpy_core (
 					end
 					10'd82: begin
 						c_cells <= md;
-						v0 = (noframe ? ABI_FRAME_BASE : ftop + {23'd0, sp, 2'b00});
+						v0 = (noframe ? ABI_FRAME_BASE : stk_top);
 						v1 = v0 + (((32'd17 + c_nst) + (32'd3 * c_nexc)) << 2);
 						v2 = ab_pe - ab_lo;
 						c_fast <= (((!ab_chunked && (ab_nkw == 8'd0)) && (c_nkwo == 8'd0)) && ((v2 + c_ndef) >= c_npos)) && ((v2 <= c_npos) || (c_scope & ABI_SCOPE_VARARGS));
@@ -11229,7 +11265,7 @@ module mpy_core (
 						rd(x4 + 20, 10'd157);
 					end
 					10'd157: begin
-						v0 = (noframe ? ABI_FRAME_BASE : ftop + {23'd0, sp, 2'b00});
+						v0 = (noframe ? ABI_FRAME_BASE : stk_top);
 						v1 = v0 + (((32'd17 + {25'd0, x1[22:16]}) + (32'd3 * {27'd0, md[20:16]})) << 2);
 						if ((x1[6:0] == 7'd0) && (t[1] != VNONE)) begin
 							fflags <= fflags & ~FF_YFAST;

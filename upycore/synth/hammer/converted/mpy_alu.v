@@ -1990,8 +1990,6 @@ module upycore_fp_pow (
 		end
 	end
 	assign j0_sel = (r_clz < 8'd2 ? 8'd2 : r_clz);
-	wire in_log;
-	wire [7:0] k_idx;
 	wire d_pos;
 	wire d_neg;
 	wire signed [89:0] w_sh;
@@ -2000,14 +1998,12 @@ module upycore_fp_pow (
 	reg signed [90:0] acc_next;
 	wire [87:0] exp_c;
 	wire exp_take;
-	assign in_log = state_r == 4'd4;
-	assign k_idx = (in_log ? j_r : {1'b0, i_r});
 	assign d_pos = !r_r[89] && (r_r[88:87] != 2'b00);
 	assign d_neg = r_r[89] && (r_r[88:87] != 2'b11);
 	wire signed [89:0] w_sh_full;
-	assign w_sh_full = r_r >>> k_idx[6:0];
-	assign w_sh = (k_idx >= sv2v_cast_8_signed(WW) ? $signed({WW {r_r[89]}}) : w_sh_full);
-	assign z_sh = z_r >> k_idx[6:0];
+	assign w_sh_full = r_r >>> j_r[6:0];
+	assign w_sh = (j_r >= sv2v_cast_8_signed(WW) ? $signed({WW {r_r[89]}}) : w_sh_full);
+	assign z_sh = z_r >> i_r;
 	always @(*) begin
 		if (_sv2v_0)
 			;
