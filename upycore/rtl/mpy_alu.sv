@@ -21,10 +21,9 @@
 // firmware can build the complex result.
 //
 // Timing: the FPU's binary64 result is registered (A_FNAR) before it is
-// rounded back to binary32, and an op that converts an int operand makes
-// its float checks a cycle later from the converted value (A_FCONV). No
-// rounding or conversion shares a cycle with another; each costs one
-// cycle where it applies.
+// rounded back to binary32. An op that converts an int operand checks
+// the converted value in A_FCONV. Integer conversion takes
+// magnitude, normalize and round stages before A_FCONV checks the result.
 
 // verilator lint_off DECLFILENAME
 package mpy_alu_pkg;
@@ -66,42 +65,19 @@ package mpy_alu_pkg;
     localparam logic [2:0] AE_COMPLEX     = 3'd5;
     localparam logic [2:0] AE_FTOI        = 3'd6;
 
-    // int64 -> binary32, round to nearest even (the C conversion).
-    function automatic logic [31:0] mpy_i64_to_f32(input logic [63:0] v);
-        logic        s;
-        logic [63:0] m;
-        logic [63:0] mant;
-        logic [63:0] rem;
-        logic [63:0] half;
-        int          msb;
-        int          sh;
-        logic [8:0]  e;
+    // Round a normalized integer magnitude. Leading one is at bit 63;
+    // only the 24 retained bits take part in the rounding carry chain.
+    function automatic logic [31:0] mpy_i64_round(
+        input logic sign, input logic zero,
+        input logic [5:0] lz, input logic [63:0] norm);
+        logic [24:0] rounded;
+        logic [7:0] exp;
         begin
-            s = v[63];
-            m = s ? (~v + 64'd1) : v;
-            msb = 0;
-            for (int i = 0; i < 64; i++)
-                if (m[i]) msb = i;
-            if (m == 64'd0) begin
-                mpy_i64_to_f32 = 32'd0;
-            end else if (msb <= 23) begin
-                mant = m << (23 - msb);
-                e = 9'(msb + 127);
-                mpy_i64_to_f32 = {s, e[7:0], mant[22:0]};
-            end else begin
-                sh = msb - 23;
-                mant = m >> sh;
-                rem = m & ((64'd1 << sh) - 64'd1);
-                half = 64'd1 << (sh - 1);
-                e = 9'(msb + 127);
-                if (rem > half || (rem == half && mant[0]))
-                    mant = mant + 64'd1;
-                if (mant[24]) begin
-                    mant = mant >> 1;
-                    e = e + 9'd1;
-                end
-                mpy_i64_to_f32 = {s, e[7:0], mant[22:0]};
-            end
+            rounded = {1'b0, norm[63:40]} +
+                      {24'd0, norm[39] && ((|norm[38:0]) || norm[40])};
+            exp = 8'd190 - {2'd0, lz} + {7'd0, rounded[24]};
+            mpy_i64_round = zero ? 32'd0 :
+                {sign, exp, rounded[24] ? rounded[23:1] : rounded[22:0]};
         end
     endfunction
 
@@ -237,8 +213,7 @@ module mpy_f32_narrow (
     logic [23:0]        sumf;
     logic [52:0]        sig;
     logic [11:0]        sh;
-    logic [52:0]        shifted;
-    logic [52:0]        below;
+    logic [54:0]        jam [0:6];
     logic [23:0]        mag;
 
     assign sign     = d_i[63];
@@ -249,10 +224,17 @@ module mpy_f32_narrow (
     assign sumf     = {1'b0, d_i[51:29]} + {23'b0, round_up};
     assign sig      = {1'b1, frac};
     assign sh       = 12'd926 - {1'b0, exp};
-    assign shifted  = sig >> sh[5:0];
-    assign below    = (sh <= 12'd1) ? 53'd0 : (sig & ((53'd1 << (sh[5:0] - 6'd1)) - 53'd1));
-    assign mag      = {1'b0, shifted[22:0]}
-                    + {23'd0, (sh != 12'd0) && sig[sh[5:0] - 6'd1] && ((|below) || shifted[0])};
+    // Shift right with sticky (jammed into bit 0) at each mux level.
+    // This replaces a variable mask followed by a 53-bit subtract. Bits
+    // [24:2] retain the fraction, [1] is guard, [0] is sticky.
+    assign jam[0] = {sig, 2'b00};
+    for (genvar k = 0; k < 6; k++) begin : gen_jam
+        localparam int S = 1 << k;
+        assign jam[k+1] = sh[k] ?
+            { {S{1'b0}}, jam[k][54:S+1], (|jam[k][S:0]) } : jam[k];
+    end
+    assign mag = {1'b0, jam[6][24:2]} +
+                 {23'd0, jam[6][1] && (jam[6][0] || jam[6][2])};
 
     always_comb begin
         if (exp == 11'h7FF) begin
@@ -293,7 +275,7 @@ module mpy_alu (
 );
     import mpy_alu_pkg::*;
 
-    typedef enum logic [2:0] { A_IDLE, A_MUL, A_DIV, A_POW, A_FPU, A_FNAR, A_FCONV, A_DONE } astate_e;
+    typedef enum logic [3:0] { A_IDLE, A_MUL, A_DIV, A_POW, A_FPU, A_FNAR, A_FCONV, A_DONE, A_INORM, A_IROUND } astate_e;
     astate_e st;
 
     logic [5:0]  op;
@@ -301,6 +283,16 @@ module mpy_alu (
     logic [63:0] a, b;
     logic [31:0] fa, fb;
     logic [63:0] fa64, fb64, fa64_r, fb64_r;
+
+    // Conversion pipeline: magnitude at accept, normalization next,
+    // then a 24-bit rounding add. Neither sign correction nor rounding
+    // shares a cycle with the leading-zero encoder and barrel shifter.
+    logic [63:0] amag, bmag, anorm, bnorm;
+    logic [5:0] alz, blz;
+    logic azero, bzero, aflt, bflt;
+    logic [31:0] aconv, bconv;
+    assign aconv = mpy_i64_round(a[63], azero, alz, anorm);
+    assign bconv = mpy_i64_round(b[63], bzero, blz, bnorm);
 
     // Integer datapath (combinational ops).
     logic [4:0]  iop;
@@ -441,6 +433,9 @@ module mpy_alu (
             res_o <= '0;
             rkind_o <= AK_INT;
             err_o <= AE_NONE;
+            amag <= '0; bmag <= '0; anorm <= '0; bnorm <= '0;
+            alz <= '0; blz <= '0; azero <= 1'b1; bzero <= 1'b1;
+            aflt <= 1'b0; bflt <= 1'b0;
             op <= '0;
             small_r <= 1'b0;
             a <= '0;
@@ -454,17 +449,18 @@ module mpy_alu (
             done_o <= 1'b0;
             case (st)
                 A_IDLE: if (start_i) begin
-                    logic [31:0] xa, xb;
                     logic        isf, conv, ok;
                     logic [63:0] v;
                     op <= op_i;
                     small_r <= small_i;
                     a <= a_i;
                     b <= b_i;
-                    xa = a_flt_i ? a_i[31:0] : mpy_i64_to_f32(a_i);
-                    xb = b_flt_i ? b_i[31:0] : mpy_i64_to_f32(b_i);
-                    fa <= xa;
-                    fb <= xb;
+                    aflt <= a_flt_i;
+                    bflt <= b_flt_i;
+                    amag <= a_i[63] ? (~a_i + 64'd1) : a_i;
+                    bmag <= b_i[63] ? (~b_i + 64'd1) : b_i;
+                    fa <= a_i[31:0];
+                    fb <= b_i[31:0];
                     // Right when both are floats; A_FCONV rewrites them otherwise.
                     fa64_r <= fa64;
                     fb64_r <= fb64;
@@ -474,9 +470,8 @@ module mpy_alu (
                     isf = a_flt_i || b_flt_i;
                     conv = !a_flt_i || !b_flt_i;
                     if (op_i == ALU_I2F) begin
-                        res_o <= {32'd0, xa};
                         rkind_o <= AK_FLOAT;
-                        st <= A_DONE;
+                        st <= A_INORM;
                     end else if (op_i == ALU_F2I) begin
                         v = mpy_f32_to_i64(a_i[31:0], ok);
                         res_o <= v;
@@ -500,7 +495,7 @@ module mpy_alu (
                         end
                     end else if (op_i <= ALU_NE) begin
                         if (isf && conv) begin
-                            st <= A_FCONV;
+                            st <= A_INORM;
                         end else if (isf) begin
                             rkind_o <= AK_BOOL;
                             res_o <= {63'd0, f_cmp};
@@ -511,7 +506,7 @@ module mpy_alu (
                     end else if (isf || op_i == ALU_TDIV || (op_i == ALU_POW && b_i[63])) begin
                         rkind_o <= AK_FLOAT;
                         if (conv) begin
-                            st <= A_FCONV;
+                            st <= A_INORM;
                         end else begin
                             err_o <= f_err;
                             st <= f_fpu ? A_FPU : A_DONE;
@@ -568,6 +563,23 @@ module mpy_alu (
                         fres_r <= fres[63:0];
                         st <= A_FNAR;
                     end
+                end
+                A_INORM: begin
+                    alz <= 6'(upycore_clz64(amag));
+                    blz <= 6'(upycore_clz64(bmag));
+                    azero <= (amag == 64'd0);
+                    bzero <= (bmag == 64'd0);
+                    anorm <= amag << 6'(upycore_clz64(amag));
+                    bnorm <= bmag << 6'(upycore_clz64(bmag));
+                    st <= A_IROUND;
+                end
+                A_IROUND: begin
+                    fa <= aflt ? fa : aconv;
+                    fb <= bflt ? fb : bconv;
+                    if (op == ALU_I2F) begin
+                        res_o <= {32'd0, aflt ? fa : aconv};
+                        st <= A_DONE;
+                    end else st <= A_FCONV;
                 end
                 A_FCONV: begin
                     fa64_r <= fa64;

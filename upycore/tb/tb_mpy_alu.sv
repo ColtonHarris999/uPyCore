@@ -146,7 +146,7 @@ module tb_mpy_alu;
         // An int operand is converted first (A_FCONV), then checked and run.
         run(ALU_ADD, 0, i(1), 1, f(F32_HALF));
         check(kind == AK_FLOAT && res == f(F32_1_5), "1 + 0.5 == 1.5");
-        check(cycles == fast_add + 1, "a converted operand costs one cycle");
+        check(cycles == fast_add + 3, "a converted operand costs three cycles");
         run(ALU_LT, 1, f(F32_3_5), 0, i(3));
         check(kind == AK_BOOL && res == 64'd0, "3.5 < 3 is False");
         run(ALU_GE, 0, i(-2), 1, f(F32_M2));

@@ -74,6 +74,7 @@ class Bench:
     args: Callable[[Path], list[str]] = field(default=lambda work: [])
     top: str | None = None
     parameters: dict[str, int] = field(default_factory=dict)
+    cpp: list[str] = field(default_factory=list)
 
 
 BENCHES = [
@@ -91,6 +92,10 @@ BENCHES = [
           parameters={"BYTES_PER_CYCLE": 4}),
     Bench("mpy_hash_slot", ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_hash_slot.sv"], r"^PASS mpy_hash_slot", _hash_args),
     Bench("mpy_hash", ["mpy_hash.sv"], r"^PASS mpy_hash", _hash_args),
+    Bench("upycore_mul", ["upycore_mul.sv"], r"^PASS upycore_mul "),
+    Bench("upycore_mul8", ["upycore_mul.sv"], r"^PASS upycore_mul ", top="tb_upycore_mul", parameters={"STEP":8}),
+    Bench("upycore_mul64", ["upycore_mul.sv"], r"^PASS upycore_mul ", top="tb_upycore_mul", parameters={"STEP":64}),
+    Bench("mpy_numeric", list(mpy_synth.ALU_FILES), r"^PASS mpy_numeric ", cpp=["mpy_numeric_oracle.cpp"]),
     Bench("mpy_alu", list(mpy_synth.ALU_FILES), r"^PASS mpy_alu "),
     Bench("mpy_boot", ["mpy_boot.sv", "../tb/tb_spi_nand.sv"], r"^PASS mpy_boot "),
     Bench("mpy_ca", ["mpy_ca.sv", "bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv"], r"^PASS mpy_ca "),
@@ -113,7 +118,8 @@ def run_bench(b: Bench) -> tuple[bool, str]:
     top = b.top or f"tb_{b.name}"
     cmd = [os.environ.get("VERILATOR", "verilator"), *FLAGS, f"-I{RTL}", "--Mdir", str(work / "obj"),
            *[str(RTL / f) for f in b.rtl], str(TB / f"{top}.sv"), "--top-module", top,
-           *[f"-G{k}={v}" for k, v in b.parameters.items()]]
+           *[f"-G{k}={v}" for k, v in b.parameters.items()],
+           *[str(TB / f) for f in b.cpp]]
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
     if r.returncode != 0:
         return False, "verilator failed:\n" + (r.stdout + r.stderr)[-3000:]

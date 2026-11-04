@@ -1216,6 +1216,13 @@ module mpy_core
     // 17 header words: gen, spill_hp, and the ring metadata sit after the
     // original 14, and locals begin at byte 0x44.
     assign ftop = fbase + ((32'd17 + 32'(nloc) + 32'd3 * {27'd0, nexc}) << 2);
+    // ftop + 4 * sp, the top of the stack in the frame. The narrow fields
+    // are summed first (at most 17 + 255 + 3 * 31 + 127 = 492), so the
+    // value takes one 32-bit add instead of two in series.
+    logic [9:0]  stk_off;
+    logic [31:0] stk_top;
+    assign stk_off = 10'd17 + 10'(nloc) + 10'd3 * 10'(nexc) + 10'(sp);
+    assign stk_top = fbase + {20'd0, stk_off, 2'b00};
 
     // A function call in an NBA index trips a Verilator bug, so this is a macro.
     // Logical stack slot -> physical register. Wraps at 16. rf_base[5:4] stay 0.
@@ -1233,15 +1240,21 @@ module mpy_core
     function automatic logic [31:0] ab_ptr(input logic [7:0] idx);
         ab_ptr = ABI_ARGBUF_BASE + {22'd0, idx, 2'b00};
     endfunction
-    function automatic logic lc_is_hit(input logic [7:0] idx);
-        lc_is_hit = 1'b0;
+    // Ways whose line holds idx, as one vector shared by the hit test and
+    // the hit way. lc_hit_way keeps the highest matching way.
+    function automatic logic [7:0] lc_match(input logic [7:0] idx);
         for (int k = 0; k < 8; k++)
-            if (k < cfg_lc_n && lc_v[k] && lc_ix[k] == idx) lc_is_hit = 1'b1;
+            lc_match[k] = k < cfg_lc_n && lc_v[k] && lc_ix[k] == idx;
+    endfunction
+    function automatic logic lc_is_hit(input logic [7:0] idx);
+        lc_is_hit = |lc_match(idx);
     endfunction
     function automatic logic [2:0] lc_hit_way(input logic [7:0] idx);
+        logic [7:0] m;
+        m = lc_match(idx);
         lc_hit_way = 3'd0;
         for (int k = 0; k < 8; k++)
-            if (k < cfg_lc_n && lc_v[k] && lc_ix[k] == idx) lc_hit_way = k[2:0];
+            if (m[k]) lc_hit_way = k[2:0];
     endfunction
     function automatic logic [2:0] lc_pick(input logic [7:0] idx);
         logic [2:0] best;
@@ -1280,13 +1293,21 @@ module mpy_core
     // the install. set_st is clear when the caller already started a memory op.
     task automatic lc_fill(input logic [7:0] idx, input val_t v, input logic dirty,
                            input logic set_st, input state_e done);
-        logic [2:0] w;
+        logic [2:0] w, p;
         logic hit;
+        logic [7:0] ev;
         hit = lc_is_hit(idx);
-        w = hit ? lc_hit_way(idx) : lc_pick(idx);
+        p = lc_pick(idx);
+        w = hit ? lc_hit_way(idx) : p;
+        // Whether each way holds a dirty line of another local, computed in
+        // parallel instead of through the way select. A miss installs into
+        // the pick, so only a miss with write-back on can evict, and then
+        // it evicts the pick.
+        for (int k = 0; k < 8; k++)
+            ev[k] = lc_v[k] && lc_dirty[k] && lc_ix[k] != idx;
         if (cfg_lc_n == 4'd0) begin
             if (set_st) st <= done;
-        end else if (hit || !lc_v[w] || !lc_dirty[w] || !cfg_lc_wb || lc_ix[w] == idx) begin
+        end else if (!(!hit && cfg_lc_wb && ev[p])) begin
             lc_v[w] <= 1'b1;
             lc_ix[w] <= idx;
             lc_d[w] <= v;
@@ -1294,11 +1315,11 @@ module mpy_core
             lc_note(w);
             if (set_st) st <= done;
         end else begin
-            lc_ev_way <= w;
+            lc_ev_way <= p;
             lc_ev_idx <= idx;
             lc_ev_val <= v;
             lc_ev_dirty <= dirty && cfg_lc_wb;
-            wr(loc_ptr(lc_ix[w]), lc_d[w], S_LC_EV);
+            wr(loc_ptr(lc_ix[p]), lc_d[p], S_LC_EV);
         end
     endtask
 `ifndef SYNTHESIS
@@ -1395,7 +1416,7 @@ module mpy_core
                               (ABI_GC_POOL_BYTES + 32'd16) : (al_n << 2);
     assign gc_root0_lo_o = ABI_FRAME_BASE;
     // The resident ring is snapshotted at ftop before a collection.
-    assign gc_root0_hi_o = noframe ? ABI_FRAME_BASE : (ftop + {23'd0, sp, 2'b00});
+    assign gc_root0_hi_o = noframe ? ABI_FRAME_BASE : stk_top;
     assign gc_root1_lo_o = ABI_SCHED_BASE;
     assign gc_root1_hi_o = ABI_GC_POOL_BASE;
     assign halted_o = halted;
@@ -1830,7 +1851,7 @@ module mpy_core
             end
             S_CF_CHK: begin
                 c_cells <= md;
-                v0 = noframe ? ABI_FRAME_BASE : (ftop + {23'd0, sp, 2'b00});
+                v0 = noframe ? ABI_FRAME_BASE : stk_top;
                 v1 = v0 + ((32'd17 + c_nst + 32'd3 * c_nexc) << 2);
                 v2 = ab_pe - ab_lo;
                 c_fast <= !ab_chunked && (ab_nkw == 8'd0) && (c_nkwo == 8'd0) &&
@@ -4081,7 +4102,7 @@ module mpy_core
                 // Past the caller's spilled operand stack, same as a call.
                 // The stack sits at ftop; planting the frame on ftop itself
                 // overwrites it when this generator later spills.
-                v0 = noframe ? ABI_FRAME_BASE : (ftop + {23'd0, sp, 2'b00});
+                v0 = noframe ? ABI_FRAME_BASE : stk_top;
                 v1 = v0 + ((32'd17 + {25'd0, x1[22:16]} + 32'd3 * {27'd0, md[20:16]}) << 2);
                 if (x1[6:0] == 7'd0 && t[1] != VNONE) begin
                     fflags <= fflags & ~FF_YFAST;
