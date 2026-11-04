@@ -1,4 +1,4 @@
-# Place-and-route timing plan (draft 4)
+# Place-and-route timing plan (draft 5, reviewed)
 
 Goal: make the uPyCore core (`mpy_core`) close timing after place and route
 in the EE 477 flow (Innovus, sky130_fd_sc_hd, setup corner ss_100C_1v60)
@@ -274,14 +274,20 @@ evict. Transform:
   `!( !hit && cfg_lc_wb && ev[lc_pick(idx)] )`. This equals today's
   `hit || !lc_v[w] || !lc_dirty[w] || !cfg_lc_wb || lc_ix[w] == idx`
   (when `hit`, both are true; when not, `w` is the pick).
-- Every assignment inside `lc_fill` stays as it is; only the condition and
-  the way computation change.
+- In the evict branch `hit` is false, so `w == lc_pick(idx)`. That branch
+  uses the pick directly (in `lc_ix[..]`, `lc_d[..]`, `lc_ev_way` and the
+  `wr()` address) instead of the muxed `w`. This takes the hit-way mux off
+  the `m_addr`, `m_we` and `m_req` endpoints.
+- Every other assignment inside `lc_fill` stays as it is.
 
 Proof module: `build/equiv/lcsel_eq.sv`, a combinational module with free
 inputs `lc_v[8]`, `lc_dirty[8]`, `lc_ix[8]`, `lc_age[8]`, `cfg_lc_n`,
-`cfg_lc_dm`, `cfg_lc_wb`, `idx`. It holds the old functions and the new
-ones (copied byte for byte from the RTL; the checker diffs them) and
-asserts the old and new `w` and install condition are equal. Prove with
+`cfg_lc_dm`, `cfg_lc_wb`, `idx`. Start from the reviewer's
+`/mnt/project-files/plans/review/lc_eq.sv`, which already proves the
+install condition. It holds the old functions and the new ones (copied
+byte for byte from the RTL; the checker diffs them) and asserts that the
+old and new `w`, the install condition, and the evict-branch way (old `w`
+versus `lc_pick(idx)` whenever the evict branch is taken) are equal. Prove with
 `sat -prove ok 1 -verify`. Then `make test`, bench cycle counts and traces.
 
 **T2. `gc_root0_hi_o` sum** (`mpy_core.sv:1382`, uses `ftop` from line
@@ -302,11 +308,15 @@ shifts `r_r` by `k_idx`, which muxes `j_r` and `i_r` on
 `state_r == S_LOG`; that puts `state_r` at the head of the path. `w_sh`
 feeds only `w_next` (lines 190-191), and `r_r <= w_next` happens only in
 `S_LOG` (line 320), where `k_idx == j_r`. Transform: shift by `j_r`
-directly (`r_r >>> j_r[6:0]`, and the `>= WW` test on `j_r`). Leave
-`z_sh` (exp path, `i_r`) as it is. The implementer must first confirm
-with grep that `w_sh` and `w_next` have no other users.
+directly (`r_r >>> j_r[6:0]`, and the `>= WW` test on `j_r`). Likewise
+`z_sh` feeds only line 369 in `S_EXP`, where `k_idx == {1'b0, i_r}`, so
+it shifts by `i_r` directly. `k_idx` and `in_log` then have no users and
+are deleted. The implementer must first confirm
+with grep that `w_sh`, `w_next`, `z_sh`, `k_idx` and `in_log` have no
+other users.
 Proof module: `upycore_fp_pow`, same registers, so the `equiv_make` /
-`equiv_simple` / `equiv_induct` recipe. If `equiv_induct` does not close
+`equiv_simple` / `equiv_induct` recipe (`equiv_simple` alone should
+close it). If `equiv_induct` does not close
 in 30 minutes (the unused `w_next` values outside `S_LOG` differ, which
 is fine but can block induction), use the bounded miter at depth 40 plus
 a written argument, and say so in the commit.
