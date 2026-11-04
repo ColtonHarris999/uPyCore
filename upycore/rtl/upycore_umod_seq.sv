@@ -58,16 +58,21 @@ module upycore_umod_seq #(
     assign k    = 7'(lz_d) - 7'(lz_a) + 7'd1;
     assign kr   = (k + 7'(BPC - 1)) & ~7'(BPC - 1);
 
-    // One clock of BPC restoring steps.
+    // One clock of BPC restoring steps. Each step is one 34-bit subtract:
+    // t >= d exactly when t - d does not borrow (diff[33] clear), and then
+    // diff[31:0] is t - d, so the compare and the subtract share a carry
+    // chain instead of running in series.
     logic [31:0] r_nx, q_nx;
     always_comb begin
         logic [32:0] t;
+        logic [33:0] diff;
         r_nx = r_r;
         q_nx = q_r;
         for (int j = 0; j < BPC; j++) begin
             t = {r_nx, q_nx[31]};
             q_nx = {q_nx[30:0], 1'b0};
-            r_nx = (t >= {1'b0, d_r}) ? 32'(t - {1'b0, d_r}) : t[31:0];
+            diff = {1'b0, t} - {2'b0, d_r};
+            r_nx = diff[33] ? t[31:0] : diff[31:0];
         end
     end
 
