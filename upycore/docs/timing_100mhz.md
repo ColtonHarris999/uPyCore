@@ -82,6 +82,52 @@ levels are tool-specific structural comparisons, not silicon area or
 post-route slack. The remaining deepest generic paths are in FPU
 sequencing/normalization and need checking in the next physical run.
 
+## Matched before/after cycle benchmark
+
+Measured against parent main `dc64a89` and PR RTL `110fbb5`, using freshly
+built Verilator 5.032 simulators. Each pair executes the **same linked image**,
+with the same firmware, compiler settings and default SoC configuration.
+A measurement-only firmware builtin wraps the existing native cycle counter;
+startup and result formatting are excluded. Loop, call and timer overhead
+remain inside the interval. This is a same-clock comparison of execution
+cycles, not host simulator runtime or measured post-route frequency.
+
+Arithmetic loops perform 1,000 repetitions on function arguments (preventing
+constant folding). `int_pow` computes `3 ** 17`; `int64_mul` multiplies
+`1099511627793 * 17`; `mixed_add` computes `12345 + 1.25`. Pystone runs 300
+iterations from the pinned MicroPython perf_bench source, after its Setup().
+All result checksums match. No collection occurs in any timed test run.
+
+| Workload | Before cycles | After cycles | Increase |
+| --- | ---: | ---: | ---: |
+| `int_add` | 62,475 | 62,475 | 0.000% |
+| `int_mul` | 66,475 | 68,475 | 3.009% |
+| `int64_mul` | 110,480 | 112,480 | 1.810% |
+| `int_pow` | 96,475 | 106,475 | 10.365% |
+| `int_to_float` | 1,581,472 | 1,583,472 | 0.126% |
+| `mixed_add` | 67,480 | 69,480 | 2.964% |
+| `float_add` | 66,485 | 66,485 | 0.000% |
+| `float_mul` | 68,485 | 68,485 | 0.000% |
+| `int_true_div` | 96,475 | 98,475 | 2.073% |
+| `pystone` | 12,116,929 | 12,119,929 | 0.025% |
+
+The integer power loop incurs 10 additional clocks per iteration because
+it runs five multiplies. The other affected arithmetic loops add exactly two
+clocks per iteration. The measured general-program penalty is workload
+specific: Pystone adds 3,000 clocks, or 0.025%, while multiplication/power-heavy
+loops pay more. A frequency increase must outweigh this cycle increase to
+improve wall-clock runtime. No such frequency gain is claimed before PAR.
+
+Raw counts, output checks, GC counts and image hashes are retained in
+[timing_100mhz_benchmark.json](timing_100mhz_benchmark.json). Reproduce with:
+
+```sh
+# Build both RTL revisions with the same Verilator/toolchain first.
+python3 upycore/tools/timing_bench.py \
+    --before ../upycore-before/build/mpy_soc/obj/Vtb_mpy_soc \
+    --after build/mpy_soc/obj/Vtb_mpy_soc
+```
+
 ## Backend handoff
 
 `converted/mpy_alu.v`, `converted/mpy_core.v`, `converted/mpy_soc.v` and
