@@ -203,9 +203,13 @@ collect)
             # Keep a copy of the run's reports, so they outlive the run folder.
             mkdir -p "$keep/flow"
             cp -p "$run/${TOP}_power.rpt" "$run/${TOP}_area.rpt" "$keep/flow/" 2>/dev/null || true
-            cp -rp "$run/timingReports" "$keep/flow/" 2>/dev/null || true
+            mkdir -p "$keep/flow/timingReports"
+            cp -p "$run"/timingReports/${TOP}_postRoute_*.tarpt.gz "$keep/flow/timingReports/" 2>/dev/null || true
             find "$d" -maxdepth 3 -name '*.sdc' -exec cp -p {} "$keep/flow/" \; 2>/dev/null || true
-            cp -rp "$d/build/syn-rundir/reports" "$keep/flow/syn_reports" 2>/dev/null || true
+            # Only the small summary reports: the full folders are large.
+            mkdir -p "$keep/flow/syn_reports"
+            cp -p "$d"/build/syn-rundir/reports/final_qor.rpt "$d"/build/syn-rundir/reports/final_area*.rpt \
+                "$d"/build/syn-rundir/reports/final_time*setup*.rpt "$keep/flow/syn_reports/" 2>/dev/null || true
             if [ -f "$d/syn.out" ]; then tail -200 "$d/syn.out" > "$keep/flow/syn.out.tail"; fi
             echo; echo "==================== ${d##*/} ===================="
             echo; echo "== constraints (sdc in the run folder)"
