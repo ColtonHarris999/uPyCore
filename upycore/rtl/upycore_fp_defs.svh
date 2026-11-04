@@ -56,9 +56,20 @@ endfunction
 // Leading-zero counts (priority encoders; the last assignment wins)
 // ---------------------------------------------------------------------------
 function automatic logic [6:0] upycore_clz64(input logic [63:0] v);
-    upycore_clz64 = 7'd64;
-    for (int i = 0; i < 64; i++) begin
-        if (v[i]) upycore_clz64 = 7'(63 - i);
+    logic [63:0] x;
+    logic [5:0] n;
+    begin
+        // Balanced binary search: six fixed-width zero tests, rather than
+        // a 64-way priority chain. The zero case is kept separate.
+        x = v;
+        n = '0;
+        if (x[63:32] == 0) begin n[5] = 1'b1; x = x << 32; end
+        if (x[63:48] == 0) begin n[4] = 1'b1; x = x << 16; end
+        if (x[63:56] == 0) begin n[3] = 1'b1; x = x << 8; end
+        if (x[63:60] == 0) begin n[2] = 1'b1; x = x << 4; end
+        if (x[63:62] == 0) begin n[1] = 1'b1; x = x << 2; end
+        n[0] = !x[63];
+        upycore_clz64 = (v == 0) ? 7'd64 : {1'b0, n};
     end
 endfunction
 
@@ -235,6 +246,20 @@ function automatic logic [63:0] upycore_f64_floor(input logic [63:0] a);
     end
 endfunction
 
+// Classification only: testing integral bits must not compute floor(),
+// whose negative-fraction correction contains a wide carry-propagate add.
+function automatic logic upycore_f64_is_integer(input logic [63:0] v);
+    logic [10:0] e;
+    begin
+        e = v[62:52];
+        if (e == 11'h7ff) upycore_f64_is_integer = 1'b0;
+        else if (e >= 11'd1075) upycore_f64_is_integer = 1'b1;
+        else if (e < 11'd1023) upycore_f64_is_integer = (v[62:0] == 0);
+        else upycore_f64_is_integer =
+            (v[51:0] & (52'hfffffffffffff >> (e - 11'd1023))) == 0;
+    end
+endfunction
+
 // True when v is an odd integer (CPython DOUBLE_IS_ODD_INTEGER).
 function automatic logic upycore_f64_is_odd_integer(input logic [63:0] v);
     logic [10:0] e;
@@ -242,7 +267,7 @@ function automatic logic upycore_f64_is_odd_integer(input logic [63:0] v);
         e = v[62:52];
         if (e < 11'd1023 || e >= 11'd1076 || !upycore_f64_is_finite(v)) begin
             upycore_f64_is_odd_integer = 1'b0;           // |v| < 1, or even/huge
-        end else if (upycore_f64_floor(v) != v) begin
+        end else if (!upycore_f64_is_integer(v)) begin
             upycore_f64_is_odd_integer = 1'b0;
         end else begin
             // Integer: the units bit sits at fraction position 52 - (e-1023)

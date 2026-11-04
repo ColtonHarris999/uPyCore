@@ -120,7 +120,7 @@ so a copy that lives in the pool is not swept. The unit test places it
 outside the pool and checks that the failure path returns that address
 with the pool untouched.
 
-The oracle `-X heapsize` is this pool only, not the whole 64 KB SRAM.
+The oracle `-X heapsize` is this pool only, not the whole shared SRAM.
 A list slot is 4 bytes plus a nibble, and a wide value occupies extra
 slots. The tests are a dropped reference that can be allocated again,
 and one allocation larger than the pool. They do not pin the append

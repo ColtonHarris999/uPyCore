@@ -78,7 +78,7 @@ module tb_mpy_value;
 
     mpy_mem #(.NP(1)) dut_mem (
         .clk_i(clk),
-        .rst_n_i(rst_n),
+        .rst_n_i(rst_n), .image_words_i(32'd8),
         .req_i(req),
         .we_i(we),
         .tag_we_i(tag_acc),
@@ -295,10 +295,10 @@ module tb_mpy_value;
         check(MPY_SCHED_BASE == MPY_FRAME_RESERVE_BASE + MPY_FRAME_RESERVE_BYTES,
               "the scheduler queue follows the frame reserve");
         check(MPY_GC_POOL_BASE == 32'h2000_8500, "GC pool base");
-        check(MPY_GC_POOL_BYTES == 32'h0000_7B00, "GC pool size");
-        check(MPY_SRAM_WORDS == MPY_SRAM_BLOCKS * MPY_MEM_BLOCK_WORDS, "data SRAM is whole blocks");
-        check(MPY_FLASH_WORDS == MPY_IMAGE_BLOCKS * MPY_MEM_BLOCK_WORDS, "image SRAM is whole blocks");
-        check(MPY_MEM_BLOCKS == 4 && MPY_MEM_BLOCK_WORDS * 4 == 65536, "four 64 KB blocks");
+        check(MPY_GC_POOL_BYTES == 32'h0007_7B00, "GC pool size");
+        check(MPY_SRAM_WORDS == MPY_MEM_WORDS, "data SRAM is whole blocks");
+        check(MPY_FLASH_WORDS == MPY_MEM_WORDS, "image SRAM is whole blocks");
+        check(MPY_MEM_BLOCKS == 4 && MPY_MEM_BLOCK_WORDS * 4 == 131072, "four 128 KiB blocks");
         check((MPY_GC_POOL_BASE + MPY_GC_POOL_BYTES) ==
               (MPY_SRAM_BASE + MPY_SRAM_BYTES), "GC pool ends at SRAM");
         check(MPY_HANDLER_USED_BYTES == 48, "handler table uses 48 bytes");
@@ -538,7 +538,13 @@ module tb_mpy_value;
         expect_fault(1'b1, 32'h0000_0008, MPY_FAULT_FLASH_STORE, MPY_REGION_FLASH);
         expect_fault(1'b0, 32'h00F4_0000, MPY_FAULT_BUS, MPY_REGION_NONE);
         expect_fault(1'b0, 32'h0008_0000, MPY_FAULT_BUS, MPY_REGION_NONE);
-        expect_fault(1'b0, 32'h2004_0000, MPY_FAULT_BUS, MPY_REGION_NONE);
+        // The old data-window end is now valid and must not wrap to offset 0.
+        expect_ok(1'b1, 1'b1, 32'h2004_0000, 32'h1234_5678, MPY_TAG_INT,
+                  32'h0, 4'h0, MPY_REGION_SRAM, 1 + MPY_SRAM_LATENCY);
+        expect_ok(1'b0, 1'b1, 32'h2004_0000, 32'h0, 4'h0,
+                  32'h1234_5678, MPY_TAG_INT, MPY_REGION_SRAM, 1 + MPY_SRAM_LATENCY);
+        expect_ok(1'b0, 1'b1, MPY_SRAM_BASE, 32'h0, 4'h0,
+                  32'h0, 4'h0, MPY_REGION_SRAM, 1 + MPY_SRAM_LATENCY);
         expect_fault(1'b0, MPY_FLASH_BYTES, MPY_FAULT_BUS, MPY_REGION_NONE);
         expect_fault(1'b0, MPY_SRAM_BASE + MPY_SRAM_BYTES, MPY_FAULT_BUS, MPY_REGION_NONE);
         expect_ok(1'b0, 1'b0, 32'h0000_0000, 32'h0, 4'h0, 32'h0, 4'h0,
@@ -551,9 +557,9 @@ module tb_mpy_value;
         // before the memory port; mpy_mem itself faults them.
         expect_fault(1'b1, MPY_MMIO_BASE + MPY_MMIO_UART_TX, MPY_FAULT_BUS, MPY_REGION_MMIO);
         expect_fault(1'b0, MPY_SIM_BASE, MPY_FAULT_BUS, MPY_REGION_SIM);
-        expect_ok(1'b1, 1'b1, MPY_SRAM_BASE + MPY_SRAM_BYTES - 32'd4, 32'h5A5A_5A5A,
+        expect_ok(1'b1, 1'b1, MPY_SRAM_BASE + MPY_SRAM_BYTES - 32'd32 - 32'd4, 32'h5A5A_5A5A,
                   MPY_TAG_INT, 32'h0, 4'h0, MPY_REGION_SRAM, 1 + MPY_SRAM_LATENCY);
-        expect_ok(1'b0, 1'b1, MPY_SRAM_BASE + MPY_SRAM_BYTES - 32'd4, 32'h0, 4'h0,
+        expect_ok(1'b0, 1'b1, MPY_SRAM_BASE + MPY_SRAM_BYTES - 32'd32 - 32'd4, 32'h0, 4'h0,
                   32'h5A5A_5A5A, MPY_TAG_INT, MPY_REGION_SRAM, 1 + MPY_SRAM_LATENCY);
 
         $display("MPY value encoding: ok");

@@ -113,6 +113,11 @@ def _binop(op, a, b):
             op -= BINOP_REVERSE_OR - BINOP_OR
         break
     if op == BINOP_CONTAINS:
+        if _islist(a) or _tag(a) == TAG_TUPLE:
+            result = _seqscan(_ld(a, 2) if _islist(a) else a,
+                              0 if _islist(a) else 1, _ld(a, 0), b, 1)
+            if result >= -1:
+                return result >= 0
         for x in a:
             if _equal(x, b):
                 return True

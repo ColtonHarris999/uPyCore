@@ -82,6 +82,7 @@ state_of() {  # running, done or failed; done means the file $2 exists
 }
 
 if [ "$TOP" = mpy_soc ]; then
+    sram_macro=$(cd "$repo" && python3 -c "import sys; sys.path.insert(0, 'upycore/tools'); from mpy_synth import SRAM_MACRO; print(SRAM_MACRO['name'])")
     syn_prefix=${PREFIX:-upycore_soc}
     par_prefix=${PREFIX:-upycore_socpar}
     if [ "$SOC_RTL" = converted ]; then
@@ -123,7 +124,7 @@ status)
         state=$(state_of "$d" "$qor")
         slack=- path=- minp=- area=- macros=-
         net=$(ls "$d"/build/syn-rundir/*.mapped.v 2>/dev/null | head -1)
-        [ "$TOP" = mpy_soc ] && [ -n "$net" ] && macros=$(grep -c fakeram_d16384_w36 "$net")
+        [ "$TOP" = mpy_soc ] && [ -n "$net" ] && macros=$(grep -c "$sram_macro" "$net")
         if [ "$state" = done ] && [ -f "$rpt" ]; then
             slack=$(awk '/Slack:=/{print $2/1000; exit}' "$rpt")
             path=$(awk '/Data Path:-/{print $3/1000; exit}' "$rpt")
@@ -133,7 +134,7 @@ status)
         printf "%-22s %-8s %10s %10s %10s %12s %7s\n" "${d##*/}" "$state" "$slack" "$path" "$minp" "$area" "$macros"
     done
     if [ "$TOP" = mpy_soc ]; then
-        lef=$(find "$DESIGNS"/${syn_prefix}_p* -name 'fakeram_d16384_w36.lef' 2>/dev/null | head -1)
+        lef=$(find "$DESIGNS"/${syn_prefix}_p* -name "$sram_macro.lef" 2>/dev/null | head -1)
         [ -n "$lef" ] && echo "SRAM macro footprint (um): $(grep -m1 -o 'SIZE.*' "$lef")"
     fi
     echo "min ns = period - slack: the shortest clock that run's netlist would meet."

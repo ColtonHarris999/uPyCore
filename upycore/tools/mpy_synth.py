@@ -51,8 +51,16 @@ TOPS: dict[str, list[str]] = {
     "mpy_regfile": ["mpy_regfile.sv"],
     "mpy_irq": ["mpy_mmio_pkg.sv", "mpy_irq.sv"],
     "mpy_periph": ["mpy_mmio_pkg.sv", "mpy_irq.sv", "mpy_periph.sv"],
+    "mpy_hash": ["mpy_hash.sv"],
+    "mpy_hash_slot": ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_hash_slot.sv"],
     "mpy_container": ["mpy_container.sv"],
+    "mpy_bytecopy": ["mpy_bytecopy.sv"],
     "mpy_ca": ["mpy_ca.sv"],
+    "mpy_key_equal": ["mpy_key_equal.sv"],
+    "mpy_map_engine": ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_key_equal.sv", "mpy_map_engine.sv"],
+    "mpy_rehash_stream": ["mpy_hash.sv", "mpy_hash_slot.sv", "upycore_umod_seq.sv", "mpy_rehash_stream.sv"],
+    "mpy_collection": ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_key_equal.sv", "mpy_map_engine.sv", "mpy_bulk.sv", "mpy_hash_slot.sv", "mpy_rehash_stream.sv", "mpy_ca.sv", "mpy_bytecopy.sv", "mpy_collection.sv"],
+    "mpy_bulk": ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_key_equal.sv", "mpy_map_engine.sv", "mpy_bulk.sv", "mpy_hash_slot.sv", "mpy_rehash_stream.sv"],
     "upycore_umod_seq": ["upycore_umod_seq.sv"],
     "mpy_alu": ALU_FILES,
     "mpy_gc": ["mpy_gc.sv"],
@@ -60,7 +68,7 @@ TOPS: dict[str, list[str]] = {
     "mpy_boot": ["mpy_boot.sv"],
     "mpy_core": ALU_FILES + ["upycore_umod_seq.sv", "mpy_decode.sv", "mpy_fetch.sv", "mpy_core.sv"],
     "mpy_soc": ALU_FILES
-    + ["upycore_umod_seq.sv", "mpy_decode.sv", "mpy_fetch.sv", "mpy_core.sv", "mpy_gc.sv", "mpy_ca.sv",
+    + ["upycore_umod_seq.sv", "mpy_decode.sv", "mpy_fetch.sv", "mpy_core.sv", "mpy_gc.sv", "mpy_ca.sv", "mpy_hash.sv", "mpy_key_equal.sv", "mpy_map_engine.sv", "mpy_bulk.sv", "mpy_hash_slot.sv", "mpy_rehash_stream.sv", "mpy_bytecopy.sv", "mpy_collection.sv",
        "bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv", "mpy_boot.sv", "mpy_soc.sv"],
 }
 
@@ -68,12 +76,12 @@ TOPS: dict[str, list[str]] = {
 CORE_FILES = TOPS["mpy_core"]
 
 # Behavioral stand-in for BaseJump's SRAM wrapper. The EE 477 flow reads
-# BaseJump's file instead and swaps each 16384 x 36 instance for this
+# BaseJump's file instead and swaps each 32768 x 36 instance for this
 # bsg_fakeram macro (MPY_MEM_BLOCK_WORDS x MPY_MEM_WIDTH in mpy_defs.svh).
 SRAM_MODEL = "bsg_mem_1rw_sync_mask_write_bit.sv"
-SRAM_MACRO = {"name": "fakeram_d16384_w36", "family": "1rw", "depth": 16384, "width": 36,
+SRAM_MACRO = {"name": "fakeram_d32768_w36", "family": "1rw", "depth": 32768, "width": 36,
               "mask": True, "mux": 1, "vt": ""}
-SRAM_BLOCKS = 4   # MPY_MEM_BLOCKS: one data SRAM block, three image blocks
+SRAM_BLOCKS = 4   # MPY_MEM_BLOCKS: interleaved shared image/data SRAM
 
 # Gate mapping the SRAM blocks as flops is a long memory job (the class
 # flow uses macros instead), so mem and soc stay elaborate-only here.
@@ -83,6 +91,8 @@ GATES_DEFAULT = [
     "mpy_regfile",
     "mpy_irq",
     "mpy_periph",
+    "mpy_hash",
+    "mpy_hash_slot",
     "mpy_container",
     "mpy_ca",
     "upycore_umod_seq",

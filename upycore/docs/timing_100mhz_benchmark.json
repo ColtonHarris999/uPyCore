@@ -1,0 +1,277 @@
+{
+  "loops": 1000,
+  "pystone_loops": 300,
+  "before": {
+    "commit": "dc64a89d887d343ff1bc64f9e1070a222fb62fc0",
+    "simulator_sha256": "2cc443b6645d098bbfda09992219058d891952e50dc83d412317a221e2390b99"
+  },
+  "after": {
+    "commit": "110fbb564978c0f0aedf344f2355d79c398619cc",
+    "simulator_sha256": "428fc5e5d26b48c0c352637c048a04899c5da3a2e77f5e009b24c507a3aa5f70"
+  },
+  "cases": [
+    {
+      "name": "int_add",
+      "image_sha256": {
+        ".hex": "73dae4a70bd5da3cf9b62ebf01f9f112450cafd2158870081a8950e522324f97",
+        ".tags.hex": "68ab2d5860fa4563ab1bdd8e7432a307d606e0003e0c92f001c7d716686c68b8"
+      },
+      "before": {
+        "cycles": 62475,
+        "total_cycles": 95487,
+        "ops": 13120,
+        "gc": 0,
+        "check": [
+          "CHECK 3580245"
+        ]
+      },
+      "after": {
+        "cycles": 62475,
+        "total_cycles": 95487,
+        "ops": 13120,
+        "gc": 0,
+        "check": [
+          "CHECK 3580245"
+        ]
+      },
+      "change_pct": 0.0
+    },
+    {
+      "name": "int_mul",
+      "image_sha256": {
+        ".hex": "a52d273318be9424a56312d9f652c7a9cf3217c9edd258831b2f89667c61adaf",
+        ".tags.hex": "68ab2d5860fa4563ab1bdd8e7432a307d606e0003e0c92f001c7d716686c68b8"
+      },
+      "before": {
+        "cycles": 66475,
+        "total_cycles": 99745,
+        "ops": 13144,
+        "gc": 0,
+        "check": [
+          "CHECK 83810205"
+        ]
+      },
+      "after": {
+        "cycles": 68475,
+        "total_cycles": 101745,
+        "ops": 13144,
+        "gc": 0,
+        "check": [
+          "CHECK 83810205"
+        ]
+      },
+      "change_pct": 3.0086498683715712
+    },
+    {
+      "name": "int64_mul",
+      "image_sha256": {
+        ".hex": "af10c23ddd5a98d447994671d556c9f00366fd142a93c272e86f30c027c5f060",
+        ".tags.hex": "e7dcf0b6d9fb2514c13b88c0f563e684e7cce10eaec442dfd11bbf87a35b405c"
+      },
+      "before": {
+        "cycles": 110480,
+        "total_cycles": 145752,
+        "ops": 13316,
+        "gc": 0,
+        "check": [
+          "CHECK 18691697672481"
+        ]
+      },
+      "after": {
+        "cycles": 112480,
+        "total_cycles": 147752,
+        "ops": 13316,
+        "gc": 0,
+        "check": [
+          "CHECK 18691697672481"
+        ]
+      },
+      "change_pct": 1.8102824040550303
+    },
+    {
+      "name": "int_pow",
+      "image_sha256": {
+        ".hex": "d984c842e444e3e65b1beae735bbc8bbb489a389f0dd7d974918c3eb6144e136",
+        ".tags.hex": "5fa25a9864796ace3f3ed56cc99ff4cacf56f84175962698cb264ab9ffce1d80"
+      },
+      "before": {
+        "cycles": 96475,
+        "total_cycles": 129979,
+        "ops": 13168,
+        "gc": 0,
+        "check": [
+          "CHECK 129140163"
+        ]
+      },
+      "after": {
+        "cycles": 106475,
+        "total_cycles": 140205,
+        "ops": 13192,
+        "gc": 0,
+        "check": [
+          "CHECK 129140163"
+        ]
+      },
+      "change_pct": 10.365379632029015
+    },
+    {
+      "name": "int_to_float",
+      "image_sha256": {
+        ".hex": "a8906521f8296c5827d33a9ba0fc8b34bcdac558c92389331511fe72136d1656",
+        ".tags.hex": "b16bb5abf8935430d4287f810821ecf529be4802c8b493c211b9fc5f28226b94"
+      },
+      "before": {
+        "cycles": 1581472,
+        "total_cycles": 1998360,
+        "ops": 85897,
+        "gc": 0,
+        "check": [
+          "CHECK 1099511600000.0"
+        ]
+      },
+      "after": {
+        "cycles": 1583472,
+        "total_cycles": 2000624,
+        "ops": 85897,
+        "gc": 0,
+        "check": [
+          "CHECK 1099511600000.0"
+        ]
+      },
+      "change_pct": 0.1264644584286101
+    },
+    {
+      "name": "mixed_add",
+      "image_sha256": {
+        ".hex": "2fc241e9c91e698db2ef48daba48208c7fab0f58973c02f4c45abffbebab8d0a",
+        ".tags.hex": "b844d390480dd174a3375839eb27f6e4e16af1335d147a96bed8c6f0d5d66a46"
+      },
+      "before": {
+        "cycles": 67480,
+        "total_cycles": 440677,
+        "ops": 29148,
+        "gc": 0,
+        "check": [
+          "CHECK 12346.25"
+        ]
+      },
+      "after": {
+        "cycles": 69480,
+        "total_cycles": 442889,
+        "ops": 29148,
+        "gc": 0,
+        "check": [
+          "CHECK 12346.25"
+        ]
+      },
+      "change_pct": 2.9638411381149865
+    },
+    {
+      "name": "float_add",
+      "image_sha256": {
+        ".hex": "99710ce5b77e85bc63517234be183f68a3641211196d4707ff56028ee714e30e",
+        ".tags.hex": "5a99b65169ec6bf6a679d6009a43bf3b8fcbb5c25dbb391f101fce5b5bf6cfb2"
+      },
+      "before": {
+        "cycles": 66485,
+        "total_cycles": 158163,
+        "ops": 15456,
+        "gc": 0,
+        "check": [
+          "CHECK 3.75"
+        ]
+      },
+      "after": {
+        "cycles": 66485,
+        "total_cycles": 158191,
+        "ops": 15456,
+        "gc": 0,
+        "check": [
+          "CHECK 3.75"
+        ]
+      },
+      "change_pct": 0.0
+    },
+    {
+      "name": "float_mul",
+      "image_sha256": {
+        ".hex": "9822baf1e105a16b375c825e0cb6f69de42516783058960dd5712e54f240ff85",
+        ".tags.hex": "5a99b65169ec6bf6a679d6009a43bf3b8fcbb5c25dbb391f101fce5b5bf6cfb2"
+      },
+      "before": {
+        "cycles": 68485,
+        "total_cycles": 159918,
+        "ops": 15544,
+        "gc": 0,
+        "check": [
+          "CHECK 3.125"
+        ]
+      },
+      "after": {
+        "cycles": 68485,
+        "total_cycles": 159946,
+        "ops": 15544,
+        "gc": 0,
+        "check": [
+          "CHECK 3.125"
+        ]
+      },
+      "change_pct": 0.0
+    },
+    {
+      "name": "int_true_div",
+      "image_sha256": {
+        ".hex": "253c1d7d62100d1c75df20df35119c733b28ce63ac6721be3525e8e1a0ce42ba",
+        ".tags.hex": "5fa25a9864796ace3f3ed56cc99ff4cacf56f84175962698cb264ab9ffce1d80"
+      },
+      "before": {
+        "cycles": 96475,
+        "total_cycles": 611428,
+        "ops": 36018,
+        "gc": 0,
+        "check": [
+          "CHECK 2.3333332"
+        ]
+      },
+      "after": {
+        "cycles": 98475,
+        "total_cycles": 613678,
+        "ops": 36018,
+        "gc": 0,
+        "check": [
+          "CHECK 2.3333332"
+        ]
+      },
+      "change_pct": 2.0730759264057985
+    },
+    {
+      "name": "pystone",
+      "image_sha256": {
+        ".hex": "def287c3c39db8a11056d020806706f681923257d1bcf17dbb278a6940b4da54",
+        ".tags.hex": "1ecd7a2cbc9b536898ff2a2a818f6b920062e12f8275527fb3433460f092391c"
+      },
+      "before": {
+        "cycles": 12116929,
+        "total_cycles": 12727128,
+        "ops": 469996,
+        "gc": 0,
+        "check": [
+          "CHECK 5 True 310"
+        ]
+      },
+      "after": {
+        "cycles": 12119929,
+        "total_cycles": 12730362,
+        "ops": 469996,
+        "gc": 0,
+        "check": [
+          "CHECK 5 True 310"
+        ]
+      },
+      "change_pct": 0.024758748689546195
+    }
+  ],
+  "compiler": "pinned mpy-cross, -msmall-int-bits=31 -O0",
+  "micropython_pin": "0fd6c573ea815774668bbb16b8e197c8822368b2",
+  "measurement": "Native core cycle counter through a measurement-only firmware wrapper. Startup and output excluded; loop, call and timer overhead included. Identical linked image used for before and after. All checksums match."
+}

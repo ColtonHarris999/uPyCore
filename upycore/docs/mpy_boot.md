@@ -1,33 +1,53 @@
 # On-chip memory and boot
 
-uPyCore's two memories are on-chip SRAM: a 64 KB data SRAM and a 192 KB
-image SRAM that holds the linked image (the window at address 0 that the
-rest of the docs call flash). Both live in four identical 64 KB blocks,
-interleaved by word. The image comes from an SPI NAND flash: `mpy_boot`
-copies it into the image SRAM after reset, before the hart starts.
+uPyCore has four interleaved 32,768 x 36-bit SRAM banks, sharing 512 KiB
+of payload capacity between the linked image and mutable data. Each word
+stores a 32-bit payload and its 4-bit tag together. There is no fixed
+image/data partition. SPI NAND supplies the image at boot.
 
-| Window | Base | Size | Rows of every block |
-| --- | --- | ---: | --- |
-| Data SRAM | `0x2000_0000` | 64 KB | 0 to 4095 |
-| Image SRAM ("flash") | `0x0000_0000` | 192 KB | 4096 to 16383 |
+Let `I = align_up(image_bytes, 32)`. Boot maps:
 
-Word `w` of either window is in block `w % 4` (address bits `[3:2]`), so
-consecutive words sit in different blocks. The constants are in
-`upycore/rtl/mpy_defs.svh` (`MPY_MEM_*`, `MPY_SRAM_BLOCKS`,
-`MPY_IMAGE_BLOCKS` give the sizes), `upycore/tools/mpy_abi.py`
-(`SRAM_BYTES`) and `upycore/tools/mpy_link.py` (`FLASH_BYTES`). The frame
-stack, root area and argument buffer keep their 0x8500 bytes at the bottom
-of the data SRAM, so the GC pool is 31,488 bytes (1,968 blocks).
+| Window | Logical base | Capacity | Physical byte offset |
+| --- | --- | ---: | ---: |
+| Image ("flash") | `0x0000_0000` | `I` | `0` |
+| Mutable data | `0x2000_0000` | `524288 - I` | `I` |
+
+Physical word `w` selects bank `w % 4` and row `w / 4`. The split is
+aligned to eight words, preserving word interleaving and 16-byte GC blocks.
+Logical bases remain stable, so pointers embedded in linked images need
+no relocation. Image stores fault after boot. Accesses beyond either
+boot-selected window fault instead of aliasing the other window.
+
+Runtime reservations occupy the first `0x8500` bytes of mutable data.
+The GC pool starts at logical `0x2000_8500` and normally uses everything
+remaining: `524288 - I - 0x8500` bytes. A nonzero image header `POOL_BYTES`
+may cap that pool; boot rejects unaligned caps or caps beyond the physical
+space. At least one GC block must fit. `mpy_abi.memory_layout` applies the
+same checks in the linker and NAND packer. The linker reports the aligned
+image, data capacity, and heap capacity in `.map.json`.
+
+`MPY_MEM_*` in `mpy_defs.svh` describes the physical SRAM. `MPY_FLASH_*`
+and `MPY_SRAM_*` sizes are maximum logical windows; the memory controller
+checks their actual boot-selected ends. GC metadata is sized for the
+maximum possible pool, while allocation, marking, sweeping and free-space
+counters use the runtime pool size.
+
+Heap capacity does not equal the largest payload every constructor can build.
+Currently `bytearray(n)` creates a temporary bytes buffer and copies it, so
+its peak allocation is roughly twice `n` plus headers. With a roughly 305 KB
+heap, `bytes(262144)` fits while `bytearray(262144)` can raise MemoryError.
+The large-address regression uses one bytes payload; RTL tests independently
+verify writes above the old 256 KiB boundary and across all four banks.
 
 ## SRAM blocks
 
 Every block is `bsg_mem_1rw_sync_mask_write_bit` from BaseJump STL with
-`els_p = 16384` and `width_p = 36`: one read/write port and a per-bit write
+`els_p = 32768` and `width_p = 36`: one read/write port and a per-bit write
 mask. A word is `{tag[3:0], payload[31:0]}`, so one access reads a value
 and its tag together, and one write stores both. The mask turns a byte
 store, or a payload store that keeps the tag, into one write instead of a
 read and a write. In the EE 477 flow each block becomes a
-`fakeram_d16384_w36` macro.
+`fakeram_d32768_w36` macro.
 
 Why one 36-bit port per block:
 
@@ -105,13 +125,14 @@ idle, since a copy in flight may be writing it. Image reads never wait.
 
 ## Reset
 
-After reset `mpy_mem` writes zero to every data SRAM word, all four blocks
-at once (4,096 rows), and grants nothing until it is done. A loader write
-during the clear takes its block for that cycle and the clear repeats the
-row, so the clear finishes after 4,096 cycles without a loader write. `mpy_gc` clears its allocation
-table (one entry per cycle, 1,968 cycles) at the same time. A real SRAM
-or flop does not power up as zero, so neither can rely on an `initial`
-block.
+After reset `mpy_mem` clears every physical SRAM row, all four banks at
+once (32,768 cycles). Boot waits for this clear before writing the image,
+so clearing cannot overwrite loaded words. When loading finishes, the
+layout is fixed and `mpy_gc` clears its maximum-capacity allocation table.
+The core and accelerator leave reset only after all three steps complete.
+An invalid image count or heap cap raises `boot_err_o` and keeps them in
+reset. Reset clears the full memory and metadata again, allowing a later
+boot to choose a different split without retaining stale data or tags.
 
 `upycore/rtl/bsg_mem_1rw_sync_mask_write_bit.sv` is a behavioral stand-in
 with BaseJump's name and ports, for Verilator and Yosys. The class flow
@@ -166,15 +187,33 @@ cycles over SPI, 73 ms at 100 MHz. Not done yet:
   guarantee block 0
 - a checksum over the stream
 
-## The frozen compiler does not fit
+## Resident compiler capacity
 
-The firmware and `array` link to 176 KB. The frozen uPy2 compiler that
-`compile`, `exec` and `eval` run is another 167 KB, so images with it
-(346 KB) do not fit the 192 KB image SRAM. `mpy_build.py` links the
-compiler only into programs that name one of the three builtins (an AST
-check, so a string or comment does not count). Those programs (the
-`compiler` area of the hardware suite) fail to link with this memory map.
-Running them on chip would need the compiler paged in from NAND.
+The 512 KiB shared SRAM holds the frozen uPy2 compiler and firmware together.
+A typical compiler-area image is about 355 KB, leaving about 135 KB of GC
+heap after the fixed runtime reservations. `mpy_build.py` freezes the compiler
+only for programs that name `compile`, `exec` or `eval` (an AST check, so a
+string or comment does not count). Images still must fit together with runtime
+reservations; the linker reports a capacity error before producing an image
+if they do not.
+
+## Capacity-sensitive acceptance results
+
+At the previous 256 KiB capacity, firmware left roughly 42 KiB of heap
+for a small program. A complete
+mpy-cross run of the 425 noncompiler acceptance programs passed 419. The
+remaining programs were `star_wide_dir`, `star_wide_oom`, `ca_copy`,
+`gc_list_shrink_reclaims`, `gc_live_exceeds_heap`, and `gc_memoryerror_recover`.
+They either exhaust the available heap or produce a different result when
+collection/MemoryError occurs earlier than in the oracle golden. In particular,
+`star_wide_oom` reports retained memory and needs further investigation under
+this smaller heap; it must not be hidden by an expected-failure marker.
+
+Of 53 compiler-area programs, 9 passed and 44 were rejected by the linker
+because their images exceed total SRAM capacity with runtime reservations.
+These results are failures, not accepted exceptions: no programs are disabled
+or marked expected-failure. These measurements describe the 256 KiB baseline, before increasing each
+bank to 128 KiB.
 
 ## Simulation
 
@@ -184,7 +223,7 @@ default `mpy_boot` takes a simulation-only shortcut. With `+IMAGE` and
 `+TAGS` and no `+NAND`, it builds the same word stream from the image
 files and feeds it one word per cycle. The stream decoder and the SRAM
 writes are the same; only the SPI transport is skipped. That boot takes
-about 52K cycles, and the SRAM clear runs in parallel.
+the stream length plus the SRAM clear and GC metadata initialization.
 
 ```bash
 python3 upycore/tools/mpy_build.py run -v upycore/programs/hello.py          # shortcut
@@ -202,7 +241,7 @@ The halt line reports `boot=<cycles>`. `--nand` writes the `.nand.bin` and
 - leaves the stand-in model out of `v/`
 - lists BaseJump's `bsg_mem_1rw_sync_mask_write_bit.v`, its synth model
   and helpers in `src.yml` (with the `subst` meta for `${bsg_root}`)
-- adds `fakeram_d16384_w36` to `vlsi.inputs.sram_parameters`
+- adds `fakeram_d32768_w36` to `vlsi.inputs.sram_parameters`
 
 ```bash
 python3 upycore/synth/hammer/make_hammer_design.py \
@@ -219,7 +258,7 @@ cannot parse `mpy_core.sv`, and writes the rest (`mpy_gc`, `mpy_ca`,
 those modules, convert the whole `mpy_soc` with `convert_rtl.sh` instead.
 
 After `make sram`, read the macro size from the generated
-`fakeram_d16384_w36.lef` (`SIZE w BY h`) and pick a die that holds four
+`fakeram_d32768_w36.lef` (`SIZE w BY h`) and pick a die that holds four
 macros plus the logic. `--die` is a starting guess. Then follow Module 2
 Task 3:
 
@@ -242,7 +281,7 @@ the exact names from Innovus.
 
 Mirror (`mx`, `my`) but do not rotate the macros: rotating them breaks
 their power rails. After `make syn`, the mapped netlist should instantiate
-`fakeram_d16384_w36` four times (`grep -c fakeram_d16384_w36
+`fakeram_d32768_w36` four times (`grep -c fakeram_d32768_w36
 build/syn-rundir/mpy_soc.mapped.v`). If a block shows up as
 `notmacro.synth`, its depth or width does not match the `sram_parameters`
 entry and Genus is building 590K bits of flops. A run that takes far

@@ -60,21 +60,50 @@ def _periph_args(work: Path) -> list[str]:
     return r.stdout.split()
 
 
+def _hash_args(work: Path) -> list[str]:
+    subprocess.run([sys.executable, str(TB / "mpy_hash_oracle.py"), str(work)],
+                   cwd=ROOT, check=True)
+    return [f"+VECTORS={work / 'vectors.txt'}"]
+
+
 @dataclass
 class Bench:
     name: str
     rtl: list[str]
     passed: str                      # regex on the bench's output
     args: Callable[[Path], list[str]] = field(default=lambda work: [])
+    top: str | None = None
+    parameters: dict[str, int] = field(default_factory=dict)
+    cpp: list[str] = field(default_factory=list)
 
 
 BENCHES = [
+    Bench("mpy_bytecopy", ["mpy_bytecopy.sv"], r"^PASS mpy_bytecopy "),
+    Bench("mpy_key_equal", ["mpy_key_equal.sv"], r"^PASS mpy_key_equal "),
+    Bench("mpy_rehash_stream", ["mpy_hash.sv", "mpy_hash_slot.sv", "upycore_umod_seq.sv", "mpy_key_equal.sv", "mpy_map_engine.sv", "mpy_rehash_stream.sv"], r"^PASS mpy_rehash_stream "),
+    Bench("mpy_collection", ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_key_equal.sv", "mpy_map_engine.sv", "mpy_bulk.sv", "mpy_hash_slot.sv", "mpy_rehash_stream.sv", "mpy_ca.sv", "mpy_bytecopy.sv", "mpy_collection.sv"], r"^PASS mpy_collection "),
+    Bench("mpy_bulk", ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_key_equal.sv", "mpy_map_engine.sv", "mpy_bulk.sv", "mpy_hash_slot.sv", "mpy_rehash_stream.sv"], r"^PASS mpy_bulk "),
+    Bench("mpy_map_engine", ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_key_equal.sv", "mpy_map_engine.sv"], r"^PASS mpy_map_engine "),
+    Bench("mpy_map_cache", ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_key_equal.sv", "mpy_map_engine.sv"], r"^PASS mpy_map_engine ", top="tb_mpy_map_engine", parameters={"TYPE_CACHE": 1}),
+    Bench("mpy_hash4", ["mpy_hash.sv"], r"^PASS mpy_hash", _hash_args,
+          top="tb_mpy_hash", parameters={"BYTES_PER_CYCLE": 4}),
+    Bench("mpy_hash_slot4", ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_hash_slot.sv"],
+          r"^PASS mpy_hash_slot", _hash_args, top="tb_mpy_hash_slot",
+          parameters={"BYTES_PER_CYCLE": 4}),
+    Bench("mpy_hash_slot", ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_hash_slot.sv"], r"^PASS mpy_hash_slot", _hash_args),
+    Bench("mpy_hash", ["mpy_hash.sv"], r"^PASS mpy_hash", _hash_args),
+    Bench("upycore_mul", ["upycore_mul.sv"], r"^PASS upycore_mul "),
+    Bench("upycore_mul8", ["upycore_mul.sv"], r"^PASS upycore_mul ", top="tb_upycore_mul", parameters={"STEP":8}),
+    Bench("upycore_mul64", ["upycore_mul.sv"], r"^PASS upycore_mul ", top="tb_upycore_mul", parameters={"STEP":64}),
+    Bench("mpy_numeric", list(mpy_synth.ALU_FILES), r"^PASS mpy_numeric ", cpp=["mpy_numeric_oracle.cpp"]),
     Bench("mpy_alu", list(mpy_synth.ALU_FILES), r"^PASS mpy_alu "),
+    Bench("mpy_boot", ["mpy_boot.sv", "../tb/tb_spi_nand.sv"], r"^PASS mpy_boot "),
     Bench("mpy_ca", ["mpy_ca.sv", "bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv"], r"^PASS mpy_ca "),
     Bench("mpy_container", ["mpy_container.sv"], r"^PASS mpy_container"),
     Bench("mpy_decode", ["mpy_decode.sv"], r"^mpy_decode checks: \d+ ok", _decode_args),
     Bench("mpy_fetch", ["bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv", "mpy_fetch.sv"],
           r"^PASS mpy_fetch "),
+    Bench("mpy_shared_mem", ["bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv"], r"^PASS mpy_shared_mem "),
     Bench("mpy_gc", ["mpy_gc.sv"], r"^PASS mpy_gc "),
     Bench("mpy_periph", ["mpy_mmio_pkg.sv", "mpy_irq.sv", "mpy_periph.sv"], r"^PASS: mpy periph",
           _periph_args),
@@ -86,9 +115,11 @@ BENCHES = [
 def run_bench(b: Bench) -> tuple[bool, str]:
     work = BUILD / b.name
     work.mkdir(parents=True, exist_ok=True)
-    top = f"tb_{b.name}"
+    top = b.top or f"tb_{b.name}"
     cmd = [os.environ.get("VERILATOR", "verilator"), *FLAGS, f"-I{RTL}", "--Mdir", str(work / "obj"),
-           *[str(RTL / f) for f in b.rtl], str(TB / f"{top}.sv"), "--top-module", top]
+           *[str(RTL / f) for f in b.rtl], str(TB / f"{top}.sv"), "--top-module", top,
+           *[f"-G{k}={v}" for k, v in b.parameters.items()],
+           *[str(TB / f) for f in b.cpp]]
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
     if r.returncode != 0:
         return False, "verilator failed:\n" + (r.stdout + r.stderr)[-3000:]

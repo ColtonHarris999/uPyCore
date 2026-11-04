@@ -6,8 +6,8 @@ bytecode. Programs are MicroPython source. Host `mpy-cross` compiles them to
 Verilator model of `mpy_soc` boots it into its on-chip image SRAM and runs
 it. `compile`, `exec`, and `eval` run the frozen uPy2 compiler on the hart:
 each stage is its own call, and the firmware collects between them. The
-compiler does not fit the 192 KB image SRAM next to the firmware, so those
-programs do not link with the current memory map (see Memory and boot).
+512 KiB shared SRAM holds the compiler and firmware together; the remaining
+space supplies its runtime heap (see Memory and boot).
 
 The unix oracle is MicroPython v1.29.0 built as the `upycore` variant
 (`sys.platform` and `sys.implementation.name` are `upycore`).
@@ -68,6 +68,11 @@ python3 upycore/tools/unit_tests.py alu gc
 
 ## Accelerators
 
+[`upycore/docs/mpy_hash.md`](upycore/docs/mpy_hash.md) describes the standalone
+MicroPython hash engine and pipelined hash-to-slot unit for future rehashing,
+their equivalence tests, and the hash/modulo/memory tradeoffs. They are not
+yet connected to the SoC.
+
 Bulk word copies run on the container accelerator while the core goes on
 to the next instruction, and a binary op that cannot fail retires before
 the ALU finishes. A scoreboard makes a later access to busy data wait.
@@ -77,9 +82,11 @@ and `mpy_build.py run --sim-arg +CA=0 --sim-arg +AALU=0` turns both off.
 
 ## Memory and boot
 
-Both memories are on-chip SRAM built from four 64 KB blocks of 16384 x 36
-bits (payload and tag in one word): a 64 KB data SRAM and a 192 KB image
-SRAM, interleaved by word across the four blocks. The collector, the core,
+Both memories are on-chip SRAM built from four 128 KiB blocks of 32768 x 36
+bits (payload and tag in one word), interleaved by word. Image and data
+share their 512 KiB payload capacity: boot rounds the actual image size
+up to 32 bytes and gives all remaining space to mutable data. Logical
+image/data addresses stay unchanged; there is no fixed partition. The collector, the core,
 the core's instruction fetch and the container accelerator each have a
 memory port, and ports that touch different blocks run in the same cycle.
 Fetch reads three words ahead of `pc`. After reset `mpy_boot` copies the

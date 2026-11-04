@@ -153,7 +153,7 @@ module mpy_ca #(
 
     // The core holds one more command while its last ship is still landing.
     assign cmd_ready_o = 32'(cnt) < QDEPTH;
-    assign idle_o = (cnt == '0);
+    assign idle_o = (cnt == '0) && (if_n == '0) && !rq_v;
 
     always_comb begin
         chk_busy_o = 1'b0;

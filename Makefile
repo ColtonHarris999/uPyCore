@@ -52,6 +52,7 @@ run: $(MPY_CROSS)
 test: $(MPY_CROSS)
 	$(PYTHON) upycore/tests/test_mpy_periph_model.py
 	$(PYTHON) upycore/tests/test_hw_manifest.py
+	$(PYTHON) upycore/tests/test_memory_layout.py
 	$(PYTHON) upycore/tests/test_numeric_const.py
 	$(PYTHON) upycore/tests/test_compiler_host.py
 	$(PYTHON) upycore/tools/compiler_suite.py
@@ -78,6 +79,7 @@ test-unit: $(MPY_CROSS)
 test-host: $(MPY_CROSS)
 	$(PYTHON) upycore/tests/test_mpy_periph_model.py
 	$(PYTHON) upycore/tests/test_hw_manifest.py
+	$(PYTHON) upycore/tests/test_memory_layout.py
 	$(PYTHON) upycore/tests/test_numeric_const.py
 	$(PYTHON) upycore/tests/test_compiler_host.py
 	$(PYTHON) upycore/tools/compiler_suite.py

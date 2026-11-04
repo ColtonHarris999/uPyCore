@@ -5,8 +5,8 @@
 // each on its own mpy_mem port, and mpy_boot, which fills the image SRAM
 // from SPI NAND.
 //
-// Boot: mpy_mem zeroes the data SRAM, mpy_gc clears its allocation table
-// and mpy_boot copies the image from the NAND, all at once. The core and the
+// Boot: mpy_mem clears all SRAM, then mpy_boot loads the image and fixes
+// the split, then mpy_gc clears its maximum-capacity allocation table. The core and the
 // accelerator stay in reset until all three are done, so the program's cycle
 // count starts at its first instruction. A bad boot stream raises
 // boot_err_o and the core never starts (upycore/docs/mpy_boot.md).
@@ -28,6 +28,7 @@
 // SIM_CYCLES returns the cycle counter. Everything else goes to mpy_mem.
 module mpy_soc #(
     parameter int SRAM_LATENCY = MPY_SRAM_LATENCY,
+    parameter bit CA_TYPE_CACHE = 0,
     parameter int FLASH_WAIT_STATES = MPY_FLASH_WAIT_STATES
 ) (
     input  logic        clk_i,
@@ -90,9 +91,14 @@ module mpy_soc #(
     logic [31:0] f_addr;
 
     // core <-> container accelerator
+    logic ca_byte,ca_reverse;
     logic        ca_valid, ca_ready, ca_idle, ca_busy, ca_fault;
     logic [31:0] ca_dst, ca_src, ca_n, ca_fault_addr, ca_words, ca_cmds;
     logic [3:0]  ca_fault_reason;
+    logic mb_valid, mb_ready, mb_return, mb_ok, mb_set;
+    logic [2:0] mb_op;
+    logic [31:0] mb_src,mb_sn,mb_dst,mb_dn,mb_used,mb_result,mb_header,mb_source_header,mb_hashes;
+    logic [31:0] mb_qcount,mb_qbase,mb_qext;
     // accelerator <-> port
     logic        am_req, am_we, am_gnt, am_ack;
     logic [31:0] am_addr, am_wdata;
@@ -101,9 +107,18 @@ module mpy_soc #(
     logic [3:0]  core_hcode;
     logic [31:0] core_hval, core_cycles;
 
-    // mpy_mem, mpy_boot and mpy_gc (which clears its allocation table after
-    // reset) run from rst_n_i; the core and the accelerator wait for all three.
+    // Reset release follows memory clear -> image load -> GC metadata clear.
+    // The core and accelerator wait for all three.
     logic        mem_ready, boot_done;
+    logic [31:0] image_words, requested_pool, physical_pool, active_pool;
+    logic layout_error;
+    assign physical_pool = MPY_MEM_BYTES - (image_words << 2) -
+                           (ABI_GC_POOL_BASE - MPY_SRAM_BASE);
+    assign active_pool = (requested_pool == 0) ? physical_pool : requested_pool;
+    assign layout_error = boot_done && (requested_pool > physical_pool ||
+                                      active_pool < 16 || active_pool[3:0] != 0);
+    logic boot_error;
+    assign boot_err_o = boot_error || layout_error;
     logic        sys_rst_n;
     logic        ld_we;
     logic [MPY_FLASH_IDX_W-1:0] ld_idx;
@@ -112,15 +127,16 @@ module mpy_soc #(
 
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) sys_rst_n <= 1'b0;
-        else if (mem_ready && boot_done && !g_busy) sys_rst_n <= 1'b1;
+        else if (mem_ready && boot_done && !boot_err_o && !g_busy) sys_rst_n <= 1'b1;
     end
     assign boot_done_o = sys_rst_n;
 
     mpy_boot u_boot (
-        .clk_i, .rst_n_i,
+        .clk_i, .rst_n_i(rst_n_i && mem_ready),
         .sck_o(nand_sck_o), .cs_n_o(nand_cs_n_o), .mosi_o(nand_mosi_o), .miso_i(nand_miso_i),
         .ld_we_o(ld_we), .ld_idx_o(ld_idx), .ld_wdata_o(ld_wdata), .ld_wtag_o(ld_wtag),
-        .done_o(boot_done), .err_o(boot_err_o)
+        .image_words_o(image_words), .pool_bytes_o(requested_pool),
+        .done_o(boot_done), .err_o(boot_error)
     );
 
     mpy_core u_core (
@@ -139,7 +155,12 @@ module mpy_soc #(
         .gc_root1_lo_o(g_r1lo), .gc_root1_hi_o(g_r1hi),
         .gc_collect_done_i(g_collect_done),
         .gc_free_i(g_free), .gc_total_i(g_total), .gc_collections_i(g_coll),
-        .ca_valid_o(ca_valid), .ca_ready_i(ca_ready),
+        .mb_valid_o(mb_valid),.mb_ready_i(mb_ready),.mb_return_i(mb_return),.mb_ok_i(mb_ok),
+        .mb_used_i(mb_result),.mb_op_o(mb_op),.mb_set_o(mb_set),
+        .mb_src_o(mb_src),.mb_sn_o(mb_sn),.mb_dst_o(mb_dst),.mb_dn_o(mb_dn),.mb_used_o(mb_used),
+        .mb_header_o(mb_header),.mb_source_header_o(mb_source_header),.mb_hashes_o(mb_hashes),
+        .mb_qcount_o(mb_qcount),.mb_qbase_o(mb_qbase),.mb_qext_o(mb_qext),
+        .ca_reverse_o(ca_reverse),.ca_byte_o(ca_byte),.ca_valid_o(ca_valid), .ca_ready_i(ca_ready),
         .ca_dst_o(ca_dst), .ca_src_o(ca_src), .ca_n_o(ca_n), .ca_idle_i(ca_idle),
         .ca_fault_i(ca_fault), .ca_fault_reason_i(ca_fault_reason), .ca_fault_addr_i(ca_fault_addr),
         .halted_o(core_halted), .halt_code_o(core_hcode), .halt_value_o(core_hval),
@@ -151,7 +172,8 @@ module mpy_soc #(
         .POOL_BASE(ABI_GC_POOL_BASE),
         .POOL_BYTES(ABI_GC_POOL_BYTES)
     ) u_gc (
-        .clk_i, .rst_n_i,
+        .clk_i, .rst_n_i(rst_n_i && boot_done && !boot_err_o),
+        .pool_bytes_i(active_pool),
         .alloc_req_i(g_alloc_req), .alloc_nbytes_i(g_alloc_nbytes),
         .alloc_done_o(g_alloc_done), .alloc_ok_o(g_alloc_ok), .alloc_addr_o(g_alloc_addr),
         .collect_req_i(g_collect_req),
@@ -164,17 +186,22 @@ module mpy_soc #(
         .mem_ack_i(gm_ack), .mem_rdata_i(gm_rdata), .mem_rtag_i(gm_rtag)
     );
 
-    mpy_ca u_ca (
-        .clk_i, .rst_n_i(sys_rst_n),
-        .cmd_valid_i(ca_valid), .cmd_ready_o(ca_ready),
-        .cmd_dst_i(ca_dst), .cmd_src_i(ca_src), .cmd_n_i(ca_n), .idle_o(ca_idle),
-        .chk_addr_i(c_addr), .chk_we_i(c_we), .chk_busy_o(ca_busy),
-        .req_o(am_req), .we_o(am_we), .addr_o(am_addr), .wdata_o(am_wdata), .wtag_o(am_wtag),
-        .gnt_i(am_gnt), .ack_i(am_ack), .fault_i(m_fault[P_CA]),
-        .fault_reason_i(m_fault_reason[P_CA]),
-        .rdata_i(m_rdata[P_CA]), .rtag_i(m_rtag[P_CA]),
-        .fault_o(ca_fault), .fault_reason_o(ca_fault_reason), .fault_addr_o(ca_fault_addr),
-        .words_o(ca_words), .cmds_o(ca_cmds)
+    mpy_collection #(.TYPE_CACHE(CA_TYPE_CACHE)) u_ca (
+        .cache_clear_i(g_collect_req || g_collect_done),.cache_write_i(m_gnt[P_CORE] && c_we),.cache_addr_i(c_addr),
+        .clk_i,.rst_n_i(sys_rst_n),
+        .copy_reverse_i(ca_reverse),.copy_byte_i(ca_byte),.copy_valid_i(ca_valid),.copy_ready_o(ca_ready),
+        .copy_src_i(ca_src),.copy_dst_i(ca_dst),.copy_n_i(ca_n),
+        .bulk_valid_i(mb_valid),.bulk_ready_o(mb_ready),.bulk_op_i(mb_op),.bulk_set_i(mb_set),
+        .bulk_src_i(mb_src),.bulk_sn_i(mb_sn),.bulk_dst_i(mb_dst),.bulk_dn_i(mb_dn),.bulk_used_i(mb_used),
+        .bulk_header_i(mb_header),.bulk_source_header_i(mb_source_header),.bulk_hashes_i(mb_hashes),
+        .qstr_count_i(mb_qcount),.qstr_base_i(mb_qbase),.qstr_ext_i(mb_qext),
+        .bulk_return_o(mb_return),.bulk_ok_o(mb_ok),.bulk_used_o(mb_result),
+        .idle_o(ca_idle),.chk_addr_i(c_addr),.chk_we_i(c_we),.chk_busy_o(ca_busy),
+        .req_o(am_req),.we_o(am_we),.addr_o(am_addr),.wdata_o(am_wdata),.wtag_o(am_wtag),
+        .gnt_i(am_gnt),.ack_i(am_ack),.fault_i(m_fault[P_CA]),.fault_reason_i(m_fault_reason[P_CA]),
+        .rdata_i(m_rdata[P_CA]),.rtag_i(m_rtag[P_CA]),
+        .fault_o(ca_fault),.fault_reason_o(ca_fault_reason),.fault_addr_o(ca_fault_addr),
+        .words_o(ca_words),.cmds_o(ca_cmds)
     );
 
     mpy_mem #(
@@ -182,7 +209,7 @@ module mpy_soc #(
         .FLASH_WAIT_STATES(FLASH_WAIT_STATES),
         .SRAM_LATENCY(SRAM_LATENCY)
     ) u_mem (
-        .clk_i, .rst_n_i,
+        .clk_i, .rst_n_i, .image_words_i(image_words),
         .req_i(m_req), .we_i(m_we), .tag_we_i(m_tag_we), .be_i(m_be),
         .addr_i(m_addr), .wdata_i(m_wdata), .wtag_i(m_wtag),
         .gnt_o(m_gnt), .ack_o(m_ack), .rdata_o(m_rdata), .rtag_o(m_rtag),

@@ -140,6 +140,7 @@ varkw_dup_trap = { file = "hw/calls/varkw_dup_trap.py" }
 varkw_kwonly_missing_trap = { file = "hw/calls/varkw_kwonly_missing_trap.py" }
 
 [containers]
+bulk_maps = { file = "hw/containers/bulk_maps.py", cycles = 300_000_000 }
 tuple_index_bounds = { cycles = 80_000_000 }
 lists = { file = "hw/containers/lists.py" }
 tuples = { file = "hw/containers/tuples.py" }
@@ -303,6 +304,7 @@ class_const = { file = "hw/objects/class_const.py" }
 class_two_instances = { file = "hw/objects/class_two_instances.py" }
 
 [builtins]
+hash_equivalence = { file = "hw/builtins/hash_equivalence.py", cycles = 100_000_000 }
 array_slice_bounds = { cycles = 80_000_000 }
 int_bytes_bounds = { cycles = 80_000_000 }
 builtin_fns = { file = "hw/builtins/funcs.py" }
@@ -386,7 +388,8 @@ local_hot = { file = "hw/variables/local_hot.py" }
 
 # Deep frames and many locals. Register-file spill counters are not portable.
 [memory]
-alloc_size_bounds = { cycles = 80_000_000, heapsize = 228096 }
+large_sram = { cycles = 80_000_000, heapsize = 490240 }
+alloc_size_bounds = { cycles = 80_000_000, heapsize = 490240 }
 code_ram_call_rom = { file = "hw/memory/code_ram_call_rom.py" }
 locals_40_uninit = { file = "hw/memory/locals_40_uninit.py" }
 rf_deep_recursion = { file = "hw/memory/rf_deep_recursion.py", cycles = 40_000_000, timeout = 240 }

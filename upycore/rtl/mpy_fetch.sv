@@ -127,19 +127,24 @@ module mpy_fetch #(
             nfl <= nfl + (gnt_i ? 3'd1 : 3'd0) - (keep ? 3'd1 : 3'd0);
             n = qn;
             if (pop) begin
-                for (int i = 0; i < QD - 1; i++) begin
+                qb <= qb + 32'd4;
+                n = qn - 1'b1;
+            end
+            // Select shift versus append once per slot. A response arriving
+            // while the head is consumed must retain its data AND fault bit;
+            // avoid overlapping dynamic-index and shift assignments.
+            for (int i = 0; i < QD; i++) begin
+                if (keep && n == NW'(i)) begin
+                    q_w[i] <= rdata_i;
+                    q_f[i] <= fault_i;
+                    q_r[i] <= fault_reason_i;
+                end else if (pop && i < QD - 1) begin
                     q_w[i] <= q_w[i + 1];
                     q_f[i] <= q_f[i + 1];
                     q_r[i] <= q_r[i + 1];
                 end
-                qb <= qb + 32'd4;
-                n = qn - 1'b1;
             end
             if (keep) begin
-                // n < QD here: a read is only requested while there is room.
-                q_w[IW'(n)] <= rdata_i;
-                q_f[IW'(n)] <= fault_i;
-                q_r[IW'(n)] <= fault_reason_i;
                 if (fault_i) stop <= 1'b1;
                 n = n + 1'b1;
             end

@@ -25,10 +25,14 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-# Flip-flop bits in the RTL, counted with slang from the generated unit.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+from mpy_synth import SRAM_BLOCKS, SRAM_MACRO
+
+# Flip-flop bits: unique nonblocking-assignment targets in the elaborated
+# generated unit, counted with pyslang 12.1 after the numeric pipeline update.
 # Genus removes flops that are constant or duplicate another, so a few
 # percent fewer is normal; far fewer means logic was optimized away.
-RTL_FLOPS = {"mpy_alu": 5552, "mpy_decode": 461, "mpy_core": 12677}
+RTL_FLOPS = {"mpy_alu": 6127, "mpy_decode": 461, "mpy_core": 14275}
 
 BAD_WARNING = re.compile(
     r"latch|unresolved|black ?box|undriven|not driven|multiple driver|"
@@ -106,15 +110,22 @@ def main() -> int:
         keywords = {"module", "input", "output", "inout", "wire", "reg", "assign", "endmodule"}
         cells = {k: v for k, v in used.items() if k not in keywords}
         latches = sum(v for k, v in cells.items() if re.match(r"sky130_fd_sc_\w+__dl[xr]", k))
+        allowed_macros = {SRAM_MACRO["name"]} if top == "mpy_soc" else set()
         unknown = {k: v for k, v in cells.items()
-                   if k not in defined and not k.startswith("sky130_")}
+                   if k not in defined and not k.startswith("sky130_") and k not in allowed_macros}
         print(f"  latch cells: {latches}" + ("  CHECK: the RTL has no latches" if latches else ""))
         failed |= bool(latches)
         if unknown:
             failed = True
             print(f"  CHECK: instances of undefined modules (black boxes): {unknown}")
         else:
-            print("  no black boxes: every instance is a sky130 cell or a module in the netlist")
+            print("  no unexpected black boxes: every instance is a library cell, SRAM macro or defined module")
+        if top == "mpy_soc":
+            macros = cells.get(SRAM_MACRO["name"], 0)
+            bad_macros = macros != SRAM_BLOCKS
+            print(f"  SRAM macros: {macros} x {SRAM_MACRO['name']} (expected {SRAM_BLOCKS})"
+                  + ("  CHECK: SRAM geometry/count mismatch" if bad_macros else ""))
+            failed |= bad_macros
 
     print("== Flops and timing (final_qor.rpt)")
     qor = run / "reports" / "final_qor.rpt"
