@@ -41,7 +41,6 @@ from mpy_file import (  # noqa: E402
     read_mpy,
 )
 
-FLASH_BYTES = 192 * 1024  # image SRAM, MPY_FLASH_BYTES
 T = abi.TAG
 NULL = (T["CONTROL"], abi.CTL["NULL"])
 NONE = (T["CONTROL"], abi.CTL["NONE"])
@@ -781,6 +780,10 @@ def link(main: Path, modules: list[tuple[str, Path, bool]], fw: Path, out: Path,
         descs.append(baddr | (0 if all(b < 0x80 for b in data) else abi.QDESC_NONASCII))
     desc_addr = img.emit_words(descs)
 
+    try:
+        image_capacity, data_capacity, heap_capacity = abi.memory_layout(img.here(), pool_bytes)
+    except ValueError as exc:
+        raise LinkError(str(exc)) from exc
     hdr = abi.HDR
     img.set(4 * hdr["MAGIC"], abi.IMAGE_MAGIC)
     img.set(4 * hdr["VERSION"], abi.IMAGE_VERSION)
@@ -795,11 +798,8 @@ def link(main: Path, modules: list[tuple[str, Path, bool]], fw: Path, out: Path,
     img.set(4 * hdr["CHARS"], chars_addr)
     img.set(4 * hdr["EMPTY_TUPLE"], img.symbols["empty_tuple"])
     img.set(4 * hdr["FW_MODULE"], fw_mod.md_addr)
-    img.set(4 * hdr["POOL_BYTES"], pool_bytes)
+    img.set(4 * hdr["POOL_BYTES"], heap_capacity)
     img.set(4 * hdr["IMAGE_BYTES"], img.here())
-
-    if img.here() > FLASH_BYTES:
-        raise LinkError(f"image is {img.here()} bytes; flash is {FLASH_BYTES}")
 
     out.parent.mkdir(parents=True, exist_ok=True)
     nwords = len(img.words)
@@ -815,6 +815,9 @@ def link(main: Path, modules: list[tuple[str, Path, bool]], fw: Path, out: Path,
     Path(f"{out}.tags.hex").write_text("".join(tag_lines))
     info = {
         "image_bytes": img.here(),
+        "image_aligned_bytes": image_capacity,
+        "data_bytes": data_capacity,
+        "pool_bytes": heap_capacity,
         "qstrs": len(img.qstrs),
         "rc": {f"{a:#x}": n for a, n in sorted(img.rc_names.items())},
         "main_md": main_mod.md_addr,

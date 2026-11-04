@@ -68,12 +68,12 @@ TOPS: dict[str, list[str]] = {
 CORE_FILES = TOPS["mpy_core"]
 
 # Behavioral stand-in for BaseJump's SRAM wrapper. The EE 477 flow reads
-# BaseJump's file instead and swaps each 16384 x 36 instance for this
+# BaseJump's file instead and swaps each 32768 x 36 instance for this
 # bsg_fakeram macro (MPY_MEM_BLOCK_WORDS x MPY_MEM_WIDTH in mpy_defs.svh).
 SRAM_MODEL = "bsg_mem_1rw_sync_mask_write_bit.sv"
-SRAM_MACRO = {"name": "fakeram_d16384_w36", "family": "1rw", "depth": 16384, "width": 36,
+SRAM_MACRO = {"name": "fakeram_d32768_w36", "family": "1rw", "depth": 32768, "width": 36,
               "mask": True, "mux": 1, "vt": ""}
-SRAM_BLOCKS = 4   # MPY_MEM_BLOCKS: one data SRAM block, three image blocks
+SRAM_BLOCKS = 4   # MPY_MEM_BLOCKS: interleaved shared image/data SRAM
 
 # Gate mapping the SRAM blocks as flops is a long memory job (the class
 # flow uses macros instead), so mem and soc stay elaborate-only here.

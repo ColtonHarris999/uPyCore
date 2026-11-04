@@ -90,27 +90,22 @@ localparam int MPY_TAGS_PER_WORD = 8;
 // Address windows. There is no DRAM, no L1, and no L2.
 // The old 256 KB spill at 0xF40000 is not a window.
 //
-// Both on-chip memories are built from MPY_MEM_BLOCKS identical 64 KB SRAM
-// blocks of MPY_MEM_BLOCK_WORDS x MPY_MEM_WIDTH bits: a 32-bit payload and
-// its 4-bit tag in one word, so one access reads or writes both. Words are
-// interleaved: word w of either window is in block w % 4. MPY_SRAM_BLOCKS
-// and MPY_IMAGE_BLOCKS size the windows in blocks' worth of words (mpy_mem
-// puts the data SRAM in the low rows of every block). The "flash" window is
-// the image SRAM. mpy_boot fills it from SPI NAND before
-// the hart leaves reset, and the hart can only read it.
-localparam int MPY_MEM_BLOCK_WORDS = 16384;
-localparam int MPY_MEM_BLOCK_AW    = 14; // $clog2(MPY_MEM_BLOCK_WORDS)
-localparam int MPY_MEM_WIDTH       = 36; // {tag, payload}
-localparam int MPY_SRAM_BLOCKS     = 1;
-localparam int MPY_IMAGE_BLOCKS    = 3;
-localparam int MPY_MEM_BLOCKS      = MPY_SRAM_BLOCKS + MPY_IMAGE_BLOCKS;
-
-localparam logic [31:0] MPY_FLASH_BASE           = 32'h0000_0000;
-localparam logic [31:0] MPY_FLASH_BYTES          = 32'h0003_0000; // 192 KB image SRAM
+// Four physical SRAM banks share image and mutable data capacity. The
+// constants below describe maximum address windows, not a fixed partition.
+// Boot places the image first (rounded to 32 bytes), then maps data offset
+// zero immediately after it. Logical pointers retain their existing bases.
+localparam int MPY_MEM_BLOCK_WORDS = 32768;
+localparam int MPY_MEM_BLOCK_AW    = $clog2(MPY_MEM_BLOCK_WORDS);
+localparam int MPY_MEM_WIDTH       = 36;
+localparam int MPY_MEM_BLOCKS      = 4;
+localparam int MPY_MEM_WORDS       = MPY_MEM_BLOCKS * MPY_MEM_BLOCK_WORDS;
+localparam int MPY_MEM_BYTES       = MPY_MEM_WORDS * 4;
+localparam int MPY_MEM_WORD_AW     = $clog2(MPY_MEM_WORDS);
+localparam logic [31:0] MPY_FLASH_BASE = 32'h0000_0000;
+localparam logic [31:0] MPY_FLASH_BYTES = MPY_MEM_BYTES;
 localparam logic [31:0] MPY_FLASH_RESERVED_BYTES = 32'd8;
-
-localparam logic [31:0] MPY_SRAM_BASE  = 32'h2000_0000;
-localparam logic [31:0] MPY_SRAM_BYTES = 32'h0001_0000; // 64 KB
+localparam logic [31:0] MPY_SRAM_BASE = 32'h2000_0000;
+localparam logic [31:0] MPY_SRAM_BYTES = MPY_MEM_BYTES;
 
 localparam logic [31:0] MPY_MMIO_BASE  = 32'h4000_0000;
 localparam logic [31:0] MPY_MMIO_BYTES = 32'h0000_1000; // 4 KB
@@ -121,9 +116,9 @@ localparam logic [31:0] MPY_SIM_BYTES = 32'd256;
 localparam int MPY_SRAM_LATENCY       = 1;
 localparam int MPY_FLASH_WAIT_STATES  = 1;
 
-localparam int MPY_SRAM_WORDS      = MPY_SRAM_BLOCKS * MPY_MEM_BLOCK_WORDS;  // 16384
-localparam int MPY_FLASH_WORDS     = MPY_IMAGE_BLOCKS * MPY_MEM_BLOCK_WORDS; // 49152
-localparam int MPY_FLASH_IDX_W     = 16; // $clog2(MPY_FLASH_WORDS)
+localparam int MPY_SRAM_WORDS      = MPY_MEM_WORDS;  // maximum, reduced by image at boot
+localparam int MPY_FLASH_WORDS     = MPY_MEM_WORDS; // maximum image window
+localparam int MPY_FLASH_IDX_W     = MPY_MEM_WORD_AW;
 
 // Boot stream in SPI NAND (upycore/docs/mpy_boot.md): magic, image word
 // count, then groups of one packed tag word and eight image words.
@@ -405,16 +400,16 @@ function automatic logic mpy_flash_addr_reserved(
     mpy_flash_addr_reserved = (addr < MPY_FLASH_RESERVED_BYTES);
 endfunction
 
-function automatic logic [15:0] mpy_sram_word_index(
+function automatic logic [MPY_MEM_WORD_AW-1:0] mpy_sram_word_index(
     input logic [31:0] addr
 );
-    mpy_sram_word_index = 16'((addr - MPY_SRAM_BASE) >> 2);
+    mpy_sram_word_index = MPY_MEM_WORD_AW'((addr - MPY_SRAM_BASE) >> 2);
 endfunction
 
-function automatic logic [16:0] mpy_flash_word_index(
+function automatic logic [MPY_MEM_WORD_AW-1:0] mpy_flash_word_index(
     input logic [31:0] addr
 );
-    mpy_flash_word_index = 17'((addr - MPY_FLASH_BASE) >> 2);
+    mpy_flash_word_index = MPY_MEM_WORD_AW'((addr - MPY_FLASH_BASE) >> 2);
 endfunction
 
 // SHORT_STR: length in the first payload's low byte, then up to 15 bytes

@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 
 BOOT_MAGIC = 0x4259_5055  # "UPYB", MPY_BOOT_MAGIC in upycore/rtl/mpy_defs.svh
-IMAGE_SRAM_WORDS = 3 * 16384  # MPY_FLASH_WORDS
+import mpy_abi as abi
 
 
 def _words(path: Path) -> list[int]:
@@ -41,8 +41,11 @@ def pack(image: Path) -> bytes:
     data = _words(Path(f"{image}.hex"))
     tags = _words(Path(f"{image}.tags.hex"))
     n = len(data)
-    if not 0 < n <= IMAGE_SRAM_WORDS:
-        raise ValueError(f"{image}: {n} words; the image SRAM holds {IMAGE_SRAM_WORDS}")
+    if n <= max(abi.HDR.values()):
+        raise ValueError(f"{image}: truncated image header")
+    abi.memory_layout(n * 4, data[abi.HDR["POOL_BYTES"]])
+    if (data[abi.HDR["IMAGE_BYTES"]] + 31) // 32 * 8 != n:
+        raise ValueError(f"{image}: image size header disagrees with padded word count")
     groups = (n + 7) // 8
     data += [0] * (8 * groups - n)
     tags += [0] * (groups - len(tags))

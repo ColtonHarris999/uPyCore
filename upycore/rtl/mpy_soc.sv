@@ -5,8 +5,8 @@
 // each on its own mpy_mem port, and mpy_boot, which fills the image SRAM
 // from SPI NAND.
 //
-// Boot: mpy_mem zeroes the data SRAM, mpy_gc clears its allocation table
-// and mpy_boot copies the image from the NAND, all at once. The core and the
+// Boot: mpy_mem clears all SRAM, then mpy_boot loads the image and fixes
+// the split, then mpy_gc clears its maximum-capacity allocation table. The core and the
 // accelerator stay in reset until all three are done, so the program's cycle
 // count starts at its first instruction. A bad boot stream raises
 // boot_err_o and the core never starts (upycore/docs/mpy_boot.md).
@@ -101,9 +101,18 @@ module mpy_soc #(
     logic [3:0]  core_hcode;
     logic [31:0] core_hval, core_cycles;
 
-    // mpy_mem, mpy_boot and mpy_gc (which clears its allocation table after
-    // reset) run from rst_n_i; the core and the accelerator wait for all three.
+    // Reset release follows memory clear -> image load -> GC metadata clear.
+    // The core and accelerator wait for all three.
     logic        mem_ready, boot_done;
+    logic [31:0] image_words, requested_pool, physical_pool, active_pool;
+    logic layout_error;
+    assign physical_pool = MPY_MEM_BYTES - (image_words << 2) -
+                           (ABI_GC_POOL_BASE - MPY_SRAM_BASE);
+    assign active_pool = (requested_pool == 0) ? physical_pool : requested_pool;
+    assign layout_error = boot_done && (requested_pool > physical_pool ||
+                                      active_pool < 16 || active_pool[3:0] != 0);
+    logic boot_error;
+    assign boot_err_o = boot_error || layout_error;
     logic        sys_rst_n;
     logic        ld_we;
     logic [MPY_FLASH_IDX_W-1:0] ld_idx;
@@ -112,15 +121,16 @@ module mpy_soc #(
 
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) sys_rst_n <= 1'b0;
-        else if (mem_ready && boot_done && !g_busy) sys_rst_n <= 1'b1;
+        else if (mem_ready && boot_done && !boot_err_o && !g_busy) sys_rst_n <= 1'b1;
     end
     assign boot_done_o = sys_rst_n;
 
     mpy_boot u_boot (
-        .clk_i, .rst_n_i,
+        .clk_i, .rst_n_i(rst_n_i && mem_ready),
         .sck_o(nand_sck_o), .cs_n_o(nand_cs_n_o), .mosi_o(nand_mosi_o), .miso_i(nand_miso_i),
         .ld_we_o(ld_we), .ld_idx_o(ld_idx), .ld_wdata_o(ld_wdata), .ld_wtag_o(ld_wtag),
-        .done_o(boot_done), .err_o(boot_err_o)
+        .image_words_o(image_words), .pool_bytes_o(requested_pool),
+        .done_o(boot_done), .err_o(boot_error)
     );
 
     mpy_core u_core (
@@ -151,7 +161,8 @@ module mpy_soc #(
         .POOL_BASE(ABI_GC_POOL_BASE),
         .POOL_BYTES(ABI_GC_POOL_BYTES)
     ) u_gc (
-        .clk_i, .rst_n_i,
+        .clk_i, .rst_n_i(rst_n_i && boot_done && !boot_err_o),
+        .pool_bytes_i(active_pool),
         .alloc_req_i(g_alloc_req), .alloc_nbytes_i(g_alloc_nbytes),
         .alloc_done_o(g_alloc_done), .alloc_ok_o(g_alloc_ok), .alloc_addr_o(g_alloc_addr),
         .collect_req_i(g_collect_req),
@@ -182,7 +193,7 @@ module mpy_soc #(
         .FLASH_WAIT_STATES(FLASH_WAIT_STATES),
         .SRAM_LATENCY(SRAM_LATENCY)
     ) u_mem (
-        .clk_i, .rst_n_i,
+        .clk_i, .rst_n_i, .image_words_i(image_words),
         .req_i(m_req), .we_i(m_we), .tag_we_i(m_tag_we), .be_i(m_be),
         .addr_i(m_addr), .wdata_i(m_wdata), .wtag_i(m_wtag),
         .gnt_o(m_gnt), .ack_o(m_ack), .rdata_o(m_rdata), .rtag_o(m_rtag),

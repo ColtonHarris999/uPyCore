@@ -49,7 +49,7 @@ from mpy_dc_unit import write_unit  # noqa: E402
 from mpy_synth import CORE_FILES, SRAM_BLOCKS, SRAM_MACRO, SRAM_MODEL, TOPS  # noqa: E402
 
 # BaseJump STL sources for the SRAM wrapper, in the class src.yml style.
-# The fakeram hook swaps each 16384 x 36 bsg_mem_1rw_sync_mask_write_bit
+# The fakeram hook swaps each 32768 x 36 bsg_mem_1rw_sync_mask_write_bit
 # for the generated macro; the other files are what its synth model and
 # options name.
 BSG_SRAM_FILES = [

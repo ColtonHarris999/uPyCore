@@ -42,8 +42,9 @@ module tb_mpy_gc;
 
     always #5 clk = ~clk;
 
+    logic [31:0] pool_bytes = POOL_BYTES;
     mpy_gc #(.POOL_BASE(POOL), .POOL_BYTES(POOL_BYTES), .STACK_DEPTH(2)) dut (
-        .clk_i(clk), .rst_n_i(rst_n),
+        .clk_i(clk), .rst_n_i(rst_n), .pool_bytes_i(pool_bytes),
         .alloc_req_i(alloc_req), .alloc_nbytes_i(alloc_nbytes),
         .alloc_done_o(alloc_done), .alloc_ok_o(alloc_ok), .alloc_addr_o(alloc_addr),
         .collect_req_i(collect_req),
@@ -197,6 +198,21 @@ module tb_mpy_gc;
         collect(ROOTS, ROOTS + 4);
         check(overflows > 32'(free0), "the mark stack overflowed");
         check(free_blocks == 32'(NB - 8), "parent and six children survive the overflow");
+
+        // A boot-selected pool smaller than the physical metadata capacity.
+        @(negedge clk); rst_n = 0; pool_bytes = 128;
+        repeat (3) @(negedge clk);
+        rst_n = 1;
+        wait (!busy);
+        check(free_blocks == 8 && total_blocks == 8, "runtime heap capacity after reset");
+        alloc(144, ok, x);
+        check(!ok && free_blocks == 8, "runtime bound rejects allocation below compile-time maximum");
+        alloc(128, ok, x);
+        check(ok && x == POOL && free_blocks == 0, "all runtime heap bytes are usable");
+        alloc(16, ok, x);
+        check(!ok, "allocation cannot spill beyond runtime end");
+        collect(ROOTS, ROOTS);
+        check(free_blocks == 8, "sweep only accounts for runtime heap blocks");
 
         $display("PASS mpy_gc %0d checks", checks);
         $finish;
