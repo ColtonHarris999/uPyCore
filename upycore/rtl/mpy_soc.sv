@@ -28,6 +28,7 @@
 // SIM_CYCLES returns the cycle counter. Everything else goes to mpy_mem.
 module mpy_soc #(
     parameter int SRAM_LATENCY = MPY_SRAM_LATENCY,
+    parameter bit CA_TYPE_CACHE = 0,
     parameter int FLASH_WAIT_STATES = MPY_FLASH_WAIT_STATES
 ) (
     input  logic        clk_i,
@@ -90,9 +91,14 @@ module mpy_soc #(
     logic [31:0] f_addr;
 
     // core <-> container accelerator
+    logic ca_byte,ca_reverse;
     logic        ca_valid, ca_ready, ca_idle, ca_busy, ca_fault;
     logic [31:0] ca_dst, ca_src, ca_n, ca_fault_addr, ca_words, ca_cmds;
     logic [3:0]  ca_fault_reason;
+    logic mb_valid, mb_ready, mb_return, mb_ok, mb_set;
+    logic [2:0] mb_op;
+    logic [31:0] mb_src,mb_sn,mb_dst,mb_dn,mb_used,mb_result,mb_header,mb_source_header,mb_hashes;
+    logic [31:0] mb_qcount,mb_qbase,mb_qext;
     // accelerator <-> port
     logic        am_req, am_we, am_gnt, am_ack;
     logic [31:0] am_addr, am_wdata;
@@ -139,7 +145,12 @@ module mpy_soc #(
         .gc_root1_lo_o(g_r1lo), .gc_root1_hi_o(g_r1hi),
         .gc_collect_done_i(g_collect_done),
         .gc_free_i(g_free), .gc_total_i(g_total), .gc_collections_i(g_coll),
-        .ca_valid_o(ca_valid), .ca_ready_i(ca_ready),
+        .mb_valid_o(mb_valid),.mb_ready_i(mb_ready),.mb_return_i(mb_return),.mb_ok_i(mb_ok),
+        .mb_used_i(mb_result),.mb_op_o(mb_op),.mb_set_o(mb_set),
+        .mb_src_o(mb_src),.mb_sn_o(mb_sn),.mb_dst_o(mb_dst),.mb_dn_o(mb_dn),.mb_used_o(mb_used),
+        .mb_header_o(mb_header),.mb_source_header_o(mb_source_header),.mb_hashes_o(mb_hashes),
+        .mb_qcount_o(mb_qcount),.mb_qbase_o(mb_qbase),.mb_qext_o(mb_qext),
+        .ca_reverse_o(ca_reverse),.ca_byte_o(ca_byte),.ca_valid_o(ca_valid), .ca_ready_i(ca_ready),
         .ca_dst_o(ca_dst), .ca_src_o(ca_src), .ca_n_o(ca_n), .ca_idle_i(ca_idle),
         .ca_fault_i(ca_fault), .ca_fault_reason_i(ca_fault_reason), .ca_fault_addr_i(ca_fault_addr),
         .halted_o(core_halted), .halt_code_o(core_hcode), .halt_value_o(core_hval),
@@ -164,17 +175,22 @@ module mpy_soc #(
         .mem_ack_i(gm_ack), .mem_rdata_i(gm_rdata), .mem_rtag_i(gm_rtag)
     );
 
-    mpy_ca u_ca (
-        .clk_i, .rst_n_i(sys_rst_n),
-        .cmd_valid_i(ca_valid), .cmd_ready_o(ca_ready),
-        .cmd_dst_i(ca_dst), .cmd_src_i(ca_src), .cmd_n_i(ca_n), .idle_o(ca_idle),
-        .chk_addr_i(c_addr), .chk_we_i(c_we), .chk_busy_o(ca_busy),
-        .req_o(am_req), .we_o(am_we), .addr_o(am_addr), .wdata_o(am_wdata), .wtag_o(am_wtag),
-        .gnt_i(am_gnt), .ack_i(am_ack), .fault_i(m_fault[P_CA]),
-        .fault_reason_i(m_fault_reason[P_CA]),
-        .rdata_i(m_rdata[P_CA]), .rtag_i(m_rtag[P_CA]),
-        .fault_o(ca_fault), .fault_reason_o(ca_fault_reason), .fault_addr_o(ca_fault_addr),
-        .words_o(ca_words), .cmds_o(ca_cmds)
+    mpy_collection #(.TYPE_CACHE(CA_TYPE_CACHE)) u_ca (
+        .cache_clear_i(g_collect_req || g_collect_done),.cache_write_i(m_gnt[P_CORE] && c_we),.cache_addr_i(c_addr),
+        .clk_i,.rst_n_i(sys_rst_n),
+        .copy_reverse_i(ca_reverse),.copy_byte_i(ca_byte),.copy_valid_i(ca_valid),.copy_ready_o(ca_ready),
+        .copy_src_i(ca_src),.copy_dst_i(ca_dst),.copy_n_i(ca_n),
+        .bulk_valid_i(mb_valid),.bulk_ready_o(mb_ready),.bulk_op_i(mb_op),.bulk_set_i(mb_set),
+        .bulk_src_i(mb_src),.bulk_sn_i(mb_sn),.bulk_dst_i(mb_dst),.bulk_dn_i(mb_dn),.bulk_used_i(mb_used),
+        .bulk_header_i(mb_header),.bulk_source_header_i(mb_source_header),.bulk_hashes_i(mb_hashes),
+        .qstr_count_i(mb_qcount),.qstr_base_i(mb_qbase),.qstr_ext_i(mb_qext),
+        .bulk_return_o(mb_return),.bulk_ok_o(mb_ok),.bulk_used_o(mb_result),
+        .idle_o(ca_idle),.chk_addr_i(c_addr),.chk_we_i(c_we),.chk_busy_o(ca_busy),
+        .req_o(am_req),.we_o(am_we),.addr_o(am_addr),.wdata_o(am_wdata),.wtag_o(am_wtag),
+        .gnt_i(am_gnt),.ack_i(am_ack),.fault_i(m_fault[P_CA]),.fault_reason_i(m_fault_reason[P_CA]),
+        .rdata_i(m_rdata[P_CA]),.rtag_i(m_rtag[P_CA]),
+        .fault_o(ca_fault),.fault_reason_o(ca_fault_reason),.fault_addr_o(ca_fault_addr),
+        .words_o(ca_words),.cmds_o(ca_cmds)
     );
 
     mpy_mem #(

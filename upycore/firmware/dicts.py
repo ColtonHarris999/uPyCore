@@ -76,7 +76,13 @@ def _slot(tab, pos, is_set):
 def _map_insert_new(c, k, v, is_set):
     n = _ld(c, 1)
     tab = _ld(c, 2)
-    pos = _hmod(_uhash(k), n)
+    # Capture table/size before the callback, as the ordinary path does.
+    # Retire this entry before evaluating the next key's hash. The native
+    # stages key/value/hash in its rooted argument buffer, with no heap sidecar.
+    h = _uhash(k)
+    if _mapinsert_hashed(c, tab, n, k, v, h):
+        return
+    pos = _hmod(h, n)
     while True:
         cur = _slot(tab, pos, is_set)
         if cur is NULL or _is_tomb(cur):
@@ -340,15 +346,16 @@ def dict__update(self, *args, **kw):
     if args:
         other = args[0]
         if _isdict(other):
-            for k in other:
-                self[k] = other[k]
+            if not _mapbulk(self, other, 1):
+                for k in other:
+                    self[k] = other[k]
         elif _tag(other) == TAG_OBJECT and _tlookup(_ld(other, 1), 'keys') is not NULL:
             for k in other.keys():
                 self[k] = other[k]
         else:
             for item in other:
                 self[item[0]] = item[1]
-    if kw:
+    if kw and not _mapbulk(self, kw, 1):
         for k in kw:
             self[k] = kw[k]
     return None
@@ -385,6 +392,8 @@ def _set_freeze(s, like):
 
 
 def _set_add_iter(dst, src):
+    if _isset(src) and _mapbulk(dst, src, 1):
+        return
     for k in src:
         _map_put(dst, k, NULL, True)
 
@@ -505,8 +514,9 @@ def frozenset__difference(self, *args):
 
 def set__symmetric_difference(self, other):
     r = _set_clone(self)
-    for k in other:
-        _set_toggle(r, k)
+    if not (_isset(other) and _mapbulk(r, other, 4)):
+        for k in other:
+            _set_toggle(r, k)
     return _set_freeze(r, self)
 
 
@@ -515,23 +525,32 @@ def frozenset__symmetric_difference(self, other):
 
 
 def set__symmetric_difference_update(self, other):
+    if _isset(other) and _mapbulk(self, other, 4):
+        return None
     for k in other:
         _set_toggle(self, k)
     return None
 
 
 def set__difference_update(self, *args):
+    if len(args) == 1 and _isset(args[0]) and _mapbulk(self, args[0], 2):
+        return None
     _set_diff(self, args, True)
     return None
 
 
 def set__intersection_update(self, *args):
     other = args[0] if args else self
-    _set_intersect(self, other, True)
+    if not (_isset(other) and _mapbulk(self, other, 3)):
+        _set_intersect(self, other, True)
     return None
 
 
 def set__isdisjoint(self, other):
+    if _isset(other):
+        result = _maprelation(self, other, 6)
+        if result >= 0:
+            return bool(result)
     for k in self:
         if k in other:
             return False
@@ -563,6 +582,10 @@ def _set_subset(a, b, proper):
         return False
     if _ld(a, 0) > _ld(b, 0) and _isanyset(b):
         return False
+    if _isset(a) and _isset(b):
+        result = _maprelation(a, b, 5)
+        if result >= 0:
+            return bool(result)
     for k in a:
         if k not in b:
             return False
@@ -587,6 +610,10 @@ def _set_intersect(a, b, update):
     if not update:
         return set__intersection(a, b)
     drop = []
+    if _isset(a) and _isset(b):
+        result = _maprelation(a, b, 5)
+        if result >= 0:
+            return bool(result)
     for k in a:
         if k not in b:
             drop.append(k)

@@ -2,12 +2,23 @@
 // division of the previous hash, including memory stalls. The result register
 // decouples the memory/probe consumer. alloc_i == 0 returns an error.
 module mpy_hash_slot #(
+    parameter bit EXTERNAL_HASH = 0,
     parameter integer BPC = 4,
     parameter integer DEPTH = 8,
     parameter integer BYTES_PER_CYCLE = 1,
     parameter logic [31:0] TUPLE_SEED = 32'd12345,
     parameter logic [31:0] FROZEN_SEED = 32'd54321
 ) (
+    output logic hash_valid_o,
+    input logic hash_ready_i,
+    output logic [3:0] hash_tag_o,
+    output logic [31:0] hash_payload_o,
+    input logic hash_result_valid_i,
+    output logic hash_result_ready_o,
+    input logic [31:0] hash_value_i,
+    input logic hash_error_i,hash_mem_req_i,
+    input logic [31:0] hash_mem_addr_i,
+    output logic hash_mem_ack_o,
     input logic clk_i, rst_n_i, valid_i,
     output logic ready_o,
     input logic [3:0] tag_i,
@@ -26,6 +37,19 @@ module mpy_hash_slot #(
     logic hv, hr, he, launch, active, done, completed, stage_error;
     logic retire;
     logic [31:0] h, alloc, rem;
+    assign hash_valid_o=valid_i;
+    assign hash_tag_o=tag_i;
+    assign hash_payload_o=payload_i;
+    assign hash_result_ready_o=hr;
+    assign hash_mem_ack_o=mem_ack_i;
+    generate if(EXTERNAL_HASH)begin : shared_hash
+        assign ready_o=hash_ready_i;
+        assign hv=hash_result_valid_i;
+        assign h=hash_value_i;
+        assign he=hash_error_i;
+        assign mem_req_o=hash_mem_req_i;
+        assign mem_addr_o=hash_mem_addr_i;
+    end else begin : private_hash
     mpy_hash #(.DEPTH(DEPTH), .BYTES_PER_CYCLE(BYTES_PER_CYCLE),
                .TUPLE_SEED(TUPLE_SEED), .FROZEN_SEED(FROZEN_SEED)) hash (
         .clk_i, .rst_n_i, .valid_i, .ready_o, .tag_i, .payload_i,
@@ -33,6 +57,7 @@ module mpy_hash_slot #(
         .valid_o(hv), .ready_i(hr), .hash_o(h), .error_o(he),
         .mem_req_o, .mem_addr_o, .mem_ack_i, .mem_fault_i, .mem_data_i, .mem_tag_i
     );
+    end endgenerate
     // The modulo result holds until the next start. Remember its done pulse
     // if the output is stalled; retire and launch the next key together.
     assign retire = active && (completed || done) && (!valid_o || ready_i);
