@@ -3,7 +3,8 @@
 # Runs survive logging out (nohup), so no tmux is needed.
 #
 #   sweep.sh collect [periods]  one file ~/par_<prefix>.txt with the timing, area,
-#                               power (and ~/drc_<folder>.rpt if present) of done par runs
+#                               power, constraints and logs of done par runs, plus
+#                               ~/deep_<folder>/ from deep_reports.tcl when present
 #   sweep.sh start 12 10 8      synthesis only: one folder and one `make syn` per period
 #   sweep.sh par 20 15          synthesis, then place and route (`make par`)
 #   sweep.sh status             synthesis results of the `start` folders
@@ -171,10 +172,21 @@ par-status)
     ;;
 collect)
     # One text file with what an RTL timing review needs from finished par runs.
+    # Run deep_reports.tcl in a run's Innovus first for 3000 paths instead of 50.
     out=$HOME/par_${par_prefix}.txt
     shift
+    paths() { awk '/Startpoint/{s=$NF} /Endpoint/{e=$NF} /Slack:=/{print $2, s, e}'; }
+    full() { awk -v k="$1" '/^ *Path [0-9]+:/{n++} n>=1 && n<=k'; }
+    # Group paths by register bank (bit indices and pin dropped): count, worst slack.
+    banks() {
+        awk '{s=$2; e=$3; sub(/\/[^\/]*$/, "", s); sub(/\/[^\/]*$/, "", e)
+              gsub(/\[[0-9]+\]/, "", s); gsub(/\[[0-9]+\]/, "", e)
+              k=s " -> " e; c[k]++; if (!(k in w) || $1 < w[k]) w[k]=$1}
+             END{for (k in c) print w[k], c[k], k}' | sort -g | head -60
+    }
     {
         echo "== sweep.sh collect: $par_prefix, $(date), RTL $(cd "$repo" && git log --oneline -1)"
+        echo "== DIE=${DIE:-default} DESIGN_ARGS=${DESIGN_ARGS:-none} (as set for this collect, not necessarily the runs)"
         "$0" par-status
         for d in "$DESIGNS"/${par_prefix}_p*; do
             [ -d "$d" ] || continue
@@ -182,25 +194,55 @@ collect)
             if [ $# -gt 0 ] && ! printf '%s\n' "$@" | grep -qx "$p"; then continue; fi
             run=$d/build/par-rundir
             [ -f "$run/${TOP}_power.rpt" ] || continue
+            deep=$HOME/deep_${d##*/}
             echo; echo "==================== ${d##*/} ===================="
-            for g in all reg2reg; do
-                f=$run/timingReports/${TOP}_postRoute_$g.tarpt.gz
+            echo; echo "== constraints (sdc in the run folder)"
+            find "$d" -maxdepth 3 -name '*.sdc' -exec sh -c 'echo "-- $1"; grep -v "^ *#" "$1" | grep -v "^ *$"' _ {} \; | head -80
+            echo; echo "== timing report files"; ls "$run/timingReports" 2>/dev/null
+            for f in "$run"/timingReports/${TOP}_postRoute_*.tarpt.gz; do
                 [ -f "$f" ] || continue
-                echo; echo "== $g: slack start end, worst path per endpoint"
-                zcat "$f" | awk '/Startpoint/{s=$NF} /Endpoint/{e=$NF} /Slack:=/{print $2, s, e}' | head -300
-                echo; echo "== $g: worst 3 paths in full"
-                zcat "$f" | awk '/^ *Path [0-9]+:/{n++} n>=1 && n<=3'
+                g=${f##*_postRoute_}; g=${g%.tarpt.gz}
+                echo; echo "== $g (flow report, 50 paths): slack start end"
+                zcat "$f" | paths
             done
-            for f in "$run"/timingReports/*hold*.tarpt.gz; do
-                [ -f "$f" ] || continue
-                echo; echo "== hold (${f##*/}): slack start end"
-                zcat "$f" | awk '/Startpoint/{s=$NF} /Endpoint/{e=$NF} /Slack:=/{print $2, s, e}' | head -30
-            done
-            echo; echo "== area by module"; head -80 "$run/${TOP}_area.rpt"
-            echo; echo "== power"; head -150 "$run/${TOP}_power.rpt"
-            for f in "$HOME"/drc_${d##*/}.rpt; do
-                [ -f "$f" ] && { echo; echo "== DRC summary"; tail -25 "$f"; }
-            done
+            if [ -d "$deep" ]; then
+                echo; echo "== deep_reports.tcl output in $deep"; ls "$deep"
+                cat "$deep"/*.err 2>/dev/null
+                for g in setup r2r hold; do
+                    [ -f "$deep/$g.rpt" ] || continue
+                    echo; echo "== $g: register banks, worst slack, path count (from up to 3000 endpoints)"
+                    paths < "$deep/$g.rpt" | banks
+                    echo; echo "== $g: slack start end, worst path per endpoint"
+                    paths < "$deep/$g.rpt" | head -600
+                done
+                [ -f "$deep/r2r.rpt" ] && { echo; echo "== r2r: worst 10 paths in full"; full 10 < "$deep/r2r.rpt"; }
+                [ -f "$deep/setup.rpt" ] && { echo; echo "== setup: worst 3 paths in full"; full 3 < "$deep/setup.rpt"; }
+                [ -f "$deep/drc.rpt" ] && { echo; echo "== DRC summary"; tail -25 "$deep/drc.rpt"; }
+                [ -f "$deep/conn.rpt" ] && { echo; echo "== connectivity"; tail -40 "$deep/conn.rpt"; }
+                for g in clock_trees skew_groups route density power_hier; do
+                    [ -f "$deep/$g.rpt" ] && { echo; echo "== $g"; head -200 "$deep/$g.rpt"; }
+                done
+            else
+                f=$run/timingReports/${TOP}_postRoute_reg2reg.tarpt.gz
+                [ -f "$f" ] && { echo; echo "== reg2reg: worst 5 paths in full"; zcat "$f" | full 5; }
+                echo; echo "(no $deep: source deep_reports.tcl in this run's Innovus for 3000 paths, hold, DRC, clock tree)"
+                for f in "$HOME"/drc_${d##*/}.rpt; do
+                    [ -f "$f" ] && { echo; echo "== DRC summary"; tail -25 "$f"; }
+                done
+            fi
+            echo; echo "== area by module"; head -120 "$run/${TOP}_area.rpt"
+            echo; echo "== power"; head -200 "$run/${TOP}_power.rpt"
+            echo; echo "== Innovus log: density, congestion, clock tree, final timing lines"
+            ls -t "$run"/*.log 2>/dev/null | head -1 | xargs -r grep -h -i -E \
+                'density|overflow|congest|skew|WNS|TNS|DRV|utiliz' 2>/dev/null | tail -120
+            syn=$d/build/syn-rundir/reports
+            if [ -d "$syn" ]; then
+                echo; echo "== Genus reports: files"; ls "$syn"
+                [ -f "$syn/final_qor.rpt" ] && { echo; echo "== Genus final_qor"; cat "$syn/final_qor.rpt"; }
+                for f in "$syn"/*area*; do
+                    [ -f "$f" ] && { echo; echo "== Genus ${f##*/}"; head -120 "$f"; }
+                done
+            fi
         done
     } > "$out" 2>&1
     echo "wrote $out ($(wc -c < "$out") bytes); upload that one file"

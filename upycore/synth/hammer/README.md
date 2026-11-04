@@ -270,6 +270,17 @@ override the defaults (`RTL` is gone: the core comes from
 `sweep.sh par-status` lists each one's post-route slack, shortest period and
 total power, and where its area, power and timing reports are.
 
+`sweep.sh collect` gathers the finished `par` runs into one file,
+`~/par_<prefix>.txt`: constraints, the flow's timing reports (50 paths
+each), area and power by module, the Innovus log's density and clock lines,
+and Genus's QoR. For more, first run
+`source ~/upycore/upycore/synth/hammer/deep_reports.tcl` in a run's Innovus
+console (`make open-chip`). It writes `~/deep_<folder>/` with 3000 setup and
+register-to-register paths, hold, DRC, connectivity and clock-tree reports,
+and `collect` then adds those, grouped by register bank. `DESIGN_ARGS`
+passes options to `make_hammer_design.py`, for example
+`DESIGN_ARGS=--no-feedthrough` so input-to-output paths are not timed.
+
 Before starting runs, `sweep.sh` pulls the branch and compares
 `converted/RTL_STAMP` with a hash of `upycore/rtl` and the converter
 scripts. If the RTL changed and `converted/*.v` were not regenerated, it
