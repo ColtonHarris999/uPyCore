@@ -46,6 +46,7 @@ module upycore_umod_seq #(
     endfunction
 
     logic [31:0] d_r;
+    logic [33:0] d3_r;       // 3 * d_r, for the radix-4 steps
     logic [31:0] r_r;        // partial remainder, always < d_r
     logic [31:0] q_r;        // dividend bits still to bring down, MSB first
     logic [5:0]  n_r;        // steps left
@@ -58,21 +59,40 @@ module upycore_umod_seq #(
     assign k    = 7'(lz_d) - 7'(lz_a) + 7'd1;
     assign kr   = (k + 7'(BPC - 1)) & ~7'(BPC - 1);
 
-    // One clock of BPC restoring steps. Each step is one 34-bit subtract:
-    // t >= d exactly when t - d does not borrow (diff[33] clear), and then
-    // diff[31:0] is t - d, so the compare and the subtract share a carry
-    // chain instead of running in series.
+    // One clock of BPC restoring steps. A radix-2 step is one 34-bit
+    // subtract: t >= d exactly when t - d does not borrow (diff[33] clear),
+    // and then diff[31:0] is t - d. BPC = 2 and 4 run radix-4 steps
+    // instead, each worth two radix-2 steps: t4 - 3d, t4 - 2d and t4 - d
+    // are computed in parallel and the largest multiple that does not
+    // borrow is taken, in the order 3d, 2d, d. Since r < d, t4 < 4d, so the
+    // multiple is unique and the remainder is the one the two radix-2
+    // steps leave. With d = 0 every subtract succeeds and the order makes
+    // the step shift bits in, as the radix-2 steps do.
     logic [31:0] r_nx, q_nx;
     always_comb begin
         logic [32:0] t;
-        logic [33:0] diff;
+        logic [33:0] t4;
+        logic [33:0] dif2;
+        logic [34:0] e1, e2, e3;
         r_nx = r_r;
         q_nx = q_r;
-        for (int j = 0; j < BPC; j++) begin
+        if (BPC == 1) begin
             t = {r_nx, q_nx[31]};
             q_nx = {q_nx[30:0], 1'b0};
-            diff = {1'b0, t} - {2'b0, d_r};
-            r_nx = diff[33] ? t[31:0] : diff[31:0];
+            dif2 = {1'b0, t} - {2'b0, d_r};
+            r_nx = dif2[33] ? t[31:0] : dif2[31:0];
+        end else begin
+            for (int j = 0; j < BPC/2; j++) begin
+                t4 = {r_nx, q_nx[31:30]};
+                q_nx = {q_nx[29:0], 2'b0};
+                e1 = {1'b0, t4} - {3'b0, d_r};
+                e2 = {1'b0, t4} - {2'b0, d_r, 1'b0};
+                e3 = {1'b0, t4} - {1'b0, d3_r};
+                if (!e3[34])      r_nx = e3[31:0];
+                else if (!e2[34]) r_nx = e2[31:0];
+                else if (!e1[34]) r_nx = e1[31:0];
+                else              r_nx = t4[31:0];
+            end
         end
     end
 
@@ -80,12 +100,13 @@ module upycore_umod_seq #(
 
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) begin
-            d_r <= '0; r_r <= '0; q_r <= '0; n_r <= '0;
+            d_r <= '0; d3_r <= '0; r_r <= '0; q_r <= '0; n_r <= '0;
             done_o <= 1'b0; rem_o <= '0;
         end else begin
             done_o <= 1'b0;
             if (start_i) begin
                 d_r <= d_i;
+                d3_r <= {2'b0, d_i} + {1'b0, d_i, 1'b0};
                 if (a_i < d_i) begin
                     n_r <= '0;
                     done_o <= 1'b1;
