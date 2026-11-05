@@ -5,6 +5,8 @@ import io
 import unittest
 from pathlib import Path
 import runtime_profile as p
+from runtime_profile_compare import compare
+import copy
 
 class ProfileProtocol(unittest.TestCase):
     def parse(self,text):
@@ -31,5 +33,19 @@ class ProfileProtocol(unittest.TestCase):
     def test_state_table_is_unambiguous(self):
         states=p.state_names();self.assertEqual(len(states),len(set(states)))
         self.assertLess(len(states),2048)
+
+class CandidateComparison(unittest.TestCase):
+    def fixture(self):
+        return {'commit':'baseline','rows':[{'name':'work','flags':['+CA=1'],'expected_result':'RESULT True','image_sha256':{'hex':'same'},'profiled':{'cycles':100,'result':'RESULT True'}}]}
+    def test_cycle_change_is_reported(self):
+        a=self.fixture();b=copy.deepcopy(a);b['rows'][0]['profiled']['cycles']=80
+        self.assertAlmostEqual(compare(a,b)['rows'][0]['change_pct'],-20)
+    def test_unlabeled_image_change_is_rejected(self):
+        a=self.fixture();b=copy.deepcopy(a);b['rows'][0]['image_sha256']={'hex':'different'}
+        with self.assertRaises(ValueError):compare(a,b)
+        self.assertEqual(compare(a,b,True)['comparison'],'image-changing firmware/design')
+    def test_mismatched_results_are_rejected(self):
+        a=self.fixture();b=copy.deepcopy(a);b['rows'][0]['profiled']['result']='RESULT False'
+        with self.assertRaises(ValueError):compare(a,b)
 
 if __name__=='__main__':unittest.main()

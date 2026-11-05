@@ -70,7 +70,7 @@ else:
     print('RESULT',result())
 '''
 
-def micro_source(kind,n,mixed,loops):
+def micro_source(kind,n,mixed,loops,dependent=False):
     items="[palette[i % 7] for i in range(n)]" if mixed else 'list(range(n))'
     setup=f'n={n}\npalette=[0,None,1.25,True,"x",(),[]]\na={items}\nb=a[:]\nbuf=bytearray(n)\n'
     if kind=='byte_read':
@@ -82,6 +82,10 @@ def micro_source(kind,n,mixed,loops):
     elif kind=='slice_assign':stmt='a[:]=b'
     elif kind=='pop_insert':stmt='if n:\n            x=a.pop(0)\n            a.insert(n-1,x)'
     else:stmt='pass'
+    if dependent and kind in ['list_copy','slice_assign','pop_insert']:
+        target='x[n-1]' if kind=='list_copy' else 'a[n-2]' if kind=='pop_insert' else 'a[n-1]'
+        guard='n>1' if kind=='pop_insert' else 'n'
+        stmt+=f'\n        if {guard}:\n            x={target}'
     # Operand/result construction happens outside the timed callable. Controls
     # capture Python loop costs; do not silently subtract them from raw cycles.
     return setup+f'''\ndef work():
@@ -209,7 +213,7 @@ def run_project_suite(args,out,profiler):
 
 def main():
     ap=argparse.ArgumentParser(description=__doc__);ap.add_argument('--out',type=Path,default=b.ROOT/'build/runtime-profile')
-    ap.add_argument('--project-suite',action='store_true');ap.add_argument('--before',type=Path);ap.add_argument('--micro',action='store_true');ap.add_argument('--loops',type=int,default=8)
+    ap.add_argument('--completion-probes',action='store_true');ap.add_argument('--bytes-probe',action='store_true');ap.add_argument('--resume',action='store_true');ap.add_argument('--project-suite',action='store_true');ap.add_argument('--before',type=Path);ap.add_argument('--micro',action='store_true');ap.add_argument('--loops',type=int,default=8)
     ap.add_argument('--lengths',default=','.join(map(str,LENGTHS)));ap.add_argument('--cases',default='misc_aes,bm_fannkuch')
     ap.add_argument('--workers',type=int,default=2);ap.add_argument('--jobs',type=int,default=2);ap.add_argument('--max-cycles',type=int,default=400_000_000)
     ap.add_argument('--timeout',type=int,default=1800);ap.add_argument('--ca',type=int,choices=[0,1],default=1)
@@ -224,7 +228,19 @@ def main():
     fwsrc=out/'bench_fw.py';fwmpy=out/'bench_fw.mpy'
     fwsrc.write_text(b.firmware_source()+'\ndef bench_ticks():\n    return _ticks()\n');b.mpy_cross(fwsrc,fwmpy,'_fw.py');b.build_firmware=lambda:fwmpy
     cases=[]
-    if args.micro:
+    if args.completion_probes:
+        for n in [1,6,64,256,1024]:
+            for kind in ['list_copy','slice_assign','pop_insert']:
+                name=f'{kind}_{n}_int';source=micro_source(kind,n,False,args.loops,dependent=True)
+                ref=io.StringIO()
+                with contextlib.redirect_stdout(ref):exec(compile(source,name,'exec'),{'bench_ticks':lambda:0})
+                expected=next(line for line in ref.getvalue().splitlines() if line.startswith('RESULT '))
+                cases.append((name,source,expected,None))
+    elif args.bytes_probe:
+        for name,values in [('bytes_ascii',(0,1,2,3)),('bytes_high',(128,129,130,131))]:
+            source=f"table=bytes({values!r})\ndef work():\n    x=0\n    for i in range(4):\n        x+=table[i]\n    return x\nstart=bench_ticks()\nx=work()\nelapsed=bench_ticks()-start\nprint('CYCLES',elapsed)\nprint('RESULT',x)\n"
+            cases.append((name,source,f'RESULT {sum(values)}',None))
+    elif args.micro:
         for n in map(int,args.lengths.split(',')):
             for kind in ['control','byte_read','byte_write','list_copy','reverse_slice','slice_assign','pop_insert']:
                 for mixed in ([False,True] if kind not in ['control','byte_read','byte_write'] else [False]):
@@ -243,9 +259,18 @@ def main():
             run,result=ns['bm_setup'](ns['bm_params'][nm]);run();expected='RESULT '+str(result())
             cases.append((name,kernel_source(name),expected,sha(p)))
     before=args.before.resolve() if args.before else None
-    data=metadata(profiler,before);data['measurement_firmware_sha256']=sha(fwmpy);data['micro_loops']=args.loops if args.micro else None
+    data=metadata(profiler,before);data['measurement_firmware_sha256']=sha(fwmpy);data['micro_loops']=args.loops if args.micro or args.completion_probes else None
     # Warm the shared frozen-module cache before concurrent independent images.
     b.frozen_runtime_specs(compiler=False)
+    if args.resume and (out/'results.json').exists():
+        prior=json.loads((out/'results.json').read_text())
+        for key in ['rtl_sources','compiler_sha256','measurement_firmware_sha256','profiler_sha256','reference_sha256','micro_loops']:
+            if prior.get(key)!=data.get(key):raise ValueError(f'resume metadata changed: {key}')
+        prior.setdefault('continuations',[]).append({k:v for k,v in data.items() if k!='rows'})
+        data=prior;done={r['name']:r for r in prior['rows']}
+        for name,source,expected,source_hash in cases:
+            if name in done and (done[name]['harness_sha256']!=hashlib.sha256(source.encode()).hexdigest() or done[name]['expected_result']!=expected or done[name]['flags']!=[f'+CA={args.ca}',f'+AALU={args.aalu}']):raise ValueError(f'resume case changed: {name}')
+        cases=[case for case in cases if case[0] not in done]
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
         futures=[pool.submit(run_one,case,out,profiler,before,args.max_cycles,args.timeout,[f'+CA={args.ca}',f'+AALU={args.aalu}']) for case in cases]
         for future in concurrent.futures.as_completed(futures):
