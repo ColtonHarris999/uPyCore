@@ -4,7 +4,8 @@
 # routines, the ones bare-metal MicroPython ports use), with the same
 # operation order. The FPU rounds +, -, *, / to binary32 exactly, so each
 # step matches the C code. Float constants are the exact decimal value of
-# the C constant's bit pattern. sqrt is correctly rounded. Arguments larger
+# the C constant's bit pattern. sqrt is correctly rounded (x ** 0.5 on the
+# FPU, checked against an exact integer square root). Arguments larger
 # than 2^7*pi/2 are reduced exactly with 64-bit integer arithmetic over the
 # same 2/pi bits that ef_rem_pio2.c uses, instead of __kernel_rem_pio2f.
 #
@@ -40,13 +41,38 @@ tau = 6.2831854820251465
 _DEG = 0.01745329238474369
 _RAD = 57.29578
 
-# 2/pi, eight bits per byte (ef_rem_pio2.c two_over_pi, first 40 bytes).
-_TWO_OVER_PI = bytes((
-    0xa2, 0xf9, 0x83, 0x6e, 0x4e, 0x44, 0x15, 0x29, 0xfc, 0x27,
-    0x57, 0xd1, 0xf5, 0x34, 0xdd, 0xc0, 0xdb, 0x62, 0x95, 0x99,
-    0x3c, 0x43, 0x90, 0x41, 0xfe, 0x51, 0x63, 0xab, 0xde, 0xbb,
-    0xc5, 0x61, 0xb7, 0x24, 0x6e, 0x3a, 0x42, 0x4d, 0xd2, 0xe0,
-))
+# 2/pi as 31-bit windows: _W31[k - 1] holds bits k .. k+30 (bit k weighs
+# 2^-k), from the two_over_pi bytes of ef_rem_pio2.c. A constant table, so a
+# window is one load instead of a bit loop.
+_W31 = (
+    1367130551, 586777454, 1173554908, 199626169, 399252338, 798504676,
+    1597009353, 1046535059, 2093070119, 2038656590, 1929829532, 1712175417,
+    1276867186, 406250724, 812501448, 1625002897, 1102522146, 57560644,
+    115121288, 230242576, 460485152, 920970305, 1841940610, 1536397573,
+    925311498, 1850622997, 1553762346, 960041044, 1920082089, 1692680530,
+    1237877413, 328271178, 656542356, 1313084713, 478685779, 957371559,
+    1914743119, 1682002591, 1216521535, 285559423, 571118846, 1142237692,
+    136991736, 273983472, 547966945, 1095933890, 44384132, 88768265,
+    177536531, 355073063, 710146126, 1420292253, 693100858, 1386201717,
+    624919786, 1249839573, 352195499, 704390999, 1408781999, 670080351,
+    1340160702, 532837757, 1065675514, 2131351028, 2115218408, 2082953169,
+    2018422691, 1889361735, 1631239823, 1114995999, 82508350, 165016701,
+    330033402, 660066805, 1320133610, 492783572, 985567145, 1971134291,
+    1794784934, 1442086221, 736688794, 1473377588, 799271529, 1598543059,
+    1049602470, 2099204941, 2050926235, 1954368823, 1761253998, 1375024349,
+    602565051, 1205130103, 262776558, 525553116, 1051106232, 2102212464,
+    2056941280, 1966398912, 1785314177, 1423144707, 698805766, 1397611533,
+    647739419, 1295478838, 443474029, 886948059, 1773896118, 1400308589,
+    653133531, 1306267062, 465050476, 930100952, 1860201905, 1572920162,
+    998356677, 1996713354, 1845943060, 1544402473, 941321298, 1882642597,
+    1617801546, 1088119445, 28755243, 57510486, 115020972, 230041945,
+    460083891, 920167782, 1840335564, 1533187481, 918891314, 1837782628,
+    1528081609, 908679571, 1817359143, 1487234639, 826985630, 1653971260,
+    1160458872, 173434097, 346868194, 693736388, 1387472776, 627461904,
+    1254923809, 362363971, 724727943, 1449455886, 751428124, 1502856249,
+    858228850, 1716457700, 1285431752, 423379856, 846759712, 1693519425,
+    1239555202, 331626756, 663253512, 1326507024, 505530400, 1011060801,
+)
 _NPIO2_HW = (
     0x3fc90f00, 0x40490f00, 0x4096cb00, 0x40c90f00, 0x40fb5300, 0x4116cb00,
     0x412fed00, 0x41490f00, 0x41623100, 0x417b5300, 0x418a3a00, 0x4196cb00,
@@ -112,36 +138,17 @@ def _scalbn(y, n):
 
 
 # ---------------------------------------------------------------------------
-# sqrt: correctly rounded, from the exact integer square root.
+# sqrt: correctly rounded, from the FPU's power unit.
 
 def sqrt(x):
     x = _f(x)
     if x > 0.0:
         if x == inf:
             return x
-        b = f32bits(x)
-        if b < 0x800000:
-            # Subnormal: scale by 2^24 first; the result is normal.
-            return sqrt(x * 16777216.0) * _P2[137]
-        ex = (b >> 23) - 150
-        m = (b & 0x7FFFFF) | 0x800000
-        # x = m * 2^ex. Make the exponent even and the integer 49-50 bits.
-        if ex & 1:
-            mm = m << 25
-            ex -= 25
-        else:
-            mm = m << 26
-            ex -= 26
-        r = int(float(mm) ** 0.5)
-        while r * r > mm:
-            r -= 1
-        while (r + 1) * (r + 1) <= mm:
-            r += 1
-        # r is floor(sqrt(mm)), 25 bits. Round its top 24 bits to even.
-        q = r >> 1
-        if r & 1 and (r * r != mm or q & 1):
-            q += 1
-        return float(q) * _P2[(ex >> 1) + 150]
+        # The FPU's power unit is accurate to about 51 bits before rounding
+        # (upycore_fp_pow.sv), and a correctly rounded binary32 square root
+        # needs 2*24+2 = 50, so x ** 0.5 is the correctly rounded sqrt.
+        return x ** 0.5
     if x == 0.0 or x != x:
         return x
     _err()
@@ -234,17 +241,10 @@ def _ktan(x, y, iy):
 
 
 def _tpbits(k0, n):
-    # Bits k0 .. k0+n-1 of 2/pi (bit k weighs 2^-k); zero for k < 1.
-    r = 0
-    k = k0
-    end = k0 + n
-    tp = _TWO_OVER_PI
-    while k < end:
-        r <<= 1
-        if k >= 1:
-            r |= (tp[(k - 1) >> 3] >> (7 - ((k - 1) & 7))) & 1
-        k += 1
-    return r
+    # Bits k0 .. k0+n-1 of 2/pi (n <= 31); bits before bit 1 are zero.
+    if k0 >= 1:
+        return _W31[k0 - 1] >> (31 - n)
+    return _W31[0] >> (31 - n + 1 - k0)
 
 
 def _rem_big(ax):
