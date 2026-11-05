@@ -40,6 +40,10 @@ module tb_mpy_soc;
         .nand_miso_i(nand_miso), .boot_done_o(boot_done), .boot_err_o(boot_err)
     );
 
+`ifdef MPY_PROFILE
+    `include "upycore/tb/mpy_profile.svh"
+`endif
+
     int    fd_out, fd_err;
     longint max_cycles;
     bit    do_trace;
