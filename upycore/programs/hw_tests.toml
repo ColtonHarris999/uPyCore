@@ -154,6 +154,7 @@ list_to_tuple = { file = "hw/containers/list_to_tuple.py" }
 list_repeat = { file = "hw/containers/list_repeat.py" }
 list_repeat_type_trap = { file = "hw/containers/list_repeat_type_trap.py" }
 list_concat = { file = "hw/containers/list_concat.py" }
+list_setslice_rhs = { file = "hw/containers/list_setslice_rhs.py" }
 list_concat_type_trap = { file = "hw/containers/list_concat_type_trap.py" }
 list_comp_fast_clear = { file = "hw/containers/list_comp_fast_clear.py" }
 list_del_last_only = { file = "hw/containers/list_del_last_only.py" }

@@ -540,20 +540,42 @@ def _list_setslice(lst, sl, value):
         raise NotImplementedError()
     if value is NULL:
         value = ()
-    src = _list_of_iter(value)
+    # An exact tuple or list is read in place, as mp_obj_get_array does: its
+    # items cannot run any Python while they are copied. A tuple's items sit
+    # in its own block. A list is borrowed only when its item block is not
+    # the destination's; the snapshot covers self-assignment and any shared
+    # block. Everything else (subclasses, iterators) is materialized first.
+    # The tests stay identity and int compares: == on two item-block
+    # pointers would go through the _binop hook.
+    t = _tag(value)
+    if t == TAG_TUPLE:
+        src = value
+        off = 1
+    elif (t == TAG_MUT and (_pay(value) & 3) == MUT_LIST and value is not lst
+          and _ld(value, 2) is not _ld(lst, 2)):
+        src = value
+        off = 0
+    else:
+        src = _list_of_iter(value)
+        t = TAG_MUT
+        off = 0
     m = _ld(src, 0)
     # lst[3:1] = x inserts at 3, as mp_seq_get_fast_slice_indexes clamps stop.
     if b < a:
         b = a
     span = b - a
     newn = n - span + m
-    _list_reserve(lst, newn)
+    if m != span:
+        _list_reserve(lst, newn)
+    # Item addresses are read after the reserve, which can replace the
+    # destination block. src stays a live local, so the collector keeps it
+    # and a borrowed list's block.
     items = _ld(lst, 2)
     # The tail moves first; _wcopy runs the overlapping shift like memmove.
     if m != span and b < n:
         _wcopy(items, a + m, items, b, n - b)
     if m:
-        _wcopy(items, a, _ld(src, 2), 0, m)
+        _wcopy(items, a, src if t == TAG_TUPLE else _ld(src, 2), off, m)
     if newn < n:
         _list_clear_slots(lst, newn, n)
     _st(lst, 0, newn)
