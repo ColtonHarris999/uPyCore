@@ -200,6 +200,12 @@ outside this plan's initial scope.
 
 ## Verification for stages 2–4
 
+- Hardware suite at `c2a8099` (mpy-cross): 485 of 485 pass, including the
+  four new tests. 445 ran in one pass; the other 40 (gc, generators,
+  `compile_reject_locals`) were rerun in a clean worktree at that commit,
+  because a rebase onto newer `benchmark` work landed mid-run. The same 485
+  also pass with that newer work merged. The uPy2 (`--compiler mpyc`) pass
+  was not run.
 - New oracle-differential tests: `containers/list_setslice_rhs`,
   `containers/list_pop_insert`, `containers/list_slice_step`. They match
   the oracle with CA and AALU on and off (`list_pop_insert` in all four
