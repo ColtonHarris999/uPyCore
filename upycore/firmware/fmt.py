@@ -492,9 +492,6 @@ def print(*args, **kw):
 
 
 def _stream_writer(f):
-    if f is mod_sys__stderr:
-        return _we
-    if f is mod_sys__stdout:
-        return _wr
-    w = getattr(f, 'write')
-    return w
+    # The device's sys has no stdout or stderr objects, so a file= argument
+    # is always a user stream: print calls its write method.
+    return getattr(f, 'write')
