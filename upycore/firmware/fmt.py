@@ -136,7 +136,9 @@ def _ustr_repr(s, quote):
     i = 0
     while i < n:
         c, k = _utf8_at(d, i)
-        i += k
+        # uni_print_quoted (pinned objstrunicode.c): printable non-ASCII
+        # characters keep their UTF-8 bytes; only control characters,
+        # surrogates and invalid code points are escaped.
         if c == quote or c == 92:
             parts.append(_s('\\', _ch(c)))
         elif 32 <= c <= 126:
@@ -147,12 +149,15 @@ def _ustr_repr(s, quote):
             parts.append('\\r')
         elif c == 9:
             parts.append('\\t')
-        elif c < 0x100:
+        elif c <= 127:
             parts.append(_s('\\x', _zpad(_ubase(c, 16, False), 2)))
+        elif c < 0xD800 or 0xE000 <= c < 0x110000:
+            parts.append(_substr(s, i, i + k, TAG_STR))
         elif c < 0x10000:
             parts.append(_s('\\u', _zpad(_ubase(c, 16, False), 4)))
         else:
             parts.append(_s('\\U', _zpad(_ubase(c, 16, False), 8)))
+        i += k
     parts.append(_ch(quote))
     return _join(parts)
 
@@ -407,7 +412,7 @@ def _repr(x):
             return _dict_repr(x)
         if k == MUT_SET:
             return _set_repr(x)
-        return _s('bytearray(', _str_repr(_barr_bytes(x), True), ')')
+        return _s('bytearray(b', _str_repr(_barr_bytes(x), True), ')')
     if t == TAG_BYTES:
         return _cat('b', _str_repr(x, True))
     if t == TAG_RANGE:

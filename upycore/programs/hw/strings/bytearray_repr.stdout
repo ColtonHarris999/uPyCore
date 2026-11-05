@@ -1,0 +1,2 @@
+bytearray(b'ab') bytearray(b'ab') bytearray(b'ab') [bytearray(b'ab')]
+bytearray(b'Zb') bytearray(b'') bytearray(b'\x00\x00\x00') bytearray(b'\x01\x02\xc8') bytearray(b"it's") bytearray(b'q"\'\n\x00')
