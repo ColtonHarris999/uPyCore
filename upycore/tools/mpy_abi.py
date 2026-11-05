@@ -309,6 +309,9 @@ NATIVES = [
     "_maprelation",  # (a, b, op): 0/1 result, -1 requests software fallback
     "_seqreverse",  # (items, count): queued tagged-word reversal, or False
     "_seqscan",  # (items, start, count, value, find_first): result, -2 fallback
+    # list methods the core runs for an exact list and a small-int or bool
+    # index; anything else calls the _fb fallback with the same arguments
+    "list.pop", "list.insert",
 ]
 NATIVE_ID = {name: i for i, name in enumerate(NATIVES)}
 

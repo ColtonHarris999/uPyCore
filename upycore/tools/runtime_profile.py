@@ -19,7 +19,7 @@ GROUPS=['user','firmware_other','bytearray_load','bytearray_store','slice_normal
 REASONS=['execute','allocator_wait','gc_service','scoreboard_wait','memory_grant_wait',
          'memory_response_wait','fetch_empty','native_service','call_frame_service','aalu_service','reserved10','reserved11']
 SPECIFIC={'_slice_range':4,'_slice_len':4,'_clamp':4,'_getslice':5,'_list_setslice':6,
-          'list__pop':7,'list__insert':8,'_newlist':9,'_list_reserve':9,'_alloc':9,
+          'list__pop':7,'list__insert':8,'_list__pop_fb':7,'_list__insert_fb':8,'_list_pop_at':7,'_newlist':9,'_list_reserve':9,'_alloc':9,
           '_list_of_seq':10,'_list_of_iter':10,'_subscr':12,'_setsubscr':13}
 LENGTHS=[0,1,2,4,6,8,16,32,64,256,1024]
 

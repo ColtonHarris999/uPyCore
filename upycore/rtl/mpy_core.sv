@@ -153,6 +153,8 @@ module mpy_core
     localparam logic [7:0]  FF_YFAST = 8'h04; // YIELD_FROM resumed a generator child directly
     localparam logic [7:0]  FF_NOTB = 8'h80;
 
+    // list.pop/insert: tails longer than this many words go to the CA.
+    localparam logic [31:0] LS_CA_MIN = 32'd16;
     localparam logic [1:0] LK_FIND = 2'd0;
     localparam logic [1:0] LK_ADD = 2'd1;
     localparam logic [1:0] LK_REMOVE = 2'd2;
@@ -862,6 +864,30 @@ module mpy_core
         S_NAT_GR1,
         S_NAT_GR2,
         S_NAT_LA,
+        S_NP_I,
+        S_NP_N,
+        S_NP_P,
+        S_NP_V,
+        S_NP_L,
+        S_NP_LW,
+        S_NP_CA,
+        S_NP_CW0,
+        S_NP_CW,
+        S_NP_CLR,
+        S_NP_LEN,
+        S_NP_RET,
+        S_NI_I,
+        S_NI_V,
+        S_NI_N,
+        S_NI_A,
+        S_NI_P,
+        S_NI_L,
+        S_NI_LW,
+        S_NI_CA,
+        S_NI_CW0,
+        S_NI_CW,
+        S_NI_ST,
+        S_NI_LEN,
         S_NAT_QX,
         S_NAT_RG1,
         S_NAT_RG2,
@@ -3735,6 +3761,18 @@ module mpy_core
                         else begin si_v <= mv; gosub(S_SINFO, S_N_LEN_S); end
                     ABI_N_LIST_APPEND: if (v0 != 32'd2 || !is_mut(mv, ABI_MUT_LIST)) st <= S_NAT_FB;
                         else begin t[2] <= mv; rd(ab_ptr(ab_lo + 8'd1), S_NAT_LA); end
+                    // list.pop / list.insert on an exact list. A subclass,
+                    // a non-int index, an empty list, a bad pop index or a
+                    // full allocation goes to the firmware method before
+                    // anything is written. x0 index, x1 len, x2 items, x3 i.
+                    ABI_N_LIST_POP: if ((v0 != 32'd1 && v0 != 32'd2) || !is_mut(mv, ABI_MUT_LIST)) st <= S_NAT_FB;
+                        else begin
+                            t[2] <= mv; x0 <= 32'hFFFF_FFFF;
+                            if (v0 == 32'd2) rd(ab_ptr(ab_lo + 8'd1), S_NP_I);
+                            else rd(adr(mv), S_NP_N);
+                        end
+                    ABI_N_LIST_INSERT: if (v0 != 32'd3 || !is_mut(mv, ABI_MUT_LIST)) st <= S_NAT_FB;
+                        else begin t[2] <= mv; rd(ab_ptr(ab_lo + 8'd1), S_NI_I); end
                     ABI_N_OBJECT_INIT: if (v0 != 32'd1) st <= S_NAT_FB; else deliver(VNONE, crk);
                     ABI_N_BASEEXCEPTION_INIT: if (v0 < 32'd1 || tg(mv) != ABI_TAG_OBJECT) st <= S_NAT_FB;
                         else begin
@@ -3838,6 +3876,75 @@ module mpy_core
             S_NAT_GR1: begin t[1] <= mv; rd(ab_ptr(ab_lo + 8'd2), S_NAT_GR2); end
             S_NAT_GR2: begin t[2] <= mv; st <= S_GR0; end
             S_NAT_LA: begin t[3] <= mv; gosub(S_LA, S_N_NONE); end
+
+            // ---- list.pop ----
+            // Short tails move in this loop; a tail longer than LS_CA_MIN
+            // words goes to the accelerator, and the core waits for it to
+            // drain before it clears the last slot and publishes the length.
+            S_NP_I: if (!intlike(mv)) st <= S_NAT_FB;
+                    else begin x0 <= ival(mv); rd(adr(t[2]), S_NP_N); end
+            S_NP_N: begin
+                v0 = x0;
+                if (v0[31]) v0 = v0 + md;
+                if (md == 32'd0 || v0[31] || v0 >= md) st <= S_NAT_FB;
+                else begin x0 <= v0; x1 <= md; rd(adr(t[2]) + 8, S_NP_P); end
+            end
+            S_NP_P: begin x2 <= md; x3 <= x0; rd(md + (x0 << 2), S_NP_V); end
+            // t[3] holds the removed value; it is a root until delivered.
+            S_NP_V: begin
+                t[3] <= mv;
+                if (x0 + 32'd1 == x1) st <= S_NP_CLR;
+                else if (cfg_ca && (x1 - x0) > LS_CA_MIN) st <= S_NP_CA;
+                else st <= S_NP_L;
+            end
+            S_NP_L: if (x3 + 32'd1 == x1) st <= S_NP_CLR;
+                    else rd(x2 + ((x3 + 32'd1) << 2), S_NP_LW);
+            S_NP_LW: begin wr(x2 + (x3 << 2), mv, S_NP_L); x3 <= x3 + 32'd1; end
+            S_NP_CA: if (ca_ok) begin
+                         ca_ship(x2 + (x0 << 2), x2 + ((x0 + 32'd1) << 2), x1 - x0 - 32'd1);
+                         st <= S_NP_CW0;
+                     end
+            S_NP_CW0: st <= S_NP_CW;
+            S_NP_CW: if (!ca_valid && ca_idle_i) st <= S_NP_CLR;
+            S_NP_CLR: wr(x2 + ((x1 - 32'd1) << 2), VNULL, S_NP_LEN);
+            S_NP_LEN: wr(adr(t[2]), vint(x1 - 32'd1), S_NP_RET);
+            S_NP_RET: deliver(t[3], crk);
+
+            // ---- list.insert ----
+            // objlist.c clamps the position: normalize, then clamp, one
+            // register stage each. No spare slot -> firmware, which grows.
+            S_NI_I: if (!intlike(mv)) st <= S_NAT_FB;
+                    else begin x0 <= ival(mv); rd(ab_ptr(ab_lo + 8'd2), S_NI_V); end
+            S_NI_V: begin t[3] <= mv; rd(adr(t[2]), S_NI_N); end
+            S_NI_N: begin
+                x1 <= md;
+                if (x0[31]) x0 <= x0 + md;
+                rd(adr(t[2]) + 4, S_NI_A);
+            end
+            S_NI_A: begin
+                if (x0[31]) x0 <= 32'd0;
+                else if (x0 > x1) x0 <= x1;
+                if (x1 >= md) st <= S_NAT_FB;
+                else rd(adr(t[2]) + 8, S_NI_P);
+            end
+            S_NI_P: begin
+                x2 <= md; x3 <= x1;
+                if (x0 == x1) st <= S_NI_ST;
+                else if (cfg_ca && (x1 - x0) > LS_CA_MIN) st <= S_NI_CA;
+                else st <= S_NI_L;
+            end
+            // Top down, so each word moves before it is overwritten.
+            S_NI_L: if (x3 == x0) st <= S_NI_ST;
+                    else rd(x2 + ((x3 - 32'd1) << 2), S_NI_LW);
+            S_NI_LW: begin wr(x2 + (x3 << 2), mv, S_NI_L); x3 <= x3 - 32'd1; end
+            S_NI_CA: if (ca_ok) begin
+                         ca_ship(x2 + ((x0 + 32'd1) << 2), x2 + (x0 << 2), x1 - x0);
+                         st <= S_NI_CW0;
+                     end
+            S_NI_CW0: st <= S_NI_CW;
+            S_NI_CW: if (!ca_valid && ca_idle_i) st <= S_NI_ST;
+            S_NI_ST: wr(x2 + (x0 << 2), t[3], S_NI_LEN);
+            S_NI_LEN: wr(adr(t[2]), vint(x1 + 32'd1), S_N_NONE);
             S_NAT_QX: begin h_qextn <= mv[31:0]; deliver(VNONE, crk); end
             S_NAT_RG1: if (!intlike(mv)) st <= S_NAT_FB;
                        else if (x0 == 32'd2) begin

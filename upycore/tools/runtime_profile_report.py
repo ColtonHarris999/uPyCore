@@ -62,7 +62,7 @@ def main():
         p=r['profile'];lines+=['',f"## {r['name']}: monitored inclusive functions",'',
             'Inclusive function cycles contain descendants and therefore overlap. Frame restoration is excluded; the next coherent frame establishes a new ancestry snapshot. Recursive occurrences are counted once per function. Outer `_boot` and module wrappers are omitted below, but retained in JSON. Do not sum this table.','',
             '| Function | Self cycles | Inclusive cycles | Entries inside interval |','|---|---:|---:|---:|']
-        monitored=['_subscr','_setsubscr','_getslice','_slice_range','_slice_len','_list_setslice','_list_of_iter','_list_of_seq','_newlist','_list_reserve','list__pop','list__insert']
+        monitored=['_subscr','_setsubscr','_getslice','_slice_range','_slice_len','_list_setslice','_list_of_iter','_list_of_seq','_newlist','_list_reserve','list__pop','list__insert','_list__pop_fb','_list__insert_fb','_list_pop_at']
         for n in monitored:
             row=p['functions'].get('_fw:'+n)
             if row:lines.append(f"| {n} | {row['self_cycles']:,} | {row['inclusive_cycles']:,} | {row['entries']:,} |")
