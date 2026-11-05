@@ -2639,7 +2639,12 @@ module mpy_core
             end
 
             // ---- LOAD_SUBSCR ----
-            S_LSUB: if ((is_mut(t[0], ABI_MUT_LIST) || tg(t[0]) == ABI_TAG_TUPLE) && intlike(t[1]))
+            // An exact bytearray shares the list header layout (len, alloc,
+            // data) and the list's normalize/bounds state. Its element is one
+            // byte of the data word. A subclass is an OBJECT, not a MUT, so it
+            // never gets here. Wide or custom indices take the hook.
+            S_LSUB: if ((is_mut(t[0], ABI_MUT_LIST) || is_mut(t[0], ABI_MUT_BYTEARRAY) ||
+                         tg(t[0]) == ABI_TAG_TUPLE) && intlike(t[1]))
                         rd(adr(t[0]), S_LS_LEN);
                     else if (is_mut(t[0], ABI_MUT_DICT))
                         lookup(t[0], t[1], VNULL, LK_FIND, 1'b0, S_LS_D);
@@ -2650,12 +2655,16 @@ module mpy_core
                 v0 = ival(t[1]);
                 if (v0[31]) v0 = v0 + md;
                 x1 <= v0;
-                if (v0[31] || v0 >= md)
+                // A bad bytearray index raises from the hook, which owns
+                // that message; the miss path is not worth a new ABI text.
+                if ((v0[31] || v0 >= md) && is_mut(t[0], ABI_MUT_BYTEARRAY)) st <= S_LS_FB;
+                else if (v0[31] || v0 >= md)
                     raise_msg((tg(t[0]) == ABI_TAG_TUPLE) ? ABI_MSG_TUPLE_INDEX : ABI_MSG_LIST_INDEX);
                 else if (tg(t[0]) == ABI_TAG_TUPLE) rd(adr(t[0]) + 4 + (v0 << 2), S_LS_PUT);
                 else rd(adr(t[0]) + 8, S_LS_IT);
             end
-            S_LS_IT: rd(md + (x1 << 2), S_LS_PUT);
+            S_LS_IT: if (is_mut(t[0], ABI_MUT_BYTEARRAY)) rd(md + {x1[31:2], 2'b00}, S_LS_SB);
+                     else rd(md + (x1 << 2), S_LS_PUT);
             S_LS_PUT: begin rf[`SX(6'(sp - 7'd2))] <= mv; sp <= sp - 7'd1; st <= S_FETCH; end
             S_LS_D: if (lk_cx) st <= S_LS_FB;
                     else if (lk_found) begin rf[`SX(6'(sp - 7'd2))] <= lk_res; sp <= sp - 7'd1; st <= S_FETCH; end
@@ -2664,12 +2673,13 @@ module mpy_core
                 v0 = ival(t[1]);
                 if (v0[31]) v0 = v0 + si_len;
                 x1 <= v0;
-                if (si_na) st <= S_LS_FB;
+                // bytes index by byte, so only a str needs the code-point walk.
+                if (si_na && tg(t[0]) != ABI_TAG_BYTES) st <= S_LS_FB;
                 else if (v0[31] || v0 >= si_len)
                     raise_msg((tg(t[0]) == ABI_TAG_BYTES) ? ABI_MSG_BYTES_INDEX : ABI_MSG_STR_INDEX);
                 else rd(si_addr + {v0[31:2], 2'b00}, S_LS_SB);
             end
-            S_LS_SB: if (tg(t[0]) == ABI_TAG_BYTES) begin
+            S_LS_SB: if (!strlike(t[0])) begin
                          rf[`SX(6'(sp - 7'd2))] <= vint({24'd0, byte_of(md, x1[1:0])}); sp <= sp - 7'd1; st <= S_FETCH;
                      end else rd(h_chars + 4 * byte_of(md, x1[1:0]), S_LS_SC);
             S_LS_SC: begin rf[`SX(6'(sp - 7'd2))] <= {ABI_TAG_QSTR, md}; sp <= sp - 7'd1; st <= S_FETCH; end
@@ -2681,16 +2691,28 @@ module mpy_core
             // ---- STORE_SUBSCR ----
             S_SSUB: if (t[6] == VNULL) st <= S_SS_FB;
                     else if (is_mut(t[0], ABI_MUT_LIST) && intlike(t[1])) rd(adr(t[0]), S_SS_LEN);
+                    // MicroPython stores the low byte of any small int or bool
+                    // (binary.c SET_VAL_AS). Other values take the hook.
+                    else if (is_mut(t[0], ABI_MUT_BYTEARRAY) && intlike(t[1]) && intlike(t[6]))
+                        rd(adr(t[0]), S_SS_LEN);
                     else if (is_mut(t[0], ABI_MUT_DICT)) lookup(t[0], t[1], t[6], LK_ADD, 1'b0, S_SS_D);
                     else st <= S_SS_FB;
             S_SS_LEN: begin
                 v0 = ival(t[1]);
                 if (v0[31]) v0 = v0 + md;
                 x1 <= v0;
-                if (v0[31] || v0 >= md) raise_msg(ABI_MSG_LIST_INDEX);
+                if ((v0[31] || v0 >= md) && is_mut(t[0], ABI_MUT_BYTEARRAY)) st <= S_SS_FB;
+                else if (v0[31] || v0 >= md) raise_msg(ABI_MSG_LIST_INDEX);
                 else rd(adr(t[0]) + 8, S_SS_IT);
             end
-            S_SS_IT: begin wr(md + (x1 << 2), t[6], S_FETCH); sp <= sp - 7'd3; end
+            // The byte store is the only side effect and the last step; wrb
+            // keeps the word's other lanes and its memory tag, and the port's
+            // word-granular scoreboard holds it behind any copy in flight.
+            S_SS_IT: begin
+                if (is_mut(t[0], ABI_MUT_BYTEARRAY)) wrb(md + x1, ival(t[6]) & 32'hFF, S_FETCH);
+                else wr(md + (x1 << 2), t[6], S_FETCH);
+                sp <= sp - 7'd3;
+            end
             S_SS_D: if (lk_cx || lk_ro) st <= S_SS_FB;
                     else begin sp <= sp - 7'd3; st <= S_FETCH; end
             S_SS_FB: begin

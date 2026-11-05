@@ -240,6 +240,31 @@ def _as_index(x, what):
     _index_type(what, x)
 
 
+def _word_index(obj, x):
+    # mp_get_index for str, bytes and bytearray: a small int or a bool. A
+    # wide int overflows the machine word; nothing else is an index.
+    if _isbool(x):
+        return 1 if x else 0
+    if _tag(x) == TAG_INT:
+        return x
+    if _tag(x) == TAG_INT64:
+        raise OverflowError('overflow converting long int to machine word')
+    _index_type(obj, x)
+
+
+def _byte_value(v):
+    # mp_obj_get_int, then the low byte (binary.c SET_VAL_AS without checks).
+    if _isbool(v):
+        return 1 if v else 0
+    if _tag(v) == TAG_INT or _tag(v) == TAG_INT64:
+        return v & 255
+    if _isinst(v):
+        f = _tlookup(_ld(v, 1), '__int__')
+        if f is not NULL:
+            return _byte_value(_call_member(f, v, ()))
+    raise TypeError(_s("can't convert ", _tname(v), ' to int'))
+
+
 def _clamp(i, n, step):
     if i < 0:
         i += n
@@ -293,9 +318,7 @@ def _subscr(obj, index):
     if _kind(index) == OB_SLICE or (_tag(index) == TAG_OBJECT and _ld(index, 0) == OB_SLICE):
         return _getslice(obj, index)
     if t == TAG_STR or t == TAG_QSTR or t == TAG_BYTES or _isbarr(obj):
-        if not _isint(index) and index is not True and index is not False:
-            _index_type('string' if t != TAG_BYTES and not _isbarr(obj) else 'bytes', index)
-        return _seq_at(obj, _as_index(index, obj))
+        return _seq_at(obj, _word_index(obj, index))
     if t == TAG_TUPLE or _islist(obj):
         return _seq_at(obj, _as_index(index, obj))
     if t == TAG_RANGE:
@@ -326,7 +349,9 @@ def _seq_at(obj, i):
     if i < 0 or i >= n:
         if _isstr(obj):
             raise IndexError('string index out of range')
-        if _tag(obj) == TAG_BYTES or _isbarr(obj):
+        if _isbarr(obj):
+            raise IndexError('bytearray index out of range')
+        if _tag(obj) == TAG_BYTES:
             raise IndexError('bytes index out of range')
         if _tag(obj) == TAG_TUPLE:
             raise IndexError('tuple index out of range')
@@ -464,15 +489,16 @@ def _setsubscr(obj, index, value):
     if _isbarr(obj):
         if _tag(index) == TAG_OBJECT and _ld(index, 0) == OB_SLICE:
             return _barr_setslice(obj, index, value)
-        i = _as_index(index, obj)
+        # objarray.c: deletion is refused first, then the index, then the value.
+        if value is NULL:
+            raise TypeError("'bytearray' object doesn't support item deletion")
+        i = _word_index(obj, index)
         n = _ld(obj, 0)
         if i < 0:
             i += n
         if i < 0 or i >= n:
-            raise IndexError('bytes index out of range')
-        if value is NULL:
-            raise TypeError("bytearray doesn't support item deletion")
-        _poke8(_data(obj), i, _as_index(value, obj) & 255)
+            raise IndexError('bytearray index out of range')
+        _poke8(_data(obj), i, _byte_value(value))
         return None
     if _isdict(obj):
         if value is NULL:

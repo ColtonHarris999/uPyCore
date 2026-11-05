@@ -207,6 +207,7 @@ ca_copy = { file = "hw/containers/ca_copy.py" }
 text = { file = "hw/strings/text.py" }
 unicode = { file = "hw/strings/unicode.py" }
 bytesobj = { file = "hw/strings/bytesobj.py" }
+bytearray_index = { file = "hw/strings/bytearray_index.py" }
 format = { file = "hw/strings/format.py" }
 
 slice_str_clamp = { file = "hw/strings/slice_str_clamp.py" }
