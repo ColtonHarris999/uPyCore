@@ -116,7 +116,13 @@ def _int_value(args):
     if _tag(x) == TAG_FLOAT:
         i = _ftoi(x)
         if i is STOP:
-            raise OverflowError("overflow converting float to int")
+            # mp_obj_new_int_from_float: NaN, infinity, or past long long.
+            if x != x:
+                raise ValueError("can't convert NaN to int")
+            d = x - x
+            if d != d:
+                raise OverflowError("can't convert inf to int")
+            raise ValueError('float too big')
         return i
     if _isstr(x):
         return _parse_int(x, base)
@@ -339,6 +345,10 @@ def sorted(iterable, key=None, reverse=False):
 
 
 def hash(obj):
+    # The native hash gives every object an identity hash; a memoryview
+    # is unhashable (array has no hash slot).
+    if _ismv(obj):
+        _unsupported_un('__hash__', obj)
     return _hashv(obj)
 
 

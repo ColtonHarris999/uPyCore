@@ -377,6 +377,8 @@ def _len_fb(x):
         k = _ld(x, 0)
         if k == OB_DICT_VIEW:
             return _ld(_ld(x, 2), 0)
+        if k == OB_MEMVIEW:
+            return _ld(x, 4)
         if k == OB_INSTANCE or k == OB_EXCEPTION:
             f = _tlookup(_ld(x, 1), '__len__')
             if f is not NULL:

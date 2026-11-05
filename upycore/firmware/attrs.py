@@ -461,6 +461,8 @@ def _getslice(obj, sl):
         return r
     if t == TAG_RANGE:
         return _range_slice(obj, sl)
+    if _ismv(obj):
+        return memoryview____getitem__(obj, sl)
     if _isinst(obj):
         f = _tlookup(_ld(obj, 1), '__getitem__')
         if f is not NULL:
@@ -517,6 +519,8 @@ def _setsubscr(obj, index, value):
         sub = _subobj(obj)
         if sub is not NULL:
             return _setsubscr(sub, index, value)
+    if _ismv(obj):
+        return memoryview____setitem__(obj, index, value)
     if value is NULL:
         raise TypeError(_s("'", _tname(obj), "' object doesn't support item deletion"))
     raise TypeError(_s("'", _tname(obj), "' object does not support item assignment"))
