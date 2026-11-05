@@ -292,8 +292,43 @@ def uses_compiler(sources: list[Path]) -> bool:
     return False
 
 
-def frozen_runtime_specs(compiler: bool = True) -> list[str]:
-    """array, plus (with ``compiler``) the patched uPy2 compiler."""
+# Standard-library modules written in Python (upycore/runtime). Each is frozen
+# only into programs that import it, so other images stay byte-identical.
+# A module's own imports of these are listed here too.
+RUNTIME_MODULES = {"math": (), "cmath": ("math",), "random": (), "io": ()}
+
+
+def runtime_imports(sources: list[Path]) -> list[str]:
+    """The RUNTIME_MODULES that any source imports, with their dependencies."""
+
+    found: set[str] = set()
+    for p in sources:
+        try:
+            tree = ast.parse(p.read_bytes())
+        except (SyntaxError, ValueError):
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                names = [a.name for a in node.names]
+            elif isinstance(node, ast.ImportFrom) and not node.level and node.module:
+                names = [node.module]
+            else:
+                continue
+            for n in names:
+                top = n.split(".")[0]
+                if top in RUNTIME_MODULES:
+                    found.add(top)
+    todo = list(found)
+    while todo:
+        for dep in RUNTIME_MODULES[todo.pop()]:
+            if dep not in found:
+                found.add(dep)
+                todo.append(dep)
+    return sorted(found)
+
+
+def frozen_runtime_specs(compiler: bool = True, runtime: list[str] | tuple = ()) -> list[str]:
+    """array, the ``runtime`` modules, plus (with ``compiler``) the patched uPy2 compiler."""
 
     comp = ROOT / "upycore" / "compiler"
     if str(comp) not in sys.path:
@@ -301,6 +336,8 @@ def frozen_runtime_specs(compiler: bool = True) -> list[str]:
     import prepare
 
     rows = [("array", ROOT / "upycore" / "runtime" / "array.py", False, "array.py")]
+    for name in runtime:
+        rows.append((name, ROOT / "upycore" / "runtime" / f"{name}.py", False, f"{name}.py"))
     if compiler:
         rows.extend(prepare.module_list(prepare.prepare()))
     specs = []
@@ -325,7 +362,10 @@ def build_program(src: Path, work: Path, source_name: str | None = None,
     main_mpy = work / "main.mpy"
     compile_user(src, main_mpy, name, compiler)
     # The compiler is frozen bytecode. It is not compiled by itself.
-    specs = frozen_runtime_specs(uses_compiler([src, *(modules or {}).values()]))
+    sources = [src, *(modules or {}).values()]
+    # A test that supplies its own module of the same name keeps it.
+    runtime = [m for m in runtime_imports(sources) if m not in (modules or {})]
+    specs = frozen_runtime_specs(uses_compiler(sources), runtime)
     for mname, mpath in (modules or {}).items():
         mm = work / (mname.replace(".", "_") + ".mpy")
         mod_name = mpath.name if mpath.name != "__init__.py" else f"{mname.replace('.', '/')}/__init__.py"
