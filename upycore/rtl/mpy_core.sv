@@ -888,6 +888,13 @@ module mpy_core
         S_NI_CW,
         S_NI_ST,
         S_NI_LEN,
+        S_WS1,
+        S_WS2,
+        S_WS3,
+        S_WS4,
+        S_WS5,
+        S_WS_L,
+        S_WS_W,
         S_NAT_QX,
         S_NAT_RG1,
         S_NAT_RG2,
@@ -3773,6 +3780,11 @@ module mpy_core
                         end
                     ABI_N_LIST_INSERT: if (v0 != 32'd3 || !is_mut(mv, ABI_MUT_LIST)) st <= S_NAT_FB;
                         else begin t[2] <= mv; rd(ab_ptr(ab_lo + 8'd1), S_NI_I); end
+                    // _wcopy_step: a strided tagged-word gather into a
+                    // separate destination (a reverse slice is step -1).
+                    // x1 dst address, x2 src address, x3 count, x4 step bytes.
+                    ABI_N_WCOPY_STEP: if (v0 != 32'd6) st <= S_NAT_FB;
+                        else rd(ab_ptr(ab_lo + 8'd1), S_WS1);
                     ABI_N_OBJECT_INIT: if (v0 != 32'd1) st <= S_NAT_FB; else deliver(VNONE, crk);
                     ABI_N_BASEEXCEPTION_INIT: if (v0 < 32'd1 || tg(mv) != ABI_TAG_OBJECT) st <= S_NAT_FB;
                         else begin
@@ -3909,6 +3921,31 @@ module mpy_core
             S_NP_CLR: wr(x2 + ((x1 - 32'd1) << 2), VNULL, S_NP_LEN);
             S_NP_LEN: wr(adr(t[2]), vint(x1 - 32'd1), S_NP_RET);
             S_NP_RET: deliver(t[3], crk);
+
+            // ---- _wcopy_step ----
+            // One word per read/write pair through the port, so the
+            // scoreboard orders it behind any copy in flight. The firmware
+            // caller has validated the range and owns the destination.
+            S_WS1: if (tg(mv) != ABI_TAG_INT) st <= S_NAT_FB;
+                   else begin x1 <= mv[31:0]; rd(ab_ptr(ab_lo + 8'd2), S_WS2); end
+            S_WS2: begin ab_s[0] <= mv; rd(ab_ptr(ab_lo + 8'd3), S_WS3); end
+            S_WS3: if (tg(mv) != ABI_TAG_INT) st <= S_NAT_FB;
+                   else begin x2 <= mv[31:0]; rd(ab_ptr(ab_lo + 8'd4), S_WS4); end
+            S_WS4: if (tg(mv) != ABI_TAG_INT || mv[31]) st <= S_NAT_FB;
+                   else begin x3 <= mv[31:0]; rd(ab_ptr(ab_lo + 8'd5), S_WS5); end
+            S_WS5: if (tg(mv) != ABI_TAG_INT) st <= S_NAT_FB;
+                   else begin
+                       x4 <= mv[31:0] << 2;
+                       x1 <= padr(ab_q) + (x1 << 2);
+                       x2 <= padr(ab_s[0]) + (x2 << 2);
+                       st <= S_WS_L;
+                   end
+            S_WS_L: if (x3 == 32'd0) deliver(VNONE, crk);
+                    else rd(x2, S_WS_W);
+            S_WS_W: begin
+                wr(x1, mv, S_WS_L);
+                x1 <= x1 + 32'd4; x2 <= x2 + x4; x3 <= x3 - 32'd1;
+            end
 
             // ---- list.insert ----
             // objlist.c clamps the position: normalize, then clamp, one

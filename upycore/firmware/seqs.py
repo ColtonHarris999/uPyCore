@@ -82,6 +82,16 @@ def list__clear(self):
     return None
 
 
+def _wcopy_step_fb(dst, doff, src, soff, n, step):
+    # The native gathers in the core; this runs only for arguments it
+    # does not take.
+    i = 0
+    while i < n:
+        _st(dst, doff + i, _ld(src, soff + i * step))
+        i += 1
+    return None
+
+
 def _list_clear_slots(lst, start, stop):
     # GC scans the full allocation, including slots beyond the list length.
     # Port scoreboarding orders these stores after any pending CA copies.

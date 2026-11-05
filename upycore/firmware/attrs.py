@@ -444,13 +444,12 @@ def _getslice(obj, sl):
                 _wcopy(r, 1, base, off + a, m)
             return r
         if _islist(obj):
+            # One core gather (_wcopy_step) instead of a firmware loop. The
+            # source items are read after the result is allocated.
             r = _newlist(m)
-            i = 0
-            p = a
-            while i < m:
-                _st(_ld(r, 2), i, _ld(base, off + p))
-                p += s
-                i += 1
+            if m:
+                base, off = _seq_items(obj)
+                _wcopy_step(_ld(r, 2), 0, base, off + a, m, s)
             return r
         r = _newtuple(m)
         i = 0
