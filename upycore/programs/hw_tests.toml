@@ -50,6 +50,7 @@ branch = { file = "hw/control/branch.py" }
 fetch_long_insn = { file = "hw/control/fetch_long_insn.py" }
 loops = { file = "hw/control/loops.py" }
 for_iter = { file = "hw/control/for_iter.py" }
+stack_spill_loop = { file = "hw/control/stack_spill_loop.py", cycles = 60_000_000 }
 
 branchy = { file = "hw/control/branchy.py" }
 pop_jump_if_none = { file = "hw/control/pop_jump_if_none.py" }
@@ -148,6 +149,7 @@ dicts = { file = "hw/containers/dicts.py" }
 sets = { file = "hw/containers/sets.py" }
 set_order = { file = "hw/containers/set_order.py" }
 unpack = { file = "hw/containers/unpack.py" }
+memoryview_ops = { file = "hw/containers/memoryview_ops.py" }
 
 unpack_len_trap = { file = "hw/containers/unpack_len_trap.py" }
 list_to_tuple = { file = "hw/containers/list_to_tuple.py" }
@@ -211,6 +213,7 @@ text = { file = "hw/strings/text.py" }
 unicode = { file = "hw/strings/unicode.py" }
 bytesobj = { file = "hw/strings/bytesobj.py" }
 bytearray_index = { file = "hw/strings/bytearray_index.py" }
+bytearray_repr = { file = "hw/strings/bytearray_repr.py" }
 format = { file = "hw/strings/format.py" }
 
 slice_str_clamp = { file = "hw/strings/slice_str_clamp.py" }
@@ -368,6 +371,9 @@ import_star_all = { file = "hw/modules/import_star_all.py", modules = ["starred=
 import_getattr = { file = "hw/modules/import_getattr.py", modules = ["getattrmod=hw/modules/getattrmod.py"], oracle = false }
 import_usys = { file = "hw/modules/import_usys.py" }
 builtins_override_import = { file = "hw/modules/builtins_override_import.py" }
+math_funcs = { file = "hw/modules/math_funcs.py", cycles = 60_000_000 }
+cmath_random = { file = "hw/modules/cmath_random.py" }
+io_stringio = { file = "hw/modules/io_stringio.py" }
 import_from_hook = { file = "hw/modules/import_from_hook.py", modules = ["pkg_hook=hw/modules/pkg_hook/__init__.py", "pkg_hook.sub=hw/modules/pkg_hook/sub.py"], oracle = false }
 
 [integ]

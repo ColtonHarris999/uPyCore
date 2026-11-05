@@ -44,8 +44,8 @@ def _below(n):
 
 
 def _int(x):
-    # mp_obj_get_int
-    if isinstance(x, int):
+    # mp_obj_get_int. bool is not an int subclass on MicroPython.
+    if isinstance(x, int) or type(x) is bool:
         return int(x)
     raise TypeError("can't convert " + type(x).__name__ + " to int")
 
@@ -133,6 +133,6 @@ def uniform(a, b):
 def _fl(x):
     if type(x) is float:
         return x
-    if isinstance(x, int) or isinstance(x, float):
+    if type(x) is bool or isinstance(x, int) or isinstance(x, float):
         return float(x)
     raise TypeError("can't convert " + type(x).__name__ + " to float")

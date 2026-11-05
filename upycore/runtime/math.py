@@ -62,7 +62,8 @@ def _f(x):
     t = type(x)
     if t is float:
         return x
-    if isinstance(x, int) or isinstance(x, float):
+    # bool is not an int subclass on MicroPython, so it is named here.
+    if t is bool or isinstance(x, int) or isinstance(x, float):
         return float(x)
     m = getattr(t, '__float__', None)
     if m is not None:
@@ -600,7 +601,7 @@ def degrees(x):
 def ldexp(x, n):
     # MATH_FUN_2_FLT_INT: no domain check.
     x = _f(x)
-    if not isinstance(n, int):
+    if not isinstance(n, int) and type(n) is not bool:
         _intarg(n)
     if x == 0.0 or x != x or abs(x) == inf:
         return x
@@ -650,7 +651,7 @@ def isclose(a, b, rel_tol=1e-9, abs_tol=0):
 
 
 def factorial(x):
-    n = int(x) if isinstance(x, int) else _intarg(x)
+    n = int(x) if isinstance(x, int) or type(x) is bool else _intarg(x)
     if n < 0:
         raise ValueError('negative factorial')
     r = 1
