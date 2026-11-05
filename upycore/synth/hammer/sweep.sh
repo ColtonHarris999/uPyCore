@@ -64,6 +64,12 @@ launch() {  # launch <prefix> <steps> <periods>...
     [ $# -gt 0 ] || { echo "usage: $0 start|par <period ns>..."; exit 1; }
     for p in "$@"; do
         d=$DESIGNS/${prefix}_p$p
+        # Never replace a folder whose job is still running: the old Genus or
+        # Innovus would keep writing into the new run's files.
+        if [ -f "$d/syn.pid" ] && kill -0 "$(cat "$d/syn.pid")" 2>/dev/null; then
+            echo "skipped $p ns: $d is still running (pid $(cat "$d/syn.pid")); stop it first or use another PREFIX"
+            continue
+        fi
         python3 "$here/make_hammer_design.py" "$TEMPLATE" "$d" --top "$TOP" \
             --period "$p" "${src[@]}" ${DESIGN_ARGS:-} --force > /dev/null
         (cd "$d" && { nohup bash -c "$steps" > syn.out 2>&1 & echo $! > syn.pid; })
