@@ -210,3 +210,33 @@ outside this plan's initial scope.
   session). The new logic is FSM states that reuse existing adders,
   comparators and the port; it adds no new wide combinational path, but
   that needs a synthesis run to confirm.
+
+## Project suite regression (all stages)
+
+The original 11 programs in `upycore/programs/bench`, production firmware,
+four accelerator modes, plain and profile-capable simulators. Baseline
+`aca1b5e` against `c2a8099`, both rebuilt with Verilator 5.052. Every one of
+the 44 configurations produces byte-identical stdout/stderr to the baseline,
+and the two simulators agree to the cycle.
+
+| Program | off | CA | AALU | both |
+| --- | ---: | ---: | ---: | ---: |
+| bulk_extended_keys | −0.05 % | −0.06 % | −0.05 % | −0.05 % |
+| bulk_maps | +0.08 % | +0.14 % | +0.08 % | +0.14 % |
+| byte_moves | −1.02 % | −0.96 % | −1.03 % | −0.97 % |
+| dict | 0.00 % | 0.00 % | 0.00 % | 0.00 % |
+| float | 0.00 % | 0.00 % | 0.00 % | 0.00 % |
+| intmath | 0.00 % | 0.00 % | 0.00 % | 0.00 % |
+| listbuild | 0.00 % | 0.00 % | 0.00 % | 0.00 % |
+| listops | −0.01 % | −0.01 % | −0.01 % | −0.01 % |
+| sequence_ops | −0.62 % | −0.68 % | −0.61 % | −0.67 % |
+| set_relations | +0.11 % | +0.14 % | +0.12 % | +0.14 % |
+| strings | 0.00 % | 0.00 % | 0.00 % | 0.00 % |
+
+The small `set_relations` / `bulk_maps` increases come from stage 3 and are
+a firmware layout effect, not executed work: neither program reaches the
+new pop/insert code, and on the stage-3 RTL `set_relations` returns to
+14,421,234 cycles (baseline 14,422,301) when only `firmware/seqs.py` is put
+back to its stage-2 text. Renaming the new helper does not move it, so it
+is not one global's hash; code placement is the likely cause. It is ±0.15 %
+and should be kept in mind when reading sub-percent differences.
