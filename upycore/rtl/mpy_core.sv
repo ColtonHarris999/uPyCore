@@ -972,6 +972,8 @@ module mpy_core
     logic [5:0]  spill_n, spill_ntag;
     logic [31:0] spill_words;
     logic        spill_had_link;
+    // The chunk being reloaded sits at spill_hp, so its words can be freed.
+    logic        reload_top;
     logic [31:0] spill_prev;
     // 1 while the last change to sp was a push. Spill and reload do not count.
     logic        rf_mono, sp_hold, rf_reload_miss;
@@ -4951,6 +4953,14 @@ module mpy_core
                 // Payloads were written as they arrived. This step only
                 // installs the restored link and moves the ring window.
                 spilled_reals <= (spilled_reals >= {10'd0, spill_n}) ? (spilled_reals - {10'd0, spill_n}) : 16'd0;
+                // Chunks within a frame are reloaded last-in first-out, and a
+                // callee's chunks are gone once it returns, so the chunk at
+                // spill_hp is free again. Without this, a loop whose stack
+                // crosses the ring boundary leaked one chunk per iteration
+                // until the frame hit spill_hp ("maximum recursion depth").
+                // The spill took a 16-byte block (mpy_rf_block_bytes), and
+                // links keep aligned addresses, so free the whole block.
+                if (reload_top) spill_hp <= spill_addr + mpy_rf_block_bytes(spill_n);
                 if (spill_prev != 32'd0) begin
                     rf[4'(rf_base - spill_n)] <= mpy_make_rf_link(spill_prev);
                     rf_base <= 6'(4'(rf_base - spill_n));
@@ -4974,6 +4984,9 @@ module mpy_core
                     spill_prev <= v1;
                     spill_ntag <= 6'((v0[5:0] + 6'd7) >> 3);
                     spill_words <= 32'd1 + 32'((v0[5:0] + 6'd7) >> 3) + v0;
+                    // Registers only, so the compare stays off the reload's
+                    // header decode.
+                    reload_top <= (spill_addr == spill_hp);
                     if (v0 < 32'(MPY_RF_CHUNK_MIN) || v0 > 32'(MPY_RF_CHUNK_MAX) || v2 > 32'(MPY_RF_DEPTH)) begin
                         if (rf_resume == S_EXEC) begin
                             rf_reload_miss <= 1'b1;
