@@ -203,11 +203,14 @@ The converted files also read cleanly in Yosys's own Verilog parser.
 Vectorless power (Genus guessing how often each net toggles) does not
 compare two different cores fairly. `activity/upycore_pystone.saif.gz` is
 the switching activity of `mpy_core` running perf_bench `misc_pystone`
-(300 loops, MicroPython startup included: 14,174,681 cycles at the
-testbench's 10 ns clock; the benchmark itself is 13,513,686, the run less
-the 660,995-cycle `misc_pystone_base.py`). It matches the RTL from the
-iterative probe modulo on. `upycore_pystone_oldrtl.saif.gz` is the same
-run on the earlier RTL (15,235,606 cycles, benchmark 13,409,731), for
+(300 loops, MicroPython startup included: 12,769,729 cycles at the
+testbench's 10 ns clock; the benchmark itself is 12,174,564, the run less
+the 595,165-cycle `misc_pystone_base.py`). It matches the RTL from 9a20eb2
+on (shared SRAM, collection accelerator, hash engine, pipelined ALU).
+`upycore_pystone_oct29rtl.saif.gz` is the same run on the RTL with the
+iterative probe modulo (14,174,681 cycles, benchmark 13,513,686), and
+`upycore_pystone_oldrtl.saif.gz` the RTL before that (15,235,606 cycles,
+benchmark 13,409,731), for
 netlists synthesized before that change. To regenerate it:
 
 ```sh
@@ -230,6 +233,19 @@ Energy per cycle is total power divided by 100 MHz. Check
 `saif_annotation.rpt`: the SAIF comes from RTL simulation, so only nets
 whose names survive synthesis (flop outputs, ports) are annotated and
 Genus propagates the rest.
+
+After place and route, read the same file into Innovus on the routed
+design (unzip it first; give a full path, since Innovus does not expand `~`):
+
+```tcl
+read_activity_file -format SAIF -scope tb_mpy_soc/u_soc/u_core /home/<you>/upycore/upycore/synth/hammer/activity/upycore_pystone.saif
+report_power -out_file power_saif.rpt
+```
+
+The toggle rates in the file are for the simulated 10 ns clock. For a run
+at period T, energy per cycle is dynamic power / 100 MHz + leakage x T, and
+power at that clock is that energy / T. Without a readable SAIF,
+`report_power` silently falls back to the vectorless guess.
 
 Verilator also writes top-level `$unit` and package scopes into the SAIF;
 those were cut from `upycore_pystone.saif.gz` (keep only `tb_mpy_soc`),
