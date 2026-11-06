@@ -35,11 +35,14 @@ module mpy_hash #(
     `include "mpy_hash_funcs.svh"
     localparam integer SP_W = DEPTH < 2 ? 1 : $clog2(DEPTH + 1);
     typedef enum logic [4:0] {IDLE, DISPATCH, RESULT, RESP,
-        I64, REAL_PART, IMAG_PART, QSTR, STR_HASH, STR_LEN, STR_PTR,
+        I64, REAL_PART, REAL_HASH, IMAG_PART, IMAG_HASH, QSTR, STR_HASH, STR_LEN, STR_PTR,
         STR_DATA, STR_STEP, TUPLE_LEN, ELEM, SET_FLAGS, SET_LEN, SET_PTR} state_t;
     state_t state;
     logic [3:0] tag;
     logic [31:0] payload, result, real_hash, len, ptr, acc, byte_buffer;
+    // A complex part read from memory is registered before hash_float, so
+    // the float hash does not start from the memory's read data.
+    logic [31:0] part_r;
     logic [SP_W-1:0] sp;
     logic [31:0] frame_ptr [DEPTH], frame_len [DEPTH];
     logic [31:0] frame_idx [DEPTH], frame_sum [DEPTH];
@@ -110,7 +113,7 @@ module mpy_hash #(
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) begin
             state <= IDLE; hash_o <= 0; error_o <= 0; sp <= 0;
-            tag <= 0; payload <= 0; result <= 0; real_hash <= 0;
+            tag <= 0; payload <= 0; result <= 0; real_hash <= 0; part_r <= 0;
             len <= 0; ptr <= 0; acc <= 0; byte_buffer <= 0;
         end else if (reading && mem_ack_i && mem_fault_i) fail();
         else case (state)
@@ -144,8 +147,10 @@ module mpy_hash #(
                 if (valid_i) accept(); else state <= IDLE;
             end
             I64: if (mem_ack_i) finish(mem_data_i);
-            REAL_PART: if (mem_ack_i) begin real_hash <= hash_float(mem_data_i); state <= IMAG_PART; end
-            IMAG_PART: if (mem_ack_i) finish(real_hash ^ hash_float(mem_data_i));
+            REAL_PART: if (mem_ack_i) begin part_r <= mem_data_i; state <= REAL_HASH; end
+            REAL_HASH: begin real_hash <= hash_float(part_r); state <= IMAG_PART; end
+            IMAG_PART: if (mem_ack_i) begin part_r <= mem_data_i; state <= IMAG_HASH; end
+            IMAG_HASH: finish(real_hash ^ hash_float(part_r));
             QSTR: if (mem_ack_i) finish({16'd0, mem_data_i[15:0]});
             STR_HASH: if (mem_ack_i) begin
                 if (mem_data_i[15:0] != 0) finish({16'd0, mem_data_i[15:0]});
