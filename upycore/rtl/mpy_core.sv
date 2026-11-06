@@ -733,6 +733,7 @@ module mpy_core
         S_CELL_RD,
         S_CELL_B,
         S_RF_SPILL,
+        S_RF_SPILL2,
         S_RF_SPILL_W,
         S_RF_RELOAD,
         S_RF_RELOAD_R,
@@ -971,6 +972,9 @@ module mpy_core
     logic [31:0] spill_addr;
     logic [5:0]  spill_n, spill_ntag;
     logic [31:0] spill_words;
+    // S_RF_SPILL's chunk size and its bytes, for S_RF_SPILL2's checks.
+    logic [5:0]  spill_nc;
+    logic [31:0] spill_bc;
     logic        spill_had_link;
     // The chunk being reloaded sits at spill_hp, so its words can be freed.
     logic        reload_top;
@@ -1763,7 +1767,8 @@ module mpy_core
             sp_d <= sp;
             if (aalu_pend && alu_done) aalu_ready <= 1'b1;
 
-            if (rf_pend && st != S_MWAIT && st != S_AALU_WB && st != S_RF_SPILL && st != S_RF_SPILL_W &&
+            if (rf_pend && st != S_MWAIT && st != S_AALU_WB && st != S_RF_SPILL && st != S_RF_SPILL2 &&
+                st != S_RF_SPILL_W &&
                 st != S_RF_RELOAD && st != S_RF_RELOAD_R && st != S_RF_RELOAD_G) begin
                 if (sp >= 7'(MPY_RF_DEPTH)) begin
                     rf_resume <= st;
@@ -4978,20 +4983,26 @@ module mpy_core
                 v1 = has_link ? ((sp > 7'(RF_LEAVE_SP)) ? 32'(sp - 7'(RF_LEAVE_SP)) : 32'd0)
                               : ((sp > 7'(RF_LEAVE_SP - 1)) ? 32'(sp - 7'(RF_LEAVE_SP - 1)) : 32'd0);
                 if (v0 > v1) v0 = v1;
-                v2 = mpy_rf_block_bytes(v0[5:0]);
-                if (v0 < 32'(MPY_RF_CHUNK_MIN)) st <= rf_resume;
-                else if (spill_hp < ftop + v2) raise_msg(ABI_MSG_RECURSION);
+                // The size takes this cycle; the checks against the frame
+                // and the commit take S_RF_SPILL2. Neither cycle writes the
+                // ring, sp or the frame, so has_link and ftop do not move.
+                spill_nc <= v0[5:0];
+                spill_bc <= mpy_rf_block_bytes(v0[5:0]);
+                st <= S_RF_SPILL2;
+            end
+            S_RF_SPILL2:
+                if (spill_nc < 6'(MPY_RF_CHUNK_MIN)) st <= rf_resume;
+                else if (spill_hp < ftop + spill_bc) raise_msg(ABI_MSG_RECURSION);
                 else begin
-                    spill_n <= v0[5:0];
-                    spill_ntag <= 6'((v0[5:0] + 6'd7) >> 3);
-                    spill_words <= 32'd1 + 32'((v0[5:0] + 6'd7) >> 3) + v0;
-                    spill_addr <= spill_hp - v2;
+                    spill_n <= spill_nc;
+                    spill_ntag <= 6'((spill_nc + 6'd7) >> 3);
+                    spill_words <= 32'd1 + 32'((spill_nc + 6'd7) >> 3) + 32'(spill_nc);
+                    spill_addr <= spill_hp - spill_bc;
                     spill_had_link <= has_link;
                     spill_prev <= has_link ? mpy_rf_link_addr(rf[`SX(7'd0)]) : 32'd0;
                     sw_i <= 32'd0;
                     st <= S_RF_SPILL_W;
                 end
-            end
             S_RF_SPILL_W: if (sw_i == spill_words) begin
                 if (spill_had_link) begin
                     rf[`SX(spill_n)] <= mpy_make_rf_link(spill_addr);
