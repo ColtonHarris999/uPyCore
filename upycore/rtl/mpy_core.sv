@@ -1979,7 +1979,12 @@ module mpy_core
             S_CF_CHK: begin
                 c_cells <= md;
                 v0 = noframe ? ABI_FRAME_BASE : stk_top;
-                v1 = v0 + ((32'd17 + c_nst + 32'd3 * c_nexc) << 2);
+                // v0 + 4 * (17 + n_state + 3 * n_exc): the narrow fields are
+                // summed first (with stk_off when there is a frame, at most
+                // 492 + 1037), so the bound is one 32-bit add, not two.
+                v3 = 32'(12'd17 + 12'(c_nst) + 12'd3 * 12'(c_nexc));
+                v1 = noframe ? (ABI_FRAME_BASE + (v3 << 2))
+                             : (fbase + {18'd0, 12'(stk_off) + v3[11:0], 2'b00});
                 v2 = ab_pe - ab_lo;
                 c_fast <= !ab_chunked && (ab_nkw == 8'd0) && (c_nkwo == 8'd0) &&
                           (v2 + c_ndef >= c_npos) &&
@@ -4372,7 +4377,10 @@ module mpy_core
                 // The stack sits at ftop; planting the frame on ftop itself
                 // overwrites it when this generator later spills.
                 v0 = noframe ? ABI_FRAME_BASE : stk_top;
-                v1 = v0 + ((32'd17 + {25'd0, x1[22:16]} + 32'd3 * {27'd0, md[20:16]}) << 2);
+                // As in S_CF_CHK: narrow fields first, one 32-bit add.
+                v3 = 32'(12'd17 + 12'(x1[22:16]) + 12'd3 * 12'(md[20:16]));
+                v1 = noframe ? (ABI_FRAME_BASE + (v3 << 2))
+                             : (fbase + {18'd0, 12'(stk_off) + v3[11:0], 2'b00});
                 if (x1[6:0] == 7'd0 && t[1] != VNONE) begin
                     fflags <= fflags & ~FF_YFAST;
                     raise_msg(ABI_MSG_GEN_SEND);
