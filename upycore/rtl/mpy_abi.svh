@@ -474,6 +474,7 @@ localparam int ABI_SYSROOT_WORDS = 32;
 localparam int ABI_ARGBUF_WORDS = 256;
 localparam int ABI_ARGBUF_ARGS = 32;
 localparam int ABI_GC_POOL_BYTES = 490240;
+localparam int ABI_GC_TABLE_BYTES = 307200;
 localparam int ABI_GC_BLOCK_BYTES = 16;
 localparam int ABI_FRAME_BYTES = 32768;
 localparam int ABI_FRAME_HDR_WORDS = 16;

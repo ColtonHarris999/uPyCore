@@ -473,6 +473,14 @@ ARGBUF_WORDS = 256
 ARGBUF_ARGS = 32          # first argument word; words 1..31 take prepended self and cells
 GC_POOL_BASE = ARGBUF_BASE + 4 * ARGBUF_WORDS
 GC_POOL_BYTES = SRAM_BASE + SRAM_BYTES - GC_POOL_BASE
+# Capacity of mpy_gc's allocation table, in heap bytes. GC_POOL_BYTES is the
+# address window, the heap an image of size 0 would leave; every real image
+# carries the firmware (190,752 bytes for an empty program), so the largest
+# heap is SRAM_BYTES - reserve - 190,752 = 299,488 bytes (18,718 blocks).
+# The table holds 19,200 blocks (2 bits each, 600 x 64-bit words), so it
+# covers that with 482 blocks to spare. memory_layout caps the heap here.
+GC_TABLE_BLOCKS = 600 * 32
+GC_TABLE_BYTES = GC_TABLE_BLOCKS * 16
 
 
 def memory_layout(image_bytes: int, pool_bytes: int = 0) -> tuple[int, int, int]:
@@ -481,6 +489,8 @@ def memory_layout(image_bytes: int, pool_bytes: int = 0) -> tuple[int, int, int]
     Image/data pointers retain their logical bases. Only the physical split
     varies; at least one GC block must remain after runtime reservations.
     A nonzero pool_bytes optionally caps the heap for constrained tests.
+    The heap never exceeds GC_TABLE_BYTES, the allocation table's capacity;
+    a smaller image than the firmware allows today just leaves SRAM unused.
     """
     if image_bytes < 4 * (max(HDR.values()) + 1):
         raise ValueError("image is smaller than its header")
@@ -491,9 +501,11 @@ def memory_layout(image_bytes: int, pool_bytes: int = 0) -> tuple[int, int, int]
         raise ValueError(f"image is {image_bytes} bytes ({image} aligned); shared SRAM "
                          f"is {SRAM_BYTES} bytes and runtime reserves "
                          f"{GC_POOL_BASE - SRAM_BASE} bytes plus at least 16 heap bytes")
-    if pool_bytes < 0 or pool_bytes % 16 or pool_bytes > available:
-        raise ValueError(f"requested heap {pool_bytes} bytes; available {available} (16-byte alignment required)")
-    return image, data, pool_bytes or available
+    limit = min(available, GC_TABLE_BYTES)
+    if pool_bytes < 0 or pool_bytes % 16 or pool_bytes > limit:
+        raise ValueError(f"requested heap {pool_bytes} bytes; available {limit} "
+                         f"(SRAM {available}, GC table {GC_TABLE_BYTES}; 16-byte alignment required)")
+    return image, data, pool_bytes or limit
 
 GC_BLOCK_BYTES = 16
 
@@ -624,6 +636,7 @@ def _sv_lines() -> list[str]:
         "FRAME_EXC_ENTRIES": FRAME_EXC_ENTRIES, "FIRST_EXC_TYPE": FIRST_EXC_TYPE,
         "SYSROOT_WORDS": SYSROOT_WORDS, "ARGBUF_WORDS": ARGBUF_WORDS,
         "ARGBUF_ARGS": ARGBUF_ARGS, "GC_POOL_BYTES": GC_POOL_BYTES,
+        "GC_TABLE_BYTES": GC_TABLE_BYTES,
         "GC_BLOCK_BYTES": GC_BLOCK_BYTES, "FRAME_BYTES": FRAME_BYTES,
         "FRAME_HDR_WORDS": FRAME_HDR_WORDS, "FRAME_EXC_WORDS": FRAME_EXC_WORDS,
         "EMERG_WORDS": EMERG_WORDS, "HEADER_WORDS": HEADER_WORDS,

@@ -170,7 +170,9 @@ module mpy_soc #(
 
     mpy_gc #(
         .POOL_BASE(ABI_GC_POOL_BASE),
-        .POOL_BYTES(ABI_GC_POOL_BYTES)
+        // The table covers the largest heap a real image leaves
+        // (mpy_abi.GC_TABLE_BYTES), not the whole address window.
+        .POOL_BYTES(ABI_GC_TABLE_BYTES)
     ) u_gc (
         .clk_i, .rst_n_i(rst_n_i && boot_done && !boot_err_o),
         .pool_bytes_i(active_pool),

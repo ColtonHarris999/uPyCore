@@ -14546,7 +14546,7 @@ module mpy_hash (
 		end
 	endtask
 	initial if ((DEPTH < 1) || ((BYTES_PER_CYCLE != 1) && (BYTES_PER_CYCLE != 4)))
-		$display("Error [%0t] /tmp/claude-0/conv3/mpy_soc.sv:18591:13 - mpy_hash.<unnamed_block>.<unnamed_block>\n msg: ", $time, "mpy_hash: invalid parameters");
+		$display("Error [%0t] /tmp/claude-0/conv4/mpy_soc.sv:18592:13 - mpy_hash.<unnamed_block>.<unnamed_block>\n msg: ", $time, "mpy_hash: invalid parameters");
 	always @(posedge clk_i or negedge rst_n_i)
 		if (!rst_n_i) begin
 			state <= 5'd0;
@@ -18371,10 +18371,10 @@ module mpy_soc (
 		.trace_op_o(trace_op_o),
 		.trace_sp_o(trace_sp_o)
 	);
-	localparam signed [31:0] ABI_GC_POOL_BYTES = 490240;
+	localparam signed [31:0] ABI_GC_TABLE_BYTES = 307200;
 	mpy_gc #(
 		.POOL_BASE(ABI_GC_POOL_BASE),
-		.POOL_BYTES(ABI_GC_POOL_BYTES)
+		.POOL_BYTES(ABI_GC_TABLE_BYTES)
 	) u_gc(
 		.clk_i(clk_i),
 		.rst_n_i((rst_n_i && boot_done) && !boot_err_o),

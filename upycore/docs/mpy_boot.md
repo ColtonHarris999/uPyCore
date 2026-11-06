@@ -128,7 +128,8 @@ idle, since a copy in flight may be writing it. Image reads never wait.
 After reset `mpy_mem` clears every physical SRAM row, all four banks at
 once (32,768 cycles). Boot waits for this clear before writing the image,
 so clearing cannot overwrite loaded words. When loading finishes, the
-layout is fixed and `mpy_gc` clears its maximum-capacity allocation table.
+layout is fixed and `mpy_gc` clears its allocation table (19,200 blocks,
+sized for the largest heap a real image leaves; see `mpy_memory_map.md`).
 The core and accelerator leave reset only after all three steps complete.
 An invalid image count or heap cap raises `boot_err_o` and keeps them in
 reset. Reset clears the full memory and metadata again, allowing a later
