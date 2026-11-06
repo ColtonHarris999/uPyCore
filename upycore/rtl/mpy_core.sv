@@ -1497,15 +1497,25 @@ module mpy_core
     logic        has_link;
     logic [15:0] resident_reals;
     logic [15:0] stk_depth;
-    assign has_link = (sp != 7'd0) && mpy_is_rf_link(rf[`SX(7'd0)]);
+    // has_link reads the ring through rf_base, so it arrives late. Each
+    // slot's link test is made straight from its flops and one bit is
+    // selected, and everything derived from has_link computes both cases
+    // from sp and spilled_reals in parallel and selects at the end.
+    logic [15:0] rf_lnk;
+    logic [15:0] sd_nl, sd_l;           // stack depth without / with a link
+    always_comb
+        for (int k = 0; k < 16; k++) rf_lnk[k] = mpy_is_rf_link(rf[k]);
+    assign has_link = (sp != 7'd0) && rf_lnk[rf_base[3:0]];
     assign resident_reals = has_link ? (16'(sp) - 16'd1) : 16'(sp);
-    assign stk_depth = spilled_reals + resident_reals;
+    assign sd_nl = spilled_reals + 16'(sp);
+    assign sd_l  = spilled_reals + 16'(sp) - 16'd1;
+    assign stk_depth = has_link ? sd_l : sd_nl;
 
     function automatic logic stk_hit(input logic [15:0] g);
-        stk_hit = (g >= spilled_reals) && (g < stk_depth);
+        stk_hit = (g >= spilled_reals) && (has_link ? (g < sd_l) : (g < sd_nl));
     endfunction
     function automatic logic [6:0] stk_slot(input logic [15:0] g);
-        stk_slot = 7'(g - spilled_reals) + (has_link ? 7'd1 : 7'd0);
+        stk_slot = has_link ? (7'(g - spilled_reals) + 7'd1) : 7'(g - spilled_reals);
     endfunction
     function automatic val_t stk_val(input logic [15:0] g);
         stk_val = rf[`SX(stk_slot(g))];

@@ -40,6 +40,10 @@ module upycore_fp_mul (
     logic               s1_valid_r;
     logic               s1_sign_r;
     logic signed [13:0] s1_exp_r;        // ea + eb - 1023 (normalized sigs)
+    // The exponent sum is only read when the product is done, so C0 keeps
+    // its parts and C1 adds them, off the clz / normalize path.
+    logic [10:0]        s1_ea_r, s1_eb_r;
+    logic [5:0]         s1_lza_r, s1_lzb_r;
     logic [52:0]        s1_sig_a_r, s1_sig_b_r;
     logic               s1_special_r;
     logic [63:0]        s1_special_val_r;
@@ -100,6 +104,7 @@ module upycore_fp_mul (
             s1_valid_r       <= 1'b0;
             s1_sign_r        <= 1'b0;
             s1_exp_r         <= '0;
+            s1_ea_r <= '0; s1_eb_r <= '0; s1_lza_r <= '0; s1_lzb_r <= '0;
             s1_sig_a_r       <= '0;
             s1_sig_b_r       <= '0;
             s1_special_r     <= 1'b0;
@@ -108,9 +113,15 @@ module upycore_fp_mul (
             s1_valid_r <= 1'b0;
         end else begin
             s1_valid_r <= start_i && !busy_o;
+            if (s1_valid_r)
+                s1_exp_r <= $signed(14'(s1_ea_r)) - $signed(14'(s1_lza_r))
+                          + $signed(14'(s1_eb_r)) - $signed(14'(s1_lzb_r)) - 14'sd1023;
             if (start_i && !busy_o) begin
                 s1_sign_r        <= sign;
-                s1_exp_r         <= exp_a_n + exp_b_n - 14'sd1023;
+                s1_ea_r          <= upycore_f64_exp_eff(op_a_i);
+                s1_eb_r          <= upycore_f64_exp_eff(op_b_i);
+                s1_lza_r         <= lz_a;
+                s1_lzb_r         <= lz_b;
                 s1_sig_a_r       <= sig_a_n;
                 s1_sig_b_r       <= sig_b_n;
                 s1_special_r     <= special;
