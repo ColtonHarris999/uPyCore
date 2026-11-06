@@ -986,6 +986,7 @@ module mpy_core
     logic        lc_v [0:7];
     logic        lc_dirty [0:7];
     logic [2:0]  lc_age [0:7];
+    logic [2:0]  lc_pick_r;
     logic [7:0]  lc_ix [0:7];
     val_t        lc_d [0:7];
     logic [3:0]  cfg_lc_n;
@@ -1024,6 +1025,13 @@ module mpy_core
     // current instruction
     logic [7:0]  op, ext;
     logic [31:0] arg, jt;
+    // Branch target of the decoded instruction. S_DEC registers the
+    // operands and S_EXEC forms the sum from flops: pc is already past the
+    // instruction, and an offset with an extra byte counts from one byte
+    // earlier. jt keeps it for the states after S_EXEC.
+    logic        extv;
+    logic [31:0] jt_c;
+    assign jt_c = pc + arg - {31'd0, extv};
     logic [1:0]  ovr;
 
     // Call staging lives in ARGBUF. Slot 0 is the callable. Positionals
@@ -1238,12 +1246,18 @@ module mpy_core
     logic [1:0]  d_fmt;
     entry_e      d_entry;
     logic signed [31:0] d_arg;
+    // The aligned window is taken in S_FETCH, where pc is already the
+    // instruction's address, and the decoder reads it from flops in S_DEC.
+    // That splits the queue offset, the byte shift and the decode into two
+    // cycles without adding one: every S_DEC follows an S_FETCH.
+    logic [63:0] dq_bytes;
+    logic [3:0]  dq_n;
     assign f_off = pc - fe_base;
     assign d_bytes = 64'(fe_win >> {f_off[FE_OW-1:0], 3'b000});
     assign d_n = (fe_avail > 6'd8) ? 4'd8 : 4'(fe_avail);
 
     mpy_decode u_dec (
-        .instr_valid_i(1'b1), .bytes_i(d_bytes), .nbytes_i(d_n),
+        .instr_valid_i(1'b1), .bytes_i(dq_bytes), .nbytes_i(dq_n),
         .decoded_valid_o(d_valid), .illegal_o(d_illegal), .truncated_o(d_trunc),
         .arg_overflow_o(d_ovf), .len_o(d_len), .opcode_o(d_op), .format_o(d_fmt),
         .entry_o(d_entry), .arg_valid_o(d_argv), .arg_o(d_arg),
@@ -1295,26 +1309,72 @@ module mpy_core
         for (int k = 0; k < 8; k++)
             if (m[k]) lc_hit_way = k[2:0];
     endfunction
-    function automatic logic [2:0] lc_pick(input logic [7:0] idx);
+    // The replacement victim: the first invalid way, else the oldest. It
+    // depends only on lc_v, lc_age and cfg_lc_n, so it is computed every
+    // cycle into lc_pick_r and the fill reads the flop instead of the age
+    // comparison chain. Every fill and every lc_pick use runs in a cycle
+    // whose previous cycle (S_DEC, an S_EXEC stall, or S_MWAIT) wrote none
+    // of those registers, so the flop equals the function there; the
+    // simulation check in lc_fill holds the design to that.
+    function automatic logic [2:0] lc_pick_lru();
         logic [2:0] best;
         logic any_inv;
         best = 3'd0;
         any_inv = 1'b0;
-        if (cfg_lc_dm && cfg_lc_n != 4'd0) begin
-            lc_pick = idx[2:0] & (cfg_lc_n[2:0] - 3'd1);
-        end else begin
-            for (int k = 0; k < 8; k++) begin
-                if (k < cfg_lc_n && !lc_v[k] && !any_inv) begin
-                    best = k[2:0];
-                    any_inv = 1'b1;
-                end
+        for (int k = 0; k < 8; k++) begin
+            if (k < cfg_lc_n && !lc_v[k] && !any_inv) begin
+                best = k[2:0];
+                any_inv = 1'b1;
             end
-            if (!any_inv) begin
-                for (int k = 1; k < 8; k++)
-                    if (k < cfg_lc_n && lc_age[k] < lc_age[best]) best = k[2:0];
-            end
-            lc_pick = best;
         end
+        // Oldest way: the lowest-index way among those with the smallest age
+        // (way 0 always takes part, ways at or above cfg_lc_n never do). A
+        // three-level tournament, ties to the lower index, picks the same
+        // way as a left-to-right scan with a strict compare.
+        if (!any_inv) begin
+            logic [2:0] w1 [0:3];
+            logic [2:0] w2 [0:1];
+            logic       e1 [0:3];
+            logic       e2 [0:1];
+            for (int p = 0; p < 4; p++) begin
+                logic el, er;
+                el = (2 * p == 0) || (2 * p < cfg_lc_n);
+                er = (2 * p + 1) < cfg_lc_n;
+                w1[p] = (er && (!el || lc_age[2 * p + 1] < lc_age[2 * p])) ? 3'(2 * p + 1) : 3'(2 * p);
+                e1[p] = el || er;
+            end
+            for (int p = 0; p < 2; p++) begin
+                w2[p] = (e1[2 * p + 1] && (!e1[2 * p] || lc_age[w1[2 * p + 1]] < lc_age[w1[2 * p]]))
+                        ? w1[2 * p + 1] : w1[2 * p];
+                e2[p] = e1[2 * p] || e1[2 * p + 1];
+            end
+            best = (e2[1] && (!e2[0] || lc_age[w2[1]] < lc_age[w2[0]])) ? w2[1] : w2[0];
+        end
+        lc_pick_lru = best;
+    endfunction
+`ifndef SYNTHESIS
+    // The original scan, kept to check the tree every cycle in simulation.
+    function automatic logic [2:0] lc_pick_ref();
+        logic [2:0] best;
+        logic any_inv;
+        best = 3'd0;
+        any_inv = 1'b0;
+        for (int k = 0; k < 8; k++) begin
+            if (k < cfg_lc_n && !lc_v[k] && !any_inv) begin
+                best = k[2:0];
+                any_inv = 1'b1;
+            end
+        end
+        if (!any_inv) begin
+            for (int k = 1; k < 8; k++)
+                if (k < cfg_lc_n && lc_age[k] < lc_age[best]) best = k[2:0];
+        end
+        lc_pick_ref = best;
+    endfunction
+`endif
+    function automatic logic [2:0] lc_pick(input logic [7:0] idx);
+        if (cfg_lc_dm && cfg_lc_n != 4'd0) lc_pick = idx[2:0] & (cfg_lc_n[2:0] - 3'd1);
+        else lc_pick = lc_pick_r;
     endfunction
     task automatic lc_note(input logic [2:0] w);
         for (int k = 0; k < 8; k++) begin
@@ -1337,6 +1397,10 @@ module mpy_core
         logic [7:0] ev;
         hit = lc_is_hit(idx);
         p = lc_pick(idx);
+`ifndef SYNTHESIS
+        if (!(cfg_lc_dm && cfg_lc_n != 4'd0) && cfg_lc_n != 4'd0 && lc_pick_r != lc_pick_lru())
+            $error("lc_pick_r %0d stale (want %0d) at st %0d", lc_pick_r, lc_pick_lru(), st);
+`endif
         w = hit ? lc_hit_way(idx) : p;
         // Whether each way holds a dirty line of another local, computed in
         // parallel instead of through the way select. A miss installs into
@@ -1504,8 +1568,6 @@ module mpy_core
     task automatic wr(input logic [31:0] a, input val_t v, input state_e nxt);
         m_addr <= a; m_wdata <= v[31:0]; m_wtag <= v[35:32];
         m_we <= 1'b1; m_tag_we <= 1'b1; m_be <= 4'hF; m_req <= 1'b1;
-        // The same store that publishes the override dict keeps the probe flop.
-        if (a == ABI_SYSROOT_BASE + 4 * ABI_SR_FW7) bov <= v;
         wret <= nxt; st <= S_MWAIT;
     endtask
     task automatic wrb(input logic [31:0] a, input logic [7:0] b, input state_e nxt);
@@ -1677,8 +1739,14 @@ module mpy_core
                 lc_age[k] <= 3'd0;
             end
             lc_fi <= 4'd0;
+            lc_pick_r <= 3'd0;
         end else begin
             m_req <= 1'b0;
+            lc_pick_r <= lc_pick_lru();
+`ifndef SYNTHESIS
+            if (cfg_lc_n != 4'd0 && lc_pick_lru() != lc_pick_ref())
+                $error("lc_pick_lru %0d != scan %0d", lc_pick_lru(), lc_pick_ref());
+`endif
             fe_flush <= 1'b0;
             gc_alloc_req <= 1'b0;
             gc_collect_req <= 1'b0;
@@ -1710,6 +1778,12 @@ module mpy_core
 
             S_MWAIT: if (m_ack_i) begin
                 md <= m_rdata_i; mt <= m_rtag_i;
+                // The store that publishes the override dict keeps the probe
+                // flop. It is matched on the registered address when the store
+                // completes, not on the computed address at issue; nothing
+                // reads bov while the core waits here.
+                if (m_we && m_tag_we && !m_fault_i && m_addr == ABI_SYSROOT_BASE + 4 * ABI_SR_FW7)
+                    bov <= {m_wtag, m_wdata};
                 if (m_fault_i) begin
                     case (m_fault_reason_i)
                         MPY_FAULT_UNALIGNED: halt(ABI_HALT_UNALIGNED, m_addr);
@@ -2268,26 +2342,30 @@ module mpy_core
                          rf_resume <= S_FETCH; st <= S_RF_SPILL;
                      end else if (has_link && sp <= 7'(RF_RELOAD_AT)) begin
                          rf_resume <= S_FETCH; st <= S_RF_RELOAD;
-                     end else if (fe_avail != 6'd0) st <= S_DEC;
+                     end else if (fe_avail != 6'd0) begin
+                         dq_bytes <= d_bytes; dq_n <= d_n; st <= S_DEC;
+                     end
                      else if (fe_fault && fe_fault_addr[31:2] == pc[31:2]) fetch_fault();
                      // otherwise the word at pc is still on its way
             // The decoder sees the bytes the fetch queue has from pc on (up
             // to 8). A truncated instruction with fewer waits for the rest.
             S_DEC: if (d_trunc) begin
-                       if (fe_avail >= 6'd8) halt(ABI_HALT_BAD_OPCODE, pc);
+                       if (dq_n == 4'd8) halt(ABI_HALT_BAD_OPCODE, pc);
                        else if (fe_fault) fetch_fault();
                        else st <= S_FETCH;
                    end else if (d_illegal || !d_valid) halt(ABI_HALT_BAD_OPCODE, pc);
                    else begin
                        op <= d_op; arg <= d_arg; ext <= d_ext;
                        op_pc <= pc; pc <= pc + d_len;
-                       jt <= pc + d_len - (d_extv ? 32'd1 : 32'd0) + d_arg;
+                       extv <= d_extv;
                        nops <= nops + 32'd1; trace <= 1'b1;
                        st <= S_EXEC;
                    end
 
             // ---------------- execute ----------------
-            S_EXEC: if (aalu_pend && !aalu_pass(op)) begin
+            S_EXEC: begin
+            jt <= jt_c;
+            if (aalu_pend && !aalu_pass(op)) begin
                 if (aalu_go) begin aalu_ret <= S_EXEC; st <= S_AALU_WB; end
             end else begin
                 if ((op >= 8'hb0 && op < 8'hc0) || op == 8'h24) begin
@@ -2372,19 +2450,19 @@ module mpy_core
                     rf[`SX(6'(sp - 7'd1))] <= rf[`SX(6'(sp - 7'd2))];
                     st <= S_FETCH;
                 end
-                8'h42: begin pc <= jt; st <= S_FETCH; end
+                8'h42: begin pc <= jt_c; st <= S_FETCH; end
                 8'h43, 8'h44, 8'h45, 8'h46: begin tr_v <= rf[`SX(6'(sp - 7'd1))]; gosub(S_TR, S_JT); end
                 8'h47: begin t[0] <= rf[`SX(6'(sp - 7'd1))]; at_q <= ABI_Q_EXIT_D; gosub_scr(SCR_AT, S_AT, S_SW_X); end
                 8'h48, 8'h49: begin
                     if (xsp >= nexc) halt(ABI_HALT_INTERNAL, op_pc);
                     else begin
-                        x0 <= jt; b0 <= (op == 8'h49); x1 <= {16'd0, stk_depth}; sw_k <= 2'd0;
+                        x0 <= jt_c; b0 <= (op == 8'h49); x1 <= {16'd0, stk_depth}; sw_k <= 2'd0;
                         gosub(S_XPUSH, S_FETCH);
                     end
                 end
-                8'h4a: begin pc <= jt; sw_k <= 2'd0; gosub(S_XPOP, S_FETCH); end
+                8'h4a: begin pc <= jt_c; sw_k <= 2'd0; gosub(S_XPOP, S_FETCH); end
                 8'h40: begin
-                    rf[`SX(sp)] <= vint(jt); rf[`SX(6'(sp + 7'd1))] <= vint({24'd0, ext});
+                    rf[`SX(sp)] <= vint(jt_c); rf[`SX(6'(sp + 7'd1))] <= vint({24'd0, ext});
                     sp <= sp + 7'd2; st <= S_UJ;
                 end
                 8'h5c: st <= S_WC;
@@ -2530,6 +2608,7 @@ module mpy_core
                 default: halt(ABI_HALT_BAD_OPCODE, op_pc);
                 endcase
             end
+            end
 
             S_LCS: begin push({ABI_TAG_QSTR, md}); st <= S_FETCH; end
             S_LCO: begin push(mv); st <= S_FETCH; end
@@ -2557,6 +2636,10 @@ module mpy_core
                          rd(adr(mv) + 8, S_DEREF);
                          if (cfg_lc_n != 4'd0) begin
                              vs0 = {4'd0, lc_pick(i0)};
+`ifndef SYNTHESIS
+                             if (!cfg_lc_dm && lc_pick_r != lc_pick_lru())
+                                 $error("lc_pick_r %0d stale (want %0d) in S_LDREF", lc_pick_r, lc_pick_lru());
+`endif
                              if (!lc_v[vs0[2:0]] || !lc_dirty[vs0[2:0]])
                                  lc_fill(i0, mv, 1'b0, 1'b0, S_DEREF);
                          end
