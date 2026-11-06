@@ -246,3 +246,65 @@ new pop/insert code, and on the stage-3 RTL `set_relations` returns to
 back to its stage-2 text. Renaming the new helper does not move it, so it
 is not one global's hash; code placement is the likely cause. It is ±0.15 %
 and should be kept in mind when reading sub-percent differences.
+
+## Synthesis handoff (stages 1–4 plus later `benchmark` RTL)
+
+Compared: `main`/`synth` RTL (`aca1b5e`, the same as `5b55451`; the `synth`
+branch differs from `main` only in flow files) against `benchmark` at
+`a68030f`, which also carries another session's spill-chunk change
+(`fe62cbd`, `reload_top`) and its `memoryview` ABI renumbering.
+
+**Logic depth.** The repository's own flow (`mpy_synth.py --depth`: slang,
+`synth -flatten -noshare`, `depth_report.py`) on `mpy_core`, run through the
+YoWASP Yosys 0.70 build, which includes the slang frontend. With ABC mapping
+the deepest endpoint is 179 levels in the baseline and 180 at the tip (`jt`,
+from the fetch window through the decoder), but the ALU's own registers moved
+by up to ±4 levels (`u_pow.acc_r` 171 → 175) although the ALU source is
+byte-identical: flat ABC mapping varies by that much with no logic change.
+Without ABC (`synth -noabc`) the gate network is deterministic, and the ALU
+does not change at all, so that is the comparison used:
+
+| Endpoint | Baseline | Tip |
+| --- | ---: | ---: |
+| deepest (`bov` enable) | 131 | 131 |
+| `m_addr` D | 126 | 126 |
+| `lc_age` enable | 121 | 121 |
+| `st` D | 119 | 119 |
+| `jt` D / `m_req` D | 117 / 117 | 117 / 117 |
+| ALU register groups that changed | | 0 |
+
+Every endpoint that got deeper is far from the critical paths: the CA
+command fields fed by the pop/insert length arithmetic (`ca_n` 10 → 35,
+`ca_dst` / `ca_src` 19 → 24), `x1` (31 → 38), `sp` enable (43 → 47), `rsp`
+(53 → 56), `spill_hp` (6 → 30, `fe62cbd`) and `reload_top` (new, 15). The
+only near-critical change is `wret`'s enable, 113 → 114 (its D input went
+114 → 113). Generic levels are a structural comparison, not slack; the
+backend still has to confirm it.
+
+**Size.** Flat, without ABC: 418,373 → 424,856 generic cells (+1.5 %),
+13,138 → 13,140 flip-flop bits, no latches in either. No new memories,
+clocks, resets or asynchronous logic. `check_syn.py`'s `RTL_FLOPS` (synth
+branch) needs no change for a 2-bit difference.
+
+**Frontend fix.** `cfg_bulk` was assigned before its declaration since
+`795c1d6`, so slang (and so `make synth`) rejected `mpy_core` and `mpy_soc`
+on `main`; `a68030f` moves the declaration. With it, all 21 tops in
+`mpy_synth.TOPS` elaborate in slang with no errors. sv2v had hidden the
+problem from the Genus flow by hoisting the declaration.
+
+**Converted RTL.** `converted/mpy_core.v`, `converted/mpy_soc.v` and
+`converted/RTL_STAMP` are regenerated with `convert_rtl.sh`'s steps and sv2v
+0.0.13.1. `mpy_alu.v` and `mpy_decode.v` are left as committed: their
+generated units are byte-identical to the baseline's, and sv2v 0.0.13.1 only
+renames `sv2v_cast_*` helpers there. Both new files read and elaborate in
+Yosys `read_verilog` (Verilog-2005) with no undefined modules, and Verilator
+lints `mpy_core.v` with no errors. A trial merge of `benchmark` into
+`origin/synth` is clean, and the merged tree's own `sweep.sh rtl-stamp`
+gives `818ae4729d52…`, the committed stamp, so its freshness check passes.
+
+What only the backend can establish: setup and hold slack at the 10 ns
+target after placement, CTS and routing, with the team's constraints. The
+depth evidence says the change should not move the critical paths (FPU
+power accumulator, decoder→`jt`, the `bov` enable, `m_addr`); the near-path
+`wret` enable (+1 level) and the deeper CA command fields are the places to
+look first if a new violation appears.
