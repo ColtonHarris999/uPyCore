@@ -141,12 +141,14 @@ OB = {
     # Singletons.
     "ELLIPSIS": 17,
     "NOTIMPL": 18,
+    # Buffer view (firmware memview.py).
+    "MEMVIEW": 19,       # [2] base [3] byte offset [4] length [5] writable
 }
 OBJ_WORDS = {
     "INSTANCE": 3, "TYPE": 9, "EXCEPTION": 5, "CELL": 3, "FUNCTION": 8,
     "GENERATOR": 6, "BOUND_METHOD": 4, "BUILTIN": 5, "MODULE": 4, "SUPER": 4,
     "PROPERTY": 5, "STATICMETHOD": 3, "CLASSMETHOD": 3, "SLICE": 5,
-    "DICT_VIEW": 4, "ITEROBJ": 5, "ELLIPSIS": 2, "NOTIMPL": 2,
+    "DICT_VIEW": 4, "ITEROBJ": 5, "ELLIPSIS": 2, "NOTIMPL": 2, "MEMVIEW": 6,
 }
 
 # TYPE word 7.
@@ -196,6 +198,7 @@ TYPES = [
     "property", "staticmethod", "classmethod",
     "dict_view", "super",
     "ellipsis", "NotImplementedType",
+    "memoryview",
     # Exceptions. The hierarchy is in EXC_BASES.
     "BaseException", "Exception", "ArithmeticError", "AssertionError",
     "AttributeError", "EOFError", "GeneratorExit", "ImportError",
@@ -255,7 +258,7 @@ PUBLIC_TYPES = [
     "object", "type", "bool", "int", "float", "complex", "str", "bytes",
     "bytearray", "tuple", "list", "dict", "set", "frozenset", "range",
     "slice", "property", "staticmethod", "classmethod", "super",
-    "enumerate", "zip", "map", "filter", "reversed",
+    "enumerate", "zip", "map", "filter", "reversed", "memoryview",
 ] + [t for t in TYPES if t in EXC_BASES]
 
 # ---------------------------------------------------------------------------
@@ -309,6 +312,10 @@ NATIVES = [
     "_maprelation",  # (a, b, op): 0/1 result, -1 requests software fallback
     "_seqreverse",  # (items, count): queued tagged-word reversal, or False
     "_seqscan",  # (items, start, count, value, find_first): result, -2 fallback
+    # list methods the core runs for an exact list and a small-int or bool
+    # index; anything else calls the _fb fallback with the same arguments
+    "list.pop", "list.insert",
+    "_wcopy_step",  # (dst, doff, src, soff, n, step): dst[doff+i] = src[soff+i*step], core loop
 ]
 NATIVE_ID = {name: i for i, name in enumerate(NATIVES)}
 

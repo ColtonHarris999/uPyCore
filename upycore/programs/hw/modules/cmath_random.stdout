@@ -1,0 +1,16 @@
+3.1415928 2.7182818 (1.75516516+0.9588511j) (1+0j) (1+0j) 0.540302 0.841471
+-1.24844 -2.72789
+0 2002156 16 0 [3, 7, 0, 1, 7, 0] 25 -3 70 3 f 0.4107939 5.04612
+1 2002244 18 0 [6, 4, 5, 4, 8, 8] 17 18 100 5 f 0.3887148 2.20203
+1234 2346934 8 0 [8, 3, 8, 9, 0, 8] 85 18 79 -4 d 0.8991103 3.16643
+4294967295 2002036 2 0 [4, 1, 2, 9, 2, 8] 101 46 -8 -5 a 0.3939737 3.19641
+-5 2002452 1 0 [2, 3, 7, 8, 2, 4] 63 11 43 0 e 0.69477108 5.89913
+103738638
+randrange (0,) ValueError 
+randrange (5, 5) ValueError 
+randrange (1, 5, 0) ValueError 
+randint (3, 2) ValueError 
+choice ([],) IndexError 
+getrandbits (33,) ValueError bits must be 32 or less
+seed (1.5,) TypeError can't convert float to int
+randrange (1.5,) TypeError can't convert float to int

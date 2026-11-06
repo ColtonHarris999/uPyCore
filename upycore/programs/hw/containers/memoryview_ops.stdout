@@ -1,0 +1,27 @@
+<class 'memoryview'> 6 97 102 [98, 99] b'cdef' 0 <memoryview>
+bytearray(b'aZ,def') 44 101 4 [100, 101]
+False True True True True
+97 6 98 True
+IndexError memoryview index out of range
+TypeError memoryview indices must be integers, not str
+NotImplementedError only slices with step=1 (aka None) are supported
+TypeError object with buffer protocol required
+TypeError function takes 1 positional arguments but 0 were given
+TypeError function takes 1 positional arguments but 2 were given
+OverflowError overflow converting long int to machine word
+TypeError unsupported type for __hash__: 'memoryview'
+TypeError unsupported types for __add__: 'memoryview', 'bytes'
+TypeError 'memoryview' object doesn't support item assignment
+TypeError can't convert str to int
+TypeError 'memoryview' object doesn't support item deletion
+ok bytearray(b'QQ,def')
+ValueError lhs and rhs should be compatible
+NotImplementedError array/bytes required on right side
+ok bytearray(b'RR,def')
+ok bytearray(b'ST,def')
+NotImplementedError only slices with step=1 (aka None) are supported
+TypeError 'memoryview' object doesn't support item assignment
+6 83 [1, 2] bytearray(b'q') b'r'
+bytearray(b'wxyz')
+bytearray(b'\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b')
+b'ept'

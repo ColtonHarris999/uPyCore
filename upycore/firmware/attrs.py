@@ -240,6 +240,31 @@ def _as_index(x, what):
     _index_type(what, x)
 
 
+def _word_index(obj, x):
+    # mp_get_index for str, bytes and bytearray: a small int or a bool. A
+    # wide int overflows the machine word; nothing else is an index.
+    if _isbool(x):
+        return 1 if x else 0
+    if _tag(x) == TAG_INT:
+        return x
+    if _tag(x) == TAG_INT64:
+        raise OverflowError('overflow converting long int to machine word')
+    _index_type(obj, x)
+
+
+def _byte_value(v):
+    # mp_obj_get_int, then the low byte (binary.c SET_VAL_AS without checks).
+    if _isbool(v):
+        return 1 if v else 0
+    if _tag(v) == TAG_INT or _tag(v) == TAG_INT64:
+        return v & 255
+    if _isinst(v):
+        f = _tlookup(_ld(v, 1), '__int__')
+        if f is not NULL:
+            return _byte_value(_call_member(f, v, ()))
+    raise TypeError(_s("can't convert ", _tname(v), ' to int'))
+
+
 def _clamp(i, n, step):
     if i < 0:
         i += n
@@ -293,9 +318,7 @@ def _subscr(obj, index):
     if _kind(index) == OB_SLICE or (_tag(index) == TAG_OBJECT and _ld(index, 0) == OB_SLICE):
         return _getslice(obj, index)
     if t == TAG_STR or t == TAG_QSTR or t == TAG_BYTES or _isbarr(obj):
-        if not _isint(index) and index is not True and index is not False:
-            _index_type('string' if t != TAG_BYTES and not _isbarr(obj) else 'bytes', index)
-        return _seq_at(obj, _as_index(index, obj))
+        return _seq_at(obj, _word_index(obj, index))
     if t == TAG_TUPLE or _islist(obj):
         return _seq_at(obj, _as_index(index, obj))
     if t == TAG_RANGE:
@@ -326,7 +349,9 @@ def _seq_at(obj, i):
     if i < 0 or i >= n:
         if _isstr(obj):
             raise IndexError('string index out of range')
-        if _tag(obj) == TAG_BYTES or _isbarr(obj):
+        if _isbarr(obj):
+            raise IndexError('bytearray index out of range')
+        if _tag(obj) == TAG_BYTES:
             raise IndexError('bytes index out of range')
         if _tag(obj) == TAG_TUPLE:
             raise IndexError('tuple index out of range')
@@ -419,13 +444,12 @@ def _getslice(obj, sl):
                 _wcopy(r, 1, base, off + a, m)
             return r
         if _islist(obj):
+            # One core gather (_wcopy_step) instead of a firmware loop. The
+            # source items are read after the result is allocated.
             r = _newlist(m)
-            i = 0
-            p = a
-            while i < m:
-                _st(_ld(r, 2), i, _ld(base, off + p))
-                p += s
-                i += 1
+            if m:
+                base, off = _seq_items(obj)
+                _wcopy_step(_ld(r, 2), 0, base, off + a, m, s)
             return r
         r = _newtuple(m)
         i = 0
@@ -437,6 +461,8 @@ def _getslice(obj, sl):
         return r
     if t == TAG_RANGE:
         return _range_slice(obj, sl)
+    if _ismv(obj):
+        return memoryview____getitem__(obj, sl)
     if _isinst(obj):
         f = _tlookup(_ld(obj, 1), '__getitem__')
         if f is not NULL:
@@ -464,15 +490,16 @@ def _setsubscr(obj, index, value):
     if _isbarr(obj):
         if _tag(index) == TAG_OBJECT and _ld(index, 0) == OB_SLICE:
             return _barr_setslice(obj, index, value)
-        i = _as_index(index, obj)
+        # objarray.c: deletion is refused first, then the index, then the value.
+        if value is NULL:
+            raise TypeError("'bytearray' object doesn't support item deletion")
+        i = _word_index(obj, index)
         n = _ld(obj, 0)
         if i < 0:
             i += n
         if i < 0 or i >= n:
-            raise IndexError('bytes index out of range')
-        if value is NULL:
-            raise TypeError("bytearray doesn't support item deletion")
-        _poke8(_data(obj), i, _as_index(value, obj) & 255)
+            raise IndexError('bytearray index out of range')
+        _poke8(_data(obj), i, _byte_value(value))
         return None
     if _isdict(obj):
         if value is NULL:
@@ -492,6 +519,8 @@ def _setsubscr(obj, index, value):
         sub = _subobj(obj)
         if sub is not NULL:
             return _setsubscr(sub, index, value)
+    if _ismv(obj):
+        return memoryview____setitem__(obj, index, value)
     if value is NULL:
         raise TypeError(_s("'", _tname(obj), "' object doesn't support item deletion"))
     raise TypeError(_s("'", _tname(obj), "' object does not support item assignment"))
@@ -514,20 +543,42 @@ def _list_setslice(lst, sl, value):
         raise NotImplementedError()
     if value is NULL:
         value = ()
-    src = _list_of_iter(value)
+    # An exact tuple or list is read in place, as mp_obj_get_array does: its
+    # items cannot run any Python while they are copied. A tuple's items sit
+    # in its own block. A list is borrowed only when its item block is not
+    # the destination's; the snapshot covers self-assignment and any shared
+    # block. Everything else (subclasses, iterators) is materialized first.
+    # The tests stay identity and int compares: == on two item-block
+    # pointers would go through the _binop hook.
+    t = _tag(value)
+    if t == TAG_TUPLE:
+        src = value
+        off = 1
+    elif (t == TAG_MUT and (_pay(value) & 3) == MUT_LIST and value is not lst
+          and _ld(value, 2) is not _ld(lst, 2)):
+        src = value
+        off = 0
+    else:
+        src = _list_of_iter(value)
+        t = TAG_MUT
+        off = 0
     m = _ld(src, 0)
     # lst[3:1] = x inserts at 3, as mp_seq_get_fast_slice_indexes clamps stop.
     if b < a:
         b = a
     span = b - a
     newn = n - span + m
-    _list_reserve(lst, newn)
+    if m != span:
+        _list_reserve(lst, newn)
+    # Item addresses are read after the reserve, which can replace the
+    # destination block. src stays a live local, so the collector keeps it
+    # and a borrowed list's block.
     items = _ld(lst, 2)
     # The tail moves first; _wcopy runs the overlapping shift like memmove.
     if m != span and b < n:
         _wcopy(items, a + m, items, b, n - b)
     if m:
-        _wcopy(items, a, _ld(src, 2), 0, m)
+        _wcopy(items, a, src if t == TAG_TUPLE else _ld(src, 2), off, m)
     if newn < n:
         _list_clear_slots(lst, newn, n)
     _st(lst, 0, newn)
