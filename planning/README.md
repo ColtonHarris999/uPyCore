@@ -17,6 +17,7 @@ under `pycore/docs/`, `excore/docs/`, and `pycore_firmware/builtins/`.
 | [`cpython_baseline_bytecode.md`](cpython_baseline_bytecode.md) | Opcode inventory of the measured CPython baseline suite. No new hart opcode is required |
 | [`ubytecode_completion_plan.md`](ubytecode_completion_plan.md) | **The plan of record for finishing partial MicroPython v1.29.0 opcodes.** Implement from this file. It keeps the hart fast paths and does not add a loader, an FPU, or a wider argument buffer |
 | [`ubytecode_eval.md`](ubytecode_eval.md), [`ubytecode_eval_b.md`](ubytecode_eval_b.md), [`ubytecode_eval_c.md`](ubytecode_eval_c.md) | The three proposals that plan reviews. Inputs only. Where one disagrees with the completion plan, the completion plan governs |
+| [`perf_bench_coverage_plan.md`](perf_bench_coverage_plan.md) | Which MicroPython `perf_bench` programs cannot run on the device yet, and the steps to make them run. Companion to `runtime_optimization_plan.md`. Steps 0–4 done: every in-scope program passes; results in [`perf_bench_coverage_progress.md`](perf_bench_coverage_progress.md). Step 5 (VFS import) deferred |
 | [`old/`](old/) | Archived designs and plans. Code comments cite them by section (`compiler_design.md §6.1`), so they stay in the repo |
 
 ## Graduated

@@ -62,6 +62,15 @@ class LinkError(Exception):
 # binary32 helpers. The oracle's parser (py/parsenum.c, FORMAT_IMPL_APPROX)
 # works in binary32; this reproduces it so a float const matches the oracle.
 
+# mpy-cross folds math.pi and cmath.pi (MICROPY_COMP_MODULE_CONST) and
+# writes its double-precision repr into the .mpy. The approximate parser
+# rounds that text one ulp below the binary32 pi that the oracle folds from
+# source, so the folded text maps to the oracle's constant. (math.e and
+# math.tau already parse exactly.) A user literal spelled exactly like this
+# gets the same value, which is the correctly rounded one.
+FOLDED_FLOAT_CONSTS = {"3.141592653589793": 0x40490FDB}
+
+
 def f32(x: float) -> float:
     try:
         return struct.unpack("<f", struct.pack("<f", x))[0]
@@ -387,6 +396,8 @@ def encode_const(img: Image, value: object) -> tuple[int, int]:
         u = value & ((1 << 64) - 1)
         return emit_box(img, "INT64", u & 0xFFFFFFFF, u >> 32)
     if isinstance(value, FloatConst):
+        if value.text in FOLDED_FLOAT_CONSTS:
+            return (T["FLOAT"], FOLDED_FLOAT_CONSTS[value.text])
         return (T["FLOAT"], f32_bits(mp_parse_float(value.text)))
     if isinstance(value, float):
         return (T["FLOAT"], f32_bits(value))

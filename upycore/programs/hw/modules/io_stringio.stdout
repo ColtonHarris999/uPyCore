@@ -1,0 +1,12 @@
+6 7 13
+'hello wörld\nx-1-2.5!\n\n'
+'hello wörld\n' 'x-1' 16 '-2.5!\n\n' ''
+20 '!\n\n' 'heZZo wörld\nx-1-2.5!\n\n'
+'heZZo wörld\nx-1-2.5!\n\n\x00\x00\x00\x00\x00\x00\x00end' 33
+0
+'ab' 'c\n' 'def' ''
+ValueError I/O operation on closed file
+ValueError I/O operation on closed file
+2 1 b'ab\xff'
+2 bytearray(b'ab') b'\xff'
+True True

@@ -191,6 +191,8 @@ def _type_binop(op, a, b):
             if _ld(_ld(a, 1), 7) & TF_USER:
                 return _inst_binop(op, a, b)
             return NULL
+        if k == OB_MEMVIEW:
+            return _mv_binop(op, a, b)
         if k == OB_DICT_VIEW:
             if _ld(a, 3) != 0 or op != BINOP_CONTAINS:
                 return NULL
@@ -625,6 +627,9 @@ def _equal(a, b):
         return False
     if _isstr(b):
         return False
+    if _ismv(b) and not _ismv(a):
+        # memoryview checks the other type (MP_TYPE_FLAG_EQ_CHECKS_OTHER_TYPE).
+        return _mv_binop(BINOP_EQUAL, b, a)
     if _isnum(a) and _isnum(b):
         if ta == TAG_COMPLEX or _tag(b) == TAG_COMPLEX:
             pa = _cparts(a)

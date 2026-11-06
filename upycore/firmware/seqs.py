@@ -66,12 +66,29 @@ def list____init__(self, *args):
 
 
 def _list__append_fb(self, *args):
+    # The native appends to an exact list; a list subclass instance appends
+    # to the list it wraps.
+    if len(args) == 1 and not _islist(self) and _isinst(self):
+        sub = _subobj(self)
+        if sub is not NULL and _islist(sub):
+            sub.append(args[0])
+            return None
     _arg_count(2, 1 + len(args))
 
 
 def list__clear(self):
     _list_clear_slots(self, 0, _ld(self, 0))
     _st(self, 0, 0)
+    return None
+
+
+def _wcopy_step_fb(dst, doff, src, soff, n, step):
+    # The native gathers in the core; this runs only for arguments it
+    # does not take.
+    i = 0
+    while i < n:
+        _st(dst, doff + i, _ld(src, soff + i * step))
+        i += 1
     return None
 
 
@@ -129,7 +146,16 @@ def list__index(self, value, start=0, stop=_MISSING):
     raise ValueError(_s(_repr(value), ' is not in list'))
 
 
-def list__insert(self, index, value):
+def _list__insert_fb(self, index, value):
+    # The core inserts into an exact list with spare capacity and a small-int
+    # or bool index. objlist.c clamps the position and never rejects it.
+    self = _list_self(self)
+    if _isbool(index):
+        index = 1 if index else 0
+    elif _tag(index) == TAG_INT64:
+        index = -1 - _ld(self, 0) if index < 0 else _ld(self, 0)
+    elif _tag(index) != TAG_INT:
+        _index_type(self, index)
     n = _ld(self, 0)
     if index < 0:
         index += n
@@ -146,18 +172,43 @@ def list__insert(self, index, value):
     return None
 
 
-def list__pop(self, index=-1):
+def _list_self(self):
+    # The list a list method works on: the list, or the one a list subclass
+    # instance wraps.
+    if not _islist(self) and _isinst(self):
+        sub = _subobj(self)
+        if sub is not NULL and _islist(sub):
+            return sub
+    if not _islist(self):
+        raise TypeError(_s("descriptor requires a 'list' object but received '", _tname(self), "'"))
+    return self
+
+
+def _list__pop_fb(self, *args):
+    # The core pops from an exact non-empty list with a small-int or bool
+    # index in range. The checks follow objlist.c: argument count, empty,
+    # then mp_get_index.
+    if len(args) > 1:
+        raise TypeError(_s("function expected at most 2 arguments, got ", _istr(1 + len(args))))
+    index = args[0] if args else -1
+    self = _list_self(self)
     n = _ld(self, 0)
     if n == 0:
         raise IndexError('pop from empty list')
-    if index < 0:
-        index += n
-    if index < 0 or index >= n:
-        raise IndexError('pop index out of range')
+    i = _word_index(self, index)
+    if i < 0:
+        i += n
+    if i < 0 or i >= n:
+        raise IndexError('list index out of range')
+    return _list_pop_at(self, i)
+
+
+def _list_pop_at(self, i):
+    n = _ld(self, 0)
     items = _ld(self, 2)
-    v = _ld(items, index)
-    if index < n - 1:
-        _wcopy(items, index, items, index + 1, n - 1 - index)
+    v = _ld(items, i)
+    if i < n - 1:
+        _wcopy(items, i, items, i + 1, n - 1 - i)
     _st(items, n - 1, NULL)
     _st(self, 0, n - 1)
     return v
@@ -165,7 +216,7 @@ def list__pop(self, index=-1):
 
 def list__remove(self, value):
     i = list__index(self, value)
-    list__pop(self, i)
+    _list_pop_at(self, i)
     return None
 
 
@@ -326,6 +377,8 @@ def _len_fb(x):
         k = _ld(x, 0)
         if k == OB_DICT_VIEW:
             return _ld(_ld(x, 2), 0)
+        if k == OB_MEMVIEW:
+            return _ld(x, 4)
         if k == OB_INSTANCE or k == OB_EXCEPTION:
             f = _tlookup(_ld(x, 1), '__len__')
             if f is not NULL:

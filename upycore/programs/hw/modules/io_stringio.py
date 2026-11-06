@@ -1,0 +1,35 @@
+# io.StringIO and io.BytesIO (frozen runtime module), and print(file=...)
+# writing to a user stream.
+import io
+s = io.StringIO()
+print(s.write('hello '), s.write('wörld\n'), s.tell())
+print('x', 1, 2.5, sep='-', end='!\n', file=s)
+print(file=s)
+print(repr(s.getvalue()))
+s.seek(0)
+print(repr(s.readline()), repr(s.read(3)), s.tell(), repr(s.read()), repr(s.read()))
+s.seek(2)
+s.write('ZZ')
+s.seek(-3, 2)
+print(s.tell(), repr(s.read()), repr(s.getvalue()))
+s.seek(30)
+s.write('end')
+print(repr(s.getvalue()), s.tell())
+s.seek(-100, 1)
+print(s.tell())
+t = io.StringIO('abc\ndef')
+print(repr(t.read(2)), repr(t.readline()), repr(t.readline()), repr(t.readline()))
+with io.StringIO() as u:
+    u.write('in with')
+for f in (u.getvalue, lambda: s.write('x')):
+    s.close()
+    try:
+        f()
+    except ValueError as e:
+        print('ValueError', e)
+b = io.BytesIO()
+print(b.write(b'ab'), b.write(b'\xff'), b.getvalue())
+b.seek(0)
+bb = bytearray(2)
+print(b.readinto(bb), bb, b.read())
+print(io.StringIO(10).getvalue() == '', isinstance(io.StringIO(), io.StringIO))

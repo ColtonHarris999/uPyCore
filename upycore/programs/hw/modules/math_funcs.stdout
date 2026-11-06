@@ -1,0 +1,82 @@
+3.1415928 2.7182818 6.2831856 inf -inf nan
+sqrt 0.0 0.0
+sqrt -0.0 -0.0
+sqrt 2.44318106e-44 3.743392e-23
+sqrt 1.63250339e-39 9.999973e-21
+sqrt 2.0 1.4142135
+sqrt 2 1.4142135
+sqrt True 1.0
+sqrt 0.5 0.707106736
+sqrt 3.0 1.7320508
+sqrt 1e+30 1000000000000000.0
+sqrt 3.4e+38 1.843909e+19
+sqrt 12345.678 111.11111
+sqrt inf inf
+trig 0.0 0 1 0
+trig 0.5 0.479426 0.877583 0.546303
+trig 1.0 0.841471 0.540302 1.55741
+trig -1.0 -0.841471 0.540302 -1.55741
+trig 2.0 0.909297 -0.416147 -2.18504
+trig 3.1415928 -8.74228e-08 -1 8.74228e-08
+trig 7.0 0.656987 0.753902 0.871448
+trig 100.0 -0.506366 0.862319 -0.587214
+trig 202 0.806418 0.591345 1.3637
+trig 249 -0.727163 -0.686465 1.05929
+trig 10000.0 -0.305614 -0.952155 0.320971
+trig 1000000.0 -0.349994 0.936752 -0.373624
+trig 30000000.0 0.96413 -0.265429 -3.63234
+trig 10000000000.0 -0.487506 0.87312 -0.55835
+trig 1e+20 0.656577 0.754259 0.870492
+trig -1e+20 -0.656577 0.754259 -0.870492
+trig 3.4e+38 -0.244085 0.969754 -0.251698
+log 1e-10 -23.0259 -33.2193 -10 -20.959
+log 0.5 -0.693147 -1 -0.30103 -0.63093
+log 1.0 0 0 0 0
+log 2.0 0.693147 1 0.30103 0.63093
+log 2.7182818 1 1.4427 0.434294 0.910239
+log 10.0 2.30259 3.32193 1 2.0959
+log 10000000000.0 23.0259 33.2193 10 20.959
+log 3.4e+38 88.722 127.999 38.5315 80.7582
+log 1.63250339e-39 -92.1034 -132.877 -40 -83.8361
+log 8 2.07944 3 0.90309 1.89279
+log 1024 6.93147 10 3.0103 6.3093
+exp -104.0 0
+exp -87.0 1.64581e-38
+exp -1.0 0.367879
+exp -1e-05 0.99999
+exp 0.0 1
+exp 1e-05 1.00001
+exp 0.3 1.34986
+exp 1.0 2.71828
+exp 10.0 22026.5
+exp 88.0 1.65164e+38
+exp -inf 0
+round 2.5 2 3 2 (0.5, 2.0) (0.625, 2)
+round -2.5 -3 -2 -2 (-0.5, -2.0) (-0.625, 2)
+round 2.0 2 2 2 (0.0, 2.0) (0.5, 2)
+round -0.5 -1 0 0 (-0.5, -0.0) (-0.5, 0)
+round 10000000000.0 10000000000 10000000000 10000000000 (0.0, 10000000000.0) (0.5820766, 34)
+round -7 -7 -7 -7 (-0.0, -7.0) (-0.875, 3)
+round 0.999999 0 1 0 (0.999999, 0.0) (0.999999, 0)
+6.0 2.44318106e-44 inf -3.0 2.0
+3.0 True True True False
+3.14159 180 1 3628800
+True False True
+1024 1.41421 -512.0
+sqrt (-1.0,) ValueError math domain error
+log (0.0,) ValueError math domain error
+log (-2,) ValueError math domain error
+log (2, 1) ZeroDivisionError divide by zero
+log (2, -1) ValueError math domain error
+exp (100.0,) ValueError math domain error
+sin (inf,) ValueError math domain error
+cos (nan,) nan
+sin ('x',) TypeError can't convert str to float
+sqrt (1j,) TypeError can't convert complex to float
+floor (inf,) OverflowError can't convert inf to int
+factorial (-1,) ValueError negative factorial
+factorial (2.5,) TypeError can't convert float to int
+pow (-8.0, 0.5) ValueError math domain error
+pow (0.0, -1.0) ValueError math domain error
+log2 (0,) ValueError math domain error
+log10 (-1,) ValueError math domain error

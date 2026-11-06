@@ -116,7 +116,13 @@ def _int_value(args):
     if _tag(x) == TAG_FLOAT:
         i = _ftoi(x)
         if i is STOP:
-            raise OverflowError("overflow converting float to int")
+            # mp_obj_new_int_from_float: NaN, infinity, or past long long.
+            if x != x:
+                raise ValueError("can't convert NaN to int")
+            d = x - x
+            if d != d:
+                raise OverflowError("can't convert inf to int")
+            raise ValueError('float too big')
         return i
     if _isstr(x):
         return _parse_int(x, base)
@@ -339,6 +345,10 @@ def sorted(iterable, key=None, reverse=False):
 
 
 def hash(obj):
+    # The native hash gives every object an identity hash; a memoryview
+    # is unhashable (array has no hash slot).
+    if _ismv(obj):
+        _unsupported_un('__hash__', obj)
     return _hashv(obj)
 
 
@@ -407,18 +417,53 @@ def _load_attr(obj, name):
     return _getattr(obj, name)
 
 
+def _inst_attr(obj, name):
+    # An attribute of a plain instance without raising: its value from the
+    # instance dict, NULL for a definite miss, or STOP when the full path has
+    # to decide (a special name, anything the type defines, __getattr__, or
+    # not a plain instance). MicroPython's getattr with a default does not
+    # build an AttributeError for a miss; the full path costs ~30k cycles.
+    if _tag(obj) != TAG_OBJECT or _ld(obj, 0) != OB_INSTANCE:
+        return STOP
+    c = _byte(name, 0) if _slen(name) else 0
+    if c == 95 or c == 102:
+        # '_' or 'f': the special names _special_attr answers first.
+        if _streq(name, '__class__') or _streq(name, '__dict__') or _streq(name, 'fromkeys') or _streq(name, 'from_bytes'):
+            return STOP
+    d = _ld(obj, 2)
+    if d is not NULL:
+        hit = _dget(d, name)
+        if hit is not NULL:
+            return hit
+    t = _ld(obj, 1)
+    if _tlookup(t, name) is not NULL or _tlookup(t, '__getattr__') is not NULL:
+        return STOP
+    return NULL
+
+
 def getattr(obj, name, default=_MISSING):
     if not _isstr(name):
         raise TypeError('attribute name must be string')
+    v = _inst_attr(obj, name)
+    if v is not STOP:
+        if v is not NULL:
+            return v
+        if default is not _MISSING:
+            return default
+        _attr_error(obj, name)
     try:
         return _load_attr(obj, name)
     except AttributeError:
-        if default == _MISSING:
+        if default is _MISSING:
             raise
         return default
 
 
 def hasattr(obj, name):
+    if _isstr(name):
+        v = _inst_attr(obj, name)
+        if v is not STOP:
+            return v is not NULL
     try:
         _load_attr(obj, name)
         return True
