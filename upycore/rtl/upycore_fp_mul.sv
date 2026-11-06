@@ -10,9 +10,10 @@
 //   C0            unpack, normalize subnormal significands  -> stage 1 regs
 //   C1 .. C(N)    N = ceil(53/STEP) product steps (4 at STEP = 14)
 //   C(N+1)        product registered by the multiplier core;
-//                 normalize by one bit, round, pack          -> result_o
+//                 normalize by one bit, round, pack          -> result reg
+//   C(N+2)        done_o, result_o from the register
 //
-// done_o is asserted in C(N+1): the 6th cycle counting the accept cycle as
+// done_o is asserted in C(N+2): the 7th cycle counting the accept cycle as
 // the first, at the default STEP.
 // Handshake as in upycore_umul_seq.sv (level start_i, one-cycle done_o,
 // withdrawing start_i aborts).
@@ -139,9 +140,24 @@ module upycore_fp_mul (
         end
     end
 
-    assign result_o = s1_special_r ? s1_special_val_r
-                    : upycore_f64_pack_round(s1_sign_r, r_exp, r_sig, r_g, r_r, r_s);
-    assign done_o   = mul_done;
-    assign busy_o   = s1_valid_r | mul_busy | mul_done;
+    // The rounded result goes to a register, so the rounding carry does not
+    // run on through the parent's result select in the same cycle.
+    logic        out_valid_r;
+    logic [63:0] out_res_r;
+    always_ff @(posedge clk_i or negedge rst_n_i) begin
+        if (!rst_n_i) begin
+            out_valid_r <= 1'b0;
+            out_res_r   <= '0;
+        end else if (!start_i) begin
+            out_valid_r <= 1'b0;
+        end else begin
+            out_valid_r <= mul_done;
+            out_res_r   <= s1_special_r ? s1_special_val_r
+                         : upycore_f64_pack_round(s1_sign_r, r_exp, r_sig, r_g, r_r, r_s);
+        end
+    end
+    assign result_o = out_res_r;
+    assign done_o   = out_valid_r;
+    assign busy_o   = s1_valid_r | mul_busy | mul_done | out_valid_r;
 
 endmodule
