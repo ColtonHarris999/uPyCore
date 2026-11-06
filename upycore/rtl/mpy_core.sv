@@ -65,6 +65,8 @@ module mpy_core
     parameter int CA_EN = 1,
     // Retire a binary op that cannot fail at issue and let loads run while
     // the ALU finishes it (upycore/docs/mpy_ca.md). +AALU= overrides in sim.
+    parameter int SHORTLIST_MAX = 16,
+    parameter int SHORTLIST_MODE = 2,
     parameter int AALU = 1
 ) (
     input  logic        clk_i,
@@ -107,6 +109,12 @@ module mpy_core
     input  logic [31:0] gc_total_i,
     input  logic [31:0] gc_collections_i,
 
+    output logic sl_valid_o, input logic sl_ready_i,
+    output logic [31:0] sl_src_o, sl_dst_o, sl_n_o,
+    output logic sl_reverse_o, sl_clear_o, sl_put_o, sl_length_o,
+    output logic [31:0] sl_clear_addr_o, sl_put_addr_o, sl_header_o, sl_new_length_o,
+    output logic [35:0] sl_put_value_o,
+    input logic sl_response_i, output logic sl_response_ready_o,
     output logic mb_valid_o,
     input logic mb_ready_i, mb_return_i, mb_ok_i,
     input logic [31:0] mb_used_i,
@@ -923,7 +931,38 @@ module mpy_core
         S_N_BCF,
         S_NAT_WCA,
         S_LA_CA,
-        S_AALU_WB
+        S_AALU_WB,
+        S_SL_KIND,
+        S_SL_N,
+        S_SL_STEP,
+        S_SL_START,
+        S_SL_START_ADD,
+        S_SL_START_CLAMP,
+        S_SL_STOP,
+        S_SL_STOP_ADD,
+        S_SL_STOP_CLAMP,
+        S_SL_COUNT,
+        S_SL_ELIG,
+        S_SL_ALLOC,
+        S_SL_SRC,
+        S_SL_RESULT,
+        S_SL_RHS_N,
+        S_SL_RHS_PTR,
+        S_SL_STORE_DST,
+        S_SL_STORE_DONE,
+        S_SL_COPY_N,
+        S_SL_COPY_LEN,
+        S_SL_FB,
+        S_SL_BEGIN,
+        S_SL_ISSUE,
+        S_SL_WAIT,
+        S_SL_CORE_R,
+        S_SL_CORE_RV,
+        S_SL_CORE_W,
+        S_SL_CORE_CLEAR,
+        S_SL_CORE_PUT,
+        S_SL_CORE_LEN,
+        S_SL_DONE
     } state_e;
 
     state_e st, wret;
@@ -936,6 +975,24 @@ module mpy_core
     logic [31:0] m_addr, m_wdata;
     logic [31:0] md;
     logic [3:0]  mt;
+    // All Python values surviving allocation stay in t[]/ARGBUF, not here.
+    // ss_buf is operation-local; the reference path never allocates/calls out.
+    logic [1:0] cfg_sl;
+    logic ss_store, ss_native, ss_reverse, ss_omitted;
+    logic [31:0] ss_len, ss_start, ss_stop, ss_bound, ss_count;
+    logic [31:0] ss_src, ss_dst, ss_n, ss_clear_addr, ss_put_addr, ss_header, ss_new_length;
+    logic ss_clear, ss_put, ss_length;
+    val_t ss_put_value, ss_buf[0:SHORTLIST_MAX-1];
+    logic [$clog2(SHORTLIST_MAX+1)-1:0] ss_i;
+    state_e ss_back;
+    assign sl_valid_o = st==S_SL_ISSUE;
+    assign sl_response_ready_o = st==S_SL_WAIT;
+    assign sl_src_o=ss_src; assign sl_dst_o=ss_dst; assign sl_n_o=ss_n;
+    assign sl_reverse_o=ss_reverse; assign sl_clear_o=ss_clear;
+    assign sl_put_o=ss_put; assign sl_length_o=ss_length;
+    assign sl_clear_addr_o=ss_clear_addr; assign sl_put_addr_o=ss_put_addr;
+    assign sl_header_o=ss_header; assign sl_new_length_o=ss_new_length;
+    assign sl_put_value_o=ss_put_value;
     val_t mv;
     assign mv = {mt, md};
 
@@ -1431,7 +1488,7 @@ module mpy_core
     endtask
 `ifndef SYNTHESIS
     initial begin
-        int grow_v, adapt_v, lc_n_v, lc_wb_v, lc_dm_v, ca_v, aalu_v, bulk_v;
+        int grow_v, adapt_v, lc_n_v, lc_wb_v, lc_dm_v, ca_v, aalu_v, bulk_v, sl_v;
         grow_v = GROW_CHUNK;
         adapt_v = GROW_ADAPT;
         lc_n_v = LC_N;
@@ -1455,6 +1512,9 @@ module mpy_core
         cfg_lc_dm = (lc_dm_v != 0);
         if (!$value$plusargs("BULK=%d", bulk_v)) bulk_v = 1;
         cfg_bulk = (bulk_v != 0);
+        if (!$value$plusargs("SL=%d", sl_v)) sl_v = SHORTLIST_MODE;
+        if(sl_v<0 || sl_v>2) $fatal(1,"SL must be 0, 1, or 2");
+        cfg_sl=2'(sl_v);
         cfg_ca = (ca_v != 0);
         cfg_aalu = (aalu_v != 0);
     end
@@ -1467,6 +1527,7 @@ module mpy_core
     assign cfg_lc_wb = (LC_WB != 0);
     assign cfg_lc_dm = 1'b0;
     assign cfg_bulk = 1'b1;
+    assign cfg_sl = 2'(SHORTLIST_MODE);
     assign cfg_ca = (CA_EN != 0);
     assign cfg_aalu = (AALU != 0);
 `endif
@@ -1737,6 +1798,11 @@ module mpy_core
             fbase <= ABI_FRAME_BASE; fprev <= 32'd0;
             gen <= VNULL; inj <= VNONE; fl_img <= 1'b0; spill_to_img <= 1'b0;
             lc_fl_ret <= S_SPILL;
+            ss_store<=0;ss_native<=0;ss_reverse<=0;ss_omitted<=0;
+            ss_len<=0;ss_start<=0;ss_stop<=0;ss_bound<=0;ss_count<=0;
+            ss_src<=0;ss_dst<=0;ss_n<=0;ss_clear_addr<=0;ss_put_addr<=0;
+            ss_header<=0;ss_new_length<=0;ss_clear<=0;ss_put<=0;ss_length<=0;
+            ss_put_value<=VNULL;ss_i<=0;ss_back<=S_FETCH;
             for (int k = 0; k < 8; k++) t[k] <= VNULL;
             xc <= VNULL;
             bov <= VNULL;
@@ -2787,6 +2853,9 @@ module mpy_core
             S_LSUB: if ((is_mut(t[0], ABI_MUT_LIST) || is_mut(t[0], ABI_MUT_BYTEARRAY) ||
                          tg(t[0]) == ABI_TAG_TUPLE) && intlike(t[1]))
                         rd(adr(t[0]), S_LS_LEN);
+                    else if (cfg_sl!=0 && is_mut(t[0], ABI_MUT_LIST) && tg(t[1])==ABI_TAG_OBJECT) begin
+                        ss_store<=0;ss_native<=0;st<=S_SL_BEGIN;ss_back<=S_SL_KIND;
+                    end
                     else if (is_mut(t[0], ABI_MUT_DICT))
                         lookup(t[0], t[1], VNULL, LK_FIND, 1'b0, S_LS_D);
                     else if ((strlike(t[0]) || tg(t[0]) == ABI_TAG_BYTES) && intlike(t[1])) begin
@@ -2829,11 +2898,116 @@ module mpy_core
                 hook(ABI_HOOK_SUBSCR, ABI_RK_PUSH, 8'd2, t[0], t[1], VNULL, VNULL);
             end
 
+            // ---- exact short lists: normalize, allocate, then move ----
+            S_SL_KIND: rd(adr(t[1]), S_SL_N);
+            S_SL_N: if(md!=ABI_OB_SLICE) st<=S_SL_FB;
+                    else rd(adr(t[0]),S_SL_STEP);
+            S_SL_STEP: if(md>SHORTLIST_MAX) st<=S_SL_FB;
+                    else begin ss_len<=md;rd(adr(t[1])+16,S_SL_START);end
+            S_SL_START: if(mv==VNONE || (tg(mv)==ABI_TAG_INT && mv[31:0]==1)) begin
+                           ss_reverse<=0;rd(adr(t[1])+8,S_SL_START_ADD);
+                       end else if(!ss_store && tg(mv)==ABI_TAG_INT && mv[31:0]==32'hffffffff) begin
+                           ss_reverse<=1;rd(adr(t[1])+8,S_SL_START_ADD);
+                       end else st<=S_SL_FB;
+            S_SL_START_ADD: if(mv!=VNONE && tg(mv)!=ABI_TAG_INT) st<=S_SL_FB;
+                       else begin
+                           ss_omitted<=mv==VNONE;
+                           ss_bound<=mv==VNONE ? (ss_reverse ? ss_len-32'd1 : 32'd0) : mv[31:0];
+                           st<=S_SL_START_CLAMP;
+                       end
+            S_SL_START_CLAMP: begin
+                if(!ss_omitted && ss_bound[31]) ss_bound<=ss_bound+ss_len;
+                st<=S_SL_STOP;
+            end
+            S_SL_STOP: begin
+                if(ss_omitted) ss_start<=ss_bound;
+                else if(ss_bound[31]) ss_start<=ss_reverse ? 32'hffffffff : 0;
+                else if(ss_bound>=ss_len) ss_start<=ss_reverse ? ss_len-32'd1 : ss_len;
+                else ss_start<=ss_bound;
+                rd(adr(t[1])+12,S_SL_STOP_ADD);
+            end
+            S_SL_STOP_ADD: if(mv!=VNONE && tg(mv)!=ABI_TAG_INT) st<=S_SL_FB;
+                       else begin
+                           ss_omitted<=mv==VNONE;
+                           ss_bound<=mv==VNONE ? (ss_reverse ? 32'hffffffff : ss_len) : mv[31:0];
+                           st<=S_SL_STOP_CLAMP;
+                       end
+            S_SL_STOP_CLAMP: begin
+                if(!ss_omitted && ss_bound[31]) ss_bound<=ss_bound+ss_len;
+                st<=S_SL_COUNT;
+            end
+            S_SL_COUNT: begin
+                if(ss_omitted) ss_stop<=ss_bound;
+                else if(ss_bound[31]) ss_stop<=ss_reverse ? 32'hffffffff : 0;
+                else if(ss_bound>=ss_len) ss_stop<=ss_reverse ? ss_len-32'd1 : ss_len;
+                else ss_stop<=ss_bound;
+                st<=S_SL_ELIG;
+            end
+            S_SL_ELIG: begin
+                ss_count<=ss_reverse ? (($signed(ss_start)>$signed(ss_stop)) ? ss_start-ss_stop : 0) :
+                                      (($signed(ss_stop)>$signed(ss_start)) ? ss_stop-ss_start : 0);
+                st<=S_SL_ALLOC;
+            end
+            S_SL_ALLOC: if(ss_store) begin
+                if(!is_mut(t[6],ABI_MUT_LIST) && tg(t[6])!=ABI_TAG_TUPLE) st<=S_SL_FB;
+                else rd(adr(t[6]),S_SL_RHS_N);
+            end else begin
+                alloc(32'd3+((ss_count<4)?32'd4:ss_count),S_SL_SRC);
+            end
+            S_SL_SRC: begin
+                t[2]<=vmut(al_a,ABI_MUT_LIST);ss_dst<=al_a+32'd12;
+                wb_v[0]<=vint(ss_count);wb_v[1]<=vint(ss_count<4?32'd4:ss_count);
+                wb_v[2]<={ABI_TAG_CONT,al_a+32'd12};
+                wblock(al_a,4'd3,S_SL_RHS_PTR);
+            end
+            S_SL_RHS_PTR: if(!ss_store) rd(adr(t[0])+8,S_SL_STORE_DST);
+                         else begin ss_src<=md;rd(adr(t[0])+8,S_SL_STORE_DST);end
+            S_SL_STORE_DST: begin
+                if(ss_store) begin ss_dst<=md+(ss_start<<2);ss_back<=S_SL_STORE_DONE;end
+                else begin ss_src<=md+(ss_start<<2);ss_back<=S_SL_RESULT;end
+                ss_n<=ss_count;ss_clear<=0;ss_put<=0;ss_length<=0;ss_i<=0;
+                st<=S_SL_BEGIN;
+            end
+            S_SL_RHS_N: if(md!=ss_count || md>SHORTLIST_MAX) st<=S_SL_FB;
+                else if(tg(t[6])==ABI_TAG_TUPLE) begin
+                    ss_src<=adr(t[6])+32'd4;rd(adr(t[0])+8,S_SL_STORE_DST);
+                end else rd(adr(t[6])+8,S_SL_RHS_PTR);
+            S_SL_COPY_N: begin
+                ss_store<=0;ss_native<=1;ss_reverse<=0;ss_start<=0;
+                rd(adr(t[0]),S_SL_COPY_LEN);
+            end
+            S_SL_COPY_LEN: if(md>SHORTLIST_MAX) st<=S_NAT_FB;
+                          else begin ss_count<=md;st<=S_SL_ALLOC;end
+            S_SL_FB: if(ss_native) st<=S_NAT_FB;
+                     else st<=ss_store ? S_SS_FB : S_LS_FB;
+            S_SL_RESULT: if(ss_native) deliver(t[2],crk);
+                else begin rf[`SX(6'(sp-7'd2))]<=t[2];sp<=sp-7'd1;st<=S_FETCH;end
+            S_SL_STORE_DONE: begin sp<=sp-7'd3;st<=S_FETCH;end
+            S_SL_BEGIN: if(!ca_valid && ca_idle_i) begin
+                if(ss_back==S_SL_KIND || ss_back==S_SL_COPY_N) st<=ss_back;
+                else if(cfg_sl==2 && cfg_ca) st<=S_SL_ISSUE;
+                else begin ss_i<=0;st<=S_SL_CORE_R;end
+            end
+            S_SL_ISSUE: if(sl_ready_i) st<=S_SL_WAIT;
+            S_SL_WAIT: if(sl_response_i) st<=S_SL_DONE;
+            S_SL_CORE_R: if(ss_i==ss_n) begin ss_i<=0;st<=S_SL_CORE_W;end
+                else rd(ss_reverse ? ss_src-(32'(ss_i)<<2) : ss_src+(32'(ss_i)<<2),S_SL_CORE_RV);
+            S_SL_CORE_RV: begin ss_buf[ss_i]<=mv;ss_i<=ss_i+1'b1;st<=S_SL_CORE_R;end
+            S_SL_CORE_W: if(ss_i==ss_n) st<=S_SL_CORE_CLEAR;
+                else begin wr(ss_dst+(32'(ss_i)<<2),ss_buf[ss_i],S_SL_CORE_W);ss_i<=ss_i+1'b1;end
+            S_SL_CORE_CLEAR: if(ss_clear) wr(ss_clear_addr,VNULL,S_SL_CORE_PUT);else st<=S_SL_CORE_PUT;
+            S_SL_CORE_PUT: if(ss_put) wr(ss_put_addr,ss_put_value,S_SL_CORE_LEN);else st<=S_SL_CORE_LEN;
+            S_SL_CORE_LEN: if(ss_length) wr(ss_header,vint(ss_new_length),S_SL_DONE);else st<=S_SL_DONE;
+            S_SL_DONE: st<=ss_back;
+
             // ---- STORE_SUBSCR ----
             S_SSUB: if (t[6] == VNULL) st <= S_SS_FB;
                     else if (is_mut(t[0], ABI_MUT_LIST) && intlike(t[1])) rd(adr(t[0]), S_SS_LEN);
                     // MicroPython stores the low byte of any small int or bool
                     // (binary.c SET_VAL_AS). Other values take the hook.
+                    else if(cfg_sl!=0 && is_mut(t[0],ABI_MUT_LIST) && tg(t[1])==ABI_TAG_OBJECT) begin
+                        ss_store<=1;ss_native<=0;st<=S_SL_BEGIN;ss_back<=S_SL_KIND;
+                    end
                     else if (is_mut(t[0], ABI_MUT_BYTEARRAY) && intlike(t[1]) && intlike(t[6]))
                         rd(adr(t[0]), S_SS_LEN);
                     else if (is_mut(t[0], ABI_MUT_DICT)) lookup(t[0], t[1], t[6], LK_ADD, 1'b0, S_SS_D);
@@ -3880,6 +4054,8 @@ module mpy_core
                     // a non-int index, an empty list, a bad pop index or a
                     // full allocation goes to the firmware method before
                     // anything is written. x0 index, x1 len, x2 items, x3 i.
+                    ABI_N_LIST_COPY: if(v0!=1 || !is_mut(mv,ABI_MUT_LIST) || cfg_sl==0) st<=S_NAT_FB;
+                        else begin t[0]<=mv;ss_store<=0;ss_native<=1;ss_back<=S_SL_COPY_N;st<=S_SL_BEGIN;end
                     ABI_N_LIST_POP: if ((v0 != 32'd1 && v0 != 32'd2) || !is_mut(mv, ABI_MUT_LIST)) st <= S_NAT_FB;
                         else begin
                             t[2] <= mv; x0 <= 32'hFFFF_FFFF;
@@ -4013,7 +4189,12 @@ module mpy_core
             // t[3] holds the removed value; it is a root until delivered.
             S_NP_V: begin
                 t[3] <= mv;
-                if (x0 + 32'd1 == x1) st <= S_NP_CLR;
+                if(cfg_sl!=0 && x1<=SHORTLIST_MAX && x0+32'd1!=x1) begin
+                    ss_src<=x2+((x0+32'd1)<<2);ss_dst<=x2+(x0<<2);ss_n<=x1-x0-32'd1;
+                    ss_reverse<=0;ss_clear<=1;ss_clear_addr<=x2+((x1-32'd1)<<2);
+                    ss_put<=0;ss_length<=1;ss_header<=adr(t[2]);ss_new_length<=x1-32'd1;
+                    ss_back<=S_NP_RET;st<=S_SL_BEGIN;
+                end else if (x0 + 32'd1 == x1) st <= S_NP_CLR;
                 else if (cfg_ca && (x1 - x0) > LS_CA_MIN) st <= S_NP_CA;
                 else st <= S_NP_L;
             end
@@ -4058,7 +4239,7 @@ module mpy_core
             // ---- list.insert ----
             // objlist.c clamps the position: normalize, then clamp, one
             // register stage each. No spare slot -> firmware, which grows.
-            S_NI_I: if (!intlike(mv)) st <= S_NAT_FB;
+            S_NI_I: if (!intlike(mv) || (cfg_sl!=0 && is_bool(mv))) st <= S_NAT_FB;
                     else begin x0 <= ival(mv); rd(ab_ptr(ab_lo + 8'd2), S_NI_V); end
             S_NI_V: begin t[3] <= mv; rd(adr(t[2]), S_NI_N); end
             S_NI_N: begin
@@ -4074,7 +4255,12 @@ module mpy_core
             end
             S_NI_P: begin
                 x2 <= md; x3 <= x1;
-                if (x0 == x1) st <= S_NI_ST;
+                if(cfg_sl!=0 && x1<SHORTLIST_MAX && x0!=x1) begin
+                    ss_src<=md+(x0<<2);ss_dst<=md+((x0+32'd1)<<2);ss_n<=x1-x0;
+                    ss_reverse<=0;ss_clear<=0;ss_put<=1;ss_put_addr<=md+(x0<<2);ss_put_value<=t[3];
+                    ss_length<=1;ss_header<=adr(t[2]);ss_new_length<=x1+32'd1;
+                    ss_back<=S_N_NONE;st<=S_SL_BEGIN;
+                end else if (x0 == x1) st <= S_NI_ST;
                 else if (cfg_ca && (x1 - x0) > LS_CA_MIN) st <= S_NI_CA;
                 else st <= S_NI_L;
             end

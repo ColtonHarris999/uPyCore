@@ -59,7 +59,7 @@ RTL = [
     "upycore/rtl/upycore_ipow.sv", "upycore/rtl/upycore_fp_add.sv", "upycore/rtl/upycore_fp_mul.sv",
     "upycore/rtl/upycore_fp_divrem.sv", "upycore/rtl/upycore_fp_pow.sv", "upycore/rtl/upycore_fpu.sv",
     "upycore/rtl/mpy_alu.sv", "upycore/rtl/mpy_decode.sv", "upycore/rtl/mpy_fetch.sv", "upycore/rtl/mpy_core.sv",
-    "upycore/rtl/mpy_hash.sv", "upycore/rtl/mpy_hash_slot.sv", "upycore/rtl/mpy_rehash_stream.sv", "upycore/rtl/mpy_key_equal.sv", "upycore/rtl/mpy_map_engine.sv", "upycore/rtl/mpy_bulk.sv", "upycore/rtl/mpy_bytecopy.sv", "upycore/rtl/mpy_collection.sv",
+    "upycore/rtl/mpy_hash.sv", "upycore/rtl/mpy_hash_slot.sv", "upycore/rtl/mpy_rehash_stream.sv", "upycore/rtl/mpy_key_equal.sv", "upycore/rtl/mpy_map_engine.sv", "upycore/rtl/mpy_bulk.sv", "upycore/rtl/mpy_bytecopy.sv", "upycore/rtl/mpy_shortlist.sv", "upycore/rtl/mpy_collection.sv",
     "upycore/rtl/mpy_gc.sv", "upycore/rtl/mpy_ca.sv", "upycore/rtl/bsg_mem_1rw_sync_mask_write_bit.sv",
     "upycore/rtl/mpy_mem.sv", "upycore/rtl/mpy_boot.sv", "upycore/rtl/mpy_soc.sv",
     "upycore/tb/tb_spi_nand.sv", "upycore/tb/tb_mpy_soc.sv",

@@ -13,6 +13,9 @@ module tb_mpy_collection;
     logic [31:0] pa,pd;logic [3:0] pt;
     integer delay_count=0,cycles=0,returns=0;
     mpy_collection #(.TYPE_CACHE(0)) dut(.clk_i(clk),.rst_n_i(rst),
+        .sl_valid_i(1'b0),.sl_src_i(0),.sl_dst_i(0),.sl_n_i(0),.sl_reverse_i(0),
+        .sl_clear_i(0),.sl_put_i(0),.sl_length_i(0),.sl_clear_addr_i(0),.sl_put_addr_i(0),
+        .sl_header_i(0),.sl_new_length_i(0),.sl_put_value_i(0),.sl_response_ready_i(1),
         .copy_reverse_i(1'b0),.copy_byte_i(byte_mode),.copy_valid_i(cv),.copy_ready_o(cr),.copy_src_i(cs),.copy_dst_i(cd),.copy_n_i(cn),
         .bulk_valid_i(bv),.bulk_ready_o(br),.bulk_op_i(operation),.bulk_set_i(1'b1),
         .bulk_src_i(bs),.bulk_sn_i(sn),.bulk_dst_i(bd),.bulk_dn_i(dn),.bulk_used_i(used),.bulk_hashes_i(hashes),
