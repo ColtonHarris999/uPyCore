@@ -141,23 +141,39 @@ module upycore_fp_mul (
     end
 
     // The rounded result goes to a register, so the rounding carry does not
-    // run on through the parent's result select in the same cycle.
+    // run on through the parent's result select in the same cycle. A
+    // subnormal result is denormalized into dn_r first and rounded one
+    // cycle later, which keeps the right shift out of the common path.
     logic        out_valid_r;
     logic [63:0] out_res_r;
+    logic        dn_pend_r, dn_sign_r;
+    logic [55:0] dn_r;
+    logic [55:0] r_ext;
+    assign r_ext = {r_sig, r_g, r_r, r_s};
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) begin
             out_valid_r <= 1'b0;
             out_res_r   <= '0;
+            dn_pend_r   <= 1'b0;
+            dn_sign_r   <= 1'b0;
+            dn_r        <= '0;
         end else if (!start_i) begin
             out_valid_r <= 1'b0;
+            dn_pend_r   <= 1'b0;
         end else begin
-            out_valid_r <= mul_done;
-            out_res_r   <= s1_special_r ? s1_special_val_r
-                         : upycore_f64_pack_round(s1_sign_r, r_exp, r_sig, r_g, r_r, r_s);
+            out_valid_r <= dn_pend_r || (mul_done && (s1_special_r || r_exp > 14'sd0));
+            dn_pend_r   <= mul_done && !s1_special_r && r_exp <= 14'sd0;
+            if (dn_pend_r)
+                out_res_r <= upycore_f64_round_pack(dn_sign_r, 14'sd1, dn_r);
+            else
+                out_res_r <= s1_special_r ? s1_special_val_r
+                           : upycore_f64_round_pack(s1_sign_r, r_exp, r_ext);
+            dn_sign_r <= s1_sign_r;
+            dn_r      <= upycore_f64_denorm(r_ext, r_exp);
         end
     end
     assign result_o = out_res_r;
     assign done_o   = out_valid_r;
-    assign busy_o   = s1_valid_r | mul_busy | mul_done | out_valid_r;
+    assign busy_o   = s1_valid_r | mul_busy | mul_done | dn_pend_r | out_valid_r;
 
 endmodule

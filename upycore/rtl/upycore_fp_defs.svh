@@ -96,6 +96,63 @@ endfunction
 //   is denormalized here with a sticky-collecting right shift; exponents
 //   that saturate round to infinity.
 // ---------------------------------------------------------------------------
+// The two halves of upycore_f64_pack_round, for units that give a
+// subnormal result an extra cycle (the right shift) and keep the shift out
+// of the common path:
+//   upycore_f64_denorm      {sig, g, r, s} shifted right for exp_s <= 0,
+//                           with the lost bits in the sticky
+//   upycore_f64_round_pack  RNE and pack of an already-denormalized value
+// upycore_f64_round_pack(sign, exp_s > 0 ? exp_s : 1,
+//                        exp_s > 0 ? ext : upycore_f64_denorm(ext, exp_s))
+// equals upycore_f64_pack_round(sign, exp_s, sig, g, r, s) for every input.
+function automatic logic [55:0] upycore_f64_denorm(
+    input logic [55:0]        ext,
+    input logic signed [13:0] exp_s
+);
+    logic signed [13:0] sh;
+    logic [55:0]        lost_mask;
+    begin
+        sh = 14'sd1 - exp_s;
+        if (sh > 14'sd55) begin
+            upycore_f64_denorm = {55'd0, |ext};
+        end else begin
+            lost_mask = (56'd1 << sh[5:0]) - 56'd1;
+            upycore_f64_denorm = ext >> sh[5:0];
+            upycore_f64_denorm[0] = upycore_f64_denorm[0] | (|(ext & lost_mask));
+        end
+    end
+endfunction
+
+function automatic logic [63:0] upycore_f64_round_pack(
+    input logic               sign,
+    input logic signed [13:0] exp_eff_i,
+    input logic [55:0]        shifted
+);
+    logic               inc;
+    logic [53:0]        sig_r;
+    logic signed [13:0] exp_eff;
+    logic [10:0]        e_field;
+    begin
+        exp_eff = exp_eff_i;
+        if (shifted == 56'd0) begin
+            upycore_f64_round_pack = {sign, 63'd0};
+        end else begin
+            inc   = shifted[2] & (shifted[1] | shifted[0] | shifted[3]);
+            sig_r = {1'b0, shifted[55:3]} + {53'd0, inc};
+            if (sig_r[53]) begin
+                sig_r   = sig_r >> 1;
+                exp_eff = exp_eff + 14'sd1;
+            end
+            if (exp_eff >= 14'sd2047) begin
+                upycore_f64_round_pack = {sign, UPY_F64_PINF[62:0]};
+            end else begin
+                e_field = sig_r[52] ? exp_eff[10:0] : 11'd0;
+                upycore_f64_round_pack = {sign, e_field, sig_r[51:0]};
+            end
+        end
+    end
+endfunction
+
 function automatic logic [63:0] upycore_f64_pack_round(
     input logic               sign,
     input logic signed [13:0] exp_s,

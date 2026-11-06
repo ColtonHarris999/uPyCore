@@ -109,6 +109,9 @@ BENCHES = [
           _periph_args),
     Bench("mpy_value", ["mpy_regfile.sv", "bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv"], r"^MPY value encoding: ok"),
     Bench("upycore_umod_seq", ["upycore_umod_seq.sv"], r"^PASS upycore_umod_seq "),
+    Bench("upycore_fp_subnormal", ["upycore_fp_add.sv", "upycore_umul_seq.sv", "upycore_fp_mul.sv",
+                                   "upycore_udiv_seq.sv", "upycore_fp_divrem.sv"],
+          r"^PASS upycore_fp_subnormal "),
 ]
 
 
