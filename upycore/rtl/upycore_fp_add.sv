@@ -1,14 +1,13 @@
 `include "upycore_defs.svh"
 
 // IEEE 754 binary64 add / subtract, round-to-nearest-even, full subnormal
-// support.  Three register stages; the round / pack logic of the last
-// stage drives result_o combinationally, so done_o comes 4 cycles after
-// the accept cycle:
+// support.  Four register stages, so done_o comes 5 cycles after the
+// accept cycle and result_o is a flop:
 //
 //   C0  unpack, order the operands by magnitude            -> stage 1 regs
 //   C1  exponent difference, align with sticky, add / sub  -> stage 2 regs
 //   C2  leading-zero normalize (bounded by the exponent)    -> stage 3 regs
-//   C3  round-to-nearest-even, pack, specials               -> result_o
+//   C3  round-to-nearest-even, pack, specials               -> result_o reg
 //
 // Handshake: level start_i, one-cycle done_o, withdrawing start_i flushes
 // the pipeline (see upycore_umul_seq.sv).  Only one operation is in flight;
@@ -200,11 +199,25 @@ module upycore_fp_add (
         end
     end
 
-    // C3: round / pack.
-    assign result_o = s3_special_r ? s3_special_val_r
-                    : upycore_f64_pack_round(s3_sign_r, s3_exp_r, s3_sig_r,
-                                            s3_g_r, s3_r_r, s3_s_r);
-    assign done_o   = s3_valid_r;
-    assign busy_o   = s1_valid_r | s2_valid_r | s3_valid_r;
+    // C3: round / pack into a result register, so the rounding carry does
+    // not run on into the parent's result select in the same cycle.
+    logic        s4_valid_r;
+    logic [63:0] s4_res_r;
+    always_ff @(posedge clk_i or negedge rst_n_i) begin
+        if (!rst_n_i) begin
+            s4_valid_r <= 1'b0;
+            s4_res_r   <= '0;
+        end else if (!start_i) begin
+            s4_valid_r <= 1'b0;
+        end else begin
+            s4_valid_r <= s3_valid_r;
+            s4_res_r   <= s3_special_r ? s3_special_val_r
+                        : upycore_f64_pack_round(s3_sign_r, s3_exp_r, s3_sig_r,
+                                                s3_g_r, s3_r_r, s3_s_r);
+        end
+    end
+    assign result_o = s4_res_r;
+    assign done_o   = s4_valid_r;
+    assign busy_o   = s1_valid_r | s2_valid_r | s3_valid_r | s4_valid_r;
 
 endmodule

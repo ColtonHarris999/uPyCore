@@ -131,7 +131,7 @@ module upycore_fpu #(
         S_DIRECT,                       // scalar add/sub/mul/div pass-through
         S_MOD_FMOD, S_MOD_FIX, S_MOD_ADD,
         S_FD_FMOD, S_FD_SUB, S_FD_DIV, S_FD_FIX, S_FD_SUB1,
-        S_FD_FLOOR, S_FD_DIFF, S_FD_HALF, S_FD_ADD1,
+        S_FD_FLOORW, S_FD_FLOOR, S_FD_DIFF, S_FD_HALF, S_FD_ADD1,
         S_POW_NORM, S_POW_STEP, S_POW_SQR, S_POW_MUL, S_POW_FIN, S_POW_RECIP, S_POW_INV,
         S_POW_END, S_POW_UNIT, S_POW_SQRT,
         S_CADD_R, S_CADD_I,
@@ -563,6 +563,14 @@ module upycore_fpu #(
     assign pow_overflow   = upycore_f64_is_inf(t0_r);
     assign pow_lz         = upycore_clz64(pow_n_r);
 
+    // floor(t1_r) takes its own cycle. S_FD_FLOOR is entered from S_FD_FIX,
+    // which does not write t1_r, or through S_FD_FLOORW after S_FD_SUB1 did.
+    logic [63:0] fd_floor_r;
+    always_ff @(posedge clk_i or negedge rst_n_i) begin
+        if (!rst_n_i) fd_floor_r <= '0;
+        else          fd_floor_r <= fd_floor;
+    end
+
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) begin
             state_r     <= S_IDLE;
@@ -625,10 +633,13 @@ module upycore_fpu #(
                 S_FD_SUB:  if (u_done) begin t1_r <= u_res; state_r <= S_FD_DIV; end
                 S_FD_DIV:  if (u_done) begin t1_r <= u_res; state_r <= S_FD_FIX; end
                 S_FD_FIX:  state_r <= mod_fix_add ? S_FD_SUB1 : S_FD_FLOOR;
-                S_FD_SUB1: if (u_done) begin t1_r <= u_res; state_r <= S_FD_FLOOR; end
+                // fd_floor_r is floor(t1_r) one cycle late, so after this
+                // write it needs a cycle before S_FD_FLOOR reads it.
+                S_FD_SUB1: if (u_done) begin t1_r <= u_res; state_r <= S_FD_FLOORW; end
+                S_FD_FLOORW: state_r <= S_FD_FLOOR;
                 S_FD_FLOOR: begin
                     if (fd_div_nonzero) begin
-                        t2_r    <= fd_floor;
+                        t2_r    <= fd_floor_r;
                         state_r <= S_FD_DIFF;
                     end else begin
                         res_r   <= {64'd0, ar[63] ^ br[63], 63'd0};
