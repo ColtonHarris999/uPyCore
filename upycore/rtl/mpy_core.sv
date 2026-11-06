@@ -991,6 +991,10 @@ module mpy_core
     logic [3:0]  cfg_lc_n;
     logic        cfg_lc_wb, cfg_lc_dm;
     logic        cfg_ca, cfg_aalu;
+    // Declared with the other config bits: the config block assigns it
+    // below, and strict frontends (slang, Design Compiler) reject a use
+    // before the declaration.
+    logic        cfg_bulk;
     logic [2:0]  lc_ev_way;
     logic [7:0]  lc_ev_idx;
     val_t        lc_ev_val;
@@ -1470,7 +1474,6 @@ module mpy_core
 
     // Accelerator command, a one-cycle pulse. A ship still landing counts
     // as a full queue, so two ships one cycle apart cannot overrun it.
-    logic cfg_bulk;
     logic        ca_valid;
     logic [31:0] ca_dst, ca_src, ca_n;
     logic        ca_ok;
