@@ -35,6 +35,16 @@ module tb_mpy_shortlist #(parameter int MAX_ELEMS=16);
         end
         if(cycles>3000000)$fatal(1,"timeout");
     end
+    logic stalled=0;
+    logic [68:0] held;
+    always @(posedge clk)begin
+        if(!rst)stalled<=0;
+        else begin
+            if(stalled && (!req || {we,addr,wt,wd}!==held))$fatal(1,"request changed before grant");
+            stalled<=req && !gnt;
+            if(req && !gnt)held<={we,addr,wt,wd};
+        end
+    end
     task automatic reset_unit();
         @(negedge clk);rst=0;valid=0;accept=0;
         repeat(3)@(negedge clk);rst=1;
@@ -78,7 +88,7 @@ module tb_mpy_shortlist #(parameter int MAX_ELEMS=16);
             @(negedge clk);src=128;dst=512;n=4;reverse_mode=0;
             clear_mode=1;put_mode=1;length_mode=1;valid=1;
             @(negedge clk);valid=0;wait(failed);#1;
-            if(response||ready||req||!check_busy)$fatal(1,"fault not latched/locked");
+            if(response||ready||req||!check_busy||reason!=1||fa!=pa)$fatal(1,"fault not latched/locked/addressed");
             repeat(3)@(negedge clk);
         end
         inject=-1;reset_unit();

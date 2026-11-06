@@ -41,7 +41,10 @@ def main():
             'simulator_sha256':sha(args.sim), 'firmware_sha256':sha(fm),
             'compiler_sha256':sha(b.MPY_CROSS), 'flags':args.flags.split(),
             'boundary':'bench_ticks around run(), N=100 M=100', 'clock_period_ns':18,
-            'validation':'baseline result callback comparison; not an independent oracle run', 'rows':[]}
+            'validation':'baseline result callback comparison; not an independent oracle run',
+            'rtl_sha256':{p:sha(b.ROOT/p) for p in b.RTL+b.RTL_INCLUDES},
+            'firmware_sources_sha256':{p.name:sha(p) for p in b.FW_SRC.glob('*.py')},
+            'working_tree_diff_sha256':hashlib.sha256(subprocess.check_output(['git','diff','HEAD','--','upycore'],cwd=b.ROOT)).hexdigest(), 'rows':[]}
     baseline = {r['name']:r for r in json.loads(args.compare.read_text())['rows']} if args.compare else {}
     def one(case):
         name,image,source_hash,image_hash = case
@@ -61,8 +64,9 @@ def main():
                 row['cycle_change_percent']=100*(cycles/old['cycles']-1)
         return row
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
-        for row in pool.map(one,cases):
-            data['rows'].append(row)
+        for future in concurrent.futures.as_completed([pool.submit(one,c) for c in cases]):
+            row=future.result()
+            data['rows'].append(row); data['rows'].sort(key=lambda r:r['name'])
             (out/'results.json').write_text(json.dumps(data,indent=2)+'\n')
             print(row['name'],row['cycles'],row['ok'],row.get('cycle_change_percent',''),flush=True)
     return int(any(not r['ok'] for r in data['rows']))

@@ -63,10 +63,13 @@ module mpy_core
     parameter int LC_WB = 1,
     // Ship bulk copies to mpy_ca. 0 keeps them on the core. +CA= overrides in sim.
     parameter int CA_EN = 1,
-    // Retire a binary op that cannot fail at issue and let loads run while
-    // the ALU finishes it (upycore/docs/mpy_ca.md). +AALU= overrides in sim.
+    // Exact short-list fast paths: 0 legacy, 1 native core, 2 snapshot engine.
+    // +SL= overrides the mode in simulation; the synthesis reference buffer is
+    // removed in mode 2 when CA_EN is set.
     parameter int SHORTLIST_MAX = 16,
     parameter int SHORTLIST_MODE = 2,
+    // Retire a binary op that cannot fail at issue and let loads run while
+    // the ALU finishes it (upycore/docs/mpy_ca.md). +AALU= overrides in sim.
     parameter int AALU = 1
 ) (
     input  logic        clk_i,
@@ -962,7 +965,9 @@ module mpy_core
         S_SL_CORE_CLEAR,
         S_SL_CORE_PUT,
         S_SL_CORE_LEN,
-        S_SL_DONE
+        S_SL_DONE,
+        S_LA_OLD_CLEAR,
+        S_LA_APPEND
     } state_e;
 
     state_e st, wret;
@@ -983,6 +988,13 @@ module mpy_core
     logic [31:0] ss_src, ss_dst, ss_n, ss_clear_addr, ss_put_addr, ss_header, ss_new_length;
     logic ss_clear, ss_put, ss_length;
     val_t ss_put_value, ss_buf[0:SHORTLIST_MAX-1];
+`ifndef SYNTHESIS
+    // One simulator can compare SL=1 and SL=2 on the exact same image.
+    localparam bit SL_REFERENCE = 1;
+`else
+    // Do not pay for the reference buffer in the production engine build.
+    localparam bit SL_REFERENCE = SHORTLIST_MODE==1 || CA_EN==0;
+`endif
     logic [$clog2(SHORTLIST_MAX+1)-1:0] ss_i;
     state_e ss_back;
     assign sl_valid_o = st==S_SL_ISSUE;
@@ -2992,8 +3004,10 @@ module mpy_core
             S_SL_WAIT: if(sl_response_i) st<=S_SL_DONE;
             S_SL_CORE_R: if(ss_i==ss_n) begin ss_i<=0;st<=S_SL_CORE_W;end
                 else rd(ss_reverse ? ss_src-(32'(ss_i)<<2) : ss_src+(32'(ss_i)<<2),S_SL_CORE_RV);
-            S_SL_CORE_RV: begin ss_buf[ss_i]<=mv;ss_i<=ss_i+1'b1;st<=S_SL_CORE_R;end
-            S_SL_CORE_W: if(ss_i==ss_n) st<=S_SL_CORE_CLEAR;
+            S_SL_CORE_RV: if(SL_REFERENCE) begin ss_buf[ss_i]<=mv;ss_i<=ss_i+1'b1;st<=S_SL_CORE_R;end
+                else halt(ABI_HALT_INTERNAL,32'h534c0001);
+            S_SL_CORE_W: if(!SL_REFERENCE) halt(ABI_HALT_INTERNAL,32'h534c0002);
+                else if(ss_i==ss_n) st<=S_SL_CORE_CLEAR;
                 else begin wr(ss_dst+(32'(ss_i)<<2),ss_buf[ss_i],S_SL_CORE_W);ss_i<=ss_i+1'b1;end
             S_SL_CORE_CLEAR: if(ss_clear) wr(ss_clear_addr,VNULL,S_SL_CORE_PUT);else st<=S_SL_CORE_PUT;
             S_SL_CORE_PUT: if(ss_put) wr(ss_put_addr,ss_put_value,S_SL_CORE_LEN);else st<=S_SL_CORE_LEN;
@@ -5013,7 +5027,16 @@ module mpy_core
                      else rd(`la_items + (`la_i << 2), S_LA_CP2);
             S_LA_CP2: begin wr(`la_new + (`la_i << 2), mv, S_LA_CP); `la_i <= `la_i + 32'd1; end
             S_LA_G3: wr(adr(t[2]) + 8, {ABI_TAG_CONT, `la_new}, S_LA_G4);
-            S_LA_G4: wr(`la_new + (`la_len << 2), t[3], S_LA_INC);
+            // An inline item array shares its allocation with the live
+            // header. Clear its obsolete tagged references after relocation;
+            // unlike a separate old array it cannot be swept independently.
+            // The source scoreboard orders clears behind an in-flight copy.
+            S_LA_G4: if (`la_items == adr(t[2]) + 32'd12) begin
+                         `la_i <= 0; st <= S_LA_OLD_CLEAR;
+                     end else st <= S_LA_APPEND;
+            S_LA_OLD_CLEAR: if (`la_i == `la_len) st <= S_LA_APPEND;
+                else begin wr(`la_items + (`la_i << 2), VNULL, S_LA_OLD_CLEAR); `la_i <= `la_i + 32'd1; end
+            S_LA_APPEND: wr(`la_new + (`la_len << 2), t[3], S_LA_INC);
             S_LA_INC: wr(adr(t[2]), vint(`la_len + 32'd1), S_LA_RET);
             S_LA_RET: ret();
 

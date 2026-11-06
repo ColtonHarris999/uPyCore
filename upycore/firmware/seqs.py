@@ -106,7 +106,8 @@ def list__copy(self):
 
 
 def _list__copy_fb(self, *args):
-    _arg_count(1, 1 + len(args))
+    if args:
+        _arg_count(1, 1 + len(args))
     return _list_of_seq(_list_self(self))
 
 
