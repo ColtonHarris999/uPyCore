@@ -21,6 +21,23 @@ function automatic logic [31:0] hash_float(input logic [31:0] bits);
     end
 endfunction
 
+// hash_float in two steps for a registered stage between them:
+// hash_float(b) == hash_float_sign(b[31], hash_float_mag(b)).
+function automatic logic [31:0] hash_float_mag(input logic [31:0] bits);
+    logic [31:0] frac;
+    integer e;
+    begin
+        e = integer'({1'b0, bits[30:23]}) - 127;
+        frac = {8'd0, 1'b1, bits[22:0]};
+        if (e < 0 || e >= 31) return 0;
+        else if (e >= 23) return frac << (e - 23);
+        else return frac >> (23 - e);
+    end
+endfunction
+function automatic logic [31:0] hash_float_sign(input logic neg, input logic [31:0] mag);
+    return hash_sx31(neg ? -mag : mag);
+endfunction
+
 function automatic logic [31:0] hash_byte(input logic [31:0] h,
                                          input logic [7:0] b);
     return ((h << 5) + h) ^ {24'd0, b};
