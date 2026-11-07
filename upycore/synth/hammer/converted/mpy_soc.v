@@ -13530,13 +13530,8 @@ module mpy_gc (
 	localparam [31:0] MPY_ARGBUF_BASE = MPY_SYSROOT_BASE + 32'h00000080;
 	localparam [31:0] MPY_GC_POOL_BASE = MPY_ARGBUF_BASE + 32'h00000400;
 	parameter [31:0] POOL_BASE = MPY_GC_POOL_BASE;
-	localparam signed [31:0] MPY_MEM_BLOCKS = 4;
-	localparam signed [31:0] MPY_MEM_BLOCK_WORDS = 32768;
-	localparam signed [31:0] MPY_MEM_WORDS = MPY_MEM_BLOCKS * MPY_MEM_BLOCK_WORDS;
-	localparam signed [31:0] MPY_MEM_BYTES = MPY_MEM_WORDS * 4;
-	localparam [31:0] MPY_SRAM_BYTES = MPY_MEM_BYTES;
-	localparam [31:0] MPY_GC_POOL_BYTES = MPY_SRAM_BYTES - (MPY_GC_POOL_BASE - MPY_SRAM_BASE);
-	parameter signed [31:0] POOL_BYTES = MPY_GC_POOL_BYTES;
+	localparam signed [31:0] ABI_GC_TABLE_BYTES = 307200;
+	parameter signed [31:0] POOL_BYTES = ABI_GC_TABLE_BYTES;
 	parameter signed [31:0] STACK_DEPTH = 64;
 	input wire clk_i;
 	input wire rst_n_i;
@@ -13586,7 +13581,6 @@ module mpy_gc (
 	localparam [1:0] A_TAIL = 2'd2;
 	localparam [1:0] A_MARK = 2'd3;
 	reg [4:0] st;
-	reg [1:0] atb [0:NB - 1];
 	reg [BW - 1:0] stk [0:STACK_DEPTH - 1];
 	reg [SW - 1:0] ssp;
 	reg ovf;
@@ -13647,27 +13641,164 @@ module mpy_gc (
 	end
 	wire [BW - 1:0] run_first;
 	assign run_first = (run_len == {BW {1'sb0}} ? idx : run_start);
+	localparam signed [31:0] NW = (NB + 31) / 32;
+	localparam signed [31:0] WW = (NW > 1 ? $clog2(NW) : 1);
+	function automatic [WW - 1:0] sv2v_cast_21912;
+		input reg [WW - 1:0] inp;
+		sv2v_cast_21912 = inp;
+	endfunction
+	function automatic [WW - 1:0] word_of;
+		input reg [BW - 1:0] b;
+		word_of = sv2v_cast_21912(sv2v_cast_32(b) >> 5);
+	endfunction
+	function automatic [4:0] sv2v_cast_5;
+		input reg [4:0] inp;
+		sv2v_cast_5 = inp;
+	endfunction
+	function automatic [4:0] slot_of;
+		input reg [BW - 1:0] b;
+		slot_of = sv2v_cast_5(sv2v_cast_32(b));
+	endfunction
+	function automatic [63:0] slot_mask;
+		input reg [BW - 1:0] b;
+		slot_mask = 64'd3 << {slot_of(b), 1'b0};
+	endfunction
+	function automatic [1:0] ent_of;
+		input reg [63:0] w;
+		input reg [BW - 1:0] b;
+		ent_of = w[{slot_of(b), 1'b0}+:2];
+	endfunction
+	reg p_v;
+	reg p_w;
+	reg [WW - 1:0] p_addr;
+	reg [63:0] p_data;
+	reg [63:0] p_mask;
+	wire [63:0] q;
+	bsg_mem_1rw_sync_mask_write_bit #(
+		.width_p(64),
+		.els_p(NW)
+	) u_atb(
+		.clk_i(clk_i),
+		.reset_i(!rst_n_i),
+		.data_i(p_data),
+		.addr_i(p_addr),
+		.v_i(p_v),
+		.w_mask_i(p_mask),
+		.w_i(p_w),
+		.data_o(q)
+	);
+	reg mk_v;
+	reg mk_chk;
+	reg mk_wr;
+	wire mk_stall;
+	wire mk_busy;
+	reg [BW - 1:0] mk_blk;
+	reg [BW - 1:0] mk_cb;
+	reg [BW - 1:0] mk_wb;
+	assign mk_stall = mk_wr;
+	assign mk_busy = (mk_v | mk_chk) | mk_wr;
+	reg [63:0] wb;
+	reg [63:0] wbk;
+	reg [WW - 1:0] wb_w;
+	reg [WW - 1:0] ld_w;
+	reg [WW - 1:0] wbk_w;
+	reg wb_v;
+	reg wb_dirty;
+	reg ld_pend;
+	reg wbk_v;
+	wire cur_hit;
+	wire [1:0] cur;
+	assign cur_hit = wb_v && (wb_w == word_of(idx));
+	assign cur = ent_of(wb, idx);
+	reg tl_have;
+	reg tl_tail;
+	reg tl_rd;
+	wire [BW - 1:0] onext;
+	assign onext = oblk + 1'b1;
+	wire scan_fail;
+	assign scan_fail = (need > active_blocks) || (scanned == active_blocks);
+	reg f_v;
+	reg f_w;
+	reg [WW - 1:0] f_addr;
+	reg [63:0] f_data;
+	reg [63:0] f_mask;
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		f_v = 1'b0;
+		f_w = 1'b0;
+		f_addr = word_of(idx);
+		f_data = 1'sb0;
+		f_mask = 1'sb1;
+		(* full_case, parallel_case *)
+		case (st)
+			5'd0: begin
+				f_v = 1'b1;
+				f_w = 1'b1;
+				f_addr = sv2v_cast_21912(sv2v_cast_32(idx));
+			end
+			5'd2: f_v = (!scan_fail && !cur_hit) && !ld_pend;
+			5'd11: f_v = ((idx != active_blocks) && !cur_hit) && !ld_pend;
+			5'd12:
+				if (((idx != active_blocks) && !cur_hit) && !ld_pend)
+					f_v = 1'b1;
+				else if (ld_pend && wbk_v) begin
+					f_v = 1'b1;
+					f_w = 1'b1;
+					f_addr = wbk_w;
+					f_data = wbk;
+				end
+				else if (((idx == active_blocks) && wb_v) && wb_dirty) begin
+					f_v = 1'b1;
+					f_w = 1'b1;
+					f_addr = wb_w;
+					f_data = wb;
+				end
+			5'd3: begin
+				f_v = 1'b1;
+				f_w = 1'b1;
+				f_mask = slot_mask(idx);
+				f_data = {32 {(idx == run_start ? A_HEAD : A_TAIL)}};
+			end
+			5'd9, 5'd18: begin
+				f_v = ((!tl_have && !tl_rd) && !mk_busy) && (onext < active_blocks);
+				f_addr = word_of(onext);
+			end
+			default:
+				;
+		endcase
+	end
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		p_v = f_v;
+		p_w = f_w;
+		p_addr = f_addr;
+		p_data = f_data;
+		p_mask = f_mask;
+		if (mk_wr) begin
+			p_v = 1'b1;
+			p_w = 1'b1;
+			p_addr = word_of(mk_wb);
+			p_data = {32 {A_MARK}};
+			p_mask = slot_mask(mk_wb);
+		end
+		else if (mk_v) begin
+			p_v = 1'b1;
+			p_w = 1'b0;
+			p_addr = word_of(mk_blk);
+		end
+	end
 	assign busy_o = st != 5'd1;
 	assign free_blocks_o = free_cnt;
 	assign total_blocks_o = sv2v_cast_32(active_blocks);
 	assign collections_o = ncoll;
 	assign overflows_o = novf;
-	function automatic signed [SW - 1:0] sv2v_cast_2449B_signed;
-		input reg signed [SW - 1:0] inp;
-		sv2v_cast_2449B_signed = inp;
-	endfunction
 	task automatic try_mark;
 		input reg [BW - 1:0] b;
-		if (atb[b] == A_HEAD) begin
-			atb[b] <= A_MARK;
-			if (ssp < sv2v_cast_2449B_signed(STACK_DEPTH)) begin
-				stk[ssp] <= b;
-				ssp <= ssp + 1'b1;
-			end
-			else begin
-				ovf <= 1'b1;
-				novf <= novf + 32'd1;
-			end
+		begin
+			mk_v <= 1'b1;
+			mk_blk <= b;
 		end
 	endtask
 	task automatic mem_read;
@@ -13709,6 +13840,10 @@ module mpy_gc (
 			MPY_TAG_STR, MPY_TAG_TUPLE, MPY_TAG_MUT_COLLEC, MPY_TAG_RANGE, MPY_TAG_ITER, MPY_TAG_BYTES, MPY_TAG_OBJECT: mpy_tag_is_pointer = 1'b1;
 			default: mpy_tag_is_pointer = 1'b0;
 		endcase
+	endfunction
+	function automatic signed [SW - 1:0] sv2v_cast_2449B_signed;
+		input reg signed [SW - 1:0] inp;
+		sv2v_cast_2449B_signed = inp;
 	endfunction
 	function automatic signed [BW - 1:0] sv2v_cast_B8D8A_signed;
 		input reg signed [BW - 1:0] inp;
@@ -13759,17 +13894,67 @@ module mpy_gc (
 			mem_addr_o <= 1'sb0;
 			mem_wdata_o <= 1'sb0;
 			mem_wtag_o <= 1'sb0;
+			mk_v <= 1'b0;
+			mk_chk <= 1'b0;
+			mk_wr <= 1'b0;
+			mk_blk <= 1'sb0;
+			mk_cb <= 1'sb0;
+			mk_wb <= 1'sb0;
+			wb <= 1'sb0;
+			wb_w <= 1'sb0;
+			wb_v <= 1'b0;
+			wb_dirty <= 1'b0;
+			ld_pend <= 1'b0;
+			ld_w <= 1'sb0;
+			wbk <= 1'sb0;
+			wbk_w <= 1'sb0;
+			wbk_v <= 1'b0;
+			tl_have <= 1'b0;
+			tl_tail <= 1'b0;
+			tl_rd <= 1'b0;
 		end
 		else begin
 			alloc_done_o <= 1'b0;
 			collect_done_o <= 1'b0;
 			mem_req_o <= 1'b0;
+			if (mk_v && !mk_stall)
+				mk_v <= 1'b0;
+			mk_chk <= mk_v && !mk_stall;
+			if (mk_v && !mk_stall)
+				mk_cb <= mk_blk;
+			mk_wr <= 1'b0;
+			if (mk_chk && (ent_of(q, mk_cb) == A_HEAD)) begin
+				mk_wr <= 1'b1;
+				mk_wb <= mk_cb;
+				if (ssp < sv2v_cast_2449B_signed(STACK_DEPTH)) begin
+					stk[ssp] <= mk_cb;
+					ssp <= ssp + 1'b1;
+				end
+				else begin
+					ovf <= 1'b1;
+					novf <= novf + 32'd1;
+				end
+			end
+			ld_pend <= ((f_v && !f_w) && (st != 5'd9)) && (st != 5'd18);
+			if (((f_v && !f_w) && (st != 5'd9)) && (st != 5'd18))
+				ld_w <= f_addr;
+			if (ld_pend) begin
+				wb <= q;
+				wb_w <= ld_w;
+				wb_v <= 1'b1;
+			end
+			else if (((p_v && p_w) && wb_v) && (p_addr == wb_w))
+				wb <= (wb & ~p_mask) | (p_data & p_mask);
+			tl_rd <= f_v && ((st == 5'd9) || (st == 5'd18));
+			if (tl_rd) begin
+				tl_tail <= ent_of(q, onext) == A_TAIL;
+				tl_have <= 1'b1;
+			end
 			(* full_case, parallel_case *)
 			case (st)
 				5'd0: begin
-					atb[idx] <= A_FREE;
 					idx <= idx + 1'b1;
-					if (idx == sv2v_cast_B8D8A_signed(NB - 1)) begin
+					if (idx == sv2v_cast_B8D8A_signed(NW - 1)) begin
 						idx <= 1'sb0;
 						free_cnt <= sv2v_cast_32(active_blocks);
 						st <= 5'd1;
@@ -13803,14 +13988,14 @@ module mpy_gc (
 						alloc_ok_o <= 1'b0;
 						st <= 5'd1;
 					end
-					else begin
+					else if (cur_hit) begin
 						scanned <= scanned + 1'b1;
-						if ((atb[idx] == A_FREE) && ((run_len + 1'b1) == need)) begin
+						if ((cur == A_FREE) && ((run_len + 1'b1) == need)) begin
 							run_start <= run_first;
 							st <= 5'd3;
 						end
 						else begin
-							if (atb[idx] == A_FREE) begin
+							if (cur == A_FREE) begin
 								run_start <= run_first;
 								run_len <= run_len + 1'b1;
 							end
@@ -13826,17 +14011,14 @@ module mpy_gc (
 					end
 				5'd3:
 					if (idx == run_start) begin
-						atb[idx] <= A_HEAD;
 						zaddr <= POOL_BASE + {run_start, 4'b0000};
 						zend <= (POOL_BASE + {run_start, 4'b0000}) + {need, 4'b0000};
 						free_cnt <= free_cnt - sv2v_cast_32(need);
 						rover <= ((run_start + need) >= active_blocks ? {BW {1'sb0}} : run_start + need);
 						st <= 5'd4;
 					end
-					else begin
-						atb[idx] <= A_TAIL;
+					else
 						idx <= idx - 1'b1;
-					end
 				5'd4:
 					if (zaddr == zend) begin
 						alloc_done_o <= 1'b1;
@@ -13955,26 +14137,29 @@ module mpy_gc (
 						end
 					end
 				5'd8:
-					if (ssp != {SW {1'sb0}}) begin
-						oblk <= stk[ssp - 1'b1];
-						oword <= 1'sb0;
-						ssp <= ssp - 1'b1;
-						st <= 5'd9;
-					end
-					else if (rescanning) begin
-						idx <= idx + 1'b1;
-						st <= 5'd11;
-					end
-					else if (ovf) begin
-						ovf <= 1'b0;
-						rescanning <= 1'b1;
-						idx <= 1'sb0;
-						st <= 5'd11;
-					end
-					else begin
-						idx <= 1'sb0;
-						freeing <= 1'b0;
-						st <= 5'd12;
+					if (!mk_busy) begin
+						if (ssp != {SW {1'sb0}}) begin
+							oblk <= stk[ssp - 1'b1];
+							oword <= 1'sb0;
+							tl_have <= 1'b0;
+							ssp <= ssp - 1'b1;
+							st <= 5'd9;
+						end
+						else if (rescanning) begin
+							idx <= idx + 1'b1;
+							st <= 5'd11;
+						end
+						else if (ovf) begin
+							ovf <= 1'b0;
+							rescanning <= 1'b1;
+							idx <= 1'sb0;
+							st <= 5'd11;
+						end
+						else begin
+							idx <= 1'sb0;
+							freeing <= 1'b0;
+							st <= 5'd12;
+						end
 					end
 				5'd9: begin
 					mem_read((POOL_BASE + {oblk, 4'b0000}) + {28'b0000000000000000000000000000, oword, 2'b00});
@@ -13988,9 +14173,25 @@ module mpy_gc (
 							oword <= oword + 1'b1;
 							st <= 5'd9;
 						end
-						else if (((oblk + 1'b1) < active_blocks) && (atb[oblk + 1'b1] == A_TAIL)) begin
-							oblk <= oblk + 1'b1;
+						else if (onext >= active_blocks)
+							st <= 5'd8;
+						else if (!tl_have)
+							st <= 5'd18;
+						else if (tl_tail) begin
+							oblk <= onext;
 							oword <= 1'sb0;
+							tl_have <= 1'b0;
+							st <= 5'd9;
+						end
+						else
+							st <= 5'd8;
+					end
+				5'd18:
+					if (tl_have) begin
+						if (tl_tail) begin
+							oblk <= onext;
+							oword <= 1'sb0;
+							tl_have <= 1'b0;
 							st <= 5'd9;
 						end
 						else
@@ -14009,38 +14210,59 @@ module mpy_gc (
 							st <= 5'd12;
 						end
 					end
-					else if (atb[idx] == A_MARK) begin
+					else if (!cur_hit)
+						;
+					else if (cur == A_MARK) begin
 						oblk <= idx;
 						oword <= 1'sb0;
+						tl_have <= 1'b0;
 						st <= 5'd9;
 					end
 					else
 						idx <= idx + 1'b1;
-				5'd12:
-					if (idx == active_blocks)
-						st <= 5'd18;
+				5'd12: begin
+					if (ld_pend)
+						wbk_v <= 1'b0;
+					if (idx == active_blocks) begin
+						if (wb_v && wb_dirty)
+							wb_dirty <= 1'b0;
+						else
+							st <= 5'd19;
+					end
+					else if (!cur_hit) begin
+						if ((!ld_pend && wb_v) && wb_dirty) begin
+							wbk <= wb;
+							wbk_w <= wb_w;
+							wbk_v <= 1'b1;
+							wb_dirty <= 1'b0;
+						end
+					end
 					else begin
 						(* full_case, parallel_case *)
-						case (atb[idx])
+						case (cur)
 							A_HEAD: begin
-								atb[idx] <= A_FREE;
+								wb[{slot_of(idx), 1'b0}+:2] <= A_FREE;
+								wb_dirty <= 1'b1;
 								freeing <= 1'b1;
 								free_cnt <= free_cnt + 32'd1;
 							end
 							A_TAIL:
 								if (freeing) begin
-									atb[idx] <= A_FREE;
+									wb[{slot_of(idx), 1'b0}+:2] <= A_FREE;
+									wb_dirty <= 1'b1;
 									free_cnt <= free_cnt + 32'd1;
 								end
 							A_MARK: begin
-								atb[idx] <= A_HEAD;
+								wb[{slot_of(idx), 1'b0}+:2] <= A_HEAD;
+								wb_dirty <= 1'b1;
 								freeing <= 1'b0;
 							end
 							default: freeing <= 1'b0;
 						endcase
 						idx <= idx + 1'b1;
 					end
-				5'd18: begin
+				end
+				5'd19: begin
 					collect_done_o <= 1'b1;
 					ncoll <= ncoll + 32'd1;
 					rover <= 1'sb0;
@@ -14546,7 +14768,7 @@ module mpy_hash (
 		end
 	endtask
 	initial if ((DEPTH < 1) || ((BYTES_PER_CYCLE != 1) && (BYTES_PER_CYCLE != 4)))
-		$display("Error [%0t] /tmp/claude-0/conv4/mpy_soc.sv:18592:13 - mpy_hash.<unnamed_block>.<unnamed_block>\n msg: ", $time, "mpy_hash: invalid parameters");
+		$display("Error [%0t] /tmp/tmp.0mvwH7OAQn/mpy_soc.sv:19330:13 - mpy_hash.<unnamed_block>.<unnamed_block>\n msg: ", $time, "mpy_hash: invalid parameters");
 	always @(posedge clk_i or negedge rst_n_i)
 		if (!rst_n_i) begin
 			state <= 5'd0;

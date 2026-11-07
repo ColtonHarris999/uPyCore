@@ -107,9 +107,12 @@ period (18 → ≈10.4 ns) every workload runs ≈1.68–1.73× faster in time.
   regenerate `converted/*.v` and `RTL_STAMP` first.
 - `mpy_gc`'s allocation table was 30 640 × 2 bits of flops (≈61 k flops),
   sized for an image of size 0. It is now sized for the largest heap a
-  real image leaves (`GC_TABLE_BYTES`, 19 200 blocks, ≈38 k flops; see
-  `mpy_memory_map.md`). Its read select is short in logic, but it still
-  covers a large area; moving it to a 600 × 64 SRAM macro is the next step.
+  real image leaves (`GC_TABLE_BYTES`, 19 200 blocks; see
+  `mpy_memory_map.md`) and held in a `fakeram_d600_w64` macro. In the
+  estimate flow, `mpy_gc` went from 5.83 mm² (39.6 k flops) to 0.107 mm²
+  (2.0 k flops, macro excluded), worst path 4.9 → 4.6 ns; workloads cost
+  at most +0.33 % cycles (`bulk_extended_keys`), most ≤ +0.05 %. Add the
+  macro to `make sram` and the floorplan.
 - What is left is a plateau at 7.1–7.4 ns (estimate) in three places: the
   core's state-machine outputs (`m_addr`, `m_be`, `wret`, `st`, `rstk`)
   after the per-state arithmetic; the copy engine's response to a grant

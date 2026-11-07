@@ -104,7 +104,7 @@ BENCHES = [
     Bench("mpy_fetch", ["bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv", "mpy_fetch.sv"],
           r"^PASS mpy_fetch "),
     Bench("mpy_shared_mem", ["bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv"], r"^PASS mpy_shared_mem "),
-    Bench("mpy_gc", ["mpy_gc.sv"], r"^PASS mpy_gc "),
+    Bench("mpy_gc", ["bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_gc.sv"], r"^PASS mpy_gc "),
     Bench("mpy_periph", ["mpy_mmio_pkg.sv", "mpy_irq.sv", "mpy_periph.sv"], r"^PASS: mpy periph",
           _periph_args),
     Bench("mpy_value", ["mpy_regfile.sv", "bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv"], r"^MPY value encoding: ok"),

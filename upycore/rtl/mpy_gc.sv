@@ -1,11 +1,22 @@
 `include "mpy_defs.svh"
+`include "mpy_abi.svh"
 
 // Mark-sweep collector and allocator for the uPyCore GC pool
 // (upycore/docs/mpy_gc.md).
 //
-// The pool is split into 16-byte blocks. An internal allocation table holds
-// two bits per block: FREE, HEAD (first block of an object), TAIL (a later
-// block of the same object), or MARK (a HEAD reached in this collection).
+// The pool is split into 16-byte blocks. An allocation table holds two bits
+// per block: FREE, HEAD (first block of an object), TAIL (a later block of
+// the same object), or MARK (a HEAD reached in this collection).
+//
+// The table is a one-port SRAM of 64-bit words, 32 entries per word
+// (bsg_mem_1rw_sync_mask_write_bit, NW x 64; mpy_soc's size maps to the
+// fakeram_d600_w64 macro). Read data comes one cycle after the read, and a
+// write changes only the entries its mask selects. The sequential walks
+// (allocation search, overflow rescan, sweep) work on a one-word buffer,
+// wb, loaded on a miss; the sweep edits wb and writes it back when it moves
+// to the next word. A pointer found while marking goes through a three-step
+// mark pipeline (read the word, check for HEAD and push, write MARK) that
+// runs while the next memory read is in flight.
 //
 // Allocation is next-fit: the search starts where the last one ended and
 // takes the first run of free blocks that is long enough. The blocks are
@@ -25,7 +36,9 @@
 // protocol as mpy_mem.
 module mpy_gc #(
     parameter logic [31:0] POOL_BASE   = MPY_GC_POOL_BASE,
-    parameter int          POOL_BYTES  = MPY_GC_POOL_BYTES,
+    // Table capacity: the largest heap a real image leaves (19200 blocks,
+    // a 600 x 64 table SRAM).
+    parameter int          POOL_BYTES  = ABI_GC_TABLE_BYTES,
     parameter int          STACK_DEPTH = 64
 ) (
     input  logic        clk_i,
@@ -94,11 +107,11 @@ module mpy_gc #(
         G_LNK_T1,
         G_LNK_P0,
         G_LNK_DEC,
+        G_TAIL,       // object scan: wait for the next block's table entry
         G_DONE
     } gstate_e;
 
     gstate_e st;
-    logic [1:0]  atb [0:NB-1];
     logic [BW-1:0] stk [0:STACK_DEPTH-1];
     logic [SW-1:0] ssp;
     logic        ovf;
@@ -142,24 +155,121 @@ module mpy_gc #(
     logic [BW-1:0] run_first;
     assign run_first = (run_len == '0) ? idx : run_start;
 
+    // ---------------- allocation table SRAM ----------------
+    localparam int NW = (NB + 31) / 32;
+    localparam int WW = (NW > 1) ? $clog2(NW) : 1;
+    function automatic logic [WW-1:0] word_of(input logic [BW-1:0] b);
+        return WW'(32'(b) >> 5);
+    endfunction
+    function automatic logic [4:0] slot_of(input logic [BW-1:0] b);
+        return 5'(32'(b));
+    endfunction
+    function automatic logic [63:0] slot_mask(input logic [BW-1:0] b);
+        return 64'd3 << {slot_of(b), 1'b0};
+    endfunction
+    function automatic logic [1:0] ent_of(input logic [63:0] w, input logic [BW-1:0] b);
+        return w[{slot_of(b), 1'b0} +: 2];
+    endfunction
+
+    logic          p_v, p_w;
+    logic [WW-1:0] p_addr;
+    logic [63:0]   p_data, p_mask, q;
+    bsg_mem_1rw_sync_mask_write_bit #(.width_p(64), .els_p(NW)) u_atb (
+        .clk_i, .reset_i(!rst_n_i), .data_i(p_data), .addr_i(p_addr), .v_i(p_v),
+        .w_mask_i(p_mask), .w_i(p_w), .data_o(q));
+
+    // Mark pipeline: mk_v (read the candidate's word), mk_chk (HEAD? push),
+    // mk_wr (write MARK). The read waits a cycle when it meets a write.
+    logic          mk_v, mk_chk, mk_wr, mk_stall, mk_busy;
+    logic [BW-1:0] mk_blk, mk_cb, mk_wb;
+    assign mk_stall = mk_wr;
+    assign mk_busy  = mk_v | mk_chk | mk_wr;
+
+    // Walk buffer: word wb_w of the table, valid when wb_v. ld_pend: a read
+    // of word ld_w was issued last cycle. wbk: a dirty sweep word on its way
+    // back to the SRAM.
+    logic [63:0]   wb, wbk;
+    logic [WW-1:0] wb_w, ld_w, wbk_w;
+    logic          wb_v, wb_dirty, ld_pend, wbk_v;
+    logic          cur_hit;
+    logic [1:0]    cur;
+    assign cur_hit = wb_v && wb_w == word_of(idx);
+    assign cur     = ent_of(wb, idx);
+
+    // Object scan: is the block after oblk a TAIL? Read while its words are.
+    logic          tl_have, tl_tail, tl_rd;
+    logic [BW-1:0] onext;
+    assign onext = oblk + 1'b1;
+
+    logic scan_fail;
+    assign scan_fail = need > active_blocks || scanned == active_blocks;
+
+    // FSM table access this cycle (the mark pipeline has the port first).
+    logic          f_v, f_w;
+    logic [WW-1:0] f_addr;
+    logic [63:0]   f_data, f_mask;
+    always_comb begin
+        f_v = 1'b0; f_w = 1'b0; f_addr = word_of(idx); f_data = '0; f_mask = '1;
+        unique case (st)
+            G_CLEAR: begin
+                f_v = 1'b1; f_w = 1'b1; f_addr = WW'(32'(idx));
+            end
+            G_SCAN:   f_v = !scan_fail && !cur_hit && !ld_pend;
+            G_RESCAN: f_v = idx != active_blocks && !cur_hit && !ld_pend;
+            G_SWEEP: begin
+                if (idx != active_blocks && !cur_hit && !ld_pend) begin
+                    f_v = 1'b1;
+                end else if (ld_pend && wbk_v) begin
+                    f_v = 1'b1; f_w = 1'b1; f_addr = wbk_w; f_data = wbk;
+                end else if (idx == active_blocks && wb_v && wb_dirty) begin
+                    f_v = 1'b1; f_w = 1'b1; f_addr = wb_w; f_data = wb;
+                end
+            end
+            G_CLAIM: begin
+                f_v = 1'b1; f_w = 1'b1; f_mask = slot_mask(idx);
+                f_data = {32{(idx == run_start) ? A_HEAD : A_TAIL}};
+            end
+            G_OBJ, G_TAIL: begin
+                f_v = !tl_have && !tl_rd && !mk_busy && onext < active_blocks;
+                f_addr = word_of(onext);
+            end
+            default: ;
+        endcase
+    end
+
+    always_comb begin
+        p_v = f_v; p_w = f_w; p_addr = f_addr; p_data = f_data; p_mask = f_mask;
+        if (mk_wr) begin
+            p_v = 1'b1; p_w = 1'b1; p_addr = word_of(mk_wb);
+            p_data = {32{A_MARK}}; p_mask = slot_mask(mk_wb);
+        end else if (mk_v) begin
+            p_v = 1'b1; p_w = 1'b0; p_addr = word_of(mk_blk);
+        end
+    end
+
+`ifndef SYNTHESIS
+    always_ff @(posedge clk_i) if (rst_n_i) begin
+        if ((mk_wr || mk_v) && f_v)
+            $fatal(1, "mpy_gc: table port used by the mark pipeline and %s", st.name());
+        if (ld_pend && p_v && p_w && wb_v && p_addr == ld_w)
+            $fatal(1, "mpy_gc: write to the word being loaded");
+    end
+`endif
+
     assign busy_o         = (st != G_IDLE);
     assign free_blocks_o  = free_cnt;
     assign total_blocks_o = 32'(active_blocks);
     assign collections_o  = ncoll;
     assign overflows_o    = novf;
 
-    // Marks a candidate (registered by the caller state) and pushes it.
+    // Hands a candidate block to the mark pipeline, which marks it and
+    // pushes it if its entry is HEAD.
     task automatic try_mark(input logic [BW-1:0] b);
-        if (atb[b] == A_HEAD) begin
-            atb[b] <= A_MARK;
-            if (ssp < SW'(STACK_DEPTH)) begin
-                stk[ssp] <= b;
-                ssp <= ssp + 1'b1;
-            end else begin
-                ovf <= 1'b1;
-                novf <= novf + 32'd1;
-            end
-        end
+`ifndef SYNTHESIS
+        if (mk_v && mk_stall) $fatal(1, "mpy_gc: mark candidate while the pipeline is full");
+`endif
+        mk_v   <= 1'b1;
+        mk_blk <= b;
     endtask
 
     task automatic mem_read(input logic [31:0] a);
@@ -202,18 +312,58 @@ module mpy_gc #(
             mem_addr_o     <= '0;
             mem_wdata_o    <= '0;
             mem_wtag_o     <= '0;
+            mk_v <= 1'b0; mk_chk <= 1'b0; mk_wr <= 1'b0;
+            mk_blk <= '0; mk_cb <= '0; mk_wb <= '0;
+            wb <= '0; wb_w <= '0; wb_v <= 1'b0; wb_dirty <= 1'b0;
+            ld_pend <= 1'b0; ld_w <= '0;
+            wbk <= '0; wbk_w <= '0; wbk_v <= 1'b0;
+            tl_have <= 1'b0; tl_tail <= 1'b0; tl_rd <= 1'b0;
         end else begin
             alloc_done_o   <= 1'b0;
             collect_done_o <= 1'b0;
             mem_req_o      <= 1'b0;
+
+            // Mark pipeline.
+            if (mk_v && !mk_stall) mk_v <= 1'b0;
+            mk_chk <= mk_v && !mk_stall;
+            if (mk_v && !mk_stall) mk_cb <= mk_blk;
+            mk_wr <= 1'b0;
+            if (mk_chk && ent_of(q, mk_cb) == A_HEAD) begin
+                mk_wr <= 1'b1;
+                mk_wb <= mk_cb;
+                if (ssp < SW'(STACK_DEPTH)) begin
+                    stk[ssp] <= mk_cb;
+                    ssp <= ssp + 1'b1;
+                end else begin
+                    ovf <= 1'b1;
+                    novf <= novf + 32'd1;
+                end
+            end
+
+            // Walk buffer: a read issued for a miss lands here; a table
+            // write to the buffered word updates the copy.
+            ld_pend <= f_v && !f_w && st != G_OBJ && st != G_TAIL;
+            if (f_v && !f_w && st != G_OBJ && st != G_TAIL) ld_w <= f_addr;
+            if (ld_pend) begin
+                wb <= q; wb_w <= ld_w; wb_v <= 1'b1;
+            end else if (p_v && p_w && wb_v && p_addr == wb_w) begin
+                wb <= (wb & ~p_mask) | (p_data & p_mask);
+            end
+
+            // Next-block TAIL check for the object scan.
+            tl_rd <= f_v && (st == G_OBJ || st == G_TAIL);
+            if (tl_rd) begin
+                tl_tail <= ent_of(q, onext) == A_TAIL;
+                tl_have <= 1'b1;
+            end
+
             unique case (st)
-                // Flops do not power up as A_FREE. One entry per cycle (NB
-                // cycles for maximum metadata capacity); busy_o is set meanwhile
+                // An SRAM does not power up as A_FREE. NW cycles; busy_o is set meanwhile
                 // and mpy_soc keeps the core in reset until it clears.
                 G_CLEAR: begin
-                    atb[idx] <= A_FREE;
+                    // One table word (32 entries) per cycle.
                     idx <= idx + 1'b1;
-                    if (idx == BW'(NB - 1)) begin
+                    if (idx == BW'(NW - 1)) begin
                         idx <= '0;
                         free_cnt <= 32'(active_blocks);
                         st  <= G_IDLE;
@@ -249,13 +399,13 @@ module mpy_gc #(
                         alloc_done_o <= 1'b1;
                         alloc_ok_o   <= 1'b0;
                         st           <= G_IDLE;
-                    end else begin
+                    end else if (cur_hit) begin
                         scanned <= scanned + 1'b1;
-                        if (atb[idx] == A_FREE && run_len + 1'b1 == need) begin
+                        if (cur == A_FREE && run_len + 1'b1 == need) begin
                             run_start <= run_first;
                             st        <= G_CLAIM;
                         end else begin
-                            if (atb[idx] == A_FREE) begin
+                            if (cur == A_FREE) begin
                                 run_start <= run_first;
                                 run_len   <= run_len + 1'b1;
                             end else begin
@@ -276,14 +426,12 @@ module mpy_gc #(
                     // run_start .. run_start + need - 1, one block per cycle;
                     // idx walks back from the last block found.
                     if (idx == run_start) begin
-                        atb[idx] <= A_HEAD;
                         zaddr    <= POOL_BASE + {run_start, 4'b0000};
                         zend     <= POOL_BASE + {run_start, 4'b0000} + {need, 4'b0000};
                         free_cnt <= free_cnt - 32'(need);
                         rover    <= (run_start + need >= active_blocks) ? '0 : run_start + need;
                         st       <= G_ZERO;
                     end else begin
-                        atb[idx] <= A_TAIL;
                         idx      <= idx - 1'b1;
                     end
                 end
@@ -408,10 +556,11 @@ module mpy_gc #(
                     end
                 end
 
-                G_POP: begin
+                G_POP: if (!mk_busy) begin
                     if (ssp != '0) begin
                         oblk  <= stk[ssp - 1'b1];
                         oword <= '0;
+                        tl_have <= 1'b0;
                         ssp   <= ssp - 1'b1;
                         st    <= G_OBJ;
                     end else if (rescanning) begin
@@ -438,10 +587,27 @@ module mpy_gc #(
                         if (oword != 2'd3) begin
                             oword <= oword + 1'b1;
                             st    <= G_OBJ;
-                        end else if (oblk + 1'b1 < active_blocks && atb[oblk + 1'b1] == A_TAIL) begin
-                            oblk  <= oblk + 1'b1;
-                            oword <= '0;
-                            st    <= G_OBJ;
+                        end else if (onext >= active_blocks) begin
+                            st <= G_POP;
+                        end else if (!tl_have) begin
+                            st <= G_TAIL;
+                        end else if (tl_tail) begin
+                            oblk    <= onext;
+                            oword   <= '0;
+                            tl_have <= 1'b0;
+                            st      <= G_OBJ;
+                        end else begin
+                            st <= G_POP;
+                        end
+                    end
+                end
+                G_TAIL: begin
+                    if (tl_have) begin
+                        if (tl_tail) begin
+                            oblk    <= onext;
+                            oword   <= '0;
+                            tl_have <= 1'b0;
+                            st      <= G_OBJ;
                         end else begin
                             st <= G_POP;
                         end
@@ -459,33 +625,50 @@ module mpy_gc #(
                             freeing    <= 1'b0;
                             st         <= G_SWEEP;
                         end
-                    end else if (atb[idx] == A_MARK) begin
-                        oblk  <= idx;
-                        oword <= '0;
-                        st    <= G_OBJ;
+                    end else if (!cur_hit) begin
+                        // wait for the word
+                    end else if (cur == A_MARK) begin
+                        oblk    <= idx;
+                        oword   <= '0;
+                        tl_have <= 1'b0;
+                        st      <= G_OBJ;
                     end else begin
                         idx <= idx + 1'b1;
                     end
                 end
 
+                // The sweep edits wb; a dirty word goes back through wbk
+                // while the next one loads, and the last one at the end.
                 G_SWEEP: begin
+                    if (ld_pend) begin
+                        wbk_v <= 1'b0;
+                    end
                     if (idx == active_blocks) begin
-                        st <= G_DONE;
+                        if (wb_v && wb_dirty) wb_dirty <= 1'b0;
+                        else st <= G_DONE;
+                    end else if (!cur_hit) begin
+                        if (!ld_pend && wb_v && wb_dirty) begin
+                            wbk <= wb; wbk_w <= wb_w; wbk_v <= 1'b1;
+                            wb_dirty <= 1'b0;
+                        end
                     end else begin
-                        unique case (atb[idx])
+                        unique case (cur)
                             A_HEAD: begin
-                                atb[idx] <= A_FREE;
+                                wb[{slot_of(idx), 1'b0} +: 2] <= A_FREE;
+                                wb_dirty <= 1'b1;
                                 freeing  <= 1'b1;
                                 free_cnt <= free_cnt + 32'd1;
                             end
                             A_TAIL: begin
                                 if (freeing) begin
-                                    atb[idx] <= A_FREE;
+                                    wb[{slot_of(idx), 1'b0} +: 2] <= A_FREE;
+                                    wb_dirty <= 1'b1;
                                     free_cnt <= free_cnt + 32'd1;
                                 end
                             end
                             A_MARK: begin
-                                atb[idx] <= A_HEAD;
+                                wb[{slot_of(idx), 1'b0} +: 2] <= A_HEAD;
+                                wb_dirty <= 1'b1;
                                 freeing  <= 1'b0;
                             end
                             default: freeing <= 1'b0;
