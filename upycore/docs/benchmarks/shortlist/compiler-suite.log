@@ -1,0 +1,5 @@
+FLOAT float_pow.py
+FLOAT floatparse.py
+FLOAT fw_float_str.py
+DIFFER math_funcs.py
+compiler_suite: 504 file(s), 500 byte-exact, 3 float spelling, 1 differ, 0 rejected by both

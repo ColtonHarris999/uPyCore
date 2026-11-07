@@ -25,10 +25,12 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-# Flip-flop bits in the RTL, counted with slang from the generated unit.
+# Flip-flop bits counted with slang/Yosys from the generated unit.
 # Genus removes flops that are constant or duplicate another, so a few
 # percent fewer is normal; far fewer means logic was optimized away.
-RTL_FLOPS = {"mpy_alu": 5552, "mpy_decode": 461, "mpy_core": 12677}
+# Core: production short-list mode 2, comparison-only buffer removed,
+# synth -noabc -flatten -noshare (see docs/benchmarks/shortlist/ppa.json).
+RTL_FLOPS = {"mpy_alu": 5552, "mpy_decode": 461, "mpy_core": 14126}
 
 BAD_WARNING = re.compile(
     r"latch|unresolved|black ?box|undriven|not driven|multiple driver|"

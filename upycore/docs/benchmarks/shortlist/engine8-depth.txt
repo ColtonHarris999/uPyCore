@@ -1,0 +1,22 @@
+mpy_shortlist: 1502 endpoint bits, 168 register groups, deepest 44
+groups at >= 0 levels: 168
+   44  st <-D                                           from n_i via cmd_span > cmd_low
+   43  fault_addr_o <-E                                 from n_i via cmd_span > cmd_low
+   42  fault_reason_o <-E                               from n_i via cmd_span > cmd_low
+   42  fault_o <-E                                      from n_i via cmd_span > cmd_low
+   31  source_low <-D                                   from n_i via cmd_span > cmd_low
+   25  chk_busy_o[0] (output)                           from source_end
+   18  source_end <-D                                   from n_i via cmd_high
+   17  read_addr <-D                                    from read_addr
+   16  dest_end <-D                                     from dst_i
+   11  write_addr <-E                                   from index
+   11  read_addr <-E                                    from index
+   11  index <-D                                        from index
+   11  index <-E                                        from index
+    9  write_addr <-D                                   from write_addr
+    9  fault_addr_o <-D                                 from st
+    9  addr_o[0] (output)                               from st
+    9  addr_o[1] (output)                               from st
+    9  addr_o[2] (output)                               from st
+    9  addr_o[3] (output)                               from st
+    9  addr_o[4] (output)                               from st

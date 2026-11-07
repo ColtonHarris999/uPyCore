@@ -159,6 +159,7 @@ list_concat = { file = "hw/containers/list_concat.py" }
 list_setslice_rhs = { file = "hw/containers/list_setslice_rhs.py" }
 list_pop_insert = { file = "hw/containers/list_pop_insert.py" }
 shortlist = { file = "hw/containers/shortlist.py", cycles = 180_000_000, timeout = 2400 }
+shortlist_methods = { file = "hw/containers/shortlist_methods.py" }
 list_slice_step = { file = "hw/containers/list_slice_step.py", cycles = 120_000_000, timeout = 900 }
 list_concat_type_trap = { file = "hw/containers/list_concat_type_trap.py" }
 list_comp_fast_clear = { file = "hw/containers/list_comp_fast_clear.py" }

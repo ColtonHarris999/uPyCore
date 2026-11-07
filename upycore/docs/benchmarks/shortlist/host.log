@@ -1,0 +1,12 @@
+....
+----------------------------------------------------------------------
+Ran 4 tests in 0.822s
+
+OK
+upycore/tests/test_compiler_host.py 0
+FLOAT float_pow.py
+FLOAT floatparse.py
+FLOAT fw_float_str.py
+DIFFER math_funcs.py
+compiler_suite: 503 file(s), 499 byte-exact, 3 float spelling, 1 differ, 0 rejected by both
+upycore/tools/compiler_suite.py 1

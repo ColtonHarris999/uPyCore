@@ -12,8 +12,14 @@ estimate (method and limits below).
 | | Baseline (`6c2a0ae`) | Now | Change |
 | --- | ---: | ---: | ---: |
 | `mpy_core` worst reg-to-reg path (estimate) | 12.84 ns | 7.40 ns | −42.4 % |
-| `mpy_soc` worst reg-to-reg path (estimate) | — | see below | |
+| `mpy_soc` worst reg-to-reg path (estimate) | ≥ 12.84 ns | 7.41 ns | ≤ −42.3 % |
 | Scaled to the 18 ns post-route baseline | 18.0 ns | ≈ 10.4 ns | |
+| Execution time at that period (all workloads) | 1.00 | 0.578 – 0.595 | 1.68 – 1.73× faster |
+
+The SoC figure comes from an analysis copy with a 16-row SRAM model and a
+16 KiB collector pool (so the flat netlist fits); all other logic is the
+committed RTL. Its first measurement, with the core changes in, was
+8.49 ns, set by `mpy_mem`'s split arithmetic and then the shared hash.
 
 The estimate scales the measured 18 ns post-route period by the ratio of
 the estimated worst paths; it assumes routing adds the same fraction to
@@ -59,7 +65,8 @@ baseline and a change are what the decisions were based on.
 | `d2fdae4` | `has_link` (ring read) at the head of `stk_depth` / `stk_hit` chains | per-slot link test, late select of linked / unlinked results | 0 |
 | `d2fdae4` | FP mul accept: clz → exponent sum | exponent summed in C1 from registered parts | 0 |
 | `9135c00` | call / generator-resume frame bound (two 32-bit adds + compare) | narrow fields summed first, one 32-bit add | 0 |
-| `this round` | `mpy_mem` split arithmetic ahead of block arbitration and grants | `image_words` / `data_words` registered; block from the offset bits | 0 |
+| `8c0eecf` | `mpy_mem` split arithmetic ahead of block arbitration and grants (8.4–8.5 ns) | `image_words` / `data_words` registered; block from the offset bits | 0 |
+| `7e79d72`, `4879bc2` | memory read data → `hash_float` → shared hash result (7.7–7.9 ns) | complex parts registered, then the float hash in two steps (SAT-proven split) | +4 cycles per complex-number hash |
 
 Estimated core worst path after each step: 12.84 → 9.44 → 8.74 → 7.87 →
 7.67 → 7.40 ns.
@@ -103,7 +110,12 @@ period (18 → ≈10.4 ns) every workload runs ≈1.68–1.73× faster in time.
   16 k entries in this flow, so about 5 ns at full size)
   but it covers a large area; watch its post-route wire delay. Moving it
   to an SRAM macro is the structural fix if it limits.
-- The core's remaining paths are a plateau at 7.1–7.4 ns (estimate): the
-  state-machine outputs (`m_addr`, `m_be`, `wret`, `st`, `rstk`) after the
-  per-state arithmetic. Further gains there need the address/next-state
-  logic split across cycles, which costs cycles on every memory access.
+- What is left is a plateau at 7.1–7.4 ns (estimate) in three places: the
+  core's state-machine outputs (`m_addr`, `m_be`, `wret`, `st`, `rstk`)
+  after the per-state arithmetic; the copy engine's response to a grant
+  (`rpend`, `rn`, `ra`); and the SRAM enables, both behind the
+  accelerator scoreboard check (the core's address against every queued
+  copy range) and `mpy_mem`'s block arbitration. Going further means a
+  registered scoreboard check or splitting the address/next-state logic,
+  which costs a cycle on memory accesses; at ≈4 % of period that did not
+  pay for itself here.

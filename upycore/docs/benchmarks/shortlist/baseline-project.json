@@ -1,0 +1,436 @@
+{
+  "source_root": "/workspace/scratch/a97e5a8d3bbf/upycore/build/shortlist-base-src",
+  "simulator_sha256": "2087c4dcaf5f4ac97d444b09ace7a2822a27c5f5b313e248bae13d3f92f14639",
+  "firmware_sha256": "3441b768ad023d3c6022554dc7239d245ab91a819dfe23bf70dfb23bb583c94a",
+  "rows": [
+    {
+      "name": "bulk_extended_keys",
+      "source_sha256": "38ff9a6a6d6a6c142a547b1034417cfb200c3fc22e3058c00f557fca79288d34",
+      "image_sha256": "4534b121cafcb3abbcb0b96d7e39f7f60d8e1b4ce4f173b5ab2a3eb39774c033",
+      "runs": [
+        {
+          "mode": "off",
+          "cycles": 7676741,
+          "gc": 20,
+          "stdout": "extended keys ok\n[(0, 0), (1, 1), (2, 2), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (9, 9), (10, 10), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (9, 9), (10, 10), (11, 11), (12, 12), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (9, 9), (10, 10), (11, 11), (12, 12), (13, 13), (0, 14), (1, 14), (2, 14), (3, 14), (4, 14), (5, 14), (6, 14), (7, 14), (8, 14), (9, 14), (10, 14), (11, 14), (12, 14), (13, 14)]\ncallback keys ok\n[(0, 0), (1, 1), (2, 2), (1, 0), (0, 1), (2, 2), (3, 3), (4, 4), (3, 0), (1, 1), (0, 2), (2, 3), (4, 4), (5, 5), (0, 6), (1, 6), (2, 6), (3, 6), (4, 6), (5, 6)]\nhash exception 1\n[(0, 0), (1, 1), (2, 2), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (0, 0), (1, 1)]\ncallback gc and exception ok\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "CA",
+          "cycles": 7257152,
+          "gc": 20,
+          "stdout": "extended keys ok\n[(0, 0), (1, 1), (2, 2), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (9, 9), (10, 10), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (9, 9), (10, 10), (11, 11), (12, 12), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (9, 9), (10, 10), (11, 11), (12, 12), (13, 13), (0, 14), (1, 14), (2, 14), (3, 14), (4, 14), (5, 14), (6, 14), (7, 14), (8, 14), (9, 14), (10, 14), (11, 14), (12, 14), (13, 14)]\ncallback keys ok\n[(0, 0), (1, 1), (2, 2), (1, 0), (0, 1), (2, 2), (3, 3), (4, 4), (3, 0), (1, 1), (0, 2), (2, 3), (4, 4), (5, 5), (0, 6), (1, 6), (2, 6), (3, 6), (4, 6), (5, 6)]\nhash exception 1\n[(0, 0), (1, 1), (2, 2), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (0, 0), (1, 1)]\ncallback gc and exception ok\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "AALU",
+          "cycles": 7615990,
+          "gc": 20,
+          "stdout": "extended keys ok\n[(0, 0), (1, 1), (2, 2), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (9, 9), (10, 10), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (9, 9), (10, 10), (11, 11), (12, 12), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (9, 9), (10, 10), (11, 11), (12, 12), (13, 13), (0, 14), (1, 14), (2, 14), (3, 14), (4, 14), (5, 14), (6, 14), (7, 14), (8, 14), (9, 14), (10, 14), (11, 14), (12, 14), (13, 14)]\ncallback keys ok\n[(0, 0), (1, 1), (2, 2), (1, 0), (0, 1), (2, 2), (3, 3), (4, 4), (3, 0), (1, 1), (0, 2), (2, 3), (4, 4), (5, 5), (0, 6), (1, 6), (2, 6), (3, 6), (4, 6), (5, 6)]\nhash exception 1\n[(0, 0), (1, 1), (2, 2), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (0, 0), (1, 1)]\ncallback gc and exception ok\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "both",
+          "cycles": 7199096,
+          "gc": 20,
+          "stdout": "extended keys ok\n[(0, 0), (1, 1), (2, 2), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (9, 9), (10, 10), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (9, 9), (10, 10), (11, 11), (12, 12), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (9, 9), (10, 10), (11, 11), (12, 12), (13, 13), (0, 14), (1, 14), (2, 14), (3, 14), (4, 14), (5, 14), (6, 14), (7, 14), (8, 14), (9, 14), (10, 14), (11, 14), (12, 14), (13, 14)]\ncallback keys ok\n[(0, 0), (1, 1), (2, 2), (1, 0), (0, 1), (2, 2), (3, 3), (4, 4), (3, 0), (1, 1), (0, 2), (2, 3), (4, 4), (5, 5), (0, 6), (1, 6), (2, 6), (3, 6), (4, 6), (5, 6)]\nhash exception 1\n[(0, 0), (1, 1), (2, 2), (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (0, 0), (1, 1)]\ncallback gc and exception ok\n",
+          "stderr": "",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "bulk_maps",
+      "source_sha256": "cb9eef76e3dce7b7451f4b41fb0d5f767a92dd34fe67e0e34e26bd315d3bd596",
+      "image_sha256": "aa48033e500fc28f027446d348b35b52ef669a0891a5a27b615ba1a5d991d837",
+      "runs": [
+        {
+          "mode": "off",
+          "cycles": 3704991,
+          "gc": 0,
+          "stdout": "15 -7 10 True False\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "CA",
+          "cycles": 1451807,
+          "gc": 0,
+          "stdout": "15 -7 10 True False\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "AALU",
+          "cycles": 3679387,
+          "gc": 0,
+          "stdout": "15 -7 10 True False\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "both",
+          "cycles": 1441765,
+          "gc": 0,
+          "stdout": "15 -7 10 True False\n",
+          "stderr": "",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "byte_moves",
+      "source_sha256": "2cf3b28bc7ff30916c5133a5cddabeddd7e0297ba4656b303c06bce91687716f",
+      "image_sha256": "a0a2ba78780fb9383449cad8def3802bf0eb16178e7fd488ad4af1789059412e",
+      "runs": [
+        {
+          "mode": "off",
+          "cycles": 9639043,
+          "gc": 0,
+          "stdout": "byte moves ok 384\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "CA",
+          "cycles": 9412615,
+          "gc": 0,
+          "stdout": "byte moves ok 384\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "AALU",
+          "cycles": 9563607,
+          "gc": 0,
+          "stdout": "byte moves ok 384\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "both",
+          "cycles": 9337179,
+          "gc": 0,
+          "stdout": "byte moves ok 384\n",
+          "stderr": "",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "dict",
+      "source_sha256": "d051d0f8959f328c263ab530b254eed2c27f6aa3526867e83a9346682439bfde",
+      "image_sha256": "a56e5f2c11ba5b85809e8c919ef7b4896cbfcecbd767ee97f5e3b407537e9b6d",
+      "runs": [
+        {
+          "mode": "off",
+          "cycles": 307971,
+          "gc": 0,
+          "stdout": "736\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "CA",
+          "cycles": 279305,
+          "gc": 0,
+          "stdout": "736\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "AALU",
+          "cycles": 299811,
+          "gc": 0,
+          "stdout": "736\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "both",
+          "cycles": 271145,
+          "gc": 0,
+          "stdout": "736\n",
+          "stderr": "",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "float",
+      "source_sha256": "20ad29d5208fcc11706e6bc4ea1081014e36b76c3f883465360998c5eae661a4",
+      "image_sha256": "765a8a341db13e04d8d4512a3f6a9a9303e48ea31c6a8d86f1ae474ceb300076",
+      "runs": [
+        {
+          "mode": "off",
+          "cycles": 681859,
+          "gc": 0,
+          "stdout": "2002\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "CA",
+          "cycles": 681816,
+          "gc": 0,
+          "stdout": "2002\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "AALU",
+          "cycles": 557996,
+          "gc": 0,
+          "stdout": "2002\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "both",
+          "cycles": 557953,
+          "gc": 0,
+          "stdout": "2002\n",
+          "stderr": "",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "intmath",
+      "source_sha256": "94248ced31282fe12e03d600dd6c5af008064c829fdd24110e2507e8a647a312",
+      "image_sha256": "a98f1cdc5f325ffdedb938f4924933c88f188d80dc8f06e4a5153afa116fcdb5",
+      "runs": [
+        {
+          "mode": "off",
+          "cycles": 703877,
+          "gc": 0,
+          "stdout": "7057605 199\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "CA",
+          "cycles": 703752,
+          "gc": 0,
+          "stdout": "7057605 199\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "AALU",
+          "cycles": 652693,
+          "gc": 0,
+          "stdout": "7057605 199\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "both",
+          "cycles": 652568,
+          "gc": 0,
+          "stdout": "7057605 199\n",
+          "stderr": "",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "listbuild",
+      "source_sha256": "2e187f0d4410532814b860ee7ca303995bca5df9d49f6f3c3ea569d27931ace6",
+      "image_sha256": "9c0bda4d2d18e989d75325e66db099be8640cc8545b3e1540ca673540ff8eaf0",
+      "runs": [
+        {
+          "mode": "off",
+          "cycles": 1475367,
+          "gc": 0,
+          "stdout": "4798\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "CA",
+          "cycles": 1427084,
+          "gc": 0,
+          "stdout": "4798\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "AALU",
+          "cycles": 1455977,
+          "gc": 0,
+          "stdout": "4798\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "both",
+          "cycles": 1407694,
+          "gc": 0,
+          "stdout": "4798\n",
+          "stderr": "",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "listops",
+      "source_sha256": "3f3384c1de0d2e5cfc03270a2030c23c78a52114fc0cd4b56d6728c336bfc8dc",
+      "image_sha256": "6b7af013168e028e33227f39c9458f34d803c62481ce30993fe756e13fd2f52d",
+      "runs": [
+        {
+          "mode": "off",
+          "cycles": 1349293,
+          "gc": 0,
+          "stdout": "27452\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "CA",
+          "cycles": 1134166,
+          "gc": 0,
+          "stdout": "27452\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "AALU",
+          "cycles": 1338205,
+          "gc": 0,
+          "stdout": "27452\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "both",
+          "cycles": 1123078,
+          "gc": 0,
+          "stdout": "27452\n",
+          "stderr": "",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "sequence_ops",
+      "source_sha256": "3e2da0a31f9926908ac2180cb7dbdd8c682c296032fd81f2b3bd2fd30d2c3af4",
+      "image_sha256": "c68521b7d77c128d52325beb329f4743364e41bfb0237092a221879a9d446a32",
+      "runs": [
+        {
+          "mode": "off",
+          "cycles": 6782913,
+          "gc": 0,
+          "stdout": "[0, 1, 0, 0, 1, 0, 1]\n0 1 2 False\nsequence ops ok\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "CA",
+          "cycles": 6255470,
+          "gc": 0,
+          "stdout": "[0, 1, 0, 0, 1, 0, 1]\n0 1 2 False\nsequence ops ok\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "AALU",
+          "cycles": 6725114,
+          "gc": 0,
+          "stdout": "[0, 1, 0, 0, 1, 0, 1]\n0 1 2 False\nsequence ops ok\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "both",
+          "cycles": 6207023,
+          "gc": 0,
+          "stdout": "[0, 1, 0, 0, 1, 0, 1]\n0 1 2 False\nsequence ops ok\n",
+          "stderr": "",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "set_relations",
+      "source_sha256": "7dc41cd54f73648882fa7b30b10e5340f9ffb7d9bd9809d693eb6d6b1333f7e7",
+      "image_sha256": "c55b0a36c5ee20b437b92199df0e8f4bfa700851e05753fb8b6f054fa1dbe606",
+      "runs": [
+        {
+          "mode": "off",
+          "cycles": 17551838,
+          "gc": 0,
+          "stdout": "[('h', 1), ('e', 1, 1), ('h', 2), ('e', 1, 2), ('e', 2, 2), ('h', 1), ('e', 1, 1)]\nset relations ok\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "CA",
+          "cycles": 14573030,
+          "gc": 0,
+          "stdout": "[('h', 1), ('e', 1, 1), ('h', 2), ('e', 1, 2), ('e', 2, 2), ('h', 1), ('e', 1, 1)]\nset relations ok\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "AALU",
+          "cycles": 17428001,
+          "gc": 0,
+          "stdout": "[('h', 1), ('e', 1, 1), ('h', 2), ('e', 1, 2), ('e', 2, 2), ('h', 1), ('e', 1, 1)]\nset relations ok\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "both",
+          "cycles": 14463213,
+          "gc": 0,
+          "stdout": "[('h', 1), ('e', 1, 1), ('h', 2), ('e', 1, 2), ('e', 2, 2), ('h', 1), ('e', 1, 1)]\nset relations ok\n",
+          "stderr": "",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "strings",
+      "source_sha256": "355647a9604c5e80331f1ddf65d3056a504ed6190f940619f759018f0523913c",
+      "image_sha256": "48c0ec7196b13dc958c88cc754147578ee537d64141f29fb2c65a74088c99b75",
+      "runs": [
+        {
+          "mode": "off",
+          "cycles": 6459098,
+          "gc": 0,
+          "stdout": "20505\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "CA",
+          "cycles": 6353687,
+          "gc": 0,
+          "stdout": "20505\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "AALU",
+          "cycles": 6412590,
+          "gc": 0,
+          "stdout": "20505\n",
+          "stderr": "",
+          "ok": true
+        },
+        {
+          "mode": "both",
+          "cycles": 6307179,
+          "gc": 0,
+          "stdout": "20505\n",
+          "stderr": "",
+          "ok": true
+        }
+      ]
+    }
+  ]
+}

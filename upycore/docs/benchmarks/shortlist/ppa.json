@@ -1,0 +1,26 @@
+[
+  {
+    "name": "baseline",
+    "cells": 419657,
+    "ff_bits": 13692,
+    "latches": 0
+  },
+  {
+    "name": "engine",
+    "cells": 5467,
+    "ff_bits": 986,
+    "latches": 0
+  },
+  {
+    "name": "engine8",
+    "cells": 4921,
+    "ff_bits": 696,
+    "latches": 0
+  },
+  {
+    "name": "core_gc",
+    "cells": 427612,
+    "ff_bits": 14126,
+    "latches": 0
+  }
+]
