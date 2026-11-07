@@ -130,7 +130,7 @@ status)
         state=$(state_of "$d" "$qor")
         slack=- path=- minp=- area=- macros=-
         net=$(ls "$d"/build/syn-rundir/*.mapped.v 2>/dev/null | head -1)
-        [ "$TOP" = mpy_soc ] && [ -n "$net" ] && macros=$(grep -cE "^ *($(echo $sram_macro | tr ' ' '|')) " "$net")
+        [ "$TOP" = mpy_soc ] && [ -n "$net" ] && macros=$(grep -cwE "$(echo $sram_macro | tr ' ' '|')" "$net" || true)
         if [ "$state" = done ] && [ -f "$rpt" ]; then
             slack=$(awk '/Slack:=/{print $2/1000; exit}' "$rpt")
             path=$(awk '/Data Path:-/{print $3/1000; exit}' "$rpt")
