@@ -1,0 +1,10 @@
+hw_tests: 5 test(s), 2 job(s), compiler mpy-cross
+PASS  containers/list_pop_insert  cycles=5178099
+PASS  containers/list_setslice_rhs  cycles=6397860
+PASS  containers/list_slice_step  cycles=30039250
+PASS  gc/shortlist_grow_roots  cycles=7746032
+PASS  containers/shortlist  cycles=55472108
+
+  containers     4 passed    0 failed
+  gc             1 passed    0 failed
+hw_tests: 5 of 5 passed in 671s

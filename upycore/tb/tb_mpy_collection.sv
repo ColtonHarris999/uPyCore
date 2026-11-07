@@ -3,6 +3,9 @@ module tb_mpy_collection;
     logic clk=0;always #5 clk=~clk;
     logic [2:0] operation=1;
     logic byte_mode=0;
+    logic slv=0,slr,slresp,slaccept=0;
+    logic [31:0] slsrc=0,sldst=0,sln=0;
+    logic slreverse=0;
     logic rst=0,cv=0,cr,bv=0,br,ret,ok,idle,busy,fault;
     logic [31:0] cs=0,cd=0,cn=0,bs=256,bd=1024,sn=17,dn=37,used=0,hdr=2048,shdr=2080;
     logic [31:0] result,hashes=0,chk=0,fault_addr,words,cmds;
@@ -13,6 +16,9 @@ module tb_mpy_collection;
     logic [31:0] pa,pd;logic [3:0] pt;
     integer delay_count=0,cycles=0,returns=0;
     mpy_collection #(.TYPE_CACHE(0)) dut(.clk_i(clk),.rst_n_i(rst),
+        .sl_valid_i(slv),.sl_ready_o(slr),.sl_response_o(slresp),.sl_src_i(slsrc),.sl_dst_i(sldst),.sl_n_i(sln),.sl_reverse_i(slreverse),
+        .sl_clear_i(0),.sl_put_i(0),.sl_length_i(0),.sl_clear_addr_i(0),.sl_put_addr_i(0),
+        .sl_header_i(0),.sl_new_length_i(0),.sl_put_value_i(0),.sl_response_ready_i(slaccept),
         .copy_reverse_i(1'b0),.copy_byte_i(byte_mode),.copy_valid_i(cv),.copy_ready_o(cr),.copy_src_i(cs),.copy_dst_i(cd),.copy_n_i(cn),
         .bulk_valid_i(bv),.bulk_ready_o(br),.bulk_op_i(operation),.bulk_set_i(1'b1),
         .bulk_src_i(bs),.bulk_sn_i(sn),.bulk_dst_i(bd),.bulk_dn_i(dn),.bulk_used_i(used),.bulk_hashes_i(hashes),
@@ -111,6 +117,30 @@ module tb_mpy_collection;
         if(mem[1600]!==mem[1550] || mem[1601]!==mem[1551])$fatal(1,"byte then word dependency");
         // Zero-length copy still retires its FIFO entry without memory requests.
         copy(0,0,0);wait(idle);
+        // A short snapshot must wait for an older queued copy, then keep
+        // exclusive ownership (including response backpressure). A held newer
+        // copy sees the completed short result only after ownership releases.
+        for(integer i=0;i<8;i++)mem[1900+i]={4'(i),32'(100+i)};
+        copy(7600,7800,8);
+        @(negedge clk);slsrc=7828;sldst=8000;sln=8;slreverse=1;slv=1;
+        do @(posedge clk);while(!slr);
+        @(negedge clk);slv=0;
+        check_busy(8000,0,1);check_busy(7800,1,1);
+        if(cr||br||idle)$fatal(1,"short owner did not exclude queue");
+        fork
+            copy(8000,8200,8);
+            begin
+                wait(slresp);#1;
+                if(pending||cr||br||idle)$fatal(1,"short early completion/release");
+                repeat(4)@(negedge clk);
+                slaccept=1;@(negedge clk);slaccept=0;
+            end
+        join
+        wait(idle);#1;
+        for(integer i=0;i<8;i++)begin
+            if(mem[2000+i]!==mem[1900+7-i] || mem[2050+i]!==mem[2000+i])
+                $fatal(1,"short/legacy ownership order");
+        end
         // A fault cancels queued work and prevents further accepts.
         copy(6144,256,17);copy(256,7168,17);
         inject_fault=1;wait(fault);repeat(10)@(negedge clk);

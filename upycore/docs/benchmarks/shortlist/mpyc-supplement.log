@@ -1,0 +1,27 @@
+Locally isolated original binaries; timeout floor 2400s; unchanged cycle budgets.
+PASS  compiler/cs_control  cycles=108794
+PASS  compiler/cs_containers  cycles=267512
+PASS  compiler/cs_exceptions  cycles=67493
+PASS  compiler/cs_expressions  cycles=237458
+PASS  compiler/cs_peephole  cycles=47140
+PASS  compiler/cs_program  cycles=246165
+PASS  compiler/cs_functions  cycles=856855
+PASS  compiler/cs_t5_t6  cycles=141558
+PASS  compiler/cs_starred  cycles=396383
+PASS  gc/gc_list_shrink_reclaims  cycles=2505443
+PASS  gc/gc_verify_containers  cycles=241272
+PASS  gc/gc_verify_cycles  cycles=121714
+PASS  gc/gc_reuse_after_collect  cycles=87648
+PASS  gc/gc_zero_on_reuse  cycles=346754
+PASS  gc/gc_cycle_self  cycles=116352
+PASS  gc/gc_cycle_mutual  cycles=173097
+PASS  gc/gc_root_spill  cycles=158228
+PASS  gc/gc_root_caller_rf  cycles=84908
+PASS  gc/shortlist_grow_roots  cycles=7746032
+PASS  gc/gc_ltt_churn  cycles=2342579
+PASS  gc/gc_unpack_ex  cycles=6102467
+PASS  gc/gc_stracc_partition  cycles=7019329
+PASS  gc/gc_range_churn  cycles=266603
+PASS  gc/gc_bind_churn  cycles=568021
+
+STOPPED redundant second simulation pass after all 100 linked payload/tag images were proven identical to the passing hardware inputs. Only completed PASS cases count as independent runs.

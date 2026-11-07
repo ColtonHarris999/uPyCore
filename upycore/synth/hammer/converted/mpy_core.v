@@ -5710,6 +5710,22 @@ module mpy_core (
 	gc_free_i,
 	gc_total_i,
 	gc_collections_i,
+	sl_valid_o,
+	sl_ready_i,
+	sl_src_o,
+	sl_dst_o,
+	sl_n_o,
+	sl_reverse_o,
+	sl_clear_o,
+	sl_put_o,
+	sl_length_o,
+	sl_clear_addr_o,
+	sl_put_addr_o,
+	sl_header_o,
+	sl_new_length_o,
+	sl_put_value_o,
+	sl_response_i,
+	sl_response_ready_o,
 	mb_valid_o,
 	mb_ready_i,
 	mb_return_i,
@@ -5756,6 +5772,8 @@ module mpy_core (
 	parameter signed [31:0] LC_N = 8;
 	parameter signed [31:0] LC_WB = 1;
 	parameter signed [31:0] CA_EN = 1;
+	parameter signed [31:0] SHORTLIST_MAX = 16;
+	parameter signed [31:0] SHORTLIST_MODE = 2;
 	parameter signed [31:0] AALU = 1;
 	input wire clk_i;
 	input wire rst_n_i;
@@ -5792,6 +5810,22 @@ module mpy_core (
 	input wire [31:0] gc_free_i;
 	input wire [31:0] gc_total_i;
 	input wire [31:0] gc_collections_i;
+	output wire sl_valid_o;
+	input wire sl_ready_i;
+	output wire [31:0] sl_src_o;
+	output wire [31:0] sl_dst_o;
+	output wire [31:0] sl_n_o;
+	output wire sl_reverse_o;
+	output wire sl_clear_o;
+	output wire sl_put_o;
+	output wire sl_length_o;
+	output wire [31:0] sl_clear_addr_o;
+	output wire [31:0] sl_put_addr_o;
+	output wire [31:0] sl_header_o;
+	output wire [31:0] sl_new_length_o;
+	output wire [35:0] sl_put_value_o;
+	input wire sl_response_i;
+	output wire sl_response_ready_o;
 	output reg mb_valid_o;
 	input wire mb_ready_i;
 	input wire mb_return_i;
@@ -6052,6 +6086,45 @@ module mpy_core (
 	reg [31:0] m_wdata;
 	reg [31:0] md;
 	reg [3:0] mt;
+	wire [1:0] cfg_sl;
+	reg ss_store;
+	reg ss_native;
+	reg ss_reverse;
+	reg ss_omitted;
+	reg [31:0] ss_len;
+	reg [31:0] ss_start;
+	reg [31:0] ss_stop;
+	reg [31:0] ss_bound;
+	reg [31:0] ss_count;
+	reg [31:0] ss_src;
+	reg [31:0] ss_dst;
+	reg [31:0] ss_n;
+	reg [31:0] ss_clear_addr;
+	reg [31:0] ss_put_addr;
+	reg [31:0] ss_header;
+	reg [31:0] ss_new_length;
+	reg ss_clear;
+	reg ss_put;
+	reg ss_length;
+	reg [35:0] ss_put_value;
+	reg [35:0] ss_buf [0:SHORTLIST_MAX - 1];
+	localparam [0:0] SL_REFERENCE = (SHORTLIST_MODE == 1) || (CA_EN == 0);
+	reg [$clog2(SHORTLIST_MAX + 1) - 1:0] ss_i;
+	reg [9:0] ss_back;
+	assign sl_valid_o = st == 10'd712;
+	assign sl_response_ready_o = st == 10'd713;
+	assign sl_src_o = ss_src;
+	assign sl_dst_o = ss_dst;
+	assign sl_n_o = ss_n;
+	assign sl_reverse_o = ss_reverse;
+	assign sl_clear_o = ss_clear;
+	assign sl_put_o = ss_put;
+	assign sl_length_o = ss_length;
+	assign sl_clear_addr_o = ss_clear_addr;
+	assign sl_put_addr_o = ss_put_addr;
+	assign sl_header_o = ss_header;
+	assign sl_new_length_o = ss_new_length;
+	assign sl_put_value_o = ss_put_value;
 	wire [35:0] mv;
 	assign mv = {mt, md};
 	reg [31:0] h_qdesc;
@@ -6719,6 +6792,11 @@ module mpy_core (
 	assign cfg_lc_wb = LC_WB != 0;
 	assign cfg_lc_dm = 1'b0;
 	assign cfg_bulk = 1'b1;
+	function automatic signed [1:0] sv2v_cast_2_signed;
+		input reg signed [1:0] inp;
+		sv2v_cast_2_signed = inp;
+	endfunction
+	assign cfg_sl = sv2v_cast_2_signed(SHORTLIST_MODE);
 	assign cfg_ca = CA_EN != 0;
 	assign cfg_aalu = AALU != 0;
 	function automatic [35:0] hdr_word;
@@ -7251,6 +7329,7 @@ module mpy_core (
 	localparam [7:0] ABI_N_LD = 8'd9;
 	localparam [7:0] ABI_N_LEN = 8'd0;
 	localparam [7:0] ABI_N_LIST_APPEND = 8'd35;
+	localparam [7:0] ABI_N_LIST_COPY = 8'd48;
 	localparam [7:0] ABI_N_LIST_INSERT = 8'd46;
 	localparam [7:0] ABI_N_LIST_POP = 8'd45;
 	localparam [7:0] ABI_N_LOOKUP = 8'd21;
@@ -7536,6 +7615,28 @@ module mpy_core (
 			fl_img <= 1'b0;
 			spill_to_img <= 1'b0;
 			lc_fl_ret <= 10'd443;
+			ss_store <= 0;
+			ss_native <= 0;
+			ss_reverse <= 0;
+			ss_omitted <= 0;
+			ss_len <= 0;
+			ss_start <= 0;
+			ss_stop <= 0;
+			ss_bound <= 0;
+			ss_count <= 0;
+			ss_src <= 0;
+			ss_dst <= 0;
+			ss_n <= 0;
+			ss_clear_addr <= 0;
+			ss_put_addr <= 0;
+			ss_header <= 0;
+			ss_new_length <= 0;
+			ss_clear <= 0;
+			ss_put <= 0;
+			ss_length <= 0;
+			ss_put_value <= VNULL;
+			ss_i <= 0;
+			ss_back <= 10'd118;
 			begin : sv2v_autoblock_13
 				reg signed [31:0] k;
 				for (k = 0; k < 8; k = k + 1)
@@ -9261,6 +9362,12 @@ module mpy_core (
 					10'd274:
 						if (((is_mut(t[0], ABI_MUT_LIST) || is_mut(t[0], ABI_MUT_BYTEARRAY)) || (tg(t[0]) == ABI_TAG_TUPLE)) && intlike(t[1]))
 							rd(adr(t[0]), 10'd278);
+						else if (((cfg_sl != 0) && is_mut(t[0], ABI_MUT_LIST)) && (tg(t[1]) == ABI_TAG_OBJECT)) begin
+							ss_store <= 0;
+							ss_native <= 0;
+							st <= 10'd711;
+							ss_back <= 10'd690;
+						end
 						else if (is_mut(t[0], ABI_MUT_DICT))
 							lookup(t[0], t[1], VNULL, LK_FIND, 1'b0, 10'd275);
 						else if ((strlike(t[0]) || (tg(t[0]) == ABI_TAG_BYTES)) && intlike(t[1])) begin
@@ -9332,11 +9439,231 @@ module mpy_core (
 						sp <= sp - 7'd2;
 						hook(ABI_HOOK_SUBSCR, ABI_RK_PUSH, 8'd2, t[0], t[1], VNULL, VNULL);
 					end
+					10'd690:
+						rd(adr(t[1]), 10'd691);
+					10'd691:
+						if (md != ABI_OB_SLICE)
+							st <= 10'd710;
+						else
+							rd(adr(t[0]), 10'd692);
+					10'd692:
+						if (md > SHORTLIST_MAX)
+							st <= 10'd710;
+						else begin
+							ss_len <= md;
+							rd(adr(t[1]) + 16, 10'd693);
+						end
+					10'd693:
+						if ((mv == VNONE) || ((tg(mv) == ABI_TAG_INT) && (mv[31:0] == 1))) begin
+							ss_reverse <= 0;
+							rd(adr(t[1]) + 8, 10'd694);
+						end
+						else if ((!ss_store && (tg(mv) == ABI_TAG_INT)) && (mv[31:0] == 32'hffffffff)) begin
+							ss_reverse <= 1;
+							rd(adr(t[1]) + 8, 10'd694);
+						end
+						else
+							st <= 10'd710;
+					10'd694:
+						if ((mv != VNONE) && (tg(mv) != ABI_TAG_INT))
+							st <= 10'd710;
+						else begin
+							ss_omitted <= mv == VNONE;
+							ss_bound <= (mv == VNONE ? (ss_reverse ? ss_len - 32'd1 : 32'd0) : mv[31:0]);
+							st <= 10'd695;
+						end
+					10'd695: begin
+						if (!ss_omitted && ss_bound[31])
+							ss_bound <= ss_bound + ss_len;
+						st <= 10'd696;
+					end
+					10'd696: begin
+						if (ss_omitted)
+							ss_start <= ss_bound;
+						else if (ss_bound[31])
+							ss_start <= (ss_reverse ? 32'hffffffff : 0);
+						else if (ss_bound >= ss_len)
+							ss_start <= (ss_reverse ? ss_len - 32'd1 : ss_len);
+						else
+							ss_start <= ss_bound;
+						rd(adr(t[1]) + 12, 10'd697);
+					end
+					10'd697:
+						if ((mv != VNONE) && (tg(mv) != ABI_TAG_INT))
+							st <= 10'd710;
+						else begin
+							ss_omitted <= mv == VNONE;
+							ss_bound <= (mv == VNONE ? (ss_reverse ? 32'hffffffff : ss_len) : mv[31:0]);
+							st <= 10'd698;
+						end
+					10'd698: begin
+						if (!ss_omitted && ss_bound[31])
+							ss_bound <= ss_bound + ss_len;
+						st <= 10'd699;
+					end
+					10'd699: begin
+						if (ss_omitted)
+							ss_stop <= ss_bound;
+						else if (ss_bound[31])
+							ss_stop <= (ss_reverse ? 32'hffffffff : 0);
+						else if (ss_bound >= ss_len)
+							ss_stop <= (ss_reverse ? ss_len - 32'd1 : ss_len);
+						else
+							ss_stop <= ss_bound;
+						st <= 10'd700;
+					end
+					10'd700: begin
+						ss_count <= (ss_reverse ? ($signed(ss_start) > $signed(ss_stop) ? ss_start - ss_stop : 0) : ($signed(ss_stop) > $signed(ss_start) ? ss_stop - ss_start : 0));
+						st <= 10'd701;
+					end
+					10'd701:
+						if (ss_store) begin
+							if (!is_mut(t[6], ABI_MUT_LIST) && (tg(t[6]) != ABI_TAG_TUPLE))
+								st <= 10'd710;
+							else
+								rd(adr(t[6]), 10'd704);
+						end
+						else
+							alloc(32'd3 + (ss_count < 4 ? 32'd4 : ss_count), 10'd702);
+					10'd702: begin
+						t[2] <= vmut(al_a, ABI_MUT_LIST);
+						ss_dst <= al_a + 32'd12;
+						wb_v[0] <= vint(ss_count);
+						wb_v[1] <= vint((ss_count < 4 ? 32'd4 : ss_count));
+						wb_v[2] <= {ABI_TAG_CONT, al_a + 32'd12};
+						wblock(al_a, 4'd3, 10'd705);
+					end
+					10'd705:
+						if (!ss_store)
+							rd(adr(t[0]) + 8, 10'd706);
+						else begin
+							ss_src <= md;
+							rd(adr(t[0]) + 8, 10'd706);
+						end
+					10'd706: begin
+						if (ss_store) begin
+							ss_dst <= md + (ss_start << 2);
+							ss_back <= 10'd707;
+						end
+						else begin
+							ss_src <= md + (ss_start << 2);
+							ss_back <= 10'd703;
+						end
+						ss_n <= ss_count;
+						ss_clear <= 0;
+						ss_put <= 0;
+						ss_length <= 0;
+						ss_i <= 0;
+						st <= 10'd711;
+					end
+					10'd704:
+						if ((md != ss_count) || (md > SHORTLIST_MAX))
+							st <= 10'd710;
+						else if (tg(t[6]) == ABI_TAG_TUPLE) begin
+							ss_src <= adr(t[6]) + 32'd4;
+							rd(adr(t[0]) + 8, 10'd706);
+						end
+						else
+							rd(adr(t[6]) + 8, 10'd705);
+					10'd708: begin
+						ss_store <= 0;
+						ss_native <= 1;
+						ss_reverse <= 0;
+						ss_start <= 0;
+						rd(adr(t[0]), 10'd709);
+					end
+					10'd709:
+						if (md > SHORTLIST_MAX)
+							st <= 10'd290;
+						else begin
+							ss_count <= md;
+							st <= 10'd701;
+						end
+					10'd710:
+						if (ss_native)
+							st <= 10'd290;
+						else
+							st <= (ss_store ? 10'd451 : 10'd276);
+					10'd703:
+						if (ss_native)
+							deliver(t[2], crk);
+						else begin
+							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))] <= t[2];
+							sp <= sp - 7'd1;
+							st <= 10'd118;
+						end
+					10'd707: begin
+						sp <= sp - 7'd3;
+						st <= 10'd118;
+					end
+					10'd711:
+						if (!ca_valid && ca_idle_i) begin
+							if ((ss_back == 10'd690) || (ss_back == 10'd708))
+								st <= ss_back;
+							else if ((cfg_sl == 2) && cfg_ca)
+								st <= 10'd712;
+							else begin
+								ss_i <= 0;
+								st <= 10'd714;
+							end
+						end
+					10'd712:
+						if (sl_ready_i)
+							st <= 10'd713;
+					10'd713:
+						if (sl_response_i)
+							st <= 10'd720;
+					10'd714:
+						if (ss_i == ss_n) begin
+							ss_i <= 0;
+							st <= 10'd716;
+						end
+						else
+							rd((ss_reverse ? ss_src - (sv2v_cast_32(ss_i) << 2) : ss_src + (sv2v_cast_32(ss_i) << 2)), 10'd715);
+					10'd715:
+						if (SL_REFERENCE) begin
+							ss_buf[ss_i] <= mv;
+							ss_i <= ss_i + 1'b1;
+							st <= 10'd714;
+						end
+						else
+							halt(ABI_HALT_INTERNAL, 32'h534c0001);
+					10'd716:
+						if (!SL_REFERENCE)
+							halt(ABI_HALT_INTERNAL, 32'h534c0002);
+						else if (ss_i == ss_n)
+							st <= 10'd717;
+						else begin
+							wr(ss_dst + (sv2v_cast_32(ss_i) << 2), ss_buf[ss_i], 10'd716);
+							ss_i <= ss_i + 1'b1;
+						end
+					10'd717:
+						if (ss_clear)
+							wr(ss_clear_addr, VNULL, 10'd718);
+						else
+							st <= 10'd718;
+					10'd718:
+						if (ss_put)
+							wr(ss_put_addr, ss_put_value, 10'd719);
+						else
+							st <= 10'd719;
+					10'd719:
+						if (ss_length)
+							wr(ss_header, vint(ss_new_length), 10'd720);
+						else
+							st <= 10'd720;
+					10'd720: st <= ss_back;
 					10'd449:
 						if (t[6] == VNULL)
 							st <= 10'd451;
 						else if (is_mut(t[0], ABI_MUT_LIST) && intlike(t[1]))
 							rd(adr(t[0]), 10'd453);
+						else if (((cfg_sl != 0) && is_mut(t[0], ABI_MUT_LIST)) && (tg(t[1]) == ABI_TAG_OBJECT)) begin
+							ss_store <= 1;
+							ss_native <= 0;
+							st <= 10'd711;
+							ss_back <= 10'd690;
+						end
 						else if ((is_mut(t[0], ABI_MUT_BYTEARRAY) && intlike(t[1])) && intlike(t[6]))
 							rd(adr(t[0]), 10'd453);
 						else if (is_mut(t[0], ABI_MUT_DICT))
@@ -11048,6 +11375,16 @@ module mpy_core (
 									t[2] <= mv;
 									rd(ab_ptr(ab_lo + 8'd1), 10'd630);
 								end
+							ABI_N_LIST_COPY:
+								if (((v0 != 1) || !is_mut(mv, ABI_MUT_LIST)) || (cfg_sl == 0))
+									st <= 10'd290;
+								else begin
+									t[0] <= mv;
+									ss_store <= 0;
+									ss_native <= 1;
+									ss_back <= 10'd708;
+									st <= 10'd711;
+								end
 							ABI_N_LIST_POP:
 								if (((v0 != 32'd1) && (v0 != 32'd2)) || !is_mut(mv, ABI_MUT_LIST))
 									st <= 10'd290;
@@ -11355,7 +11692,21 @@ module mpy_core (
 					end
 					10'd634: begin
 						t[3] <= mv;
-						if ((x0 + 32'd1) == x1)
+						if (((cfg_sl != 0) && (x1 <= SHORTLIST_MAX)) && ((x0 + 32'd1) != x1)) begin
+							ss_src <= x2 + ((x0 + 32'd1) << 2);
+							ss_dst <= x2 + (x0 << 2);
+							ss_n <= (x1 - x0) - 32'd1;
+							ss_reverse <= 0;
+							ss_clear <= 1;
+							ss_clear_addr <= x2 + ((x1 - 32'd1) << 2);
+							ss_put <= 0;
+							ss_length <= 1;
+							ss_header <= adr(t[2]);
+							ss_new_length <= x1 - 32'd1;
+							ss_back <= 10'd642;
+							st <= 10'd711;
+						end
+						else if ((x0 + 32'd1) == x1)
 							st <= 10'd640;
 						else if (cfg_ca && ((x1 - x0) > LS_CA_MIN))
 							st <= 10'd637;
@@ -11432,7 +11783,7 @@ module mpy_core (
 						x3 <= x3 - 32'd1;
 					end
 					10'd643:
-						if (!intlike(mv))
+						if (!intlike(mv) || ((cfg_sl != 0) && is_bool(mv)))
 							st <= 10'd290;
 						else begin
 							x0 <= ival(mv);
@@ -11461,7 +11812,22 @@ module mpy_core (
 					10'd647: begin
 						x2 <= md;
 						x3 <= x1;
-						if (x0 == x1)
+						if (((cfg_sl != 0) && (x1 < SHORTLIST_MAX)) && (x0 != x1)) begin
+							ss_src <= md + (x0 << 2);
+							ss_dst <= md + ((x0 + 32'd1) << 2);
+							ss_n <= x1 - x0;
+							ss_reverse <= 0;
+							ss_clear <= 0;
+							ss_put <= 1;
+							ss_put_addr <= md + (x0 << 2);
+							ss_put_value <= t[3];
+							ss_length <= 1;
+							ss_header <= adr(t[2]);
+							ss_new_length <= x1 + 32'd1;
+							ss_back <= 10'd357;
+							st <= 10'd711;
+						end
+						else if (x0 == x1)
 							st <= 10'd653;
 						else if (cfg_ca && ((x1 - x0) > LS_CA_MIN))
 							st <= 10'd650;
@@ -12820,6 +13186,20 @@ module mpy_core (
 					10'd239:
 						wr(adr(t[2]) + 8, {ABI_TAG_CONT, sA[3]}, 10'd240);
 					10'd240:
+						if (sA[2] == (adr(t[2]) + 32'd12)) begin
+							sA[4] <= 0;
+							st <= 10'd721;
+						end
+						else
+							st <= 10'd722;
+					10'd721:
+						if (sA[4] == sA[0])
+							st <= 10'd722;
+						else begin
+							wr(sA[2] + (sA[4] << 2), VNULL, 10'd721);
+							sA[4] <= sA[4] + 32'd1;
+						end
+					10'd722:
 						wr(sA[3] + (sA[0] << 2), t[3], 10'd242);
 					10'd242:
 						wr(adr(t[2]), vint(sA[0] + 32'd1), 10'd245);

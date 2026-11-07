@@ -1,0 +1,125 @@
+== elaborate mpy_soc ==
+Printing statistics.
+
+=== mpy_soc ===
+
+        +-------------------Count including submodules.
+        |        +----------Local count, excluding submodules.
+        |        | 
+   132452   132452 wires
+  9437883  9437883 wire bits
+     2545     2545 public wires
+   119197   119197 public wire bits
+       22       22 ports
+      231      231 port bits
+       18       18 memories
+  4790065  4790065 memory bits
+        -        - processes
+   115903   115903 cells
+     1638     1638   $add
+      819      819   $aldff
+      251      251   $and
+      379      379   $bmux
+     1335     1335   $buf
+      166      166   $bwmux
+      384      384   $demux
+        4        4   $dff
+    30949    30949   $dffe
+        3        3   $div
+    23100    23100   $eq
+     1005     1005   $ge
+      122      122   $gt
+       42       42   $le
+     1655     1655   $logic_and
+     1554     1554   $logic_not
+      492      492   $logic_or
+      720      720   $lt
+        5        5   $meminit
+       26       26   $memrd_v2
+      117      117   $memwr_v2
+       83       83   $mul
+    46950    46950   $mux
+      222      222   $ne
+       13       13   $neg
+      973      973   $not
+      273      273   $or
+      776      776   $pmux
+      268      268   $reduce_bool
+      534      534   $reduce_or
+        2        2   $reduce_xor
+       15       15   $shiftx
+       59       59   $shl
+       31       31   $shr
+        2        2   $sshl
+        4        4   $sshr
+      903      903   $sub
+       29       29   $xor
+
+Warnings: 218 unique messages, 218 total
+End of script. Logfile hash: f292892944, time: 517.29s, user: 517.30s, system: 0.00s
+Yosys 0.70 (git sha1 28ba3cb92, Release, Clang /workspace/YoWASP/yosys/wasi-sdk-33.0-x86_64-linux/share/cmake/../..//bin/clang++ 22.1.0)
+Time spent: 84% 1x proc_mux (433 sec), 11% 1x opt_expr (57 sec), ...
+
+log: build/synth/mpy_soc.log
+== elaborate mpy_core ==
+Printing statistics.
+
+=== mpy_core ===
+
+        +-------------------Count including submodules.
+        |        +----------Local count, excluding submodules.
+        |        | 
+   113831   113831 wires
+  1679577  1679577 wire bits
+     1382     1382 public wires
+    35929    35929 public wire bits
+       89       89 ports
+     1431     1431 port bits
+        6        6 memories
+    70560    70560 memory bits
+        -        - processes
+    72941    72941 cells
+     1417     1417   $add
+      414      414   $aldff
+      230      230   $and
+      342      342   $bmux
+      595      595   $buf
+      102      102   $bwmux
+      305      305   $demux
+      236      236   $dffe
+        1        1   $div
+    20753    20753   $eq
+      830      830   $ge
+      105      105   $gt
+       36       36   $le
+     1189     1189   $logic_and
+     1030     1030   $logic_not
+      325      325   $logic_or
+      541      541   $lt
+        4        4   $meminit
+        5        5   $memrd_v2
+       92       92   $memwr_v2
+       67       67   $mul
+    40905    40905   $mux
+      207      207   $ne
+        7        7   $neg
+      850      850   $not
+      249      249   $or
+      627      627   $pmux
+      201      201   $reduce_bool
+      408      408   $reduce_or
+        1        1   $reduce_xor
+       14       14   $shiftx
+       32       32   $shl
+       19       19   $shr
+        2        2   $sshl
+        4        4   $sshr
+      770      770   $sub
+       26       26   $xor
+
+Warnings: 207 unique messages, 207 total
+End of script. Logfile hash: 4cd2136302, time: 355.13s, user: 355.15s, system: 0.00s
+Yosys 0.70 (git sha1 28ba3cb92, Release, Clang /workspace/YoWASP/yosys/wasi-sdk-33.0-x86_64-linux/share/cmake/../..//bin/clang++ 22.1.0)
+Time spent: 95% 1x proc_mux (338 sec), 1% 1x opt_expr (6 sec), ...
+
+log: build/synth/mpy_core.log

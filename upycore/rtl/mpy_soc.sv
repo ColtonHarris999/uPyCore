@@ -29,6 +29,8 @@
 module mpy_soc #(
     parameter int SRAM_LATENCY = MPY_SRAM_LATENCY,
     parameter bit CA_TYPE_CACHE = 0,
+    parameter int SHORTLIST_MAX = 16,
+    parameter int SHORTLIST_MODE = 2,
     parameter int FLASH_WAIT_STATES = MPY_FLASH_WAIT_STATES
 ) (
     input  logic        clk_i,
@@ -90,6 +92,10 @@ module mpy_soc #(
     logic        f_req;
     logic [31:0] f_addr;
 
+    logic sl_valid, sl_ready, sl_reverse, sl_clear, sl_put, sl_length, sl_response, sl_response_ready;
+    logic [31:0] sl_src, sl_dst, sl_n, sl_clear_addr, sl_put_addr, sl_header, sl_new_length;
+    logic [35:0] sl_put_value;
+
     // core <-> container accelerator
     logic ca_byte,ca_reverse;
     logic        ca_valid, ca_ready, ca_idle, ca_busy, ca_fault;
@@ -139,7 +145,7 @@ module mpy_soc #(
         .done_o(boot_done), .err_o(boot_error)
     );
 
-    mpy_core u_core (
+    mpy_core #(.SHORTLIST_MAX(SHORTLIST_MAX), .SHORTLIST_MODE(SHORTLIST_MODE)) u_core (
         .clk_i, .rst_n_i(sys_rst_n),
         .m_req_o(c_req), .m_we_o(c_we), .m_tag_we_o(c_tag_we), .m_be_o(c_be),
         .m_addr_o(c_addr), .m_wdata_o(c_wdata), .m_wtag_o(c_wtag),
@@ -161,6 +167,22 @@ module mpy_soc #(
         .mb_header_o(mb_header),.mb_source_header_o(mb_source_header),.mb_hashes_o(mb_hashes),
         .mb_qcount_o(mb_qcount),.mb_qbase_o(mb_qbase),.mb_qext_o(mb_qext),
         .ca_reverse_o(ca_reverse),.ca_byte_o(ca_byte),.ca_valid_o(ca_valid), .ca_ready_i(ca_ready),
+        .sl_valid_o(sl_valid),
+        .sl_ready_i(sl_ready),
+        .sl_src_o(sl_src),
+        .sl_dst_o(sl_dst),
+        .sl_n_o(sl_n),
+        .sl_reverse_o(sl_reverse),
+        .sl_clear_o(sl_clear),
+        .sl_put_o(sl_put),
+        .sl_length_o(sl_length),
+        .sl_clear_addr_o(sl_clear_addr),
+        .sl_put_addr_o(sl_put_addr),
+        .sl_header_o(sl_header),
+        .sl_new_length_o(sl_new_length),
+        .sl_put_value_o(sl_put_value),
+        .sl_response_i(sl_response),
+        .sl_response_ready_o(sl_response_ready),
         .ca_dst_o(ca_dst), .ca_src_o(ca_src), .ca_n_o(ca_n), .ca_idle_i(ca_idle),
         .ca_fault_i(ca_fault), .ca_fault_reason_i(ca_fault_reason), .ca_fault_addr_i(ca_fault_addr),
         .halted_o(core_halted), .halt_code_o(core_hcode), .halt_value_o(core_hval),
@@ -188,7 +210,7 @@ module mpy_soc #(
         .mem_ack_i(gm_ack), .mem_rdata_i(gm_rdata), .mem_rtag_i(gm_rtag)
     );
 
-    mpy_collection #(.TYPE_CACHE(CA_TYPE_CACHE)) u_ca (
+    mpy_collection #(.TYPE_CACHE(CA_TYPE_CACHE), .SHORTLIST_MAX(SHORTLIST_MAX)) u_ca (
         .cache_clear_i(g_collect_req || g_collect_done),.cache_write_i(m_gnt[P_CORE] && c_we),.cache_addr_i(c_addr),
         .clk_i,.rst_n_i(sys_rst_n),
         .copy_reverse_i(ca_reverse),.copy_byte_i(ca_byte),.copy_valid_i(ca_valid),.copy_ready_o(ca_ready),
@@ -198,6 +220,22 @@ module mpy_soc #(
         .bulk_header_i(mb_header),.bulk_source_header_i(mb_source_header),.bulk_hashes_i(mb_hashes),
         .qstr_count_i(mb_qcount),.qstr_base_i(mb_qbase),.qstr_ext_i(mb_qext),
         .bulk_return_o(mb_return),.bulk_ok_o(mb_ok),.bulk_used_o(mb_result),
+        .sl_valid_i(sl_valid),
+        .sl_ready_o(sl_ready),
+        .sl_src_i(sl_src),
+        .sl_dst_i(sl_dst),
+        .sl_n_i(sl_n),
+        .sl_reverse_i(sl_reverse),
+        .sl_clear_i(sl_clear),
+        .sl_put_i(sl_put),
+        .sl_length_i(sl_length),
+        .sl_clear_addr_i(sl_clear_addr),
+        .sl_put_addr_i(sl_put_addr),
+        .sl_header_i(sl_header),
+        .sl_new_length_i(sl_new_length),
+        .sl_put_value_i(sl_put_value),
+        .sl_response_o(sl_response),
+        .sl_response_ready_i(sl_response_ready),
         .idle_o(ca_idle),.chk_addr_i(c_addr),.chk_we_i(c_we),.chk_busy_o(ca_busy),
         .req_o(am_req),.we_o(am_we),.addr_o(am_addr),.wdata_o(am_wdata),.wtag_o(am_wtag),
         .gnt_i(am_gnt),.ack_i(am_ack),.fault_i(m_fault[P_CA]),.fault_reason_i(m_fault_reason[P_CA]),

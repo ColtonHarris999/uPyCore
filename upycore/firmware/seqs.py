@@ -105,6 +105,12 @@ def list__copy(self):
     return _list_of_seq(self)
 
 
+def _list__copy_fb(self, *args):
+    if args:
+        _arg_count(1, 1 + len(args))
+    return _list_of_seq(_list_self(self))
+
+
 def list__count(self, value):
     result = _seqscan(_ld(self, 2), 0, _ld(self, 0), value, 0)
     if result >= 0:

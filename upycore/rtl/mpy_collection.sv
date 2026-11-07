@@ -5,10 +5,16 @@
 // acceptance, before either engine starts. Only the head owns the memory port;
 // ownership changes after every response, including the final write, retires.
 // There is one core producer: it never asserts both command valids together.
-module mpy_collection #(parameter bit TYPE_CACHE=0) (
+module mpy_collection #(parameter bit TYPE_CACHE=0, parameter int SHORTLIST_MAX=16) (
     input logic cache_clear_i,cache_write_i,
     input logic [31:0] cache_addr_i,
     input logic clk_i, rst_n_i,
+    input logic sl_valid_i, output logic sl_ready_o,
+    input logic [31:0] sl_src_i, sl_dst_i, sl_n_i,
+    input logic sl_reverse_i, sl_clear_i, sl_put_i, sl_length_i,
+    input logic [31:0] sl_clear_addr_i, sl_put_addr_i, sl_header_i, sl_new_length_i,
+    input logic [35:0] sl_put_value_i,
+    output logic sl_response_o, input logic sl_response_ready_i,
     input logic copy_valid_i,copy_byte_i,copy_reverse_i,
     output logic copy_ready_o,
     input logic [31:0] copy_src_i, copy_dst_i, copy_n_i,
@@ -56,29 +62,35 @@ module mpy_collection #(parameter bit TYPE_CACHE=0) (
     logic bm_ready, bm_idle, bm_req, bm_we, bm_fault;
     logic [31:0] cp_addr, cp_data, cp_fault_addr, bm_addr, bm_data, bm_fault_addr;
     logic [3:0] cp_tag, cp_reason, bm_tag;
+    logic sl_idle, sl_req, sl_we, sl_fault, sl_lock;
+    logic [31:0] sl_addr, sl_data, sl_faddr;
+    logic [3:0] sl_tag, sl_reason;
+    logic legacy_idle;
     command_t current;
     assign current = queue[head];
     assign tail = head ^ count[0];
-    assign copy_ready_o = count < 2 && !fault_o && !bulk_valid_i;
-    assign bulk_ready_o = count < 2 && !fault_o;
+    assign copy_ready_o = count < 2 && !fault_o && !bulk_valid_i && sl_idle && !sl_valid_i;
+    assign bulk_ready_o = count < 2 && !fault_o && sl_idle && !sl_valid_i;
     assign push = (copy_valid_i && copy_ready_o) || (bulk_valid_i && bulk_ready_o);
     assign dispatch = count != 0 && !running && !fault_o;
     assign cp_launch = dispatch && !current.bulk && !current.bytes_mode && cp_ready;
     assign by_launch = dispatch && !current.bulk && current.bytes_mode && by_ready;
     assign bm_launch = dispatch && current.bulk && bm_ready;
     assign pop = running && (owner_bulk ? bm_idle : owner_byte ? by_idle : cp_idle) && !fault_o;
-    assign idle_o = count == 0 && !running && cp_idle && bm_idle && by_idle;
-    assign req_o = !fault_o && (owner_bulk ? bm_req : owner_byte ? by_req : cp_req);
-    assign we_o = owner_bulk ? bm_we : owner_byte ? by_we : cp_we;
-    assign addr_o = owner_bulk ? bm_addr : owner_byte ? by_addr : cp_addr;
-    assign wdata_o = owner_bulk ? bm_data : owner_byte ? by_data : cp_data;
-    assign wtag_o = owner_bulk ? bm_tag : owner_byte ? by_tag : cp_tag;
-    assign fault_o = cp_fault || bm_fault || by_fault;
-    assign fault_addr_o = bm_fault ? bm_fault_addr : by_fault ? by_fault_addr : cp_fault_addr;
-    assign fault_reason_o = (bm_fault || by_fault) ? MPY_FAULT_BUS : cp_reason;
+    assign legacy_idle = count == 0 && !running && cp_idle && bm_idle && by_idle;
+    assign sl_ready_o = legacy_idle && sl_idle && !fault_o;
+    assign idle_o = legacy_idle && sl_idle && !sl_valid_i;
+    assign req_o = !sl_idle ? sl_req : (!fault_o && (owner_bulk ? bm_req : owner_byte ? by_req : cp_req));
+    assign we_o = !sl_idle ? sl_we : (owner_bulk ? bm_we : owner_byte ? by_we : cp_we);
+    assign addr_o = !sl_idle ? sl_addr : (owner_bulk ? bm_addr : owner_byte ? by_addr : cp_addr);
+    assign wdata_o = !sl_idle ? sl_data : (owner_bulk ? bm_data : owner_byte ? by_data : cp_data);
+    assign wtag_o = !sl_idle ? sl_tag : (owner_bulk ? bm_tag : owner_byte ? by_tag : cp_tag);
+    assign fault_o = cp_fault || bm_fault || by_fault || sl_fault;
+    assign fault_addr_o = sl_fault ? sl_faddr : bm_fault ? bm_fault_addr : by_fault ? by_fault_addr : cp_fault_addr;
+    assign fault_reason_o = sl_fault ? sl_reason : (bm_fault || by_fault) ? MPY_FAULT_BUS : cp_reason;
 
     always_comb begin
-        chk_busy_o = cp_busy;
+        chk_busy_o = cp_busy || sl_lock;
         for (int i=0; i<2; i++) begin
             // Once a copy starts, its own scoreboard releases completed words.
             // A map retains whole-table ownership through count publication.
@@ -130,19 +142,31 @@ module mpy_collection #(parameter bit TYPE_CACHE=0) (
             if (fault_o) begin occupied<=0;count<=0;running<=0;end
         end
     end
+    mpy_shortlist #(.MAX_ELEMS(SHORTLIST_MAX)) short_engine (
+        .clk_i,.rst_n_i,.valid_i(sl_valid_i && legacy_idle && !fault_o),.ready_o(),
+        .src_i(sl_src_i),.dst_i(sl_dst_i),.n_i(sl_n_i),.reverse_i(sl_reverse_i),
+        .clear_i(sl_clear_i),.clear_addr_i(sl_clear_addr_i),.put_i(sl_put_i),
+        .put_addr_i(sl_put_addr_i),.put_value_i(sl_put_value_i),
+        .length_i(sl_length_i),.header_i(sl_header_i),.new_length_i(sl_new_length_i),
+        .response_o(sl_response_o),.response_ready_i(sl_response_ready_i),.idle_o(sl_idle),
+        .chk_addr_i,.chk_we_i,.chk_busy_o(sl_lock),
+        .req_o(sl_req),.we_o(sl_we),.addr_o(sl_addr),.wdata_o(sl_data),.wtag_o(sl_tag),
+        .gnt_i(gnt_i && !sl_idle),.ack_i(ack_i && !sl_idle),.fault_i,.fault_reason_i,.rdata_i,.rtag_i,
+        .fault_o(sl_fault),.fault_addr_o(sl_faddr),.fault_reason_o(sl_reason)
+    );
     mpy_ca #(.QDEPTH(1)) copy_engine (
         .clk_i,.rst_n_i,.cmd_valid_i(cp_launch),.cmd_ready_o(cp_ready),
         .cmd_src_i(current.src),.cmd_dst_i(current.dst),.cmd_n_i(current.sn),.idle_o(cp_idle),
         .chk_addr_i,.chk_we_i,.chk_busy_o(cp_busy),
         .req_o(cp_req),.we_o(cp_we),.addr_o(cp_addr),.wdata_o(cp_data),.wtag_o(cp_tag),
-        .gnt_i(gnt_i && !owner_bulk && !owner_byte),.ack_i(ack_i && !owner_bulk && !owner_byte),.fault_i,.fault_reason_i,.rdata_i,.rtag_i,
+        .gnt_i(gnt_i && !owner_bulk && !owner_byte && sl_idle),.ack_i(ack_i && !owner_bulk && !owner_byte && sl_idle),.fault_i,.fault_reason_i,.rdata_i,.rtag_i,
         .fault_o(cp_fault),.fault_reason_o(cp_reason),.fault_addr_o(cp_fault_addr),.words_o,.cmds_o
     );
     mpy_bytecopy byte_engine (
         .clk_i,.rst_n_i,.valid_i(by_launch),.ready_o(by_ready),.idle_o(by_idle),
         .src_i(current.src),.dst_i(current.dst),.n_i(current.sn),.reverse_i(current.reverse_words),
         .req_o(by_req),.we_o(by_we),.addr_o(by_addr),.wdata_o(by_data),.wtag_o(by_tag),
-        .gnt_i(gnt_i && owner_byte && !owner_bulk),.ack_i(ack_i && owner_byte && !owner_bulk),
+        .gnt_i(gnt_i && owner_byte && !owner_bulk && sl_idle),.ack_i(ack_i && owner_byte && !owner_bulk && sl_idle),
         .fault_i,.rdata_i,.rtag_i,.fault_o(by_fault),.fault_addr_o(by_fault_addr)
     );
     mpy_bulk #(.TYPE_CACHE(TYPE_CACHE)) bulk_engine (
@@ -156,7 +180,7 @@ module mpy_collection #(parameter bit TYPE_CACHE=0) (
         .return_o(bulk_return_o),.ok_o(bulk_ok_o),.idle_o(bm_idle),.used_o(bulk_used_o),
         .chk_addr_i,.chk_we_i,.busy_o(),
         .req_o(bm_req),.we_o(bm_we),.addr_o(bm_addr),.wdata_o(bm_data),.wtag_o(bm_tag),
-        .gnt_i(gnt_i && owner_bulk),.ack_i(ack_i && owner_bulk),.fault_i,.rdata_i,.rtag_i,
+        .gnt_i(gnt_i && owner_bulk && sl_idle),.ack_i(ack_i && owner_bulk && sl_idle),.fault_i,.rdata_i,.rtag_i,
         .fault_o(bm_fault),.fault_addr_o(bm_fault_addr)
     );
 `ifndef SYNTHESIS

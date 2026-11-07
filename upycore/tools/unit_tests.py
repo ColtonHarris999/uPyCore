@@ -78,10 +78,12 @@ class Bench:
 
 
 BENCHES = [
+    Bench("mpy_shortlist", ["mpy_shortlist.sv"], r"^PASS mpy_shortlist "),
+    Bench("mpy_shortlist8", ["mpy_shortlist.sv"], r"^PASS mpy_shortlist ", top="tb_mpy_shortlist", parameters={"MAX_ELEMS": 8}),
     Bench("mpy_bytecopy", ["mpy_bytecopy.sv"], r"^PASS mpy_bytecopy "),
     Bench("mpy_key_equal", ["mpy_key_equal.sv"], r"^PASS mpy_key_equal "),
     Bench("mpy_rehash_stream", ["mpy_hash.sv", "mpy_hash_slot.sv", "upycore_umod_seq.sv", "mpy_key_equal.sv", "mpy_map_engine.sv", "mpy_rehash_stream.sv"], r"^PASS mpy_rehash_stream "),
-    Bench("mpy_collection", ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_key_equal.sv", "mpy_map_engine.sv", "mpy_bulk.sv", "mpy_hash_slot.sv", "mpy_rehash_stream.sv", "mpy_ca.sv", "mpy_bytecopy.sv", "mpy_collection.sv"], r"^PASS mpy_collection "),
+    Bench("mpy_collection", ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_key_equal.sv", "mpy_map_engine.sv", "mpy_bulk.sv", "mpy_hash_slot.sv", "mpy_rehash_stream.sv", "mpy_ca.sv", "mpy_bytecopy.sv", "mpy_shortlist.sv", "mpy_collection.sv"], r"^PASS mpy_collection "),
     Bench("mpy_bulk", ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_key_equal.sv", "mpy_map_engine.sv", "mpy_bulk.sv", "mpy_hash_slot.sv", "mpy_rehash_stream.sv"], r"^PASS mpy_bulk "),
     Bench("mpy_map_engine", ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_key_equal.sv", "mpy_map_engine.sv"], r"^PASS mpy_map_engine "),
     Bench("mpy_map_cache", ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_key_equal.sv", "mpy_map_engine.sv"], r"^PASS mpy_map_engine ", top="tb_mpy_map_engine", parameters={"TYPE_CACHE": 1}),
