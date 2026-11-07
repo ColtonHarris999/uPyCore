@@ -22,10 +22,10 @@ class MemoryLayoutTest(unittest.TestCase):
 
     def test_gc_table_covers_the_largest_real_heap(self):
         # Every image carries the firmware; an empty program links to
-        # 190,752 bytes today, which leaves the largest heap a real image
+        # 191,016 bytes today, which leaves the largest heap a real image
         # can have. The table must hold it (and not much more).
-        heap = abi.memory_layout(190752)[2]
-        self.assertEqual(heap, 299488)
+        heap = abi.memory_layout(191016)[2]
+        self.assertEqual(heap, 299200)
         self.assertLessEqual(heap, abi.GC_TABLE_BYTES)
         self.assertLess(abi.GC_TABLE_BYTES - heap, 16 * 1024)
         self.assertEqual(abi.memory_layout(1024)[2], abi.GC_TABLE_BYTES)

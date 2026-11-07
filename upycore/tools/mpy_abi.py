@@ -476,10 +476,10 @@ GC_POOL_BASE = ARGBUF_BASE + 4 * ARGBUF_WORDS
 GC_POOL_BYTES = SRAM_BASE + SRAM_BYTES - GC_POOL_BASE
 # Capacity of mpy_gc's allocation table, in heap bytes. GC_POOL_BYTES is the
 # address window, the heap an image of size 0 would leave; every real image
-# carries the firmware (190,752 bytes for an empty program), so the largest
-# heap is SRAM_BYTES - reserve - 190,752 = 299,488 bytes (18,718 blocks).
+# carries the firmware (191,016 bytes for an empty program), so the largest
+# heap is SRAM_BYTES - reserve - 191,016 = 299,200 bytes (18,700 blocks).
 # The table holds 19,200 blocks (2 bits each, 600 x 64-bit words), so it
-# covers that with 482 blocks to spare. memory_layout caps the heap here.
+# covers that with 500 blocks to spare. memory_layout caps the heap here.
 GC_TABLE_BLOCKS = 600 * 32
 GC_TABLE_BYTES = GC_TABLE_BLOCKS * 16
 

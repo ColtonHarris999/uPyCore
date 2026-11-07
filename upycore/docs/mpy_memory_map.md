@@ -140,7 +140,7 @@ zero; those bytes stay reserved so a pointer payload is never 0 or 4.
 `0x2000_0000 + 524288 - I` (or earlier with a heap cap). `mpy_gc`'s
 allocation table holds `GC_TABLE_BYTES` = 307,200 bytes of heap (19,200
 blocks, 2 bits each, in a 600 × 64 table SRAM): every image carries the firmware, and an empty program
-(190,752 bytes today) leaves at most 299,488 bytes, so a real image never
+(191,016 bytes today) leaves at most 299,200 bytes, so a real image never
 reaches the cap; a smaller image would just leave SRAM unused. Both windows
 share the same four SRAM banks; their logical bases do not imply separate
 physical memories. See [`mpy_boot.md`](mpy_boot.md) for mapping and bounds.
