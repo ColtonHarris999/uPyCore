@@ -77,10 +77,23 @@ module mpy_gc #(
 
     localparam int NB = POOL_BYTES / 16;
     localparam int BW = $clog2(NB + 1);
+    // pool_bytes_i is fixed from reset release, so its clamp is registered:
+    // nothing reads it before the NW-cycle table clear ends. This keeps the
+    // boot loader's size arithmetic off the collector's paths.
     logic [BW-1:0] active_blocks;
     logic [31:0] active_bytes;
-    assign active_blocks = BW'(((pool_bytes_i > POOL_BYTES) ? POOL_BYTES : pool_bytes_i) >> 4);
-    assign active_bytes = 32'(active_blocks) << 4;
+    logic        active_v;    // active_blocks / active_bytes hold pool_bytes_i
+    always_ff @(posedge clk_i or negedge rst_n_i) begin
+        if (!rst_n_i) begin
+            active_blocks <= '0;
+            active_bytes  <= '0;
+            active_v      <= 1'b0;
+        end else begin
+            active_v      <= 1'b1;
+            active_blocks <= BW'(((pool_bytes_i > POOL_BYTES) ? POOL_BYTES : pool_bytes_i) >> 4);
+            active_bytes  <= 32'(BW'(((pool_bytes_i > POOL_BYTES) ? POOL_BYTES : pool_bytes_i) >> 4)) << 4;
+        end
+    end
     localparam int SW = $clog2(STACK_DEPTH + 1);
 
     localparam logic [1:0] A_FREE = 2'd0;
@@ -364,9 +377,13 @@ module mpy_gc #(
                     // One table word (32 entries) per cycle.
                     idx <= idx + 1'b1;
                     if (idx == BW'(NW - 1)) begin
-                        idx <= '0;
-                        free_cnt <= 32'(active_blocks);
-                        st  <= G_IDLE;
+                        if (active_v) begin
+                            idx <= '0;
+                            free_cnt <= 32'(active_blocks);
+                            st  <= G_IDLE;
+                        end else begin
+                            idx <= idx;   // a one-word table waits for the size
+                        end
                     end
                 end
                 G_IDLE: begin

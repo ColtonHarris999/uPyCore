@@ -13943,18 +13943,28 @@ module mpy_gc (
 	input wire [3:0] mem_rtag_i;
 	localparam signed [31:0] NB = POOL_BYTES / 16;
 	localparam signed [31:0] BW = $clog2(NB + 1);
-	wire [BW - 1:0] active_blocks;
-	wire [31:0] active_bytes;
+	reg [BW - 1:0] active_blocks;
+	reg [31:0] active_bytes;
+	reg active_v;
 	function automatic [BW - 1:0] sv2v_cast_B8D8A;
 		input reg [BW - 1:0] inp;
 		sv2v_cast_B8D8A = inp;
 	endfunction
-	assign active_blocks = sv2v_cast_B8D8A((pool_bytes_i > POOL_BYTES ? POOL_BYTES : pool_bytes_i) >> 4);
 	function automatic [31:0] sv2v_cast_32;
 		input reg [31:0] inp;
 		sv2v_cast_32 = inp;
 	endfunction
-	assign active_bytes = sv2v_cast_32(active_blocks) << 4;
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i) begin
+			active_blocks <= 1'sb0;
+			active_bytes <= 1'sb0;
+			active_v <= 1'b0;
+		end
+		else begin
+			active_v <= 1'b1;
+			active_blocks <= sv2v_cast_B8D8A((pool_bytes_i > POOL_BYTES ? POOL_BYTES : pool_bytes_i) >> 4);
+			active_bytes <= sv2v_cast_32(sv2v_cast_B8D8A((pool_bytes_i > POOL_BYTES ? POOL_BYTES : pool_bytes_i) >> 4)) << 4;
+		end
 	localparam signed [31:0] SW = $clog2(STACK_DEPTH + 1);
 	localparam [1:0] A_FREE = 2'd0;
 	localparam [1:0] A_HEAD = 2'd1;
@@ -14335,9 +14345,13 @@ module mpy_gc (
 				5'd0: begin
 					idx <= idx + 1'b1;
 					if (idx == sv2v_cast_B8D8A_signed(NW - 1)) begin
-						idx <= 1'sb0;
-						free_cnt <= sv2v_cast_32(active_blocks);
-						st <= 5'd1;
+						if (active_v) begin
+							idx <= 1'sb0;
+							free_cnt <= sv2v_cast_32(active_blocks);
+							st <= 5'd1;
+						end
+						else
+							idx <= idx;
 					end
 				end
 				5'd1:
@@ -15148,7 +15162,7 @@ module mpy_hash (
 		end
 	endtask
 	initial if ((DEPTH < 1) || ((BYTES_PER_CYCLE != 1) && (BYTES_PER_CYCLE != 4)))
-		$display("Error [%0t] /tmp/tmp.Z9l0CNI1Um/mpy_soc.sv:19541:13 - mpy_hash.<unnamed_block>.<unnamed_block>\n msg: ", $time, "mpy_hash: invalid parameters");
+		$display("Error [%0t] /tmp/tmp.S7MD8uORZV/mpy_soc.sv:19558:13 - mpy_hash.<unnamed_block>.<unnamed_block>\n msg: ", $time, "mpy_hash: invalid parameters");
 	always @(posedge clk_i or negedge rst_n_i)
 		if (!rst_n_i) begin
 			state <= 5'd0;
