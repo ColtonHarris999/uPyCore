@@ -125,7 +125,7 @@ for generic area on the committed `synth/hammer/converted/*.v`.
 | Host tests (`upycore/tests/*`, `tools/test_runtime_profile.py`) | All pass |
 | `compiler_suite.py` | **FAIL (exit 1)**: 504 files, 500 byte-exact, 3 float spelling, **1 differ** (`math_funcs.py`, E7). At `aca1b5e`: 491 files, 488 byte-exact, 3 float spelling, 0 differ |
 | `unit_tests.py` | **29 / 29 pass**, including `mpy_boot` (`timing_10ns.md` reports it timing out in its environment) |
-| `hw_tests.py --area all` (mpy-cross, 494 tests) | **No failures.** 387 passed when this was committed, including `calls/star_wide_oom` and `containers/shortlist_methods`. The `compiler` area was still running (it takes minutes per program) |
+| `hw_tests.py --area all` (mpy-cross) | **494 / 494 pass** (68 min at `-j 3`), including `calls/star_wide_oom`, `containers/shortlist_methods`, and all 53 `compiler` programs. The uPy2 (`--compiler mpyc`) pass was not run in full |
 | `hw_tests.py --check-goldens` | 482 pass, 10 skip (`oracle = false`), **1 FAIL: `containers/shortlist_methods`** (E7). `generators/gen_repr` passed in the full run but **fails when run alone** (E3) |
 | x87 oracle vs SSE oracle on all 478 oracle-backed suite programs | **0 differ** |
 | `verilator --lint-only -Wall` on `mpy_soc` | 0 errors; 225 UNUSEDPARAM, 56 UNUSEDSIGNAL, 22 WIDTHEXPAND, 6 PINCONNECTEMPTY, 5 WIDTHTRUNC (`mpy_shortlist.sv:55,108`, `mpy_gc.sv:348,578`), 1 UNOPTFLAT, **2 SYNCASYNCNET** (`sys_rst_n`, `u_gc.rst_n_i`). `mpy_core` has blanket `lint_off`, so its own warnings are hidden |
