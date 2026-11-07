@@ -71,6 +71,25 @@ baseline and a change are what the decisions were based on.
 Estimated core worst path after each step: 12.84 → 9.44 → 8.74 → 7.87 →
 7.67 → 7.40 ns.
 
+### After merging the short-list engine (`main`, PR 57)
+
+Same flow, on the merged RTL, with both SRAM shapes (mpy_mem's banks and
+the GC table) as macro stand-ins whose pins are flops:
+
+| | Before merge | Merged |
+| --- | ---: | ---: |
+| `mpy_core` worst path | 7.40 ns | 7.51 ns (`sp` → `m_addr`) |
+| `mpy_soc` worst path | 7.41 ns | 7.48 ns (copy engine `rpend`) |
+| Scaled to the 18 ns post-route baseline | ≈ 10.4 ns | ≈ 10.5 ns |
+
+The short-list states add about 30 memory-access sources to the core's
+address select, which moves `sp` → `m_addr` from 7.30 to 7.51 ns. The first
+merged SoC run showed 8.41 ns from the boot loader's size arithmetic
+through `mpy_gc`'s pool clamp into its table walk; `mpy_gc` now registers
+the clamp (fixed from reset release), and its worst path in the SoC is
+5.4 ns. The GC table SRAM costs at most +0.33 % cycles on the merged
+firmware (`bulk_extended_keys`); every other workload is within +0.06 %.
+
 ## Cycle cost
 
 Same images on the baseline and the new simulator (`upycore/tools/clock_bench.py`):
