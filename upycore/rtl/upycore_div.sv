@@ -6,15 +6,15 @@
 // small operands finish early.
 //
 //   C0            accept: sign-magnitude of both operands
-//   C1            leading-zero counts, step count, align the dividend,
-//                 load the divider core
-//   C2 .. C(S+1)  S = ceil(n / RL) restoring steps, n = quotient bits
-//   C(S+2)        core registers quotient / remainder
-//   C(S+3)        Python floor fix-up, result registered
-//   C(S+4)        done_o
+//   C1            leading-zero counts and step count (registered)
+//   C2            align the dividend, load the divider core
+//   C3 .. C(S+2)  S = ceil(n / RL) restoring steps, n = quotient bits
+//   C(S+3)        core registers quotient / remainder
+//   C(S+4)        Python floor fix-up, result registered
+//   C(S+5)        done_o
 //
-// So a division takes 5 + ceil(n/2) cycles at RL = 2: 5 cycles when
-// |a| < |b|, 37 for a full 64-bit quotient.  Division by zero is reported
+// So a division takes 6 + ceil(n/2) cycles at RL = 2: 6 cycles when
+// |a| < |b|, 38 for a full 64-bit quotient.  Division by zero is reported
 // combinationally in the accept cycle (div_zero_o) and does not start the
 // unit.  Both quotient and remainder are always produced.
 //
@@ -35,7 +35,7 @@ module upycore_div #(
     output logic        busy_o
 );
 
-    typedef enum logic [1:0] { D_IDLE, D_PREP, D_RUN, D_DONE } state_e;
+    typedef enum logic [2:0] { D_IDLE, D_PREP, D_ALIGN, D_RUN, D_DONE } state_e;
 
     state_e      state_r;
     logic        sa_r, sb_r;
@@ -63,6 +63,10 @@ module upycore_div #(
     assign bits_b = 8'd64 - 8'(lz_b);
     assign n_q    = $signed(9'(bits_a)) - $signed(9'(bits_b)) + 9'sd1;
 
+    // The two leading-zero counts and the digit count take D_PREP and land
+    // in n_pad_r; D_ALIGN shifts by the flop and starts the core. Doing
+    // both in one cycle put two clz64s and two 64-bit shifts in series.
+    logic [7:0] n_pad_r;
     always_comb begin
         if (n_q <= 9'sd0) begin
             n_pad = 8'd0;
@@ -73,9 +77,9 @@ module upycore_div #(
         end
         // |a| >> n_pad is below |b| by construction; the n_pad low bits are
         // brought down one radix digit at a time.
-        rem_init = a_mag_r >> n_pad;
-        bits     = a_mag_r << (8'd64 - n_pad);
-        nsteps   = (RL == 2) ? 16'(n_pad >> 1) : 16'(n_pad);
+        rem_init = a_mag_r >> n_pad_r;
+        bits     = a_mag_r << (8'd64 - n_pad_r);
+        nsteps   = (RL == 2) ? 16'(n_pad_r >> 1) : 16'(n_pad_r);
     end
 
     logic        core_start;
@@ -85,7 +89,7 @@ module upycore_div #(
     /* verilator lint_on UNUSEDSIGNAL */
     logic [63:0] q_mag, r_mag;
 
-    assign core_start = start_i && ((state_r == D_PREP) || (state_r == D_RUN));
+    assign core_start = start_i && ((state_r == D_ALIGN) || (state_r == D_RUN));
 
     upycore_udiv_seq #(.DW(64), .VW(64), .RL(RL)) u_core (
         .clk_i      (clk_i),
@@ -134,6 +138,7 @@ module upycore_div #(
             sa_r <= 1'b0; sb_r <= 1'b0;
             a_mag_r <= '0; b_mag_r <= '0;
             quot_r <= '0; rem_r <= '0;
+            n_pad_r <= '0;
         end else if (!start_i) begin
             state_r <= D_IDLE;
         end else begin
@@ -147,7 +152,8 @@ module upycore_div #(
                         state_r <= D_PREP;
                     end
                 end
-                D_PREP: state_r <= D_RUN;
+                D_PREP: begin n_pad_r <= n_pad; state_r <= D_ALIGN; end
+                D_ALIGN: state_r <= D_RUN;
                 D_RUN: begin
                     if (core_done) begin
                         quot_r  <= q_floor;

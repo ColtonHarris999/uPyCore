@@ -1,0 +1,9 @@
+{
+  "mode": 2,
+  "halt": "CLEAN",
+  "cycles": 7746032,
+  "gc": 6,
+  "stdout": "grown roots 80 840\n",
+  "stderr": "",
+  "log": "MPY_HALT code=0 value=00000000 cycles=7746032 ops=40547 gc=6 free=8790 boot=117260\n- /workspace/scratch/a97e5a8d3bbf/upycore/upycore/tb/tb_mpy_soc.sv:109: Verilog $finish\n"
+}

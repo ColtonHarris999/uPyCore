@@ -1,0 +1,403 @@
+hw_tests: 493 test(s), 3 job(s), compiler mpyc
+PASS  smoke/hello  cycles=20858
+PASS  smoke/raise_err  cycles=37050
+PASS  smoke/exit_code  cycles=35854
+PASS  alu/bitwise  cycles=88432
+PASS  alu/compare  cycles=70825
+PASS  alu/arith  cycles=122471
+PASS  alu/divzero  cycles=63301
+PASS  alu/overflow  cycles=79743
+PASS  alu/truth  cycles=160532
+PASS  alu/floats  cycles=916466
+PASS  alu/complex  cycles=691456
+PASS  alu/bitwise_calls  cycles=29985
+PASS  alu/complex_ops  cycles=3304397
+PASS  alu/complex_nan_eq  cycles=107985
+PASS  alu/complex_type_trap  cycles=82204
+PASS  alu/unary_invert_float_trap  cycles=73970
+PASS  alu/compare_op_type_trap  cycles=81645
+PASS  control/branch  cycles=29874
+PASS  control/fetch_long_insn  cycles=27934
+PASS  control/loops  cycles=55529
+PASS  control/for_iter  cycles=257581
+PASS  alu/floatparse  cycles=11322205
+PASS  control/branchy  cycles=25364
+PASS  control/pop_jump_if_none  cycles=23612
+PASS  control/for_iter_type_trap  cycles=66521
+PASS  control/for_iter_nested  cycles=25464
+PASS  control/getitem_iter  cycles=231671
+PASS  control/for_iter_edges  cycles=25391
+PASS  control/for_iter_branch  cycles=23682
+PASS  control/for_iter_mutate  cycles=25243
+PASS  control/for_iter_mutate_visited  cycles=25296
+PASS  control/for_iter_rebind  cycles=25341
+PASS  control/for_iter_delete  cycles=27354
+PASS  alu/float_pow  cycles=14256012
+PASS  control/for_iter_clear  cycles=32834
+PASS  control/for_iter_subscr  cycles=25299
+PASS  control/for_iter_build_tuple  cycles=23667
+PASS  control/for_iter_range_type_trap  cycles=23575
+PASS  control/for_iter_range_bool  cycles=23896
+PASS  control/for_iter_str_empty  cycles=23515
+PASS  control/for_iter_str_long  cycles=26344
+PASS  control/stack_spill_loop  cycles=7709571
+PASS  control/for_iter_str_unicode  cycles=47066
+PASS  control/for_iter_str_branch  cycles=25862
+PASS  control/for_iter_str_type_trap  cycles=66521
+PASS  control/for_iter_dict_keys  cycles=25301
+PASS  control/for_iter_dict_empty  cycles=23533
+PASS  control/for_iter_dict_str_keys  cycles=24120
+PASS  control/for_iter_set_basic  cycles=94535
+PASS  control/for_iter_dict_delete  cycles=62246
+PASS  control/for_iter_set_empty  cycles=25141
+PASS  control/for_iter_object_list  cycles=51347
+PASS  control/for_iter_set_type_trap  cycles=66521
+PASS  control/for_iter_object_next  cycles=49198
+PASS  control/for_iter_object_exhaust  cycles=45253
+PASS  control/for_iter_object_no_iter_trap  cycles=90530
+PASS  control/for_iter_object_nested  cycles=70714
+PASS  control/for_iter_object_raise_catch  cycles=45713
+PASS  control/for_call_toplevel  cycles=26412
+PASS  calls/closure  cycles=86287
+PASS  calls/call_funcs  cycles=175356
+PASS  calls/varargs  cycles=205514
+PASS  calls/call_chain  cycles=26067
+PASS  calls/noncallable  cycles=64159
+PASS  calls/recursion  cycles=195138
+PASS  calls/bad_argc  cycles=87719
+PASS  calls/deep_callgraph  cycles=42329
+PASS  calls/default_arg  cycles=24305
+PASS  calls/default_none  cycles=26238
+PASS  calls/default_arg_argc_trap  cycles=87668
+PASS  calls/default_false_zero  cycles=26633
+PASS  calls/default_empty_tuple  cycles=24590
+PASS  calls/default_multi_zero_argc  cycles=26685
+PASS  calls/default_arg_too_many  cycles=85300
+PASS  calls/default_partial_none  cycles=26080
+PASS  calls/default_kwonly_none  cycles=52240
+PASS  calls/default_call_ex_empty  cycles=46040
+PASS  calls/varargs_pos_defaults  cycles=26601
+PASS  calls/default_nested  cycles=26851
+PASS  calls/call_kw  cycles=84509
+PASS  calls/call_function_ex  cycles=25639
+PASS  calls/call_kw_unexpected  cycles=75420
+PASS  calls/call_function_ex_kw  cycles=54350
+PASS  calls/varargs_basic  cycles=24097
+PASS  calls/call_wide  cycles=33465
+PASS  calls/star_wide_iter  cycles=150196
+PASS  calls/star_wide_spill  cycles=169425
+PASS  calls/star_wide_dir  cycles=4031548
+PASS  calls/varargs_empty  cycles=24026
+PASS  calls/varargs_kwonly  cycles=36737
+PASS  calls/star_wide  cycles=5474129
+PASS  calls/varargs_kwonly2  cycles=43511
+PASS  calls/varargs_kwonly2_partial  cycles=41185
+PASS  calls/varargs_ex_kw  cycles=41234
+PASS  calls/varargs_call_ex  cycles=24107
+PASS  calls/varkw_basic  cycles=43538
+PASS  calls/varkw_empty  cycles=27232
+PASS  calls/varkw_only  cycles=39448
+PASS  calls/varkw_and_varargs  cycles=41730
+PASS  calls/varkw_call_ex  cycles=48443
+PASS  calls/varkw_name_collision  cycles=38283
+PASS  calls/varkw_no_wipe  cycles=35358
+PASS  calls/star_wide_oom  cycles=6079987
+PASS  calls/varkw_kwonly  cycles=52375
+PASS  calls/varkw_many  cycles=58935
+PASS  calls/varkw_combo  cycles=60600
+PASS  calls/varkw_dup_trap  cycles=82491
+PASS  calls/varkw_kwonly_missing_trap  cycles=85180
+PASS  containers/tuple_index_bounds  cycles=92558
+PASS  containers/lists  cycles=369671
+PASS  containers/tuples  cycles=225970
+PASS  containers/dicts  cycles=437366
+PASS  containers/sets  cycles=698537
+PASS  containers/set_order  cycles=169008
+PASS  containers/unpack  cycles=187675
+PASS  containers/unpack_len_trap  cycles=71131
+PASS  containers/list_to_tuple  cycles=28963
+PASS  containers/list_repeat  cycles=68051
+PASS  containers/list_repeat_type_trap  cycles=28100
+PASS  containers/list_concat  cycles=49987
+PASS  containers/memoryview_ops  cycles=1645163
+PASS  containers/list_pop_insert  cycles=5177904
+PASS  containers/list_setslice_rhs  cycles=6397882
+FAIL  containers/bulk_maps   runner timeout after 180s
+PASS  containers/list_concat_type_trap  cycles=83680
+PASS  containers/list_comp_fast_clear  cycles=26439
+PASS  containers/list_del_last_only  cycles=27926
+PASS  containers/list_contains_types  cycles=48821
+PASS  containers/list_del_contains_call  cycles=42911
+PASS  containers/list_del_oob  cycles=59710
+PASS  containers/list_del_tuple_trap  cycles=76512
+PASS  containers/dict_del_trap  cycles=30865
+PASS  containers/dict_del_simple  cycles=31714
+PASS  containers/dict_del_then_insert  cycles=33072
+PASS  containers/dict_hash_neg1  cycles=25171
+PASS  containers/dict_str_keys  cycles=33295
+PASS  containers/dict_large_pycore  cycles=26014
+PASS  containers/dict_bool_int_collision  cycles=25076
+PASS  containers/dict_false_zero  cycles=23709
+PASS  containers/dict_del_collision  cycles=32945
+PASS  containers/dict_contains_collision  cycles=23824
+PASS  containers/set_bool_int  cycles=28490
+PASS  containers/set_hash_neg1  cycles=32064
+PASS  containers/set_str  cycles=35687
+PASS  containers/list_method_missing  cycles=73405
+PASS  containers/list_method_unbound  cycles=23932
+PASS  containers/list_extend  cycles=38012
+PASS  containers/list_extend_del_contains  cycles=42907
+PASS  containers/list_del_simple  cycles=28332
+PASS  containers/list_del_first_last  cycles=29952
+PASS  containers/list_del_contains  cycles=36756
+PASS  containers/list_del_nested  cycles=28562
+PASS  containers/dict_mixed_ops  cycles=36774
+PASS  containers/set_update  cycles=74576
+PASS  containers/set_update_tuple  cycles=79505
+PASS  containers/map_add  cycles=25958
+PASS  containers/dict_update  cycles=30389
+PASS  containers/dict_update_obj  cycles=508211
+PASS  containers/dict_merge  cycles=49813
+PASS  containers/container_list_append_grow  cycles=25113
+PASS  containers/container_dict_collision  cycles=25087
+PASS  containers/container_dict_full_insert  cycles=23924
+PASS  containers/for_iter_grow  cycles=27641
+PASS  containers/for_iter_dict_grow  cycles=26229
+PASS  containers/attr_grow_global  cycles=46198
+PASS  containers/seed_grow_global  cycles=44487
+PASS  containers/allocator_list  cycles=399961
+PASS  containers/list_del_shift_excore  cycles=28387
+PASS  containers/dict_grow_basic  cycles=25552
+PASS  containers/dict_grow_large  cycles=32640
+PASS  containers/set_grow_basic  cycles=71511
+PASS  containers/ca_copy  cycles=1478682
+PASS  strings/text  cycles=420414
+PASS  strings/unicode  cycles=48402
+PASS  strings/bytesobj  cycles=266468
+PASS  strings/bytearray_index  cycles=4876434
+PASS  strings/bytearray_repr  cycles=166088
+PASS  strings/format  cycles=199405
+PASS  strings/slice_str_clamp  cycles=78341
+PASS  strings/slice_str_long  cycles=138519
+PASS  strings/slice_str_unicode  cycles=112355
+PASS  strings/slice_str_step  cycles=102311
+PASS  strings/slice_list_step  cycles=113125
+PASS  strings/slice_str_empty  cycles=63993
+PASS  strings/slice_str_scan  cycles=62417
+PASS  strings/slice_str_neg_trap  cycles=35868
+PASS  containers/list_slice_step  cycles=29904963
+PASS  strings/slice_damerau  cycles=53905
+PASS  strings/str_consts  cycles=25200
+PASS  strings/str_eq_runtime_long  cycles=75233
+PASS  strings/string_ops  cycles=31365
+PASS  strings/list_repeat_jaro  cycles=36256
+PASS  strings/list_concat_damerau  cycles=32770
+PASS  strings/build_string  cycles=48524
+PASS  strings/str_subscr_long  cycles=25236
+PASS  strings/str_subscr_unicode  cycles=71007
+PASS  strings/str_subscr_loop  cycles=24516
+PASS  strings/str_subscr_oob_trap  cycles=58514
+PASS  strings/str_subscr_char_oob_trap  cycles=64971
+PASS  strings/str_dict_key_runtime  cycles=51581
+PASS  strings/str_dict_key_runtime_del  cycles=52671
+PASS  strings/jaro_window  cycles=58188
+PASS  strings/str_search_methods  cycles=233401
+PASS  strings/str_p5e_batch2  cycles=109324
+PASS  strings/str_p5e_batch3  cycles=182043
+PASS  exceptions/handling  cycles=121901
+PASS  exceptions/with_stmt  cycles=80911
+PASS  exceptions/custom  cycles=104476
+PASS  exceptions/try_syntaxerror  cycles=24539
+PASS  exceptions/try_exc_types  cycles=30216
+PASS  exceptions/try_syntaxerror_msg  cycles=29019
+PASS  exceptions/with_prop  cycles=423575
+PASS  exceptions/raise_syntaxerror_fatal  cycles=36250
+PASS  exceptions/try_exc_cross_frame_fatal  cycles=25081
+PASS  exceptions/try_stopiteration  cycles=24486
+PASS  exceptions/try_stopiteration_nested  cycles=26982
+PASS  exceptions/raise_stopiteration_fatal  cycles=36255
+PASS  exceptions/try_exception  cycles=24508
+PASS  exceptions/try_after_call  cycles=27254
+PASS  exceptions/try_typeerror  cycles=24510
+PASS  exceptions/raise_typeerror_call  cycles=25942
+PASS  exceptions/raise_instance  cycles=25953
+PASS  exceptions/try_tuple_match  cycles=24688
+PASS  exceptions/try_lookuperror  cycles=27304
+PASS  exceptions/bare_raise  cycles=26033
+PASS  exceptions/try_except_miss  cycles=36466
+PASS  exceptions/bare_raise_no_active  cycles=61193
+PASS  exceptions/try_except_else  cycles=26739
+PASS  exceptions/try_finally  cycles=26711
+PASS  exceptions/try_except_as  cycles=24562
+PASS  exceptions/try_callee_unhandled  cycles=36230
+PASS  exceptions/fw_next_exhausted  cycles=26667
+PASS  exceptions/exc_args  cycles=29044
+PASS  exceptions/raise_varargs  cycles=68852
+PASS  exceptions/raise_after_call_loop  cycles=29494
+PASS  objects/classes  cycles=254307
+PASS  objects/inherit  cycles=296848
+PASS  objects/mro_diamond  cycles=126713
+PASS  objects/mro_repeat  cycles=92209
+PASS  objects/props  cycles=107054
+PASS  objects/mro_native  cycles=358024
+PASS  objects/attr_basic  cycles=43772
+PASS  objects/attr_many  cycles=47527
+PASS  objects/attr_overwrite  cycles=42192
+PASS  objects/attr_missing  cycles=103492
+PASS  objects/attr_type_trap  cycles=72697
+PASS  objects/attr_del_reinsert  cycles=43844
+PASS  objects/attr_del  cycles=100646
+PASS  objects/attr_shadow  cycles=42642
+PASS  objects/attr_dunder_dict  cycles=47268
+PASS  objects/attr_mro  cycles=43709
+PASS  objects/attr_dunder_class  cycles=44279
+PASS  objects/attr_dunder_base  cycles=82814
+PASS  objects/attr_dunder_store_trap  cycles=41765
+PASS  objects/attr_dunder_del_trap  cycles=98386
+PASS  objects/firmware_attr_helpers  cycles=92028
+PASS  objects/method_call  cycles=42763
+PASS  objects/method_nested  cycles=44465
+PASS  objects/ctor_noinit  cycles=41302
+PASS  objects/ctor_init  cycles=43855
+PASS  objects/method_default  cycles=43469
+PASS  objects/varkw_method  cycles=60701
+PASS  objects/method_call_kw  cycles=77415
+PASS  objects/bound_method_obj  cycles=42848
+PASS  objects/class_const  cycles=44684
+PASS  objects/class_two_instances  cycles=50799
+PASS  builtins/hash_equivalence  cycles=1380458
+PASS  builtins/int_bytes_bounds  cycles=754666
+PASS  builtins/builtin_fns  cycles=598250
+PASS  builtins/method_getattr  cycles=51571
+PASS  builtins/sysmod  cycles=110038
+PASS  builtins/gcmod  cycles=171358
+PASS  builtins/arraymod  cycles=481115
+PASS  builtins/helper_containers  cycles=29218
+PASS  builtins/fw_range_zero_step  cycles=26603
+PASS  builtins/fw_pow_neg_mod  cycles=93610
+PASS  builtins/fw_pow_mulmod  cycles=50793
+PASS  builtins/fw_round_half_even  cycles=203280
+PASS  builtins/array_slice_bounds  cycles=5053423
+PASS  builtins/builtin_len_long_str  cycles=24944
+PASS  builtins/fw_float_str  cycles=488341
+PASS  builtins/builtin_len_obj  cycles=45846
+PASS  builtins/builtin_len_obj_missing  cycles=90270
+PASS  builtins/builtin_ord_scan  cycles=39354
+PASS  builtins/builtin_ord_unicode  cycles=44027
+PASS  builtins/builtin_ord_len_trap  cycles=84008
+PASS  builtins/builtin_ord_type_trap  cycles=75296
+PASS  builtins/builtin_chr_range_trap  cycles=60081
+PASS  builtins/builtin_chr_surrogate_trap  cycles=27730
+PASS  builtins/builtin_max_float  cycles=39067
+PASS  builtins/builtin_int_type_trap  cycles=68024
+PASS  builtins/builtin_str_type_trap  cycles=26441
+PASS  builtins/firmware_iterators  cycles=104575
+PASS  builtins/firmware_wave3a  cycles=65527
+PASS  builtins/firmware_wave3_pow  cycles=46633
+PASS  builtins/firmware_wave3_strings  cycles=55172
+PASS  builtins/firmware_sorted_kw  cycles=66586
+PASS  builtins/firmware_wave3_containers  cycles=90625
+PASS  builtins/firmware_filter_pred  cycles=44687
+PASS  builtins/firmware_isinstance  cycles=93008
+PASS  builtins/firmware_tuple_empty  cycles=26249
+PASS  builtins/firmware_min_varargs  cycles=34591
+PASS  builtins/print_empty  cycles=24182
+PASS  builtins/print_sep_end  cycles=69828
+PASS  builtins/print_end_only  cycles=48241
+PASS  builtins/print_none_sep  cycles=43370
+PASS  builtins/print_many  cycles=35582
+PASS  builtins/print_star  cycles=35165
+PASS  builtins/print_star_kw  cycles=46811
+PASS  builtins/print_neg  cycles=31033
+PASS  builtins/print_bools  cycles=42458
+PASS  builtins/print_type_trap  cycles=32073
+PASS  modules/import_missing  cycles=66118
+PASS  modules/use_helper  cycles=168778
+PASS  modules/use_pkg  cycles=115179
+PASS  modules/use_rel  cycles=117396
+PASS  modules/import_rel_pkg  cycles=145832
+PASS  modules/import_rel_main  cycles=43285
+PASS  modules/import_fail_body  cycles=133279
+PASS  modules/import_getattr  cycles=107553
+PASS  modules/import_star_all  cycles=127533
+PASS  modules/import_usys  cycles=80376
+PASS  modules/builtins_override_import  cycles=88548
+PASS  containers/shortlist  cycles=46492435
+PASS  modules/io_stringio  cycles=1378767
+PASS  modules/import_from_hook  cycles=333908
+PASS  integ/fib  cycles=89843
+PASS  integ/sort  cycles=103426
+PASS  variables/undef_global  cycles=68309
+PASS  variables/globals_accum  cycles=27926
+PASS  variables/swap  cycles=23543
+PASS  variables/delete_fast  cycles=23414
+PASS  variables/delete_fast_unbound  cycles=69169
+PASS  variables/load_fast_check  cycles=23416
+PASS  variables/load_fast_check_unbound  cycles=69169
+PASS  variables/builtins_fallback  cycles=23549
+PASS  variables/builtins_shadow  cycles=25272
+PASS  variables/builtins_null_bit  cycles=25575
+PASS  variables/builtins_override_name  cycles=70821
+PASS  variables/load_name_builtin  cycles=23568
+PASS  variables/local_hot  cycles=77156
+PASS  modules/cmath_random  cycles=9447896
+PASS  memory/alloc_size_bounds  cycles=201927
+PASS  memory/large_sram  cycles=1681928
+PASS  memory/code_ram_call_rom  cycles=31195
+PASS  memory/locals_40_uninit  cycles=62145
+PASS  memory/rf_deep_recursion  cycles=30722
+PASS  memory/rf_spill_refill  cycles=31690
+PASS  memory/stack_ring  cycles=58528
+PASS  memory/rf_thrash  cycles=409543
+PASS  memory/stack_grow  cycles=63695
+PASS  memory/align_mask  cycles=24803
+FAIL  modules/math_funcs   runner timeout after 180s
+PASS  compiler/exec_code_globals_rw  cycles=26299619
+PASS  compiler/exec_code_basic  cycles=29966338
+PASS  compiler/exec_code_returns_none  cycles=24051905
+PASS  compiler/compile_store_name_grow_loop  cycles=111458204
+Traceback (most recent call last):
+  File "/workspace/scratch/a97e5a8d3bbf/upycore/upycore/tools/hw_tests.py", line 506, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/workspace/scratch/a97e5a8d3bbf/upycore/upycore/tools/hw_tests.py", line 479, in main
+    results = run_tests(picked, args.jobs, args.compiler)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/a97e5a8d3bbf/upycore/upycore/tools/hw_tests.py", line 358, in run_tests
+    list(pool.map(work, tests))
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py", line 619, in result_iterator
+    yield _result_or_cancel(fs.pop())
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py", line 317, in _result_or_cancel
+    return fut.result(timeout)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py", line 449, in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py", line 401, in __get_result
+    raise self._exception
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/thread.py", line 59, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/a97e5a8d3bbf/upycore/upycore/tools/hw_tests.py", line 345, in work
+    o = run_device(t, compiler)
+        ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/a97e5a8d3bbf/upycore/upycore/tools/hw_tests.py", line 301, in run_device
+    image = build.build_program(t.source, work, t.source.name, _modules(t), compiler)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/a97e5a8d3bbf/upycore/upycore/tools/mpy_build.py", line 360, in build_program
+    fw = build_firmware()
+         ^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/a97e5a8d3bbf/upycore/upycore/tools/mpy_build.py", line 180, in build_firmware
+    if _newer(mpy, [src, MPY_CROSS]):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/a97e5a8d3bbf/upycore/upycore/tools/mpy_build.py", line 83, in _newer
+    return any(s.stat().st_mtime > t for s in sources)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/a97e5a8d3bbf/upycore/upycore/tools/mpy_build.py", line 83, in <genexpr>
+    return any(s.stat().st_mtime > t for s in sources)
+               ^^^^^^^^
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py", line 840, in stat
+    return os.stat(self, follow_symlinks=follow_symlinks)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b10a43f96792/upycore/build/oracle/src/mpy-cross/build/mpy-cross'

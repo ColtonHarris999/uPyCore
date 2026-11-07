@@ -1,0 +1,22 @@
+mpy_core: 29109 endpoint bits, 2057 register groups, deepest 101
+groups at >= 0 levels: 2057
+  101  u_alu.u_fpu.u_pow.lz_r <-D                       from u_alu.u_fpu.u_pow.lmag_r
+   98  u_alu.u_fpu.u_pow.j0_r <-D                       from u_alu.u_fpu.u_pow.r_r via u_alu.u_fpu.u_pow.r_mag > u_alu.u_fpu.u_pow.r_clz
+   85  u_alu.u_fpu.u_pow.ex_r <-D                       from u_alu.u_fpu.state_r via u_alu.u_fpu.u_a > u_alu.u_fpu.u_div.lz_a
+   84  u_alu.u_fpu.u_pow.ey_r <-D                       from u_alu.u_fpu.state_r via u_alu.u_fpu.u_add.op_b_i > u_alu.u_fpu.u_div.lz_b
+   81  u_alu.u_fpu.u_add.s3_exp_r <-D                   from u_alu.u_fpu.u_add.s2_sum_r via u_alu.u_fpu.u_add.lz > u_alu.u_fpu.u_add.sh
+   80  u_alu.u_fpu.u_div.s1_exp_a_r <-D                 from u_alu.u_fpu.state_r via u_alu.u_fpu.u_a > u_alu.u_fpu.u_div.lz_a
+   79  u_alu.u_fpu.u_div.s1_exp_b_r <-D                 from u_alu.u_fpu.state_r via u_alu.u_fpu.u_add.op_b_i > u_alu.u_fpu.u_div.lz_b
+   73  u_alu.u_fpu.u_add.s3_ext <-D                     from u_alu.u_fpu.u_add.s2_sum_r via u_alu.u_fpu.u_add.lz > u_alu.u_fpu.u_add.sh > u_alu.u_fpu.u_add.norm
+   72  u_alu.u_fpu.u_pow.mx_r <-D                       from u_alu.u_fpu.state_r via u_alu.u_fpu.u_a > u_alu.u_fpu.u_div.lz_a
+   72  u_alu.u_fpu.u_div.s1_sig_a_r <-D                 from u_alu.u_fpu.state_r via u_alu.u_fpu.u_a > u_alu.u_fpu.u_div.lz_a
+   72  u_alu.u_fpu.fm_mul_a <-D                         from u_alu.u_fpu.state_r via u_alu.u_fpu.u_a > u_alu.u_fpu.u_div.lz_a
+   71  u_alu.u_fpu.pw_mul_b <-D                         from u_alu.u_fpu.state_r via u_alu.u_fpu.u_add.op_b_i > u_alu.u_fpu.u_div.lz_b
+   71  u_alu.u_fpu.u_div.s1_sig_b_r <-D                 from u_alu.u_fpu.state_r via u_alu.u_fpu.u_add.op_b_i > u_alu.u_fpu.u_div.lz_b
+   71  u_alu.u_fpu.fm_mul_b <-D                         from u_alu.u_fpu.state_r via u_alu.u_fpu.u_add.op_b_i > u_alu.u_fpu.u_div.lz_b
+   69  u_alu.u_fpu.pow_res <-D                          from u_alu.u_fpu.u_pow.i_int_r via u_alu.u_fpu.u_pow.pack_res
+   68  u_alu.u_fpu.u_div.p_exp_r <-D                    from u_alu.u_fpu.u_div.rem via u_alu.u_fpu.u_div.rem_lz
+   66  u_alu.u_fpu.u_mul.s1_lza_r <-D                   from u_alu.u_fpu.state_r via u_alu.u_fpu.u_a
+   65  u_alu.u_fpu.u_mul.s1_lzb_r <-D                   from u_alu.u_fpu.state_r via u_alu.u_fpu.u_add.op_b_i
+   64  pc <-D                                           from dq_n via u_dec.nwin > d_len
+   62  u_alu.u_fpu.state_r <-D                          from u_alu.fb64_r via u_alu.u_fpu.b_uexp > u_alu.u_fpu.b_trunc_abs > u_alu.u_fpu.pow_n_small

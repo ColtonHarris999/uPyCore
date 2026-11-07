@@ -1,0 +1,6 @@
+read_slang -j 1 --single-unit --top mpy_shortlist -DSYNTHESIS -I upycore/rtl upycore/rtl/mpy_shortlist.sv
+hierarchy -check -top mpy_shortlist
+synth -noabc -flatten -noshare -top mpy_shortlist
+check
+stat
+write_json build/shortlist-ppa/engine.json

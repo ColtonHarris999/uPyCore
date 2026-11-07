@@ -278,9 +278,21 @@ def _list_reserve(lst, n):
     while alloc < n:
         alloc = alloc * 2
     items = _alloc(alloc, TAG_CONT, 0)
-    _wcopy(items, 0, _ld(lst, 2), 0, _ld(lst, 0))
+    old = _ld(lst, 2)
+    count = _ld(lst, 0)
+    _wcopy(items, 0, old, 0, count)
     _st(lst, 2, items)
     _st(lst, 1, alloc)
+    # BUILD_LIST and native short slices coallocate the header and items.
+    # The collector scans the whole allocation: after growth the old inline
+    # slots must stop retaining children. Scoreboarding orders each clear
+    # after the queued copy has consumed that source word. Use raw payload
+    # equality, not Python object equality on internal CONT pointers.
+    if _pay(old) == _pay(lst) + 12:
+        i = 0
+        while i < count:
+            _st(old, i, NULL)
+            i += 1
 
 
 def _newtuple(n):

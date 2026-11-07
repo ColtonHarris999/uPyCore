@@ -11,7 +11,7 @@
 //
 // The last line is `MPY_BOOT_ERROR`, `MPY_HALT code=<n> value=<hex> cycles=<n> ops=<n> gc=<n>`
 // or `MPY_TIMEOUT cycles=<n> ...` (upycore/tools/mpy_build.py parses it).
-module tb_mpy_soc;
+module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE=2);
     logic clk = 1'b0;
     logic rst_n = 1'b0;
     always #5 clk = ~clk;
@@ -30,7 +30,7 @@ module tb_mpy_soc;
 
     tb_spi_nand u_nand (.sck(nand_sck), .cs_n(nand_cs_n), .mosi(nand_mosi), .miso(nand_miso));
 
-    mpy_soc u_soc (
+    mpy_soc #(.SHORTLIST_MAX(SHORTLIST_MAX), .SHORTLIST_MODE(SHORTLIST_MODE)) u_soc (
         .clk_i(clk), .rst_n_i(rst_n),
         .con_valid_o(con_valid), .con_err_o(con_err), .con_byte_o(con_byte),
         .halted_o(halted), .halt_code_o(halt_code), .halt_value_o(halt_value),
