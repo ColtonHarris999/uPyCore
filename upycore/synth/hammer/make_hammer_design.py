@@ -46,7 +46,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1] / "tools"))
 from mpy_dc_unit import write_unit  # noqa: E402
-from mpy_synth import CORE_FILES, SRAM_BLOCKS, SRAM_MACRO, SRAM_MODEL, TOPS  # noqa: E402
+from mpy_synth import CORE_FILES, GC_SRAM_MACRO, SRAM_BLOCKS, SRAM_MACRO, SRAM_MODEL, TOPS  # noqa: E402
 
 # BaseJump STL sources for the SRAM wrapper, in the class src.yml style.
 # The fakeram hook swaps each 32768 x 36 bsg_mem_1rw_sync_mask_write_bit
@@ -228,6 +228,12 @@ def main() -> int:
     if vdir.exists():
         shutil.rmtree(vdir)
     srams = args.top in TOPS and SRAM_MODEL in TOPS[args.top]
+    # Macro shapes this top instantiates: mpy_mem's banks and mpy_gc's table.
+    macros = []
+    if srams and "mpy_mem.sv" in TOPS[args.top]:
+        macros.append(SRAM_MACRO)
+    if srams and "mpy_gc.sv" in TOPS[args.top]:
+        macros.append(GC_SRAM_MACRO)
     extra_v: list[Path] = []
     if args.core_v:
         if args.rtl or args.top not in TOPS or not set(CORE_FILES) < set(TOPS[args.top]):
@@ -276,9 +282,10 @@ def main() -> int:
         doc = _replace_strings(doc, old_top, args.top)
     _set(doc, "synthesis.inputs.top_module", args.top)
     if srams:
-        # One macro shape for all four blocks: `make sram` generates it and
-        # the hook swaps every matching instance (docs/mpy_boot.md).
-        _set(doc, "vlsi.inputs.sram_parameters", [dict(SRAM_MACRO)])
+        # One shape for mpy_mem's four blocks and one for mpy_gc's table:
+        # `make sram` generates them and the hook swaps every matching
+        # instance (docs/mpy_boot.md).
+        _set(doc, "vlsi.inputs.sram_parameters", [dict(m) for m in macros])
     if args.die:
         pcs = _get(doc, "vlsi.inputs.placement_constraints")
         tops = [c for c in pcs or [] if isinstance(c, dict) and c.get("type") == "toplevel"]
@@ -364,8 +371,10 @@ def main() -> int:
     for f in files:
         print(f"  input file {f}")
     if srams:
-        print(f"  SRAM       {SRAM_BLOCKS} x {SRAM_MACRO['name']} (vlsi.inputs.sram_parameters); "
-              "run `make sram`, then place them (README.md, SRAM macros)")
+        for m in macros:
+            n = SRAM_BLOCKS if m is SRAM_MACRO else 1
+            print(f"  SRAM       {n} x {m['name']} (vlsi.inputs.sram_parameters)")
+        print("             run `make sram`, then place them (README.md, SRAM macros)")
     for w in warnings:
         print(f"  WARNING: {w}")
     print("Next: cd into it and run: make syn")

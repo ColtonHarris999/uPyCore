@@ -1,0 +1,5 @@
+hw_tests: 3 test(s), 1 job(s), compiler mpy-cross
+PASS  containers/list_pop_insert  cycles=5233774
+PASS  containers/list_slice_step  cycles=35706374
+# Next compilation was interrupted by disappearance of the shared compiler path.
+# The remaining GC case is recorded separately using an identical local compiler.

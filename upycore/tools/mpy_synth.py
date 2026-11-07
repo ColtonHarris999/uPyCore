@@ -54,21 +54,22 @@ TOPS: dict[str, list[str]] = {
     "mpy_hash": ["mpy_hash.sv"],
     "mpy_hash_slot": ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_hash_slot.sv"],
     "mpy_container": ["mpy_container.sv"],
+    "mpy_shortlist": ["mpy_shortlist.sv"],
     "mpy_bytecopy": ["mpy_bytecopy.sv"],
     "mpy_ca": ["mpy_ca.sv"],
     "mpy_key_equal": ["mpy_key_equal.sv"],
     "mpy_map_engine": ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_key_equal.sv", "mpy_map_engine.sv"],
     "mpy_rehash_stream": ["mpy_hash.sv", "mpy_hash_slot.sv", "upycore_umod_seq.sv", "mpy_rehash_stream.sv"],
-    "mpy_collection": ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_key_equal.sv", "mpy_map_engine.sv", "mpy_bulk.sv", "mpy_hash_slot.sv", "mpy_rehash_stream.sv", "mpy_ca.sv", "mpy_bytecopy.sv", "mpy_collection.sv"],
+    "mpy_collection": ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_key_equal.sv", "mpy_map_engine.sv", "mpy_bulk.sv", "mpy_hash_slot.sv", "mpy_rehash_stream.sv", "mpy_ca.sv", "mpy_bytecopy.sv", "mpy_shortlist.sv", "mpy_collection.sv"],
     "mpy_bulk": ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_key_equal.sv", "mpy_map_engine.sv", "mpy_bulk.sv", "mpy_hash_slot.sv", "mpy_rehash_stream.sv"],
     "upycore_umod_seq": ["upycore_umod_seq.sv"],
     "mpy_alu": ALU_FILES,
-    "mpy_gc": ["mpy_gc.sv"],
+    "mpy_gc": ["bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_gc.sv"],
     "mpy_mem": ["bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv"],
     "mpy_boot": ["mpy_boot.sv"],
     "mpy_core": ALU_FILES + ["upycore_umod_seq.sv", "mpy_decode.sv", "mpy_fetch.sv", "mpy_core.sv"],
     "mpy_soc": ALU_FILES
-    + ["upycore_umod_seq.sv", "mpy_decode.sv", "mpy_fetch.sv", "mpy_core.sv", "mpy_gc.sv", "mpy_ca.sv", "mpy_hash.sv", "mpy_key_equal.sv", "mpy_map_engine.sv", "mpy_bulk.sv", "mpy_hash_slot.sv", "mpy_rehash_stream.sv", "mpy_bytecopy.sv", "mpy_collection.sv",
+    + ["upycore_umod_seq.sv", "mpy_decode.sv", "mpy_fetch.sv", "mpy_core.sv", "mpy_gc.sv", "mpy_ca.sv", "mpy_hash.sv", "mpy_key_equal.sv", "mpy_map_engine.sv", "mpy_bulk.sv", "mpy_hash_slot.sv", "mpy_rehash_stream.sv", "mpy_bytecopy.sv", "mpy_shortlist.sv", "mpy_collection.sv",
        "bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv", "mpy_boot.sv", "mpy_soc.sv"],
 }
 
@@ -82,6 +83,10 @@ SRAM_MODEL = "bsg_mem_1rw_sync_mask_write_bit.sv"
 SRAM_MACRO = {"name": "fakeram_d32768_w36", "family": "1rw", "depth": 32768, "width": 36,
               "mask": True, "mux": 1, "vt": ""}
 SRAM_BLOCKS = 4   # MPY_MEM_BLOCKS: interleaved shared image/data SRAM
+# mpy_gc's allocation table: 600 words x 64 bits (32 two-bit entries per
+# word, mpy_abi.GC_TABLE_BYTES / 16 blocks), the same wrapper and hook.
+GC_SRAM_MACRO = {"name": "fakeram_d600_w64", "family": "1rw", "depth": 600, "width": 64,
+                 "mask": True, "mux": 1, "vt": ""}
 
 # Gate mapping the SRAM blocks as flops is a long memory job (the class
 # flow uses macros instead), so mem and soc stay elaborate-only here.

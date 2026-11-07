@@ -15,11 +15,11 @@
 # upycore_par_p20 for `par` (prefix set by PREFIX). Each run takes a Genus or
 # Innovus license and several cores, so start three or four at a time.
 #
-# The whole chip with its four SRAM macros: TOP=mpy_soc sweep.sh start 20 15
+# The whole chip with its five SRAM macros (four memory banks, the GC table): TOP=mpy_soc sweep.sh start 20 15
 # (folders upycore_soc_p20, or upycore_socpar_p20 with `par`) runs `make sram`
 # first, with the core from converted/mpy_core.v. SOC_RTL=converted takes the
 # whole chip from converted/mpy_soc.v instead. status then also counts the
-# macros in each netlist (want 4).
+# macros in each netlist (want 5: 4 x d32768_w36, 1 x d600_w64).
 #
 # Die size: DIE="w h" in um, default 1500 1500 for the core, 4000 3000 for
 # the chip. DESIGN_ARGS passes extra make_hammer_design.py options, for example
@@ -88,7 +88,7 @@ state_of() {  # running, done or failed; done means the file $2 exists
 }
 
 if [ "$TOP" = mpy_soc ]; then
-    sram_macro=$(cd "$repo" && python3 -c "import sys; sys.path.insert(0, 'upycore/tools'); from mpy_synth import SRAM_MACRO; print(SRAM_MACRO['name'])")
+    sram_macro=$(cd "$repo" && python3 -c "import sys; sys.path.insert(0, 'upycore/tools'); from mpy_synth import SRAM_MACRO, GC_SRAM_MACRO; print(SRAM_MACRO['name'], GC_SRAM_MACRO['name'])")
     syn_prefix=${PREFIX:-upycore_soc}
     par_prefix=${PREFIX:-upycore_socpar}
     if [ "$SOC_RTL" = converted ]; then
@@ -130,7 +130,7 @@ status)
         state=$(state_of "$d" "$qor")
         slack=- path=- minp=- area=- macros=-
         net=$(ls "$d"/build/syn-rundir/*.mapped.v 2>/dev/null | head -1)
-        [ "$TOP" = mpy_soc ] && [ -n "$net" ] && macros=$(grep -c "$sram_macro" "$net")
+        [ "$TOP" = mpy_soc ] && [ -n "$net" ] && macros=$(grep -cE "^ *($(echo $sram_macro | tr ' ' '|')) " "$net")
         if [ "$state" = done ] && [ -f "$rpt" ]; then
             slack=$(awk '/Slack:=/{print $2/1000; exit}' "$rpt")
             path=$(awk '/Data Path:-/{print $3/1000; exit}' "$rpt")
@@ -140,8 +140,10 @@ status)
         printf "%-22s %-8s %10s %10s %10s %12s %7s\n" "${d##*/}" "$state" "$slack" "$path" "$minp" "$area" "$macros"
     done
     if [ "$TOP" = mpy_soc ]; then
-        lef=$(find "$DESIGNS"/${syn_prefix}_p* -name "$sram_macro.lef" 2>/dev/null | head -1)
-        [ -n "$lef" ] && echo "SRAM macro footprint (um): $(grep -m1 -o 'SIZE.*' "$lef")"
+        for m in $sram_macro; do
+            lef=$(find "$DESIGNS"/${syn_prefix}_p* -name "$m.lef" 2>/dev/null | head -1)
+            [ -n "$lef" ] && echo "$m footprint (um): $(grep -m1 -o 'SIZE.*' "$lef")"
+        done
     fi
     echo "min ns = period - slack: the shortest clock that run's netlist would meet."
     echo "Critical path of one run: awk '/Startpoint/{n++} n==1' <folder>/build/syn-rundir/reports/final_time_ss_100C_1v60.setup_view.rpt | less"

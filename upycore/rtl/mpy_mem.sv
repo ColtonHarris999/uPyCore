@@ -64,9 +64,23 @@ module mpy_mem #(
     localparam int SROWS = MPY_MEM_BLOCK_WORDS; // clear every physical row
     localparam int CW = $clog2(SROWS);
 
-    logic [31:0] image_words, data_words;
-    assign image_words = (image_words_i + 32'd7) & 32'hfffffff8;
-    assign data_words = (image_words <= MPY_MEM_WORDS) ? MPY_MEM_WORDS - image_words : 0;
+    // The split is registered: image_words_i is fixed long before any
+    // master leaves reset (mpy_boot sets it from the image header, then
+    // loads the image; mpy_soc releases the masters after boot, the clear
+    // and the collector's table clear), so the one-cycle lag is never
+    // seen, and the round-up and subtract stay out of every access's
+    // fault check and block arbitration.
+    logic [31:0] image_words, data_words, image_words_n;
+    assign image_words_n = (image_words_i + 32'd7) & 32'hfffffff8;
+    always_ff @(posedge clk_i or negedge rst_n_i) begin
+        if (!rst_n_i) begin
+            image_words <= 32'd0;
+            data_words  <= MPY_MEM_WORDS;
+        end else begin
+            image_words <= image_words_n;
+            data_words  <= (image_words_n <= MPY_MEM_WORDS) ? MPY_MEM_WORDS - image_words_n : 0;
+        end
+    end
 
     // ---------------------------------------------------------------- blocks
     logic          blk_v    [0:NB-1];
@@ -137,7 +151,9 @@ module mpy_mem #(
                 p_blk[p] = iw[BS-1:0];
                 p_row[p] = AW'(32'(iw) >> BS);
             end else begin
-                p_blk[p] = BS'(32'(sw) + image_words);
+                // image_words is a multiple of 8, so the block is sw's
+                // low bits and does not wait for the add.
+                p_blk[p] = BS'(sw);
                 p_row[p] = AW'((32'(sw) + image_words) >> BS);
             end
             for (int k = 0; k < 4; k++)

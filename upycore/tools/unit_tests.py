@@ -78,10 +78,12 @@ class Bench:
 
 
 BENCHES = [
+    Bench("mpy_shortlist", ["mpy_shortlist.sv"], r"^PASS mpy_shortlist "),
+    Bench("mpy_shortlist8", ["mpy_shortlist.sv"], r"^PASS mpy_shortlist ", top="tb_mpy_shortlist", parameters={"MAX_ELEMS": 8}),
     Bench("mpy_bytecopy", ["mpy_bytecopy.sv"], r"^PASS mpy_bytecopy "),
     Bench("mpy_key_equal", ["mpy_key_equal.sv"], r"^PASS mpy_key_equal "),
     Bench("mpy_rehash_stream", ["mpy_hash.sv", "mpy_hash_slot.sv", "upycore_umod_seq.sv", "mpy_key_equal.sv", "mpy_map_engine.sv", "mpy_rehash_stream.sv"], r"^PASS mpy_rehash_stream "),
-    Bench("mpy_collection", ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_key_equal.sv", "mpy_map_engine.sv", "mpy_bulk.sv", "mpy_hash_slot.sv", "mpy_rehash_stream.sv", "mpy_ca.sv", "mpy_bytecopy.sv", "mpy_collection.sv"], r"^PASS mpy_collection "),
+    Bench("mpy_collection", ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_key_equal.sv", "mpy_map_engine.sv", "mpy_bulk.sv", "mpy_hash_slot.sv", "mpy_rehash_stream.sv", "mpy_ca.sv", "mpy_bytecopy.sv", "mpy_shortlist.sv", "mpy_collection.sv"], r"^PASS mpy_collection "),
     Bench("mpy_bulk", ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_key_equal.sv", "mpy_map_engine.sv", "mpy_bulk.sv", "mpy_hash_slot.sv", "mpy_rehash_stream.sv"], r"^PASS mpy_bulk "),
     Bench("mpy_map_engine", ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_key_equal.sv", "mpy_map_engine.sv"], r"^PASS mpy_map_engine "),
     Bench("mpy_map_cache", ["mpy_hash.sv", "upycore_umod_seq.sv", "mpy_key_equal.sv", "mpy_map_engine.sv"], r"^PASS mpy_map_engine ", top="tb_mpy_map_engine", parameters={"TYPE_CACHE": 1}),
@@ -104,11 +106,14 @@ BENCHES = [
     Bench("mpy_fetch", ["bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv", "mpy_fetch.sv"],
           r"^PASS mpy_fetch "),
     Bench("mpy_shared_mem", ["bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv"], r"^PASS mpy_shared_mem "),
-    Bench("mpy_gc", ["mpy_gc.sv"], r"^PASS mpy_gc "),
+    Bench("mpy_gc", ["bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_gc.sv"], r"^PASS mpy_gc "),
     Bench("mpy_periph", ["mpy_mmio_pkg.sv", "mpy_irq.sv", "mpy_periph.sv"], r"^PASS: mpy periph",
           _periph_args),
     Bench("mpy_value", ["mpy_regfile.sv", "bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv"], r"^MPY value encoding: ok"),
     Bench("upycore_umod_seq", ["upycore_umod_seq.sv"], r"^PASS upycore_umod_seq "),
+    Bench("upycore_fp_subnormal", ["upycore_fp_add.sv", "upycore_umul_seq.sv", "upycore_fp_mul.sv",
+                                   "upycore_udiv_seq.sv", "upycore_fp_divrem.sv"],
+          r"^PASS upycore_fp_subnormal "),
 ]
 
 

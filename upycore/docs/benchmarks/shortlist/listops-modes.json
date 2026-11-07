@@ -1,0 +1,26 @@
+[
+  {
+    "mode": 0,
+    "cycles": 1133011,
+    "gc": 0,
+    "exit": 0,
+    "stdout": "27452\n",
+    "stderr": ""
+  },
+  {
+    "mode": 1,
+    "cycles": 1133451,
+    "gc": 0,
+    "exit": 0,
+    "stdout": "27452\n",
+    "stderr": ""
+  },
+  {
+    "mode": 2,
+    "cycles": 1133451,
+    "gc": 0,
+    "exit": 0,
+    "stdout": "27452\n",
+    "stderr": ""
+  }
+]

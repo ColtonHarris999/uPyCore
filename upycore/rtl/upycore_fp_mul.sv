@@ -10,9 +10,10 @@
 //   C0            unpack, normalize subnormal significands  -> stage 1 regs
 //   C1 .. C(N)    N = ceil(53/STEP) product steps (4 at STEP = 14)
 //   C(N+1)        product registered by the multiplier core;
-//                 normalize by one bit, round, pack          -> result_o
+//                 normalize by one bit, round, pack          -> result reg
+//   C(N+2)        done_o, result_o from the register
 //
-// done_o is asserted in C(N+1): the 6th cycle counting the accept cycle as
+// done_o is asserted in C(N+2): the 7th cycle counting the accept cycle as
 // the first, at the default STEP.
 // Handshake as in upycore_umul_seq.sv (level start_i, one-cycle done_o,
 // withdrawing start_i aborts).
@@ -39,6 +40,10 @@ module upycore_fp_mul (
     logic               s1_valid_r;
     logic               s1_sign_r;
     logic signed [13:0] s1_exp_r;        // ea + eb - 1023 (normalized sigs)
+    // The exponent sum is only read when the product is done, so C0 keeps
+    // its parts and C1 adds them, off the clz / normalize path.
+    logic [10:0]        s1_ea_r, s1_eb_r;
+    logic [5:0]         s1_lza_r, s1_lzb_r;
     logic [52:0]        s1_sig_a_r, s1_sig_b_r;
     logic               s1_special_r;
     logic [63:0]        s1_special_val_r;
@@ -99,6 +104,7 @@ module upycore_fp_mul (
             s1_valid_r       <= 1'b0;
             s1_sign_r        <= 1'b0;
             s1_exp_r         <= '0;
+            s1_ea_r <= '0; s1_eb_r <= '0; s1_lza_r <= '0; s1_lzb_r <= '0;
             s1_sig_a_r       <= '0;
             s1_sig_b_r       <= '0;
             s1_special_r     <= 1'b0;
@@ -107,9 +113,15 @@ module upycore_fp_mul (
             s1_valid_r <= 1'b0;
         end else begin
             s1_valid_r <= start_i && !busy_o;
+            if (s1_valid_r)
+                s1_exp_r <= $signed(14'(s1_ea_r)) - $signed(14'(s1_lza_r))
+                          + $signed(14'(s1_eb_r)) - $signed(14'(s1_lzb_r)) - 14'sd1023;
             if (start_i && !busy_o) begin
                 s1_sign_r        <= sign;
-                s1_exp_r         <= exp_a_n + exp_b_n - 14'sd1023;
+                s1_ea_r          <= upycore_f64_exp_eff(op_a_i);
+                s1_eb_r          <= upycore_f64_exp_eff(op_b_i);
+                s1_lza_r         <= lz_a;
+                s1_lzb_r         <= lz_b;
                 s1_sig_a_r       <= sig_a_n;
                 s1_sig_b_r       <= sig_b_n;
                 s1_special_r     <= special;
@@ -139,9 +151,40 @@ module upycore_fp_mul (
         end
     end
 
-    assign result_o = s1_special_r ? s1_special_val_r
-                    : upycore_f64_pack_round(s1_sign_r, r_exp, r_sig, r_g, r_r, r_s);
-    assign done_o   = mul_done;
-    assign busy_o   = s1_valid_r | mul_busy | mul_done;
+    // The rounded result goes to a register, so the rounding carry does not
+    // run on through the parent's result select in the same cycle. A
+    // subnormal result is denormalized into dn_r first and rounded one
+    // cycle later, which keeps the right shift out of the common path.
+    logic        out_valid_r;
+    logic [63:0] out_res_r;
+    logic        dn_pend_r, dn_sign_r;
+    logic [55:0] dn_r;
+    logic [55:0] r_ext;
+    assign r_ext = {r_sig, r_g, r_r, r_s};
+    always_ff @(posedge clk_i or negedge rst_n_i) begin
+        if (!rst_n_i) begin
+            out_valid_r <= 1'b0;
+            out_res_r   <= '0;
+            dn_pend_r   <= 1'b0;
+            dn_sign_r   <= 1'b0;
+            dn_r        <= '0;
+        end else if (!start_i) begin
+            out_valid_r <= 1'b0;
+            dn_pend_r   <= 1'b0;
+        end else begin
+            out_valid_r <= dn_pend_r || (mul_done && (s1_special_r || r_exp > 14'sd0));
+            dn_pend_r   <= mul_done && !s1_special_r && r_exp <= 14'sd0;
+            if (dn_pend_r)
+                out_res_r <= upycore_f64_round_pack(dn_sign_r, 14'sd1, dn_r);
+            else
+                out_res_r <= s1_special_r ? s1_special_val_r
+                           : upycore_f64_round_pack(s1_sign_r, r_exp, r_ext);
+            dn_sign_r <= s1_sign_r;
+            dn_r      <= upycore_f64_denorm(r_ext, r_exp);
+        end
+    end
+    assign result_o = out_res_r;
+    assign done_o   = out_valid_r;
+    assign busy_o   = s1_valid_r | mul_busy | mul_done | dn_pend_r | out_valid_r;
 
 endmodule

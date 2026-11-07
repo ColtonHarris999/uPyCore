@@ -1,0 +1,6 @@
+read_slang -j 1 --single-unit --top mpy_core -DSYNTHESIS -I upycore/rtl upycore/rtl/upycore_umul_seq.sv upycore/rtl/upycore_udiv_seq.sv upycore/rtl/upycore_int_alu.sv upycore/rtl/upycore_mul.sv upycore/rtl/upycore_div.sv upycore/rtl/upycore_ipow.sv upycore/rtl/upycore_fp_add.sv upycore/rtl/upycore_fp_mul.sv upycore/rtl/upycore_fp_divrem.sv upycore/rtl/upycore_fp_pow.sv upycore/rtl/upycore_fpu.sv upycore/rtl/mpy_alu.sv upycore/rtl/upycore_umod_seq.sv upycore/rtl/mpy_decode.sv upycore/rtl/mpy_fetch.sv upycore/rtl/mpy_core.sv
+hierarchy -check -top mpy_core
+synth -noabc -flatten -noshare -top mpy_core
+check
+stat
+write_json build/shortlist-ppa/core_gc.json

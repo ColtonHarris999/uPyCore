@@ -1,0 +1,34 @@
+PASS  mpy_shortlist      PASS mpy_shortlist checks=339 cycles=27767 max=16
+PASS  mpy_shortlist8     PASS mpy_shortlist checks=227 cycles=10876 max=8
+PASS  mpy_bytecopy       PASS mpy_bytecopy checks=675 cycles=66611
+PASS  mpy_key_equal      PASS mpy_key_equal checks=1415 reads=7685 cycles=46697
+PASS  mpy_rehash_stream  PASS mpy_rehash_stream stream=1 checks=18 cycles=24159 peak=3
+PASS  mpy_collection     PASS mpy_collection cycles=3023
+PASS  mpy_bulk           PASS mpy_bulk cycles=678
+PASS  mpy_map_engine     PASS mpy_map_engine checks=260 cycles=118371
+PASS  mpy_map_cache      PASS mpy_map_engine checks=267 cycles=120079
+hash oracle: 5190 vectors, 4049 binary32 patterns
+PASS  mpy_hash4          PASS mpy_hash tests=5190 cycles=12136 reads=1457 bytes=4 stall=1 latency=0
+hash oracle: 5190 vectors, 4049 binary32 patterns
+PASS  mpy_hash_slot4     PASS mpy_hash_slot tests=5190 cycles=20050 reads=2026 BPC=4 bytes=4 serial=0 stall=1 latency=0
+hash oracle: 5190 vectors, 4049 binary32 patterns
+PASS  mpy_hash_slot      PASS mpy_hash_slot tests=5190 cycles=21573 reads=2026 BPC=4 bytes=1 serial=0 stall=1 latency=0
+hash oracle: 5190 vectors, 4049 binary32 patterns
+PASS  mpy_hash           PASS mpy_hash tests=5190 cycles=13675 reads=1216 bytes=1 stall=1 latency=0
+PASS  upycore_mul        PASS upycore_mul STEP=16 10070 checks
+PASS  upycore_mul8       PASS upycore_mul STEP=8 10074 checks
+PASS  upycore_mul64      PASS upycore_mul STEP=64 10067 checks
+PASS  mpy_numeric        PASS mpy_numeric 162299 checks
+PASS  mpy_alu            PASS mpy_alu 35 checks
+PASS  mpy_boot           PASS mpy_boot 245144 checks
+PASS  mpy_ca             PASS mpy_ca qdepth=2 buf=4 lat=1 seed=1 ships=1117 words=13620 loads=1004 stores=1880 stall=13245 cycles=69766 alone=32 words in 68 cycles
+PASS  mpy_container      PASS mpy_container growth
+PASS  mpy_decode         mpy_decode checks: 537 ok at time 2605
+PASS  mpy_fetch          PASS mpy_fetch seed=1 steps=20000 jumps=2329 flushes=343 faults=325 waits=14805 worst=5
+PASS  mpy_shared_mem     PASS mpy_shared_mem 208 checks
+PASS  mpy_gc             PASS mpy_gc 38 checks
+PASS  mpy_periph         PASS: mpy periph blink/echo/overrun/schedule
+PASS  mpy_value          MPY value encoding: ok
+PASS  upycore_umod_seq   PASS upycore_umod_seq BPC=4 ops=200000
+PASS  upycore_fp_subnormal PASS upycore_fp_subnormal 12000 checks, 2657 subnormal results, 0 failures
+unit_tests: 29 of 29 passed

@@ -1,0 +1,15 @@
+{
+  "baseline_commit": "612df659f58c40f9889cac2877162a870b403550",
+  "timing_docs_commit": "211cbe349e31f2503412d401f2352e5d80407968",
+  "compiler_sha256": "796548218021295ab3322bca0974859f73ed4db155d5fdf7e8c40ff3ad33cc23",
+  "simulator_sha256": "02eb9baea9bf1ca0b86616c15ba35c726a224e679ef0f382530c81e1c600f70f",
+  "vendor_commits": {
+    "micropython": "0fd6c573ea815774668bbb16b8e197c8822368b2",
+    "upy2": "72bfd5c145215ea76815a2ffa9762a7995784bd1"
+  },
+  "verilator": "5.020",
+  "yosys": "0.70 (YoWASP; builtin slang, single-thread elaboration)",
+  "sv2v": "0.0.13",
+  "clock_period_ns": 18,
+  "rtl_stamp": "e2b0da87d5ed43c132dc72c9ff39146cec987016"
+}

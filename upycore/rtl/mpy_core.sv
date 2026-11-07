@@ -63,6 +63,11 @@ module mpy_core
     parameter int LC_WB = 1,
     // Ship bulk copies to mpy_ca. 0 keeps them on the core. +CA= overrides in sim.
     parameter int CA_EN = 1,
+    // Exact short-list fast paths: 0 legacy, 1 native core, 2 snapshot engine.
+    // +SL= overrides the mode in simulation; the synthesis reference buffer is
+    // removed in mode 2 when CA_EN is set.
+    parameter int SHORTLIST_MAX = 16,
+    parameter int SHORTLIST_MODE = 2,
     // Retire a binary op that cannot fail at issue and let loads run while
     // the ALU finishes it (upycore/docs/mpy_ca.md). +AALU= overrides in sim.
     parameter int AALU = 1
@@ -107,6 +112,12 @@ module mpy_core
     input  logic [31:0] gc_total_i,
     input  logic [31:0] gc_collections_i,
 
+    output logic sl_valid_o, input logic sl_ready_i,
+    output logic [31:0] sl_src_o, sl_dst_o, sl_n_o,
+    output logic sl_reverse_o, sl_clear_o, sl_put_o, sl_length_o,
+    output logic [31:0] sl_clear_addr_o, sl_put_addr_o, sl_header_o, sl_new_length_o,
+    output logic [35:0] sl_put_value_o,
+    input logic sl_response_i, output logic sl_response_ready_o,
     output logic mb_valid_o,
     input logic mb_ready_i, mb_return_i, mb_ok_i,
     input logic [31:0] mb_used_i,
@@ -733,6 +744,7 @@ module mpy_core
         S_CELL_RD,
         S_CELL_B,
         S_RF_SPILL,
+        S_RF_SPILL2,
         S_RF_SPILL_W,
         S_RF_RELOAD,
         S_RF_RELOAD_R,
@@ -922,7 +934,40 @@ module mpy_core
         S_N_BCF,
         S_NAT_WCA,
         S_LA_CA,
-        S_AALU_WB
+        S_AALU_WB,
+        S_SL_KIND,
+        S_SL_N,
+        S_SL_STEP,
+        S_SL_START,
+        S_SL_START_ADD,
+        S_SL_START_CLAMP,
+        S_SL_STOP,
+        S_SL_STOP_ADD,
+        S_SL_STOP_CLAMP,
+        S_SL_COUNT,
+        S_SL_ELIG,
+        S_SL_ALLOC,
+        S_SL_SRC,
+        S_SL_RESULT,
+        S_SL_RHS_N,
+        S_SL_RHS_PTR,
+        S_SL_STORE_DST,
+        S_SL_STORE_DONE,
+        S_SL_COPY_N,
+        S_SL_COPY_LEN,
+        S_SL_FB,
+        S_SL_BEGIN,
+        S_SL_ISSUE,
+        S_SL_WAIT,
+        S_SL_CORE_R,
+        S_SL_CORE_RV,
+        S_SL_CORE_W,
+        S_SL_CORE_CLEAR,
+        S_SL_CORE_PUT,
+        S_SL_CORE_LEN,
+        S_SL_DONE,
+        S_LA_OLD_CLEAR,
+        S_LA_APPEND
     } state_e;
 
     state_e st, wret;
@@ -935,6 +980,31 @@ module mpy_core
     logic [31:0] m_addr, m_wdata;
     logic [31:0] md;
     logic [3:0]  mt;
+    // All Python values surviving allocation stay in t[]/ARGBUF, not here.
+    // ss_buf is operation-local; the reference path never allocates/calls out.
+    logic [1:0] cfg_sl;
+    logic ss_store, ss_native, ss_reverse, ss_omitted;
+    logic [31:0] ss_len, ss_start, ss_stop, ss_bound, ss_count;
+    logic [31:0] ss_src, ss_dst, ss_n, ss_clear_addr, ss_put_addr, ss_header, ss_new_length;
+    logic ss_clear, ss_put, ss_length;
+    val_t ss_put_value, ss_buf[0:SHORTLIST_MAX-1];
+`ifndef SYNTHESIS
+    // One simulator can compare SL=1 and SL=2 on the exact same image.
+    localparam bit SL_REFERENCE = 1;
+`else
+    // Do not pay for the reference buffer in the production engine build.
+    localparam bit SL_REFERENCE = SHORTLIST_MODE==1 || CA_EN==0;
+`endif
+    logic [$clog2(SHORTLIST_MAX+1)-1:0] ss_i;
+    state_e ss_back;
+    assign sl_valid_o = st==S_SL_ISSUE;
+    assign sl_response_ready_o = st==S_SL_WAIT;
+    assign sl_src_o=ss_src; assign sl_dst_o=ss_dst; assign sl_n_o=ss_n;
+    assign sl_reverse_o=ss_reverse; assign sl_clear_o=ss_clear;
+    assign sl_put_o=ss_put; assign sl_length_o=ss_length;
+    assign sl_clear_addr_o=ss_clear_addr; assign sl_put_addr_o=ss_put_addr;
+    assign sl_header_o=ss_header; assign sl_new_length_o=ss_new_length;
+    assign sl_put_value_o=ss_put_value;
     val_t mv;
     assign mv = {mt, md};
 
@@ -971,6 +1041,9 @@ module mpy_core
     logic [31:0] spill_addr;
     logic [5:0]  spill_n, spill_ntag;
     logic [31:0] spill_words;
+    // S_RF_SPILL's chunk size and its bytes, for S_RF_SPILL2's checks.
+    logic [5:0]  spill_nc;
+    logic [31:0] spill_bc;
     logic        spill_had_link;
     // The chunk being reloaded sits at spill_hp, so its words can be freed.
     logic        reload_top;
@@ -986,6 +1059,7 @@ module mpy_core
     logic        lc_v [0:7];
     logic        lc_dirty [0:7];
     logic [2:0]  lc_age [0:7];
+    logic [2:0]  lc_pick_r;
     logic [7:0]  lc_ix [0:7];
     val_t        lc_d [0:7];
     logic [3:0]  cfg_lc_n;
@@ -1024,6 +1098,13 @@ module mpy_core
     // current instruction
     logic [7:0]  op, ext;
     logic [31:0] arg, jt;
+    // Branch target of the decoded instruction. S_DEC registers the
+    // operands and S_EXEC forms the sum from flops: pc is already past the
+    // instruction, and an offset with an extra byte counts from one byte
+    // earlier. jt keeps it for the states after S_EXEC.
+    logic        extv;
+    logic [31:0] jt_c;
+    assign jt_c = pc + arg - {31'd0, extv};
     logic [1:0]  ovr;
 
     // Call staging lives in ARGBUF. Slot 0 is the callable. Positionals
@@ -1238,12 +1319,18 @@ module mpy_core
     logic [1:0]  d_fmt;
     entry_e      d_entry;
     logic signed [31:0] d_arg;
+    // The aligned window is taken in S_FETCH, where pc is already the
+    // instruction's address, and the decoder reads it from flops in S_DEC.
+    // That splits the queue offset, the byte shift and the decode into two
+    // cycles without adding one: every S_DEC follows an S_FETCH.
+    logic [63:0] dq_bytes;
+    logic [3:0]  dq_n;
     assign f_off = pc - fe_base;
     assign d_bytes = 64'(fe_win >> {f_off[FE_OW-1:0], 3'b000});
     assign d_n = (fe_avail > 6'd8) ? 4'd8 : 4'(fe_avail);
 
     mpy_decode u_dec (
-        .instr_valid_i(1'b1), .bytes_i(d_bytes), .nbytes_i(d_n),
+        .instr_valid_i(1'b1), .bytes_i(dq_bytes), .nbytes_i(dq_n),
         .decoded_valid_o(d_valid), .illegal_o(d_illegal), .truncated_o(d_trunc),
         .arg_overflow_o(d_ovf), .len_o(d_len), .opcode_o(d_op), .format_o(d_fmt),
         .entry_o(d_entry), .arg_valid_o(d_argv), .arg_o(d_arg),
@@ -1295,26 +1382,72 @@ module mpy_core
         for (int k = 0; k < 8; k++)
             if (m[k]) lc_hit_way = k[2:0];
     endfunction
-    function automatic logic [2:0] lc_pick(input logic [7:0] idx);
+    // The replacement victim: the first invalid way, else the oldest. It
+    // depends only on lc_v, lc_age and cfg_lc_n, so it is computed every
+    // cycle into lc_pick_r and the fill reads the flop instead of the age
+    // comparison chain. Every fill and every lc_pick use runs in a cycle
+    // whose previous cycle (S_DEC, an S_EXEC stall, or S_MWAIT) wrote none
+    // of those registers, so the flop equals the function there; the
+    // simulation check in lc_fill holds the design to that.
+    function automatic logic [2:0] lc_pick_lru();
         logic [2:0] best;
         logic any_inv;
         best = 3'd0;
         any_inv = 1'b0;
-        if (cfg_lc_dm && cfg_lc_n != 4'd0) begin
-            lc_pick = idx[2:0] & (cfg_lc_n[2:0] - 3'd1);
-        end else begin
-            for (int k = 0; k < 8; k++) begin
-                if (k < cfg_lc_n && !lc_v[k] && !any_inv) begin
-                    best = k[2:0];
-                    any_inv = 1'b1;
-                end
+        for (int k = 0; k < 8; k++) begin
+            if (k < cfg_lc_n && !lc_v[k] && !any_inv) begin
+                best = k[2:0];
+                any_inv = 1'b1;
             end
-            if (!any_inv) begin
-                for (int k = 1; k < 8; k++)
-                    if (k < cfg_lc_n && lc_age[k] < lc_age[best]) best = k[2:0];
-            end
-            lc_pick = best;
         end
+        // Oldest way: the lowest-index way among those with the smallest age
+        // (way 0 always takes part, ways at or above cfg_lc_n never do). A
+        // three-level tournament, ties to the lower index, picks the same
+        // way as a left-to-right scan with a strict compare.
+        if (!any_inv) begin
+            logic [2:0] w1 [0:3];
+            logic [2:0] w2 [0:1];
+            logic       e1 [0:3];
+            logic       e2 [0:1];
+            for (int p = 0; p < 4; p++) begin
+                logic el, er;
+                el = (2 * p == 0) || (2 * p < cfg_lc_n);
+                er = (2 * p + 1) < cfg_lc_n;
+                w1[p] = (er && (!el || lc_age[2 * p + 1] < lc_age[2 * p])) ? 3'(2 * p + 1) : 3'(2 * p);
+                e1[p] = el || er;
+            end
+            for (int p = 0; p < 2; p++) begin
+                w2[p] = (e1[2 * p + 1] && (!e1[2 * p] || lc_age[w1[2 * p + 1]] < lc_age[w1[2 * p]]))
+                        ? w1[2 * p + 1] : w1[2 * p];
+                e2[p] = e1[2 * p] || e1[2 * p + 1];
+            end
+            best = (e2[1] && (!e2[0] || lc_age[w2[1]] < lc_age[w2[0]])) ? w2[1] : w2[0];
+        end
+        lc_pick_lru = best;
+    endfunction
+`ifndef SYNTHESIS
+    // The original scan, kept to check the tree every cycle in simulation.
+    function automatic logic [2:0] lc_pick_ref();
+        logic [2:0] best;
+        logic any_inv;
+        best = 3'd0;
+        any_inv = 1'b0;
+        for (int k = 0; k < 8; k++) begin
+            if (k < cfg_lc_n && !lc_v[k] && !any_inv) begin
+                best = k[2:0];
+                any_inv = 1'b1;
+            end
+        end
+        if (!any_inv) begin
+            for (int k = 1; k < 8; k++)
+                if (k < cfg_lc_n && lc_age[k] < lc_age[best]) best = k[2:0];
+        end
+        lc_pick_ref = best;
+    endfunction
+`endif
+    function automatic logic [2:0] lc_pick(input logic [7:0] idx);
+        if (cfg_lc_dm && cfg_lc_n != 4'd0) lc_pick = idx[2:0] & (cfg_lc_n[2:0] - 3'd1);
+        else lc_pick = lc_pick_r;
     endfunction
     task automatic lc_note(input logic [2:0] w);
         for (int k = 0; k < 8; k++) begin
@@ -1337,6 +1470,10 @@ module mpy_core
         logic [7:0] ev;
         hit = lc_is_hit(idx);
         p = lc_pick(idx);
+`ifndef SYNTHESIS
+        if (!(cfg_lc_dm && cfg_lc_n != 4'd0) && cfg_lc_n != 4'd0 && lc_pick_r != lc_pick_lru())
+            $error("lc_pick_r %0d stale (want %0d) at st %0d", lc_pick_r, lc_pick_lru(), st);
+`endif
         w = hit ? lc_hit_way(idx) : p;
         // Whether each way holds a dirty line of another local, computed in
         // parallel instead of through the way select. A miss installs into
@@ -1363,7 +1500,7 @@ module mpy_core
     endtask
 `ifndef SYNTHESIS
     initial begin
-        int grow_v, adapt_v, lc_n_v, lc_wb_v, lc_dm_v, ca_v, aalu_v, bulk_v;
+        int grow_v, adapt_v, lc_n_v, lc_wb_v, lc_dm_v, ca_v, aalu_v, bulk_v, sl_v;
         grow_v = GROW_CHUNK;
         adapt_v = GROW_ADAPT;
         lc_n_v = LC_N;
@@ -1387,6 +1524,9 @@ module mpy_core
         cfg_lc_dm = (lc_dm_v != 0);
         if (!$value$plusargs("BULK=%d", bulk_v)) bulk_v = 1;
         cfg_bulk = (bulk_v != 0);
+        if (!$value$plusargs("SL=%d", sl_v)) sl_v = SHORTLIST_MODE;
+        if(sl_v<0 || sl_v>2) $fatal(1,"SL must be 0, 1, or 2");
+        cfg_sl=2'(sl_v);
         cfg_ca = (ca_v != 0);
         cfg_aalu = (aalu_v != 0);
     end
@@ -1399,6 +1539,7 @@ module mpy_core
     assign cfg_lc_wb = (LC_WB != 0);
     assign cfg_lc_dm = 1'b0;
     assign cfg_bulk = 1'b1;
+    assign cfg_sl = 2'(SHORTLIST_MODE);
     assign cfg_ca = (CA_EN != 0);
     assign cfg_aalu = (AALU != 0);
 `endif
@@ -1429,15 +1570,25 @@ module mpy_core
     logic        has_link;
     logic [15:0] resident_reals;
     logic [15:0] stk_depth;
-    assign has_link = (sp != 7'd0) && mpy_is_rf_link(rf[`SX(7'd0)]);
+    // has_link reads the ring through rf_base, so it arrives late. Each
+    // slot's link test is made straight from its flops and one bit is
+    // selected, and everything derived from has_link computes both cases
+    // from sp and spilled_reals in parallel and selects at the end.
+    logic [15:0] rf_lnk;
+    logic [15:0] sd_nl, sd_l;           // stack depth without / with a link
+    always_comb
+        for (int k = 0; k < 16; k++) rf_lnk[k] = mpy_is_rf_link(rf[k]);
+    assign has_link = (sp != 7'd0) && rf_lnk[rf_base[3:0]];
     assign resident_reals = has_link ? (16'(sp) - 16'd1) : 16'(sp);
-    assign stk_depth = spilled_reals + resident_reals;
+    assign sd_nl = spilled_reals + 16'(sp);
+    assign sd_l  = spilled_reals + 16'(sp) - 16'd1;
+    assign stk_depth = has_link ? sd_l : sd_nl;
 
     function automatic logic stk_hit(input logic [15:0] g);
-        stk_hit = (g >= spilled_reals) && (g < stk_depth);
+        stk_hit = (g >= spilled_reals) && (has_link ? (g < sd_l) : (g < sd_nl));
     endfunction
     function automatic logic [6:0] stk_slot(input logic [15:0] g);
-        stk_slot = 7'(g - spilled_reals) + (has_link ? 7'd1 : 7'd0);
+        stk_slot = has_link ? (7'(g - spilled_reals) + 7'd1) : 7'(g - spilled_reals);
     endfunction
     function automatic val_t stk_val(input logic [15:0] g);
         stk_val = rf[`SX(stk_slot(g))];
@@ -1504,8 +1655,6 @@ module mpy_core
     task automatic wr(input logic [31:0] a, input val_t v, input state_e nxt);
         m_addr <= a; m_wdata <= v[31:0]; m_wtag <= v[35:32];
         m_we <= 1'b1; m_tag_we <= 1'b1; m_be <= 4'hF; m_req <= 1'b1;
-        // The same store that publishes the override dict keeps the probe flop.
-        if (a == ABI_SYSROOT_BASE + 4 * ABI_SR_FW7) bov <= v;
         wret <= nxt; st <= S_MWAIT;
     endtask
     task automatic wrb(input logic [31:0] a, input logic [7:0] b, input state_e nxt);
@@ -1661,6 +1810,11 @@ module mpy_core
             fbase <= ABI_FRAME_BASE; fprev <= 32'd0;
             gen <= VNULL; inj <= VNONE; fl_img <= 1'b0; spill_to_img <= 1'b0;
             lc_fl_ret <= S_SPILL;
+            ss_store<=0;ss_native<=0;ss_reverse<=0;ss_omitted<=0;
+            ss_len<=0;ss_start<=0;ss_stop<=0;ss_bound<=0;ss_count<=0;
+            ss_src<=0;ss_dst<=0;ss_n<=0;ss_clear_addr<=0;ss_put_addr<=0;
+            ss_header<=0;ss_new_length<=0;ss_clear<=0;ss_put<=0;ss_length<=0;
+            ss_put_value<=VNULL;ss_i<=0;ss_back<=S_FETCH;
             for (int k = 0; k < 8; k++) t[k] <= VNULL;
             xc <= VNULL;
             bov <= VNULL;
@@ -1677,8 +1831,14 @@ module mpy_core
                 lc_age[k] <= 3'd0;
             end
             lc_fi <= 4'd0;
+            lc_pick_r <= 3'd0;
         end else begin
             m_req <= 1'b0;
+            lc_pick_r <= lc_pick_lru();
+`ifndef SYNTHESIS
+            if (cfg_lc_n != 4'd0 && lc_pick_lru() != lc_pick_ref())
+                $error("lc_pick_lru %0d != scan %0d", lc_pick_lru(), lc_pick_ref());
+`endif
             fe_flush <= 1'b0;
             gc_alloc_req <= 1'b0;
             gc_collect_req <= 1'b0;
@@ -1695,7 +1855,8 @@ module mpy_core
             sp_d <= sp;
             if (aalu_pend && alu_done) aalu_ready <= 1'b1;
 
-            if (rf_pend && st != S_MWAIT && st != S_AALU_WB && st != S_RF_SPILL && st != S_RF_SPILL_W &&
+            if (rf_pend && st != S_MWAIT && st != S_AALU_WB && st != S_RF_SPILL && st != S_RF_SPILL2 &&
+                st != S_RF_SPILL_W &&
                 st != S_RF_RELOAD && st != S_RF_RELOAD_R && st != S_RF_RELOAD_G) begin
                 if (sp >= 7'(MPY_RF_DEPTH)) begin
                     rf_resume <= st;
@@ -1710,6 +1871,12 @@ module mpy_core
 
             S_MWAIT: if (m_ack_i) begin
                 md <= m_rdata_i; mt <= m_rtag_i;
+                // The store that publishes the override dict keeps the probe
+                // flop. It is matched on the registered address when the store
+                // completes, not on the computed address at issue; nothing
+                // reads bov while the core waits here.
+                if (m_we && m_tag_we && !m_fault_i && m_addr == ABI_SYSROOT_BASE + 4 * ABI_SR_FW7)
+                    bov <= {m_wtag, m_wdata};
                 if (m_fault_i) begin
                     case (m_fault_reason_i)
                         MPY_FAULT_UNALIGNED: halt(ABI_HALT_UNALIGNED, m_addr);
@@ -1890,7 +2057,12 @@ module mpy_core
             S_CF_CHK: begin
                 c_cells <= md;
                 v0 = noframe ? ABI_FRAME_BASE : stk_top;
-                v1 = v0 + ((32'd17 + c_nst + 32'd3 * c_nexc) << 2);
+                // v0 + 4 * (17 + n_state + 3 * n_exc): the narrow fields are
+                // summed first (with stk_off when there is a frame, at most
+                // 492 + 1037), so the bound is one 32-bit add, not two.
+                v3 = 32'(12'd17 + 12'(c_nst) + 12'd3 * 12'(c_nexc));
+                v1 = noframe ? (ABI_FRAME_BASE + (v3 << 2))
+                             : (fbase + {18'd0, 12'(stk_off) + v3[11:0], 2'b00});
                 v2 = ab_pe - ab_lo;
                 c_fast <= !ab_chunked && (ab_nkw == 8'd0) && (c_nkwo == 8'd0) &&
                           (v2 + c_ndef >= c_npos) &&
@@ -2268,26 +2440,30 @@ module mpy_core
                          rf_resume <= S_FETCH; st <= S_RF_SPILL;
                      end else if (has_link && sp <= 7'(RF_RELOAD_AT)) begin
                          rf_resume <= S_FETCH; st <= S_RF_RELOAD;
-                     end else if (fe_avail != 6'd0) st <= S_DEC;
+                     end else if (fe_avail != 6'd0) begin
+                         dq_bytes <= d_bytes; dq_n <= d_n; st <= S_DEC;
+                     end
                      else if (fe_fault && fe_fault_addr[31:2] == pc[31:2]) fetch_fault();
                      // otherwise the word at pc is still on its way
             // The decoder sees the bytes the fetch queue has from pc on (up
             // to 8). A truncated instruction with fewer waits for the rest.
             S_DEC: if (d_trunc) begin
-                       if (fe_avail >= 6'd8) halt(ABI_HALT_BAD_OPCODE, pc);
+                       if (dq_n == 4'd8) halt(ABI_HALT_BAD_OPCODE, pc);
                        else if (fe_fault) fetch_fault();
                        else st <= S_FETCH;
                    end else if (d_illegal || !d_valid) halt(ABI_HALT_BAD_OPCODE, pc);
                    else begin
                        op <= d_op; arg <= d_arg; ext <= d_ext;
                        op_pc <= pc; pc <= pc + d_len;
-                       jt <= pc + d_len - (d_extv ? 32'd1 : 32'd0) + d_arg;
+                       extv <= d_extv;
                        nops <= nops + 32'd1; trace <= 1'b1;
                        st <= S_EXEC;
                    end
 
             // ---------------- execute ----------------
-            S_EXEC: if (aalu_pend && !aalu_pass(op)) begin
+            S_EXEC: begin
+            jt <= jt_c;
+            if (aalu_pend && !aalu_pass(op)) begin
                 if (aalu_go) begin aalu_ret <= S_EXEC; st <= S_AALU_WB; end
             end else begin
                 if ((op >= 8'hb0 && op < 8'hc0) || op == 8'h24) begin
@@ -2372,19 +2548,19 @@ module mpy_core
                     rf[`SX(6'(sp - 7'd1))] <= rf[`SX(6'(sp - 7'd2))];
                     st <= S_FETCH;
                 end
-                8'h42: begin pc <= jt; st <= S_FETCH; end
+                8'h42: begin pc <= jt_c; st <= S_FETCH; end
                 8'h43, 8'h44, 8'h45, 8'h46: begin tr_v <= rf[`SX(6'(sp - 7'd1))]; gosub(S_TR, S_JT); end
                 8'h47: begin t[0] <= rf[`SX(6'(sp - 7'd1))]; at_q <= ABI_Q_EXIT_D; gosub_scr(SCR_AT, S_AT, S_SW_X); end
                 8'h48, 8'h49: begin
                     if (xsp >= nexc) halt(ABI_HALT_INTERNAL, op_pc);
                     else begin
-                        x0 <= jt; b0 <= (op == 8'h49); x1 <= {16'd0, stk_depth}; sw_k <= 2'd0;
+                        x0 <= jt_c; b0 <= (op == 8'h49); x1 <= {16'd0, stk_depth}; sw_k <= 2'd0;
                         gosub(S_XPUSH, S_FETCH);
                     end
                 end
-                8'h4a: begin pc <= jt; sw_k <= 2'd0; gosub(S_XPOP, S_FETCH); end
+                8'h4a: begin pc <= jt_c; sw_k <= 2'd0; gosub(S_XPOP, S_FETCH); end
                 8'h40: begin
-                    rf[`SX(sp)] <= vint(jt); rf[`SX(6'(sp + 7'd1))] <= vint({24'd0, ext});
+                    rf[`SX(sp)] <= vint(jt_c); rf[`SX(6'(sp + 7'd1))] <= vint({24'd0, ext});
                     sp <= sp + 7'd2; st <= S_UJ;
                 end
                 8'h5c: st <= S_WC;
@@ -2530,6 +2706,7 @@ module mpy_core
                 default: halt(ABI_HALT_BAD_OPCODE, op_pc);
                 endcase
             end
+            end
 
             S_LCS: begin push({ABI_TAG_QSTR, md}); st <= S_FETCH; end
             S_LCO: begin push(mv); st <= S_FETCH; end
@@ -2557,6 +2734,10 @@ module mpy_core
                          rd(adr(mv) + 8, S_DEREF);
                          if (cfg_lc_n != 4'd0) begin
                              vs0 = {4'd0, lc_pick(i0)};
+`ifndef SYNTHESIS
+                             if (!cfg_lc_dm && lc_pick_r != lc_pick_lru())
+                                 $error("lc_pick_r %0d stale (want %0d) in S_LDREF", lc_pick_r, lc_pick_lru());
+`endif
                              if (!lc_v[vs0[2:0]] || !lc_dirty[vs0[2:0]])
                                  lc_fill(i0, mv, 1'b0, 1'b0, S_DEREF);
                          end
@@ -2684,6 +2865,9 @@ module mpy_core
             S_LSUB: if ((is_mut(t[0], ABI_MUT_LIST) || is_mut(t[0], ABI_MUT_BYTEARRAY) ||
                          tg(t[0]) == ABI_TAG_TUPLE) && intlike(t[1]))
                         rd(adr(t[0]), S_LS_LEN);
+                    else if (cfg_sl!=0 && is_mut(t[0], ABI_MUT_LIST) && tg(t[1])==ABI_TAG_OBJECT) begin
+                        ss_store<=0;ss_native<=0;st<=S_SL_BEGIN;ss_back<=S_SL_KIND;
+                    end
                     else if (is_mut(t[0], ABI_MUT_DICT))
                         lookup(t[0], t[1], VNULL, LK_FIND, 1'b0, S_LS_D);
                     else if ((strlike(t[0]) || tg(t[0]) == ABI_TAG_BYTES) && intlike(t[1])) begin
@@ -2726,11 +2910,118 @@ module mpy_core
                 hook(ABI_HOOK_SUBSCR, ABI_RK_PUSH, 8'd2, t[0], t[1], VNULL, VNULL);
             end
 
+            // ---- exact short lists: normalize, allocate, then move ----
+            S_SL_KIND: rd(adr(t[1]), S_SL_N);
+            S_SL_N: if(md!=ABI_OB_SLICE) st<=S_SL_FB;
+                    else rd(adr(t[0]),S_SL_STEP);
+            S_SL_STEP: if(md>SHORTLIST_MAX) st<=S_SL_FB;
+                    else begin ss_len<=md;rd(adr(t[1])+16,S_SL_START);end
+            S_SL_START: if(mv==VNONE || (tg(mv)==ABI_TAG_INT && mv[31:0]==1)) begin
+                           ss_reverse<=0;rd(adr(t[1])+8,S_SL_START_ADD);
+                       end else if(!ss_store && tg(mv)==ABI_TAG_INT && mv[31:0]==32'hffffffff) begin
+                           ss_reverse<=1;rd(adr(t[1])+8,S_SL_START_ADD);
+                       end else st<=S_SL_FB;
+            S_SL_START_ADD: if(mv!=VNONE && tg(mv)!=ABI_TAG_INT) st<=S_SL_FB;
+                       else begin
+                           ss_omitted<=mv==VNONE;
+                           ss_bound<=mv==VNONE ? (ss_reverse ? ss_len-32'd1 : 32'd0) : mv[31:0];
+                           st<=S_SL_START_CLAMP;
+                       end
+            S_SL_START_CLAMP: begin
+                if(!ss_omitted && ss_bound[31]) ss_bound<=ss_bound+ss_len;
+                st<=S_SL_STOP;
+            end
+            S_SL_STOP: begin
+                if(ss_omitted) ss_start<=ss_bound;
+                else if(ss_bound[31]) ss_start<=ss_reverse ? 32'hffffffff : 0;
+                else if(ss_bound>=ss_len) ss_start<=ss_reverse ? ss_len-32'd1 : ss_len;
+                else ss_start<=ss_bound;
+                rd(adr(t[1])+12,S_SL_STOP_ADD);
+            end
+            S_SL_STOP_ADD: if(mv!=VNONE && tg(mv)!=ABI_TAG_INT) st<=S_SL_FB;
+                       else begin
+                           ss_omitted<=mv==VNONE;
+                           ss_bound<=mv==VNONE ? (ss_reverse ? 32'hffffffff : ss_len) : mv[31:0];
+                           st<=S_SL_STOP_CLAMP;
+                       end
+            S_SL_STOP_CLAMP: begin
+                if(!ss_omitted && ss_bound[31]) ss_bound<=ss_bound+ss_len;
+                st<=S_SL_COUNT;
+            end
+            S_SL_COUNT: begin
+                if(ss_omitted) ss_stop<=ss_bound;
+                else if(ss_bound[31]) ss_stop<=ss_reverse ? 32'hffffffff : 0;
+                else if(ss_bound>=ss_len) ss_stop<=ss_reverse ? ss_len-32'd1 : ss_len;
+                else ss_stop<=ss_bound;
+                st<=S_SL_ELIG;
+            end
+            S_SL_ELIG: begin
+                ss_count<=ss_reverse ? (($signed(ss_start)>$signed(ss_stop)) ? ss_start-ss_stop : 0) :
+                                      (($signed(ss_stop)>$signed(ss_start)) ? ss_stop-ss_start : 0);
+                st<=S_SL_ALLOC;
+            end
+            S_SL_ALLOC: if(ss_store) begin
+                if(!is_mut(t[6],ABI_MUT_LIST) && tg(t[6])!=ABI_TAG_TUPLE) st<=S_SL_FB;
+                else rd(adr(t[6]),S_SL_RHS_N);
+            end else begin
+                alloc(32'd3+((ss_count<4)?32'd4:ss_count),S_SL_SRC);
+            end
+            S_SL_SRC: begin
+                t[2]<=vmut(al_a,ABI_MUT_LIST);ss_dst<=al_a+32'd12;
+                wb_v[0]<=vint(ss_count);wb_v[1]<=vint(ss_count<4?32'd4:ss_count);
+                wb_v[2]<={ABI_TAG_CONT,al_a+32'd12};
+                wblock(al_a,4'd3,S_SL_RHS_PTR);
+            end
+            S_SL_RHS_PTR: if(!ss_store) rd(adr(t[0])+8,S_SL_STORE_DST);
+                         else begin ss_src<=md;rd(adr(t[0])+8,S_SL_STORE_DST);end
+            S_SL_STORE_DST: begin
+                if(ss_store) begin ss_dst<=md+(ss_start<<2);ss_back<=S_SL_STORE_DONE;end
+                else begin ss_src<=md+(ss_start<<2);ss_back<=S_SL_RESULT;end
+                ss_n<=ss_count;ss_clear<=0;ss_put<=0;ss_length<=0;ss_i<=0;
+                st<=S_SL_BEGIN;
+            end
+            S_SL_RHS_N: if(md!=ss_count || md>SHORTLIST_MAX) st<=S_SL_FB;
+                else if(tg(t[6])==ABI_TAG_TUPLE) begin
+                    ss_src<=adr(t[6])+32'd4;rd(adr(t[0])+8,S_SL_STORE_DST);
+                end else rd(adr(t[6])+8,S_SL_RHS_PTR);
+            S_SL_COPY_N: begin
+                ss_store<=0;ss_native<=1;ss_reverse<=0;ss_start<=0;
+                rd(adr(t[0]),S_SL_COPY_LEN);
+            end
+            S_SL_COPY_LEN: if(md>SHORTLIST_MAX) st<=S_NAT_FB;
+                          else begin ss_count<=md;st<=S_SL_ALLOC;end
+            S_SL_FB: if(ss_native) st<=S_NAT_FB;
+                     else st<=ss_store ? S_SS_FB : S_LS_FB;
+            S_SL_RESULT: if(ss_native) deliver(t[2],crk);
+                else begin rf[`SX(6'(sp-7'd2))]<=t[2];sp<=sp-7'd1;st<=S_FETCH;end
+            S_SL_STORE_DONE: begin sp<=sp-7'd3;st<=S_FETCH;end
+            S_SL_BEGIN: if(!ca_valid && ca_idle_i) begin
+                if(ss_back==S_SL_KIND || ss_back==S_SL_COPY_N) st<=ss_back;
+                else if(cfg_sl==2 && cfg_ca) st<=S_SL_ISSUE;
+                else begin ss_i<=0;st<=S_SL_CORE_R;end
+            end
+            S_SL_ISSUE: if(sl_ready_i) st<=S_SL_WAIT;
+            S_SL_WAIT: if(sl_response_i) st<=S_SL_DONE;
+            S_SL_CORE_R: if(ss_i==ss_n) begin ss_i<=0;st<=S_SL_CORE_W;end
+                else rd(ss_reverse ? ss_src-(32'(ss_i)<<2) : ss_src+(32'(ss_i)<<2),S_SL_CORE_RV);
+            S_SL_CORE_RV: if(SL_REFERENCE) begin ss_buf[ss_i]<=mv;ss_i<=ss_i+1'b1;st<=S_SL_CORE_R;end
+                else halt(ABI_HALT_INTERNAL,32'h534c0001);
+            S_SL_CORE_W: if(!SL_REFERENCE) halt(ABI_HALT_INTERNAL,32'h534c0002);
+                else if(ss_i==ss_n) st<=S_SL_CORE_CLEAR;
+                else begin wr(ss_dst+(32'(ss_i)<<2),ss_buf[ss_i],S_SL_CORE_W);ss_i<=ss_i+1'b1;end
+            S_SL_CORE_CLEAR: if(ss_clear) wr(ss_clear_addr,VNULL,S_SL_CORE_PUT);else st<=S_SL_CORE_PUT;
+            S_SL_CORE_PUT: if(ss_put) wr(ss_put_addr,ss_put_value,S_SL_CORE_LEN);else st<=S_SL_CORE_LEN;
+            S_SL_CORE_LEN: if(ss_length) wr(ss_header,vint(ss_new_length),S_SL_DONE);else st<=S_SL_DONE;
+            S_SL_DONE: st<=ss_back;
+
             // ---- STORE_SUBSCR ----
             S_SSUB: if (t[6] == VNULL) st <= S_SS_FB;
                     else if (is_mut(t[0], ABI_MUT_LIST) && intlike(t[1])) rd(adr(t[0]), S_SS_LEN);
                     // MicroPython stores the low byte of any small int or bool
                     // (binary.c SET_VAL_AS). Other values take the hook.
+                    else if(cfg_sl!=0 && is_mut(t[0],ABI_MUT_LIST) && tg(t[1])==ABI_TAG_OBJECT) begin
+                        ss_store<=1;ss_native<=0;st<=S_SL_BEGIN;ss_back<=S_SL_KIND;
+                    end
                     else if (is_mut(t[0], ABI_MUT_BYTEARRAY) && intlike(t[1]) && intlike(t[6]))
                         rd(adr(t[0]), S_SS_LEN);
                     else if (is_mut(t[0], ABI_MUT_DICT)) lookup(t[0], t[1], t[6], LK_ADD, 1'b0, S_SS_D);
@@ -3777,6 +4068,8 @@ module mpy_core
                     // a non-int index, an empty list, a bad pop index or a
                     // full allocation goes to the firmware method before
                     // anything is written. x0 index, x1 len, x2 items, x3 i.
+                    ABI_N_LIST_COPY: if(v0!=1 || !is_mut(mv,ABI_MUT_LIST) || cfg_sl==0) st<=S_NAT_FB;
+                        else begin t[0]<=mv;ss_store<=0;ss_native<=1;ss_back<=S_SL_COPY_N;st<=S_SL_BEGIN;end
                     ABI_N_LIST_POP: if ((v0 != 32'd1 && v0 != 32'd2) || !is_mut(mv, ABI_MUT_LIST)) st <= S_NAT_FB;
                         else begin
                             t[2] <= mv; x0 <= 32'hFFFF_FFFF;
@@ -3910,7 +4203,12 @@ module mpy_core
             // t[3] holds the removed value; it is a root until delivered.
             S_NP_V: begin
                 t[3] <= mv;
-                if (x0 + 32'd1 == x1) st <= S_NP_CLR;
+                if(cfg_sl!=0 && x1<=SHORTLIST_MAX && x0+32'd1!=x1) begin
+                    ss_src<=x2+((x0+32'd1)<<2);ss_dst<=x2+(x0<<2);ss_n<=x1-x0-32'd1;
+                    ss_reverse<=0;ss_clear<=1;ss_clear_addr<=x2+((x1-32'd1)<<2);
+                    ss_put<=0;ss_length<=1;ss_header<=adr(t[2]);ss_new_length<=x1-32'd1;
+                    ss_back<=S_NP_RET;st<=S_SL_BEGIN;
+                end else if (x0 + 32'd1 == x1) st <= S_NP_CLR;
                 else if (cfg_ca && (x1 - x0) > LS_CA_MIN) st <= S_NP_CA;
                 else st <= S_NP_L;
             end
@@ -3955,7 +4253,7 @@ module mpy_core
             // ---- list.insert ----
             // objlist.c clamps the position: normalize, then clamp, one
             // register stage each. No spare slot -> firmware, which grows.
-            S_NI_I: if (!intlike(mv)) st <= S_NAT_FB;
+            S_NI_I: if (!intlike(mv) || (cfg_sl!=0 && is_bool(mv))) st <= S_NAT_FB;
                     else begin x0 <= ival(mv); rd(ab_ptr(ab_lo + 8'd2), S_NI_V); end
             S_NI_V: begin t[3] <= mv; rd(adr(t[2]), S_NI_N); end
             S_NI_N: begin
@@ -3971,7 +4269,12 @@ module mpy_core
             end
             S_NI_P: begin
                 x2 <= md; x3 <= x1;
-                if (x0 == x1) st <= S_NI_ST;
+                if(cfg_sl!=0 && x1<SHORTLIST_MAX && x0!=x1) begin
+                    ss_src<=md+(x0<<2);ss_dst<=md+((x0+32'd1)<<2);ss_n<=x1-x0;
+                    ss_reverse<=0;ss_clear<=0;ss_put<=1;ss_put_addr<=md+(x0<<2);ss_put_value<=t[3];
+                    ss_length<=1;ss_header<=adr(t[2]);ss_new_length<=x1+32'd1;
+                    ss_back<=S_N_NONE;st<=S_SL_BEGIN;
+                end else if (x0 == x1) st <= S_NI_ST;
                 else if (cfg_ca && (x1 - x0) > LS_CA_MIN) st <= S_NI_CA;
                 else st <= S_NI_L;
             end
@@ -4274,7 +4577,10 @@ module mpy_core
                 // The stack sits at ftop; planting the frame on ftop itself
                 // overwrites it when this generator later spills.
                 v0 = noframe ? ABI_FRAME_BASE : stk_top;
-                v1 = v0 + ((32'd17 + {25'd0, x1[22:16]} + 32'd3 * {27'd0, md[20:16]}) << 2);
+                // As in S_CF_CHK: narrow fields first, one 32-bit add.
+                v3 = 32'(12'd17 + 12'(x1[22:16]) + 12'd3 * 12'(md[20:16]));
+                v1 = noframe ? (ABI_FRAME_BASE + (v3 << 2))
+                             : (fbase + {18'd0, 12'(stk_off) + v3[11:0], 2'b00});
                 if (x1[6:0] == 7'd0 && t[1] != VNONE) begin
                     fflags <= fflags & ~FF_YFAST;
                     raise_msg(ABI_MSG_GEN_SEND);
@@ -4721,7 +5027,16 @@ module mpy_core
                      else rd(`la_items + (`la_i << 2), S_LA_CP2);
             S_LA_CP2: begin wr(`la_new + (`la_i << 2), mv, S_LA_CP); `la_i <= `la_i + 32'd1; end
             S_LA_G3: wr(adr(t[2]) + 8, {ABI_TAG_CONT, `la_new}, S_LA_G4);
-            S_LA_G4: wr(`la_new + (`la_len << 2), t[3], S_LA_INC);
+            // An inline item array shares its allocation with the live
+            // header. Clear its obsolete tagged references after relocation;
+            // unlike a separate old array it cannot be swept independently.
+            // The source scoreboard orders clears behind an in-flight copy.
+            S_LA_G4: if (`la_items == adr(t[2]) + 32'd12) begin
+                         `la_i <= 0; st <= S_LA_OLD_CLEAR;
+                     end else st <= S_LA_APPEND;
+            S_LA_OLD_CLEAR: if (`la_i == `la_len) st <= S_LA_APPEND;
+                else begin wr(`la_items + (`la_i << 2), VNULL, S_LA_OLD_CLEAR); `la_i <= `la_i + 32'd1; end
+            S_LA_APPEND: wr(`la_new + (`la_len << 2), t[3], S_LA_INC);
             S_LA_INC: wr(adr(t[2]), vint(`la_len + 32'd1), S_LA_RET);
             S_LA_RET: ret();
 
@@ -4895,20 +5210,26 @@ module mpy_core
                 v1 = has_link ? ((sp > 7'(RF_LEAVE_SP)) ? 32'(sp - 7'(RF_LEAVE_SP)) : 32'd0)
                               : ((sp > 7'(RF_LEAVE_SP - 1)) ? 32'(sp - 7'(RF_LEAVE_SP - 1)) : 32'd0);
                 if (v0 > v1) v0 = v1;
-                v2 = mpy_rf_block_bytes(v0[5:0]);
-                if (v0 < 32'(MPY_RF_CHUNK_MIN)) st <= rf_resume;
-                else if (spill_hp < ftop + v2) raise_msg(ABI_MSG_RECURSION);
+                // The size takes this cycle; the checks against the frame
+                // and the commit take S_RF_SPILL2. Neither cycle writes the
+                // ring, sp or the frame, so has_link and ftop do not move.
+                spill_nc <= v0[5:0];
+                spill_bc <= mpy_rf_block_bytes(v0[5:0]);
+                st <= S_RF_SPILL2;
+            end
+            S_RF_SPILL2:
+                if (spill_nc < 6'(MPY_RF_CHUNK_MIN)) st <= rf_resume;
+                else if (spill_hp < ftop + spill_bc) raise_msg(ABI_MSG_RECURSION);
                 else begin
-                    spill_n <= v0[5:0];
-                    spill_ntag <= 6'((v0[5:0] + 6'd7) >> 3);
-                    spill_words <= 32'd1 + 32'((v0[5:0] + 6'd7) >> 3) + v0;
-                    spill_addr <= spill_hp - v2;
+                    spill_n <= spill_nc;
+                    spill_ntag <= 6'((spill_nc + 6'd7) >> 3);
+                    spill_words <= 32'd1 + 32'((spill_nc + 6'd7) >> 3) + 32'(spill_nc);
+                    spill_addr <= spill_hp - spill_bc;
                     spill_had_link <= has_link;
                     spill_prev <= has_link ? mpy_rf_link_addr(rf[`SX(7'd0)]) : 32'd0;
                     sw_i <= 32'd0;
                     st <= S_RF_SPILL_W;
                 end
-            end
             S_RF_SPILL_W: if (sw_i == spill_words) begin
                 if (spill_had_link) begin
                     rf[`SX(spill_n)] <= mpy_make_rf_link(spill_addr);

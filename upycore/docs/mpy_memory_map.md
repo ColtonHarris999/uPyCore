@@ -134,10 +134,14 @@ zero; those bytes stay reserved so a pointer payload is never 0 or 4.
 | Handler table | `0x2000_8040` | 64 B | 48 B: 6 sources, function and argument each |
 | System roots | `0x2000_8080` | 128 B | 32 tagged words |
 | Argument buffer | `0x2000_8100` | 1 KB | 256 tagged words |
-| GC pool | `0x2000_8500` | `524288 - I - 0x8500` B | Remaining shared SRAM, optionally capped by image header |
+| GC pool | `0x2000_8500` | `min(524288 - I - 0x8500, 307200)` B | Remaining shared SRAM, up to the allocation table's capacity, optionally capped by image header |
 
 `upycore/tools/mpy_abi.py` is the source for these bases. The pool ends at
-`0x2000_0000 + 524288 - I` (or earlier with a heap cap). Both windows
+`0x2000_0000 + 524288 - I` (or earlier with a heap cap). `mpy_gc`'s
+allocation table holds `GC_TABLE_BYTES` = 307,200 bytes of heap (19,200
+blocks, 2 bits each, in a 600 × 64 table SRAM): every image carries the firmware, and an empty program
+(191,016 bytes today) leaves at most 299,200 bytes, so a real image never
+reaches the cap; a smaller image would just leave SRAM unused. Both windows
 share the same four SRAM banks; their logical bases do not imply separate
 physical memories. See [`mpy_boot.md`](mpy_boot.md) for mapping and bounds.
 Sources, in order: timer, UART RX, GPIO, soft, `GC_REQ`,

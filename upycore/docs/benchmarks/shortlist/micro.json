@@ -1,0 +1,1846 @@
+{
+  "commit": "e8f628ec4412b3f57539874442106e78dc0a66ea",
+  "simulator_sha256": "02eb9baea9bf1ca0b86616c15ba35c726a224e679ef0f382530c81e1c600f70f",
+  "firmware_sha256": "b469c268951bf266b9f659baaafdd3ccb3f80530782fc1af9da82d14a93edd8a",
+  "loops": 8,
+  "boundary": "work() with loop/call overhead; no control subtraction",
+  "validation": "common-subset CPython result and all three matched-image modes",
+  "rows": [
+    {
+      "name": "control_0_int",
+      "expected": "RESULT ((0, 0), [], [])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "control_15_int",
+      "expected": "RESULT ((15, 0), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "control_16_int",
+      "expected": "RESULT ((16, 0), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "control_17_int",
+      "expected": "RESULT ((17, 0), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "control_1_int",
+      "expected": "RESULT ((1, 0), [0], [0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "control_2_int",
+      "expected": "RESULT ((2, 0), [0, 1], [0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "control_32_int",
+      "expected": "RESULT ((32, 0), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "control_4_int",
+      "expected": "RESULT ((4, 0), [0, 1, 2, 3], [0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "control_64_int",
+      "expected": "RESULT ((64, 0), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "control_6_int",
+      "expected": "RESULT ((6, 0), [0, 1, 2, 3, 4, 5], [0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "control_8_int",
+      "expected": "RESULT ((8, 0), [0, 1, 2, 3, 4, 5, 6, 7], [0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "control_9_int",
+      "expected": "RESULT ((9, 0), [0, 1, 2, 3, 4, 5, 6, 7, 8], [0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 2356,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "list_copy_0_int",
+      "expected": "RESULT ((0, []), [], [])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 62842,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 4186,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4162,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "list_copy_15_int",
+      "expected": "RESULT ((15, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 66002,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 5698,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 5314,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "list_copy_16_int",
+      "expected": "RESULT ((16, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 66002,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 5770,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 5362,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "list_copy_16_mixed",
+      "expected": "RESULT ((16, [0, None, 1.25, True, 'x', (), [], 0, None, 1.25, True, 'x', (), [], 0, None]), [0, None, 1.25, True, 'x', (), [], 0, None, 1.25, True, 'x', (), [], 0, None], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 66002,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 5770,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 5362,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "list_copy_17_int",
+      "expected": "RESULT ((17, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 66154,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 66242,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 66242,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "list_copy_1_int",
+      "expected": "RESULT ((1, [0]), [0], [0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 65530,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 4258,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4210,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "list_copy_2_int",
+      "expected": "RESULT ((2, [0, 1]), [0, 1], [0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 65538,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 4330,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4258,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "list_copy_32_int",
+      "expected": "RESULT ((32, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 66586,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 66674,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 66674,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "list_copy_4_int",
+      "expected": "RESULT ((4, [0, 1, 2, 3]), [0, 1, 2, 3], [0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 65538,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 4474,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4354,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "list_copy_64_int",
+      "expected": "RESULT ((64, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63]), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 67738,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 67826,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 67826,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "list_copy_6_int",
+      "expected": "RESULT ((6, [0, 1, 2, 3, 4, 5]), [0, 1, 2, 3, 4, 5], [0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 65714,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 4762,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4594,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "list_copy_6_mixed",
+      "expected": "RESULT ((6, [0, None, 1.25, True, 'x', ()]), [0, None, 1.25, True, 'x', ()], [0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 65714,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 4762,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4594,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "list_copy_8_int",
+      "expected": "RESULT ((8, [0, 1, 2, 3, 4, 5, 6, 7]), [0, 1, 2, 3, 4, 5, 6, 7], [0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 65714,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 4906,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4690,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "list_copy_9_int",
+      "expected": "RESULT ((9, [0, 1, 2, 3, 4, 5, 6, 7, 8]), [0, 1, 2, 3, 4, 5, 6, 7, 8], [0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 65858,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 4978,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4738,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "pop_insert_0_int",
+      "expected": "RESULT ((0, 0), [], [])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 2817,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 2817,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 2817,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "pop_insert_15_int",
+      "expected": "RESULT ((15, 7), [8, 9, 10, 11, 12, 13, 14, 0, 1, 2, 3, 4, 5, 6, 7], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 10393,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 10537,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 10177,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "pop_insert_16_int",
+      "expected": "RESULT ((16, 7), [8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 10457,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 10609,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 10225,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "pop_insert_16_mixed",
+      "expected": "RESULT ((16, 0), [None, 1.25, True, 'x', (), [], 0, None, 0, None, 1.25, True, 'x', (), [], 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 10457,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 10609,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 10225,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "pop_insert_17_int",
+      "expected": "RESULT ((17, 7), [8, 9, 10, 11, 12, 13, 14, 15, 16, 0, 1, 2, 3, 4, 5, 6, 7], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 9817,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 9817,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 9817,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "pop_insert_1_int",
+      "expected": "RESULT ((1, 0), [0], [0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 9489,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 9489,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 9489,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "pop_insert_2_int",
+      "expected": "RESULT ((2, 1), [0, 1], [0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 9561,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 9601,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 9553,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "pop_insert_32_int",
+      "expected": "RESULT ((32, 7), [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 0, 1, 2, 3, 4, 5, 6, 7], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 10065,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 10065,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 10065,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "pop_insert_4_int",
+      "expected": "RESULT ((4, 3), [0, 1, 2, 3], [0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 9689,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 9745,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 9649,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "pop_insert_64_int",
+      "expected": "RESULT ((64, 7), [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 0, 1, 2, 3, 4, 5, 6, 7], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 10577,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 10577,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 10577,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "pop_insert_6_int",
+      "expected": "RESULT ((6, 1), [2, 3, 4, 5, 0, 1], [0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 9817,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 9889,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 9745,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "pop_insert_6_mixed",
+      "expected": "RESULT ((6, None), [1.25, True, 'x', (), 0, None], [0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 9817,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 9889,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 9745,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "pop_insert_8_int",
+      "expected": "RESULT ((8, 7), [0, 1, 2, 3, 4, 5, 6, 7], [0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 9945,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 10033,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 9841,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "pop_insert_9_int",
+      "expected": "RESULT ((9, 7), [8, 0, 1, 2, 3, 4, 5, 6, 7], [0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 10009,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 10105,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 9889,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "reverse_slice_0_int",
+      "expected": "RESULT ((0, []), [], [])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 69634,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 4210,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4186,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "reverse_slice_15_int",
+      "expected": "RESULT ((15, [14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0]), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 78730,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 5722,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 5338,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "reverse_slice_16_int",
+      "expected": "RESULT ((16, [15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0]), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 78794,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 5794,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 5386,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "reverse_slice_16_mixed",
+      "expected": "RESULT ((16, [None, 0, [], (), 'x', True, 1.25, None, 0, [], (), 'x', True, 1.25, None, 0]), [0, None, 1.25, True, 'x', (), [], 0, None, 1.25, True, 'x', (), [], 0, None], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 78794,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 5794,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 5386,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "reverse_slice_17_int",
+      "expected": "RESULT ((17, [16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0]), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 79010,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 79098,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 79098,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "reverse_slice_1_int",
+      "expected": "RESULT ((1, [0]), [0], [0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 77362,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 4282,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4234,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "reverse_slice_2_int",
+      "expected": "RESULT ((2, [1, 0]), [0, 1], [0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 77434,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 4354,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4282,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "reverse_slice_32_int",
+      "expected": "RESULT ((32, [31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0]), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 80402,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 80490,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 80490,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "reverse_slice_4_int",
+      "expected": "RESULT ((4, [3, 2, 1, 0]), [0, 1, 2, 3], [0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 77562,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 4498,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4378,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "reverse_slice_64_int",
+      "expected": "RESULT ((64, [63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0]), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 83602,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 83690,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 83690,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "reverse_slice_6_int",
+      "expected": "RESULT ((6, [5, 4, 3, 2, 1, 0]), [0, 1, 2, 3, 4, 5], [0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 77866,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 4786,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4618,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "reverse_slice_6_mixed",
+      "expected": "RESULT ((6, [(), 'x', True, 1.25, None, 0]), [0, None, 1.25, True, 'x', ()], [0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 77866,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 4786,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4618,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "reverse_slice_8_int",
+      "expected": "RESULT ((8, [7, 6, 5, 4, 3, 2, 1, 0]), [0, 1, 2, 3, 4, 5, 6, 7], [0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 77994,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 4930,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4714,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "reverse_slice_9_int",
+      "expected": "RESULT ((9, [8, 7, 6, 5, 4, 3, 2, 1, 0]), [0, 1, 2, 3, 4, 5, 6, 7, 8], [0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 78202,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 5002,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4762,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "slice_assign_0_int",
+      "expected": "RESULT ((0, 0), [], [])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 33633,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 4226,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4202,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "slice_assign_15_int",
+      "expected": "RESULT ((15, 0), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 36209,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 5306,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4922,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "slice_assign_16_int",
+      "expected": "RESULT ((16, 0), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 36209,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 5378,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4970,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "slice_assign_16_mixed",
+      "expected": "RESULT ((16, 0), [0, None, 1.25, True, 'x', (), [], 0, None, 1.25, True, 'x', (), [], 0, None], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 36209,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 5378,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4970,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "slice_assign_17_int",
+      "expected": "RESULT ((17, 0), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 36209,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 36297,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 36297,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "slice_assign_1_int",
+      "expected": "RESULT ((1, 0), [0], [0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 36209,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 4298,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4250,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "slice_assign_2_int",
+      "expected": "RESULT ((2, 0), [0, 1], [0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 36209,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 4370,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4298,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "slice_assign_32_int",
+      "expected": "RESULT ((32, 0), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 36209,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 36297,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 36297,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "slice_assign_4_int",
+      "expected": "RESULT ((4, 0), [0, 1, 2, 3], [0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 36209,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 4514,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4394,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "slice_assign_64_int",
+      "expected": "RESULT ((64, 0), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 36209,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 36297,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 36297,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "slice_assign_6_int",
+      "expected": "RESULT ((6, 0), [0, 1, 2, 3, 4, 5], [0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 36209,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 4658,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4490,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "slice_assign_6_mixed",
+      "expected": "RESULT ((6, 0), [0, None, 1.25, True, 'x', ()], [0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 36209,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 4658,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4490,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "slice_assign_8_int",
+      "expected": "RESULT ((8, 0), [0, 1, 2, 3, 4, 5, 6, 7], [0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 36209,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 4802,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4586,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    },
+    {
+      "name": "slice_assign_9_int",
+      "expected": "RESULT ((9, 0), [0, 1, 2, 3, 4, 5, 6, 7, 8], [0, 0, 0, 0, 0, 0, 0, 0, 0])",
+      "runs": [
+        {
+          "mode": 0,
+          "cycles": 36209,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 1,
+          "cycles": 4874,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        },
+        {
+          "mode": 2,
+          "cycles": 4634,
+          "ok": true,
+          "gc": 0,
+          "halt": "CLEAN"
+        }
+      ]
+    }
+  ]
+}

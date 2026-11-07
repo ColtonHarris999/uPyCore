@@ -28,11 +28,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
 from mpy_synth import SRAM_BLOCKS, SRAM_MACRO
 
-# Flip-flop bits: unique nonblocking-assignment targets in the elaborated
-# generated unit, counted with pyslang 12.1 after the numeric pipeline update.
+# Flip-flop bits counted with slang/Yosys from the generated unit.
 # Genus removes flops that are constant or duplicate another, so a few
 # percent fewer is normal; far fewer means logic was optimized away.
-RTL_FLOPS = {"mpy_alu": 6127, "mpy_decode": 461, "mpy_core": 14275}
+# Core: production short-list mode 2, comparison-only buffer removed,
+# synth -noabc -flatten -noshare (see docs/benchmarks/shortlist/ppa.json).
+RTL_FLOPS = {"mpy_alu": 5552, "mpy_decode": 461, "mpy_core": 14126}
 
 BAD_WARNING = re.compile(
     r"latch|unresolved|black ?box|undriven|not driven|multiple driver|"

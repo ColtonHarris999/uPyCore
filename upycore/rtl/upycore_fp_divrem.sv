@@ -11,13 +11,14 @@
 //                 operands and is bounded by ~1050 at RL = 2)
 //   C(S+2)        core registers quotient / remainder
 //   C(S+3)        normalize, guard / round / sticky            -> pack regs
-//   C(S+4)        round, pack                                  -> result_o
+//   C(S+4)        round, pack                                  -> result reg
+//   C(S+5)        done_o, result_o from the register
 //
-// DIV and SQRT therefore take 33 cycles at RL = 2 (accept cycle included),
+// DIV and SQRT therefore take 34 cycles at RL = 2 (accept cycle included),
 // both correctly rounded (the remainder is the sticky bit).  FMOD is
-// exact (no rounding) and takes 5 + ceil((d+1)/2) cycles for exponent
-// difference d >= 0, or 4 cycles when |a| < |b|.  Specials (NaN, inf,
-// zero divisor) finish in 4 cycles.  The normalize and the round each get
+// exact (no rounding) and takes 6 + ceil((d+1)/2) cycles for exponent
+// difference d >= 0, or 5 cycles when |a| < |b|.  Specials (NaN, inf,
+// zero divisor) finish in 5 cycles.  The normalize and the round each get
 // a cycle so that neither shares one with the other.  The divisor-is-zero case returns the
 // IEEE value; the FPU sequencer raises the Python ZeroDivisionError trap
 // before it ever reaches this unit.  sqrt of a negative number returns
@@ -283,9 +284,40 @@ module upycore_fp_divrem #(
         end
     end
 
-    assign result_o = p_special_r ? p_special_val_r
-                    : upycore_f64_pack_round(p_sign_r, p_exp_r, p_sig_r, p_g_r, p_r_r, p_s_r);
-    assign done_o   = p_valid_r;
-    assign busy_o   = s1_valid_r | core_busy | core_done | fin_r | p_valid_r;
+    // Round / pack into a result register, so the rounding carry does not
+    // run on through the parent's result select in the same cycle.
+    // A subnormal result is denormalized into dn_r first and rounded one
+    // cycle later, which keeps the right shift out of the common path.
+    logic        o_valid_r;
+    logic [63:0] o_res_r;
+    logic        dn_pend_r, dn_sign_r;
+    logic [55:0] dn_r;
+    logic [55:0] p_ext;
+    assign p_ext = {p_sig_r, p_g_r, p_r_r, p_s_r};
+    always_ff @(posedge clk_i or negedge rst_n_i) begin
+        if (!rst_n_i) begin
+            o_valid_r <= 1'b0;
+            o_res_r   <= '0;
+            dn_pend_r <= 1'b0;
+            dn_sign_r <= 1'b0;
+            dn_r      <= '0;
+        end else if (!start_i) begin
+            o_valid_r <= 1'b0;
+            dn_pend_r <= 1'b0;
+        end else begin
+            o_valid_r <= dn_pend_r || (p_valid_r && (p_special_r || p_exp_r > 14'sd0));
+            dn_pend_r <= p_valid_r && !p_special_r && p_exp_r <= 14'sd0;
+            if (dn_pend_r)
+                o_res_r <= upycore_f64_round_pack(dn_sign_r, 14'sd1, dn_r);
+            else
+                o_res_r <= p_special_r ? p_special_val_r
+                         : upycore_f64_round_pack(p_sign_r, p_exp_r, p_ext);
+            dn_sign_r <= p_sign_r;
+            dn_r      <= upycore_f64_denorm(p_ext, p_exp_r);
+        end
+    end
+    assign result_o = o_res_r;
+    assign done_o   = o_valid_r;
+    assign busy_o   = s1_valid_r | core_busy | core_done | fin_r | p_valid_r | dn_pend_r | o_valid_r;
 
 endmodule

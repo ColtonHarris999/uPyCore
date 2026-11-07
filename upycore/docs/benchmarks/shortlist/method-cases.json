@@ -1,0 +1,44 @@
+[
+  {
+    "compiler": "mpy-cross",
+    "mode": 0,
+    "ok": true,
+    "cycles": 255064,
+    "detail": ""
+  },
+  {
+    "compiler": "mpy-cross",
+    "mode": 1,
+    "ok": true,
+    "cycles": 244732,
+    "detail": ""
+  },
+  {
+    "compiler": "mpy-cross",
+    "mode": 2,
+    "ok": true,
+    "cycles": 244633,
+    "detail": ""
+  },
+  {
+    "compiler": "mpyc",
+    "mode": 0,
+    "ok": true,
+    "cycles": 255064,
+    "detail": ""
+  },
+  {
+    "compiler": "mpyc",
+    "mode": 1,
+    "ok": true,
+    "cycles": 244732,
+    "detail": ""
+  },
+  {
+    "compiler": "mpyc",
+    "mode": 2,
+    "ok": true,
+    "cycles": 244633,
+    "detail": ""
+  }
+]
