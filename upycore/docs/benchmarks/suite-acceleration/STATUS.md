@@ -25,6 +25,14 @@ On top of the recovered checkpoint, native `chr` uses the existing ASCII charact
 
 The 32 existing string tests and both targeted character conversion/Unicode iterator tests passed. The character conversion test also passed with uPy2 and the accelerators disabled. The implementation adds three controller states and reuses the existing scratch registers, string descriptor reader and character table. Physical timing, area and power are unmeasured.
 
+## Restored dictionary lookup fast path
+
+Exact `dict.get` calls now reuse the scalar lookup engine. The firmware table size search stops at the first adequate capacity. User-defined key operations remain in firmware.
+
+`bm_wordcount` completed in **14,225,479 cycles**, 38.0% below the historical 22,934,010 cycles. At 12 ns this projects to **170.706 ms**, compared with the 110.1 ms target. The same build completed `core_str` in **12,884,690 cycles**. Both runs matched their original source/harness hashes and result callbacks.
+
+All 30 existing tests selected by `*dict*` and `*set_grow*` passed. The new dictionary regression checked hits storing `None`, missing defaults, tombstones and a single ordered hash/equality callback pair. It passed with both compilers and with the accelerators disabled on the uPy2 run.
+
 ## Earlier observations whose raw artifacts were lost
 
 The workspace twice reverted to an older snapshot on continuation. Previous acceleration worktrees, commits and raw logs are absent from the current filesystem and were not published to GitHub. The following values were observed earlier in this conversation, but must be reproduced before acceptance; they are NOT measurements of the recovered branch.

@@ -968,7 +968,8 @@ module mpy_core
         S_SL_DONE,
         S_LA_OLD_CLEAR,
         S_LA_APPEND,
-        S_N_CHR, S_N_ORD_INFO, S_N_ORD_BYTE
+        S_N_CHR, S_N_ORD_INFO, S_N_ORD_BYTE,
+        S_N_DG_KEY, S_N_DG_HIT
     } state_e;
 
     state_e st, wret;
@@ -4018,6 +4019,8 @@ module mpy_core
                     ABI_N_ORD: if (v0 != 1 || !(strlike(mv) || tg(mv) == ABI_TAG_BYTES ||
                                                is_mut(mv, ABI_MUT_BYTEARRAY))) st <= S_NAT_FB;
                         else begin si_v <= mv; gosub(S_SINFO, S_N_ORD_INFO); end
+                    ABI_N_DICT_GET: if ((v0 != 2 && v0 != 3) || !is_mut(mv, ABI_MUT_DICT)) st <= S_NAT_FB;
+                        else rd(ab_ptr(ab_lo + 8'd1), S_N_DG_KEY);
                     ABI_N_TICKS: deliver(vint({2'b00, cyc[29:0]}), crk);
                     ABI_N_GC: gosub(S_GC, S_N_NONE);
                     ABI_N_GCINFO: deliver(vint((v1 == 32'd0) ? (gc_free_i << 4) : (v1 == 32'd1) ? (gc_total_i << 4) : gc_collections_i), crk);
@@ -4414,6 +4417,13 @@ module mpy_core
                 st <= S_N_SFL;
             end
             S_N_SF2: deliver(ab_q, crk);
+            // Exact dict.get uses the normal scalar probe. Unsupported keys
+            // reach firmware before any user hash or equality callback runs.
+            S_N_DG_KEY: lookup(ab_q, mv, VNULL, LK_FIND, 1'b0, S_N_DG_HIT);
+            S_N_DG_HIT: if (lk_cx) st <= S_NAT_FB;
+                else if (lk_found) deliver(lk_res, crk);
+                else if (ab_pe - ab_lo == 8'd3) rd(ab_ptr(ab_lo + 8'd2), S_N_RV);
+                else deliver(VNONE, crk);
             S_N_LOOKUP: deliver(lk_cx ? VSTOP : lk_found ? lk_res : VNULL, crk);
             S_N_FTOI: begin
                 na_f <= 1'b1; na <= {32'd0, t[0][31:0]}; nb_f <= 1'b0; nb <= 64'd0; n_small <= 1'b0;

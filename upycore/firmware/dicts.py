@@ -9,13 +9,10 @@ _SIZES = (
 
 
 def _next_alloc(x):
-    r = (x + (x >> 1)) | 1
-    i = len(_SIZES) - 1
-    while i >= 0:
-        if _SIZES[i] >= x:
-            r = _SIZES[i]
-        i -= 1
-    return r
+    for size in _SIZES:
+        if size >= x:
+            return size
+    return (x + (x >> 1)) | 1
 
 
 def _newdict(n):
@@ -287,6 +284,10 @@ def dict__copy(self):
         _wcopy(_ld(d, 2), 0, _ld(self, 2), 0, n * 2)
     _st(d, 0, _ld(self, 0))
     return d
+
+
+def _dict__get_fb(self, key, default=None):
+    return dict__get(self, key, default)
 
 
 def dict__get(self, key, default=None):

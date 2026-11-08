@@ -207,6 +207,7 @@ attr_grow_global = { file = "hw/containers/attr_grow_global.py" }
 seed_grow_global = { file = "hw/containers/seed_grow_global.py" }
 allocator_list = { file = "hw/containers/allocator_list.py", cycles = 40_000_000, timeout = 240 }
 list_del_shift_excore = { file = "hw/containers/list_del_shift_excore.py" }
+dict_get_fastpath = { file = "hw/containers/dict_get_fastpath.py", oracle = false }
 dict_grow_basic = { file = "hw/containers/dict_grow_basic.py" }
 dict_grow_large = { file = "hw/containers/dict_grow_large.py" }
 set_grow_basic = { file = "hw/containers/set_grow_basic.py" }

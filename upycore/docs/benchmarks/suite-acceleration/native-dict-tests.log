@@ -1,0 +1,39 @@
+hw_tests: 30 test(s), 3 job(s), compiler mpy-cross
+PASS  control/for_iter_dict_keys  cycles=25305
+PASS  control/for_iter_dict_empty  cycles=23537
+PASS  control/for_iter_dict_delete  cycles=62250
+PASS  control/for_iter_dict_str_keys  cycles=24124
+PASS  containers/dict_del_trap  cycles=30869
+PASS  containers/dict_del_simple  cycles=31718
+PASS  containers/dict_del_then_insert  cycles=33076
+PASS  containers/dict_hash_neg1  cycles=25175
+PASS  containers/dicts  cycles=435489
+PASS  containers/dict_str_keys  cycles=33299
+PASS  containers/dict_large_pycore  cycles=26018
+PASS  containers/dict_bool_int_collision  cycles=25080
+PASS  containers/dict_false_zero  cycles=23713
+PASS  containers/dict_del_collision  cycles=32949
+PASS  containers/dict_contains_collision  cycles=23828
+PASS  containers/dict_mixed_ops  cycles=36778
+PASS  containers/dict_update  cycles=30393
+PASS  containers/dict_merge  cycles=49819
+PASS  containers/container_dict_collision  cycles=25091
+PASS  containers/container_dict_full_insert  cycles=23928
+PASS  containers/for_iter_dict_grow  cycles=26233
+PASS  containers/dict_grow_basic  cycles=25556
+PASS  containers/dict_update_obj  cycles=500894
+PASS  containers/dict_grow_large  cycles=32646
+PASS  containers/set_grow_basic  cycles=56722
+PASS  strings/str_dict_key_runtime  cycles=51585
+PASS  strings/str_dict_key_runtime_del  cycles=52675
+PASS  objects/attr_dunder_dict  cycles=47283
+PASS  gc/gc_steady_dict  cycles=614368
+PASS  compiler/exec_globals_dict  cycles=23996138
+
+  control        4 passed    0 failed
+  containers    21 passed    0 failed
+  strings        2 passed    0 failed
+  objects        1 passed    0 failed
+  compiler       1 passed    0 failed
+  gc             1 passed    0 failed
+hw_tests: 30 of 30 passed in 94s
