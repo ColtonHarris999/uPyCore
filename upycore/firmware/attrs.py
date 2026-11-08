@@ -415,12 +415,10 @@ def _getslice(obj, sl):
         m = _slice_len(a, b, s)
         tag = TAG_BYTES if t == TAG_BYTES or _isbarr(obj) else TAG_STR
         r = _strnew(m, tag)
-        i = 0
-        p = a
-        while i < m:
-            _poke8(_data(r), i, _byte(obj, p))
-            p += s
-            i += 1
+        # Unit stride is established above. Use the existing byte-copy
+        # engine; source/destination remain rooted across allocation and copy.
+        if m:
+            _bcopy(r, 0, obj, a, m)
         out = _strfin(r)
         if _isbarr(obj):
             return _barr_from(out)

@@ -39,6 +39,8 @@ floatparse = { file = "hw/alu/floatparse.py", cycles = 30_000_000 }
 complex = { file = "hw/alu/complex.py", cycles = 30_000_000 }
 
 bitwise_calls = { file = "hw/alu/bitwise_calls.py" }
+# Expected booleans from exact arithmetic; pinned Unix oracle unavailable.
+sqrt_extremes = { file = "hw/alu/sqrt_extremes.py", oracle = false }
 complex_ops = { file = "hw/alu/complex_ops.py" }
 complex_nan_eq = { file = "hw/alu/complex_nan_eq.py" }
 complex_type_trap = { file = "hw/alu/complex_type_trap.py" }

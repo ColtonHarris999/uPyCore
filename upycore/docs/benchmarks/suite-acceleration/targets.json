@@ -1,0 +1,125 @@
+{
+  "provenance": "Targets retained from earlier MCU comparison, not fresh same-version measurements. FFT has no target. Clock is assumed, not timing signoff.",
+  "rows": [
+    {
+      "name": "bm_chaos",
+      "baseline_cycles": 6945312,
+      "source_sha256": "35fccf0c06fc2e47e7c29663b7d5918f1866604d5fc649968d0d5cda45c1d206",
+      "baseline_ms_12ns": 83.343744,
+      "target_ms": 114.6,
+      "target_cycles_12ns": 9550000.0
+    },
+    {
+      "name": "bm_fannkuch",
+      "baseline_cycles": 1557009,
+      "source_sha256": "601408c548bd42910b44b9ccb4074afb498bee65577685257d991dc5effcee1d",
+      "baseline_ms_12ns": 18.684108000000002,
+      "target_ms": 61.7,
+      "target_cycles_12ns": 5141666.666666667
+    },
+    {
+      "name": "bm_fft",
+      "baseline_cycles": 126486860,
+      "source_sha256": "b20f9dc5b9e349415637bc311384a9e5c28e607f4ddca716d37e2731fc1104eb",
+      "baseline_ms_12ns": 1517.84232,
+      "target_ms": null,
+      "target_cycles_12ns": null
+    },
+    {
+      "name": "bm_float",
+      "baseline_cycles": 10116524,
+      "source_sha256": "fb26ef07ca6280e711faa741034f81cb99713cbeb18467d37e82e38dd588b8cd",
+      "baseline_ms_12ns": 121.39828800000001,
+      "target_ms": 63.1055,
+      "target_cycles_12ns": 5258791.666666666
+    },
+    {
+      "name": "bm_hexiom",
+      "baseline_cycles": 57597921,
+      "source_sha256": "871e5f38902bc563be257a4f99fc93d14964217d86379fb9c6a7d019c241888f",
+      "baseline_ms_12ns": 691.175052,
+      "target_ms": 194.64462,
+      "target_cycles_12ns": 16220385.0
+    },
+    {
+      "name": "bm_nqueens",
+      "baseline_cycles": 115909110,
+      "source_sha256": "96302e605f41b1bbd70fd8b685905be8bdf1cd1c55ca9ad0d6a15588495412d5",
+      "baseline_ms_12ns": 1390.90932,
+      "target_ms": 210.511,
+      "target_cycles_12ns": 17542583.333333332
+    },
+    {
+      "name": "bm_wordcount",
+      "baseline_cycles": 22934010,
+      "source_sha256": "52a00d99f7d85535cc1878b879aaba0cc443955674c1d0d292860fd03af449a3",
+      "baseline_ms_12ns": 275.20812,
+      "target_ms": 110.1,
+      "target_cycles_12ns": 9175000.0
+    },
+    {
+      "name": "core_locals",
+      "baseline_cycles": 93410376,
+      "source_sha256": "4b2958294324aa01ee4453f00219f4608c84dbc751708e3db6b9352d5ce395ec",
+      "baseline_ms_12ns": 1120.924512,
+      "target_ms": 136.5,
+      "target_cycles_12ns": 11375000.0
+    },
+    {
+      "name": "core_qstr",
+      "baseline_cycles": 607804,
+      "source_sha256": "85820c0ffe30527c3f2a6d117c6096e546f9f81f5b49518cb874b8b19b0ba709",
+      "baseline_ms_12ns": 7.293648,
+      "target_ms": 18.5,
+      "target_cycles_12ns": 1541666.6666666665
+    },
+    {
+      "name": "core_str",
+      "baseline_cycles": 36137718,
+      "source_sha256": "a885c6335383f2235430efd909df6531a3bac0477e441bf1c154b745b212073f",
+      "baseline_ms_12ns": 433.652616,
+      "target_ms": 190.5,
+      "target_cycles_12ns": 15875000.0
+    },
+    {
+      "name": "core_yield_from",
+      "baseline_cycles": 10028604,
+      "source_sha256": "aafd51b7e620207ef57802b1bb1911bbe545b945fe63061fb85a03c72e9a1339",
+      "baseline_ms_12ns": 120.343248,
+      "target_ms": 52.3,
+      "target_cycles_12ns": 4358333.333333333
+    },
+    {
+      "name": "misc_aes",
+      "baseline_cycles": 2344808,
+      "source_sha256": "511c44871d8350524072ba8e4725849915807f551f1242ddc463bceeedaebddd",
+      "baseline_ms_12ns": 28.137696000000002,
+      "target_ms": 63.97875,
+      "target_cycles_12ns": 5331562.5
+    },
+    {
+      "name": "misc_mandel",
+      "baseline_cycles": 72744638,
+      "source_sha256": "8278efdd3df5c57d5f9c2500e309d6ca7e7d37a989f926761c3a357d3dbdafe5",
+      "baseline_ms_12ns": 872.935656,
+      "target_ms": 153.923,
+      "target_cycles_12ns": 12826916.666666666
+    },
+    {
+      "name": "misc_pystone",
+      "baseline_cycles": 12183102,
+      "source_sha256": "0ee1578da1c5d5d099f744b5bcd8d494c50d778e583322ec96c7709ad3f03758",
+      "baseline_ms_12ns": 146.197224,
+      "target_ms": 116.98186781048938,
+      "target_cycles_12ns": 9748488.984207448
+    },
+    {
+      "name": "misc_raytrace",
+      "baseline_cycles": 11030762,
+      "source_sha256": "650665a71f1da302e9e255d32b9215b3cc8be94f9de21b50de54045105ab1921",
+      "baseline_ms_12ns": 132.369144,
+      "target_ms": 122.70862,
+      "target_cycles_12ns": 10225718.333333332
+    }
+  ]
+}

@@ -572,14 +572,8 @@ def _fsqrt(x):
         return _frombits(2143289344)
     if x == 0.0:
         return x
-    g = x
-    if g > 1.0:
-        g = x * 0.5
-    i = 0
-    while i < 12:
-        g = (g + x / g) * 0.5
-        i += 1
-    return g
+    # POW with exponent 0.5 selects the existing scalar square-root unit.
+    return x ** 0.5
 
 
 def _fexp(x):

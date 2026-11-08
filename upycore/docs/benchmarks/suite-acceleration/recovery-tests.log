@@ -1,0 +1,16 @@
+hw_tests: 11 test(s), 3 job(s), compiler mpy-cross
+PASS  alu/complex_nan_eq  cycles=107991
+PASS  alu/complex_type_trap  cycles=82210
+PASS  strings/slice_str_clamp  cycles=74291
+PASS  alu/complex  cycles=691488
+PASS  strings/slice_str_long  cycles=74359
+PASS  strings/slice_str_unicode  cycles=112363
+PASS  strings/slice_str_step  cycles=102319
+PASS  strings/slice_str_empty  cycles=63853
+PASS  strings/slice_str_scan  cycles=56931
+PASS  strings/slice_str_neg_trap  cycles=33466
+PASS  alu/complex_ops  cycles=3022613
+
+  alu            4 passed    0 failed
+  strings        7 passed    0 failed
+hw_tests: 11 of 11 passed in 12s

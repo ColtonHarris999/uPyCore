@@ -1,0 +1,13 @@
+hw_tests: 8 test(s), 3 job(s), compiler mpy-cross
+PASS  strings/slice_str_clamp  cycles=74831
+PASS  strings/slice_str_long  cycles=75627
+PASS  alu/sqrt_extremes  cycles=267111
+PASS  strings/slice_str_step  cycles=102839
+PASS  strings/slice_str_unicode  cycles=113537
+PASS  strings/slice_str_empty  cycles=64250
+PASS  strings/slice_str_scan  cycles=57414
+PASS  strings/slice_str_neg_trap  cycles=33645
+
+  alu            1 passed    0 failed
+  strings        7 passed    0 failed
+hw_tests: 8 of 8 passed in 2s

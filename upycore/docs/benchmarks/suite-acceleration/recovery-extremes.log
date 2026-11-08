@@ -1,0 +1,5 @@
+hw_tests: 1 test(s), 1 job(s), compiler mpy-cross
+PASS  alu/sqrt_extremes  cycles=264544
+
+  alu            1 passed    0 failed
+hw_tests: 1 of 1 passed in 1s
