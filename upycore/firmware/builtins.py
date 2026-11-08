@@ -468,22 +468,30 @@ def _inst_attr(obj, name):
     return NULL
 
 
-def getattr(obj, name, default=_MISSING):
+def _getattr_fb(obj, name, *default):
+    # getattr() when the core's native did not find the attribute itself.
+    # The default is counted, not compared with a sentinel: the linker gives
+    # a default-argument tuple its own copy, so `is _MISSING` never holds.
     if not _isstr(name):
-        raise TypeError('attribute name must be string')
+        _name_type_error(name)
     v = _inst_attr(obj, name)
     if v is not STOP:
         if v is not NULL:
             return v
-        if default is not _MISSING:
-            return default
+        if default:
+            return default[0]
         _attr_error(obj, name)
     try:
         return _load_attr(obj, name)
     except AttributeError:
-        if default is _MISSING:
+        if not default:
             raise
-        return default
+        return default[0]
+
+
+def _name_type_error(name):
+    # mp_obj_str_get_qstr on a non-str attribute name.
+    raise TypeError(_s("can't convert '", _tname(name), "' object to str implicitly"))
 
 
 def hasattr(obj, name):
@@ -498,7 +506,10 @@ def hasattr(obj, name):
         return False
 
 
-def setattr(obj, name, value):
+def _setattr_fb(obj, name, value):
+    # setattr() when the core's native did not store it itself.
+    if not _isstr(name):
+        _name_type_error(name)
     _setattr(obj, name, value)
     return None
 

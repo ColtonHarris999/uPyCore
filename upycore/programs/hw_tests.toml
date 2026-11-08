@@ -47,6 +47,7 @@ compare_op_type_trap = { file = "hw/alu/compare_op_type_trap.py" }
 complex_abs = { file = "hw/alu/complex_abs.py", cycles = 30_000_000 }
 complex_div = { file = "hw/alu/complex_div.py", cycles = 30_000_000 }
 complex_pow = { file = "hw/alu/complex_pow.py", cycles = 60_000_000 }
+complex_fast = { file = "hw/alu/complex_fast.py", cycles = 60_000_000 }
 abs_edge = { file = "hw/alu/abs_edge.py" }
 round_edge = { file = "hw/alu/round_edge.py", cycles = 30_000_000 }
 
@@ -146,6 +147,7 @@ varkw_dup_trap = { file = "hw/calls/varkw_dup_trap.py" }
 varkw_kwonly_missing_trap = { file = "hw/calls/varkw_kwonly_missing_trap.py" }
 
 [containers]
+in_seq_int = { file = "hw/containers/in_seq_int.py" }
 bulk_maps = { file = "hw/containers/bulk_maps.py", cycles = 300_000_000 }
 tuple_index_bounds = { cycles = 80_000_000 }
 lists = { file = "hw/containers/lists.py" }
@@ -286,6 +288,7 @@ raise_after_call_loop = { file = "hw/exceptions/raise_after_call_loop.py" }
 
 [objects]
 classes = { file = "hw/objects/classes.py" }
+getattr_native = { file = "hw/objects/getattr_native.py" }
 inherit = { file = "hw/objects/inherit.py" }
 mro_diamond = { file = "hw/objects/mro_diamond.py", oracle = true }
 mro_repeat = { file = "hw/objects/mro_repeat.py", oracle = true }

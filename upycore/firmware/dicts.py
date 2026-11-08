@@ -394,6 +394,16 @@ def _set_freeze(s, like):
 def _set_add_iter(dst, src):
     if _isset(src) and _mapbulk(dst, src, 1):
         return
+    if _ld(dst, 0) == 0 and _ld(dst, 1) == 0:
+        # An empty set without a table (set(x), frozenset(x), a new union):
+        # the core's SET_ADD inserts and grows in hardware, in the same
+        # order and to the same sizes as _map_put, so a comprehension
+        # builds the table and dst takes it over (its flags word stays).
+        tmp = {k for k in src}
+        _st(dst, 2, _ld(tmp, 2))
+        _st(dst, 1, _ld(tmp, 1))
+        _st(dst, 0, _ld(tmp, 0))
+        return
     for k in src:
         _map_put(dst, k, NULL, True)
 

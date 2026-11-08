@@ -317,8 +317,13 @@ NATIVES = [
     "list.pop", "list.insert",
     "_wcopy_step",  # (dst, doff, src, soff, n, step): dst[doff+i] = src[soff+i*step], core loop
     "list.copy",  # exact short list copy; ordinary fallback otherwise
-    # abs(int | bool | float) on the ALU; anything else calls _abs_fb
+    # abs(int | bool | float) on the ALU, abs(complex) on the ALU's float
+    # ops; anything else calls _abs_fb
     "abs",
+    # getattr(obj, qstr[, default]) and setattr(obj, qstr, value) by the
+    # core's LOAD_ATTR / STORE_ATTR microcode when it finds or stores the
+    # attribute itself; anything else calls _getattr_fb / _setattr_fb
+    "getattr", "setattr",
 ]
 NATIVE_ID = {name: i for i, name in enumerate(NATIVES)}
 

@@ -1,0 +1,74 @@
+(3+4.5j) 0j (-2.8125+6.75j)
+(1.5+2.25j) (1.5+2.25j) 0j
+(1.5+2.25j) (1.5+2.25j) 0j
+(inf+3.25j) (-inf+1.25j) (inf+infj)
+(2.5+nanj) (0.5+nanj) (nan+nanj)
+(3e+38+3e+38j) (-3e+38-3e+38j) (nan+infj)
+(1.6+2.95j) (1.4+1.55j) (-1.425+1.275j)
+(1.5+2.25j) (1.5+2.25j) (1.5+2.25j) (-1.5-2.25j) 0j 0j
+(4+2.25j) (4+2.25j) (-1+2.25j) (1-2.25j) (3.75+5.625j) (3.75+5.625j)
+(inf+2.25j) (inf+2.25j) (-inf+2.25j) (inf-2.25j) (inf+infj) (inf+infj)
+(nan+2.25j) (nan+2.25j) (nan+2.25j) (nan-2.25j) (nan+nanj) (nan+nanj)
+2.7041636
+0j 0j -0j
+0j 0j 0j
+(inf+1j) (-inf-1j) (nan+nanj)
+(1+nanj) (-1+nanj) (nan+nanj)
+(3e+38+3e+38j) (-3e+38-3e+38j) 0j
+(0.1+0.7j) (-0.1-0.7j) 0j
+0j 0j 0j 0j -0j -0j
+(2.5+0j) (2.5+0j) (-2.5+0j) (2.5+0j) 0j 0j
+(inf+0j) (inf+0j) (-inf+0j) (inf+0j) (nan+nanj) (nan+nanj)
+(nan+0j) (nan+0j) (nan+0j) (nan+0j) (nan+nanj) (nan+nanj)
+0.0
+0j 0j 0j
+(inf+1j) (-inf-1j) (nan+nanj)
+(1+nanj) (-1+nanj) (nan+nanj)
+(3e+38+3e+38j) (-3e+38-3e+38j) 0j
+(0.1+0.7j) (-0.1-0.7j) 0j
+0j 0j 0j 0j 0j 0j
+(2.5+0j) (2.5+0j) (-2.5+0j) (2.5+0j) 0j 0j
+(inf+0j) (inf+0j) (-inf+0j) (inf+0j) (nan+nanj) (nan+nanj)
+(nan+0j) (nan+0j) (nan+0j) (nan+0j) (nan+nanj) (nan+nanj)
+0.0
+(inf+2j) (nan+0j) (inf+infj)
+(inf+nanj) (inf+nanj) (nan+nanj)
+(inf+3e+38j) (inf-3e+38j) (inf+infj)
+(inf+1.7j) (inf+0.3j) (inf+infj)
+(inf+1j) (inf+1j) (inf+1j) (-inf-1j) (nan+nanj) (nan+nanj)
+(inf+1j) (inf+1j) (inf+1j) (-inf-1j) (inf+nanj) (inf+nanj)
+(inf+1j) (inf+1j) (nan+1j) (nan-1j) (inf+nanj) (inf+nanj)
+(nan+1j) (nan+1j) (nan+1j) (nan-1j) (nan+nanj) (nan+nanj)
+inf
+(2+nanj) nanj (nan+nanj)
+(3e+38+nanj) (-3e+38+nanj) (nan+nanj)
+(1.1+nanj) (0.9+nanj) (nan+nanj)
+(1+nanj) (1+nanj) (1+nanj) (-1+nanj) (nan+nanj) (nan+nanj)
+(3.5+nanj) (3.5+nanj) (-1.5+nanj) (1.5+nanj) (nan+nanj) (nan+nanj)
+(inf+nanj) (inf+nanj) (-inf+nanj) (inf+nanj) (nan+nanj) (nan+nanj)
+(nan+nanj) (nan+nanj) (nan+nanj) (nan+nanj) (nan+nanj) (nan+nanj)
+nan
+(inf+infj) 0j (nan+infj)
+(3e+38+3e+38j) (3e+38+3e+38j) (-1.8e+38+2.3999999e+38j)
+(3e+38+3e+38j) (3e+38+3e+38j) (3e+38+3e+38j) (-3e+38-3e+38j) 0j 0j
+(3e+38+3e+38j) (3e+38+3e+38j) (3e+38+3e+38j) (-3e+38-3e+38j) (inf+infj) (inf+infj)
+(inf+3e+38j) (inf+3e+38j) (-inf+3e+38j) (inf-3e+38j) (inf+infj) (inf+infj)
+(nan+3e+38j) (nan+3e+38j) (nan+3e+38j) (nan-3e+38j) (nan+nanj) (nan+nanj)
+inf
+(0.2+1.4j) 0j (-0.48+0.14j)
+(0.1+0.7j) (0.1+0.7j) (0.1+0.7j) (-0.1-0.7j) 0j 0j
+(2.6+0.7j) (2.6+0.7j) (-2.4+0.7j) (2.4-0.7j) (0.25+1.75j) (0.25+1.75j)
+(inf+0.7j) (inf+0.7j) (-inf+0.7j) (inf-0.7j) (inf+infj) (inf+infj)
+(nan+0.7j) (nan+0.7j) (nan+0.7j) (nan-0.7j) (nan+nanj) (nan+nanj)
+0.707106736
+(2.5+2.25j) (3+4.5j) (0.5+2.25j) (1649267400000+2473901200000j) (1099511600000+2.25j)
+(1+0j) 0j (-1+0j) 0j (1099511600000+0j)
+(1+0j) 0j (-1+0j) 0j (1099511600000+0j)
+0 (-0.75+0.125j) 0.76034536
+1 (-0.203125-0.0625j) 0.21252298
+2 (-0.7126465+0.15039062j) 0.7283422
+3 (-0.26475232-0.0893507j) 0.27942324
+4 (-0.68788976+0.1723116j) 0.70914284
+5 (-0.30649896-0.11206277j) 0.3263429
+(8.75+3j)
+True False

@@ -464,6 +464,10 @@ module mpy_core
         S_HOOK1,
         S_IN,
         S_IN_R,
+        S_INS_N,
+        S_INS_P,
+        S_INS_L,
+        S_INS_E,
         S_ISSUB,
         S_IS_C,
         S_IS_L,
@@ -567,6 +571,10 @@ module mpy_core
         S_NUM_GO,
         S_NUM_PUT,
         S_NUM_W,
+        S_CX,
+        S_CX_GO,
+        S_CX_W,
+        S_CX_BOX,
         S_N_ALLOC,
         S_N_BC,
         S_N_BC1,
@@ -851,6 +859,9 @@ module mpy_core
         S_NAT_A,
         S_NAT_FB0,
         S_NAT_ISI,
+        S_NAT_GA,
+        S_NAT_SA1,
+        S_NAT_SA2,
         S_NAT_MK,
         S_NAT_LD,
         S_NAT_ST1,
@@ -1185,6 +1196,10 @@ module mpy_core
     logic [31:0] gi;
     val_t        is_t, is_c; logic is_r; logic [31:0] is_m, is_n, is_i;
     logic [31:0] at_q; logic [1:0] at_kind; logic at_ty, at_objd;
+    // The attribute load or store is the getattr / setattr native's: it
+    // delivers its result instead of using the stack, and anything it does
+    // not finish itself goes to the firmware fallback (S_NAT_FB).
+    logic        at_nat;
     val_t        at_v;
     val_t        tr_v; logic tr_r, tr_x;
     logic        tb_src, tb_nz; logic [7:0] tb_from; logic [15:0] tb_n, tb_i; logic [31:0] tb_a; val_t tb_v;
@@ -1267,6 +1282,20 @@ module mpy_core
     logic [1:0]  alu_kind;
     logic [2:0]  alu_err;
     logic [7:0]  n_o;
+
+    // Complex arithmetic on the ALU (S_CX*): a op b for complex or float
+    // operands (+, -, *), and abs() of a complex, in objcomplex.c's order
+    // with every step rounded to binary32. A complex operand's two words are
+    // read by a burst; a float one is (x, +0.0).
+    localparam logic [1:0] CX_ADD = 2'd0, CX_SUB = 2'd1, CX_MUL = 2'd2, CX_ABS = 2'd3;
+    logic [1:0]  cx_op;
+    logic        cx_acx, cx_bcx;      // the operand is a complex in memory
+    logic [31:0] cx_pa, cx_pb;        // its address
+    logic [31:0] cx_ar, cx_ai, cx_br, cx_bi, cx_t0, cx_t1, cx_re, cx_im;
+    logic [2:0]  cx_k;                // ALU step
+    function automatic logic cx_operand(input val_t v);
+        cx_operand = tg(v) == ABI_TAG_COMPLEX || tg(v) == ABI_TAG_FLOAT;
+    endfunction
 
     // Async ALU. One result in flight: rf[aalu_slot] is busy until it is
     // written. Only an op whose operands rule out every ALU error and every
@@ -1692,6 +1721,17 @@ module mpy_core
         m_addr <= a; m_we <= 1'b0; m_tag_we <= 1'b0; m_be <= 4'hF;
         m_req <= 1'b1; lwait <= 1'b1;
     endtask
+    // Start a complex operation on a and b (b unused for CX_ABS): the
+    // first word of the operand burst, or straight to the ALU for floats.
+    task automatic cx_start(input val_t a, input val_t b);
+        cx_acx <= (tg(a) == ABI_TAG_COMPLEX); cx_pa <= adr(a);
+        cx_bcx <= (tg(b) == ABI_TAG_COMPLEX); cx_pb <= adr(b);
+        cx_ar <= a[31:0]; cx_ai <= 32'd0; cx_br <= b[31:0]; cx_bi <= 32'd0;
+        cx_k <= 3'd0; bl_k <= 3'd0;
+        if (tg(a) == ABI_TAG_COMPLEX) begin bload(adr(a)); bl_n <= 8'd1; st <= S_CX; end
+        else if (tg(b) == ABI_TAG_COMPLEX) begin bload(adr(b)); bl_n <= 8'd3; st <= S_CX; end
+        else st <= S_CX_GO;
+    endtask
     // Start the raw-code header burst of a call (S_CF_RC).
     task automatic rc_burst();
         bload(c_rc); bl_n <= 8'd1; bl_k <= 3'd0;
@@ -1950,7 +1990,7 @@ module mpy_core
             end else if (wwait && !m_gnt_i) begin
                 // A posted store is still waiting for the port: hold.
             end else if (rf_pend && st != S_MWAIT && st != S_FL_H && st != S_FL_S &&
-                st != S_CF_B && st != S_CF_RC && st != S_CF_Q && st != S_AALU_WB && st != S_RF_SPILL && st != S_RF_SPILL2 &&
+                st != S_CF_B && st != S_CF_RC && st != S_CF_Q && st != S_CX && st != S_AALU_WB && st != S_RF_SPILL && st != S_RF_SPILL2 &&
                 st != S_RF_SPILL_W &&
                 st != S_RF_RELOAD && st != S_RF_RELOAD_R && st != S_RF_RELOAD_G) begin
                 if (sp >= 7'(MPY_RF_DEPTH)) begin
@@ -2931,8 +2971,8 @@ module mpy_core
                     8'h19, 8'h1a:
                         lookup((op == 8'h19 && loc != VNULL) ? loc : glb, {ABI_TAG_QSTR, md},
                                VNULL, LK_REMOVE, 1'b0, S_DN_R);
-                    8'h13, 8'h14: begin t[0] <= rf[`SX(6'(sp - 7'd1))]; gosub_scr(SCR_AT, S_AT, S_LA_R); end
-                    8'h18: begin t[0] <= rf[`SX(6'(sp - 7'd1))]; t[6] <= rf[`SX(6'(sp - 7'd2))]; st <= S_SA; end
+                    8'h13, 8'h14: begin at_nat <= 1'b0; t[0] <= rf[`SX(6'(sp - 7'd1))]; gosub_scr(SCR_AT, S_AT, S_LA_R); end
+                    8'h18: begin at_nat <= 1'b0; t[0] <= rf[`SX(6'(sp - 7'd1))]; t[6] <= rf[`SX(6'(sp - 7'd2))]; st <= S_SA; end
                     8'h15: begin
                         sp <= sp - 7'd3;
                         hook(ABI_HOOK_SUPER_METHOD, ABI_RK_PUSH_NULL, 8'd3, rf[`SX(6'(sp - 7'd2))], rf[`SX(6'(sp - 7'd1))],
@@ -2964,7 +3004,13 @@ module mpy_core
                     else st <= S_FETCH;
 
             // ---- LOAD_ATTR / LOAD_METHOD ----
-            S_LA_R: case (at_kind)
+            // getattr(): a value the lookup found is the result; a method,
+            // a descriptor or a miss (default, __getattr__, special names)
+            // is the firmware's.
+            S_LA_R: if (at_nat) begin
+                if (at_kind == 2'd1) deliver(at_v, crk);
+                else st <= S_NAT_FB;
+            end else case (at_kind)
                 2'd1: begin
                     rf[`SX(6'(sp - 7'd1))] <= at_v;
                     if (op == 8'h14) push(VNULL);
@@ -3016,11 +3062,13 @@ module mpy_core
             S_SA_NL: wr(adr(t[0]) + ((`at_k == ABI_OB_EXCEPTION) ? 16 : 8), t[4], S_SA_NL2);
             S_SA_NL2: lookup(t[4], {ABI_TAG_QSTR, at_q}, t[6], LK_ADD, 1'b0, S_SA_R);
             S_SA_R: if (lk_ro || lk_cx || (lk_mode == LK_REMOVE && !lk_found)) st <= S_SA_FB;
+                    else if (at_nat) deliver(VNONE, crk);
                     else begin sp <= sp - 7'd2; st <= S_FETCH; end
-            S_SA_FB: begin
-                sp <= sp - 7'd2;
-                hook(ABI_HOOK_SETATTR, ABI_RK_DISCARD, 8'd3, t[0], {ABI_TAG_QSTR, at_q}, t[6], VNULL);
-            end
+            S_SA_FB: if (at_nat) st <= S_NAT_FB;
+                     else begin
+                         sp <= sp - 7'd2;
+                         hook(ABI_HOOK_SETATTR, ABI_RK_DISCARD, 8'd3, t[0], {ABI_TAG_QSTR, at_q}, t[6], VNULL);
+                     end
 
             // ---- LOAD_SUBSCR ----
             // An exact bytearray shares the list header layout (len, alloc,
@@ -4030,7 +4078,14 @@ module mpy_core
                     sp <= sp - 7'd1; st <= S_FETCH;
                 end else if (v0 == ABI_BINOP_EXCEPTION_MATCH) st <= S_EXM;
                 else if (v0 == ABI_BINOP_IN) st <= S_IN;
-                else if (numlike(rf[`SX(6'(sp - 7'd2))]) && numlike(rf[`SX(6'(sp - 7'd1))]) &&
+                else if ((tg(rf[`SX(6'(sp - 7'd2))]) == ABI_TAG_COMPLEX || tg(rf[`SX(6'(sp - 7'd1))]) == ABI_TAG_COMPLEX) &&
+                         cx_operand(rf[`SX(6'(sp - 7'd2))]) && cx_operand(rf[`SX(6'(sp - 7'd1))]) &&
+                         (v0 == ABI_BINOP_ADD || v0 == ABI_BINOP_INPLACE_ADD || v0 == ABI_BINOP_SUBTRACT ||
+                          v0 == ABI_BINOP_INPLACE_SUBTRACT || v0 == ABI_BINOP_MULTIPLY || v0 == ABI_BINOP_INPLACE_MULTIPLY)) begin
+                    cx_op <= (v0 == ABI_BINOP_ADD || v0 == ABI_BINOP_INPLACE_ADD) ? CX_ADD :
+                             (v0 == ABI_BINOP_SUBTRACT || v0 == ABI_BINOP_INPLACE_SUBTRACT) ? CX_SUB : CX_MUL;
+                    cx_start(rf[`SX(6'(sp - 7'd2))], rf[`SX(6'(sp - 7'd1))]);
+                end else if (numlike(rf[`SX(6'(sp - 7'd2))]) && numlike(rf[`SX(6'(sp - 7'd1))]) &&
                          (v0 <= ABI_BINOP_NOT_EQUAL || (v0 >= ABI_BINOP_INPLACE_OR && v0 <= ABI_BINOP_POWER))) begin
                     alu_op <= (v0 >= ABI_BINOP_INPLACE_OR && v0 < ABI_BINOP_OR) ? 6'(v0 + 32'd13) : 6'(v0);
                     // Unboxed operands go straight to S_NUM_GO; an INT64
@@ -4067,7 +4122,30 @@ module mpy_core
             end
             S_IN: if ((is_mut(t[1], ABI_MUT_DICT) || is_mut(t[1], ABI_MUT_SET)))
                       lookup(t[1], t[0], VNULL, LK_FIND, is_mut(t[1], ABI_MUT_SET), S_IN_R);
+                  else if (tg(t[0]) == ABI_TAG_INT && (is_mut(t[1], ABI_MUT_LIST) || tg(t[1]) == ABI_TAG_TUPLE))
+                      rd(adr(t[1]), S_INS_N);
                   else st <= S_BIN_FB;
+            // A small int in an exact list or tuple: an int element matches
+            // by value and a bool as 0 or 1; a str, bytes, tuple, list, dict,
+            // set, range or None never equals an int. Anything else (float,
+            // int64, complex, an object with __eq__) goes to the firmware.
+            S_INS_N: begin
+                x4 <= md; gi <= 32'd0;
+                if (tg(t[1]) == ABI_TAG_TUPLE) begin x3 <= adr(t[1]) + 32'd4; st <= S_INS_L; end
+                else rd(adr(t[1]) + 32'd8, S_INS_P);
+            end
+            S_INS_P: begin x3 <= md; st <= S_INS_L; end
+            S_INS_L: if (gi == x4) begin
+                         rf[`SX(6'(sp - 7'd2))] <= VFALSE; sp <= sp - 7'd1; st <= S_FETCH;
+                     end else rd(x3 + (gi << 2), S_INS_E);
+            S_INS_E: if ((tg(mv) == ABI_TAG_INT && mv[31:0] == t[0][31:0]) ||
+                         (is_bool(mv) && t[0][31:0] == {31'd0, mv == VTRUE})) begin
+                         rf[`SX(6'(sp - 7'd2))] <= VTRUE; sp <= sp - 7'd1; st <= S_FETCH;
+                     end else if (tg(mv) == ABI_TAG_INT || is_bool(mv) || mv == VNONE ||
+                                  tg(mv) == ABI_TAG_QSTR || tg(mv) == ABI_TAG_STR || tg(mv) == ABI_TAG_BYTES ||
+                                  tg(mv) == ABI_TAG_TUPLE || tg(mv) == ABI_TAG_MUT || tg(mv) == ABI_TAG_RANGE) begin
+                         gi <= gi + 32'd1; st <= S_INS_L;
+                     end else st <= S_BIN_FB;
             S_IN_R: if (lk_cx) st <= S_BIN_FB;
                     else begin rf[`SX(6'(sp - 7'd2))] <= vbool(lk_found); sp <= sp - 7'd1; st <= S_FETCH; end
 
@@ -4144,6 +4222,90 @@ module mpy_core
                 go_next();
             end
 
+            // Complex operands: words 0-1 are a's (re, im), 2-3 are b's;
+            // bl_n is the next word to present, bl_k the next to arrive.
+            S_CX: begin
+                if (!lwait || m_gnt_i) begin
+                    if (bl_n == 8'd1) begin bload(cx_pa + 32'd4); bl_n <= 8'd2; end
+                    else if (bl_n == 8'd2 && cx_bcx) begin bload(cx_pb); bl_n <= 8'd3; end
+                    else if (bl_n == 8'd3) begin bload(cx_pb + 32'd4); bl_n <= 8'd4; end
+                end
+                if (m_ack_i && wpend == 3'd0) begin
+                    v0 = {29'd0, (bl_k == 3'd0 && !cx_acx) ? 3'd2 : bl_k};
+                    if (m_fault_i) halt(fault_code(m_fault_reason_i), (v0 < 32'd2) ? cx_pa + (v0 << 2) : cx_pb + ((v0 - 32'd2) << 2));
+                    else begin
+                        case (v0[1:0])
+                            2'd0: cx_ar <= m_rdata_i;
+                            2'd1: cx_ai <= m_rdata_i;
+                            2'd2: cx_br <= m_rdata_i;
+                            default: cx_bi <= m_rdata_i;
+                        endcase
+                        bl_k <= v0[2:0] + 3'd1;
+                        if (v0 == 32'd3 || (v0 == 32'd1 && (!cx_bcx || cx_op == CX_ABS))) st <= S_CX_GO;
+                    end
+                end
+            end
+            // One ALU step. add/sub: re = ar op br, im = ai op bi.
+            // mul: t0 = ar*br, t1 = ai*bi, re = t0-t1, t0 = ar*bi, t1 = ai*br,
+            // im = t0+t1. abs: t0 = ar*ar, t1 = ai*ai, t0 = t0+t1, sqrt(t0)
+            // as t0 ** 0.5 (the FPU's correctly rounded root).
+            S_CX_GO: begin
+                na_f <= 1'b1; nb_f <= 1'b1; n_small <= 1'b0; n_un <= 1'b0;
+                case (cx_op)
+                    CX_ADD, CX_SUB: begin
+                        alu_op <= (cx_op == CX_ADD) ? ALU_ADD : ALU_SUB;
+                        na <= sx64(cx_k[0] ? cx_ai : cx_ar); nb <= sx64(cx_k[0] ? cx_bi : cx_br);
+                    end
+                    CX_MUL: case (cx_k)
+                        3'd0: begin alu_op <= ALU_MUL; na <= sx64(cx_ar); nb <= sx64(cx_br); end
+                        3'd1: begin alu_op <= ALU_MUL; na <= sx64(cx_ai); nb <= sx64(cx_bi); end
+                        3'd2: begin alu_op <= ALU_SUB; na <= sx64(cx_t0); nb <= sx64(cx_t1); end
+                        3'd3: begin alu_op <= ALU_MUL; na <= sx64(cx_ar); nb <= sx64(cx_bi); end
+                        3'd4: begin alu_op <= ALU_MUL; na <= sx64(cx_ai); nb <= sx64(cx_br); end
+                        default: begin alu_op <= ALU_ADD; na <= sx64(cx_t0); nb <= sx64(cx_t1); end
+                    endcase
+                    default: case (cx_k)
+                        3'd0: begin alu_op <= ALU_MUL; na <= sx64(cx_ar); nb <= sx64(cx_ar); end
+                        3'd1: begin alu_op <= ALU_MUL; na <= sx64(cx_ai); nb <= sx64(cx_ai); end
+                        3'd2: begin alu_op <= ALU_ADD; na <= sx64(cx_t0); nb <= sx64(cx_t1); end
+                        default: begin alu_op <= ALU_POW; na <= sx64(cx_t0); nb <= sx64(32'h3f000000); end
+                    endcase
+                endcase
+                alu_start <= 1'b1;
+                st <= S_CX_W;
+            end
+            S_CX_W: if (alu_done) begin
+                if (alu_err != AE_NONE || alu_kind != AK_FLOAT) begin
+                    // Not expected for these operands; the firmware decides.
+                    if (cx_op == CX_ABS) st <= S_NAT_FB;
+                    else st <= S_BIN_FB;
+                end else begin
+                    cx_k <= cx_k + 3'd1;
+                    cx_im <= alu_res[31:0];
+                    st <= S_CX_GO;
+                    case (cx_op)
+                        CX_ADD, CX_SUB: if (cx_k == 3'd0) cx_re <= alu_res[31:0];
+                                        else alloc(32'd2, S_CX_BOX);
+                        CX_MUL: case (cx_k)
+                            3'd0, 3'd3: cx_t0 <= alu_res[31:0];
+                            3'd1, 3'd4: cx_t1 <= alu_res[31:0];
+                            3'd2: cx_re <= alu_res[31:0];
+                            default: alloc(32'd2, S_CX_BOX);
+                        endcase
+                        default: case (cx_k)
+                            3'd0, 3'd2: cx_t0 <= alu_res[31:0];
+                            3'd1: cx_t1 <= alu_res[31:0];
+                            default: deliver({ABI_TAG_FLOAT, alu_res[31:0]}, crk);
+                        endcase
+                    endcase
+                end
+            end
+            S_CX_BOX: begin
+                wb_v[0] <= vint(cx_re); wb_v[1] <= vint(cx_im);
+                t[2] <= {ABI_TAG_COMPLEX, al_a};
+                wblock(al_a, 4'd2, S_NUM_PUT);
+            end
+
             // =================================================================
             // Natives. Args are the ARGBUF slots from ab_lo up to ab_pe; the result goes by crk.
             // ab_q is loaded with argument 0. Slot 0 (the builtin) is re-read
@@ -4202,13 +4364,21 @@ module mpy_core
                     end
                     // abs() of an int, bool or float on the ALU (ALU_ABS clears a
                     // float's sign bit, so -0.0 and -nan come out positive).
-                    ABI_N_ABS: if (v0 != 32'd1 || !(tg(mv) == ABI_TAG_INT || tg(mv) == ABI_TAG_FLOAT || is_bool(mv)))
+                    ABI_N_ABS: if (v0 != 32'd1) st <= S_NAT_FB;
+                        else if (tg(mv) == ABI_TAG_COMPLEX) begin cx_op <= CX_ABS; cx_start(mv, VNULL); end
+                        else if (!(tg(mv) == ABI_TAG_INT || tg(mv) == ABI_TAG_FLOAT || is_bool(mv)))
                             st <= S_NAT_FB;
                         else begin
                             na_f <= (tg(mv) == ABI_TAG_FLOAT); na <= sx64(ival(mv));
                             nb_f <= 1'b0; nb <= 64'd0; n_small <= 1'b0;
                             alu_op <= ALU_ABS; alu_start <= 1'b1; st <= S_N_ABS_W;
                         end
+                    // getattr / setattr with an interned name: the LOAD_ATTR /
+                    // STORE_ATTR microcode, with at_nat set.
+                    ABI_N_GETATTR: if (v0 != 32'd2 && v0 != 32'd3) st <= S_NAT_FB;
+                        else rd(ab_ptr(ab_lo + 8'd1), S_NAT_GA);
+                    ABI_N_SETATTR: if (v0 != 32'd3) st <= S_NAT_FB;
+                        else rd(ab_ptr(ab_lo + 8'd1), S_NAT_SA1);
                     ABI_N_INEXT: if (tg(mv) != ABI_TAG_ITER) deliver(VNULL, crk);
                         else begin t[3] <= mv; i0 <= 8'd0; st <= S_N_IN_LD; end
                     ABI_N_GRESUME: if (v0 != 32'd3) st <= S_NAT_FB;
@@ -4501,6 +4671,14 @@ module mpy_core
                            wb_v[0] <= vint(ival(ab_s[0])); wb_v[1] <= vint(ival(ab_s[1])); wb_v[2] <= vint(ival(mv));
                            alloc(32'd3, S_N_RANGE);
                        end
+            S_NAT_GA: if (tg(mv) != ABI_TAG_QSTR) st <= S_NAT_FB;
+                      else begin
+                          at_q <= mv[31:0]; at_nat <= 1'b1; t[0] <= ab_q;
+                          gosub_scr(SCR_AT, S_AT, S_LA_R);
+                      end
+            S_NAT_SA1: if (tg(mv) != ABI_TAG_QSTR) st <= S_NAT_FB;
+                       else begin at_q <= mv[31:0]; rd(ab_ptr(ab_lo + 8'd2), S_NAT_SA2); end
+            S_NAT_SA2: begin at_nat <= 1'b1; t[0] <= ab_q; t[6] <= mv; st <= S_SA; end
             S_NAT_FB: rd(ab_ptr(8'd0), S_NAT_FB0);
             S_NAT_FB0: begin ab_q <= mv; rd(adr(mv) + 12, S_NAT_FB1); end
             S_NAT_FB1: if (mv == VNULL) rd(adr(ab_q) + 16, S_NAT_FB2);
