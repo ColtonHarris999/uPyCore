@@ -67,6 +67,7 @@ Every result matches the oracle and the baseline. The hardware suite passes
 | A5 `round()` | Done: `mp_builtin_round` semantics |
 | A6 binary32 folding in `mpy-cross` | **Deferred**: a binary32 `mpy-cross` breaks uPy2's byte-exact contract with `mpy-cross`; needs a matching uPy2 change. Documented in `known_limitations.md` |
 | A7 SSE oracle | Done (`mpconfigvariant.mk`); no golden changed |
+| B1 posted stores, burst loads | Done: a store posts once granted (`m_gnt_i`; `wpend` counts its ack, a 4-entry FIFO keeps addresses for a fault halt); bursts read the frame header and stack on a fill, the function object, the raw-code header and the module bases on a call; the locals clear is one store per cycle. Simulator-page accesses drain first (`S_MDRAIN`). No drain is needed before GC or accelerator commands: the SRAM and the map cache take a store at its grant |
 | B3 skip `S_FETCH` | Done (`go_next()` for 14 fall-through sites; `S_DEC` re-checks spill/reload/fault) |
 | B4 numeric fast path | Done (`S_BIN`/`S_UN` → `S_NUM_GO` for unboxed operands) |
 | B5 image wait state 0 | Done |
@@ -84,7 +85,7 @@ Every result matches the oracle and the baseline. The hardware suite passes
 | E7 suite | `compiler_suite` compares float spellings by device binary32 (also inside const tuples); `shortlist_methods` no longer asserts a bool-index insert; `star_wide_oom` fills deterministically and binds its globals before measuring |
 | F2–F5 docs | Done: README, `NOTICE.md`, `planning/` archived, `known_limitations.md`, stale doc passages |
 | F1 license | **Open**: the owners must choose a project license (`NOTICE.md` lists third-party terms) |
-| Not started | B1, B2, B6, B8, B9, B10, C2, C5, D1, D4, D5, E2, E6, F6 |
+| Not started | B2 (the locals clear is one store per cycle; the range is not narrowed), B6, B8, B9, B10, C2, C5, D1, D4, D5, E2, E6, F6 |
 
 Found and fixed while implementing: `BUILD_LIST`, `BUILD_TUPLE` and
 `BUILD_SET` with 256 or more items lost elements (8-bit counters), and the

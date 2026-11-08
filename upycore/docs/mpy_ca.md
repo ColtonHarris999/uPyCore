@@ -125,8 +125,20 @@ keeps no owner register.
 The CA uses the cycles the core leaves idle. A core access does not wait
 for a CA access to SRAM: the port is ready again one cycle after it takes
 one, and the core wins that cycle. A CA read from flash can hold the core
-for its wait states. The core is latency-bound (one access at a time), so
-the pipelined port does not change its own cycle counts.
+for its wait states.
+
+The core uses the pipelined port in two ways. A store is posted: the
+sequencer goes on as soon as the port grants it, since `mpy_mem` writes
+the SRAM (and the map cache snoops the write) in the grant cycle. The core
+counts the store's ack still to come (`wpend`) and keeps its address in a
+4-entry FIFO, so a faulting store halts with its own address a few cycles
+later. Multi-word reads (the frame header and stack on a return, the
+function object, raw-code header and module bases on a call) are bursts:
+a load is presented in every cycle the previous one was granted, and the
+acks are applied in order. A single load still waits for its ack, which
+arrives after those of older stores. Accesses to the simulator page,
+which `mpy_soc` answers itself, first wait for every posted store's ack
+(`S_MDRAIN`), so the two acks never meet.
 
 ## Async ALU
 

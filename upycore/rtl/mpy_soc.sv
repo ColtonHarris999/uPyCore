@@ -169,7 +169,7 @@ module mpy_soc #(
         .clk_i, .rst_n_i(sys_rst_n),
         .m_req_o(c_req), .m_we_o(c_we), .m_tag_we_o(c_tag_we), .m_be_o(c_be),
         .m_addr_o(c_addr), .m_wdata_o(c_wdata), .m_wtag_o(c_wtag),
-        .m_ack_i(c_ack), .m_rdata_i(c_rdata), .m_rtag_i(c_rtag),
+        .m_gnt_i(m_gnt[P_CORE]), .m_ack_i(c_ack), .m_rdata_i(c_rdata), .m_rtag_i(c_rtag),
         .m_fault_i(c_fault), .m_fault_reason_i(c_fault_reason),
         .f_req_o(f_req), .f_addr_o(f_addr), .f_gnt_i(m_gnt[P_FETCH]), .f_ack_i(m_ack[P_FETCH]),
         .f_rdata_i(m_rdata[P_FETCH]), .f_fault_i(m_fault[P_FETCH]),

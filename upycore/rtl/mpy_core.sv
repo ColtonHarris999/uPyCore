@@ -82,6 +82,8 @@ module mpy_core
     output logic [31:0] m_addr_o,
     output logic [31:0] m_wdata_o,
     output logic [3:0]  m_wtag_o,
+    // The port took the request presented this cycle (mpy_mem's grant).
+    input  logic        m_gnt_i,
     input  logic        m_ack_i,
     input  logic [31:0] m_rdata_i,
     input  logic [3:0]  m_rtag_i,
@@ -265,6 +267,7 @@ module mpy_core
         S_BOOT,
         S_HALT,
         S_MWAIT,
+        S_MDRAIN,
         S_AL,
         S_AL_OOM,
         S_AL_OOM2,
@@ -338,21 +341,14 @@ module mpy_core
         S_CELL_A,
         S_CELL_I,
         S_CF,
-        S_CF1,
-        S_CF2,
-        S_CF3,
-        S_CF4,
-        S_CF_ARGS,
-        S_CF_C,
+        S_CF_B,
         S_CF_CHK,
         S_CF_CLI,
         S_CF_CLN,
         S_CF_CLP,
-        S_CF_MD,
-        S_CF_PC,
         S_CF_Q,
+        S_CF_RC,
         S_CF_SIG,
-        S_CF_SIG2,
         S_CF_SW,
         S_CNS,
         S_CONT,
@@ -731,7 +727,6 @@ module mpy_core
         S_WC_T,
         S_WC_TR,
         S_LCLR,
-        S_LCLR2,
         S_LDEL,
         S_LDREF,
         S_LDF,
@@ -767,7 +762,6 @@ module mpy_core
         S_FL_L,
         S_FL_L2,
         S_FL_S,
-        S_FL_S2,
         S_XPUSH,
         S_XPOP,
         S_XFLUSH,
@@ -977,6 +971,32 @@ module mpy_core
 
     // memory port
     logic        m_req, m_we, m_tag_we;
+    // Posted stores. A store to memory is complete for every master once
+    // the port grants it (mpy_mem writes the SRAM in the grant cycle and
+    // completes accesses in order), so the sequencer moves on as soon as it
+    // is presented: wwait holds the sequencer only in a cycle where the
+    // store is presented and not yet granted. wpend counts granted stores
+    // whose acks are still to come; their addresses wait in wfifo so a
+    // faulting store still halts with its own address. A load still waits
+    // for its own ack, which the port returns after the older stores' acks.
+    // Accesses to the simulator page never reach mpy_mem: they drain the
+    // posted stores first (S_MDRAIN) and wait for their ack.
+    localparam int WQ = 4;
+    logic        wwait;
+    logic [2:0]  wpend;
+    logic [31:0] wfifo [0:WQ-1];
+    logic [1:0]  wf_w, wf_r;
+    logic        wfault_p;
+    // Burst loads (frame fill, call setup): a load is presented while earlier ones are
+    // still in flight; lwait marks one presented and not yet granted, and
+    // the next is presented only once it has been. Their acks arrive in
+    // order after any older posted stores' and are consumed by the burst
+    // state, which never waits in a frozen cycle.
+    logic        lwait;
+    logic [7:0]  bl_n;
+    logic [2:0]  bl_k;          // acks taken by a call-setup burst
+    logic [3:0]  wfault_code;
+    logic [31:0] wfault_addr;
     logic [3:0]  m_be, m_wtag;
     logic [31:0] m_addr, m_wdata;
     logic [31:0] md;
@@ -1219,7 +1239,7 @@ module mpy_core
     `define la_i     sA[4]
     `define ke_w0    sA[0]
     `define ke_w1    sA[1]
-    logic [31:0] c_rc, c_md, c_cells, c_tflags;
+    logic [31:0] c_rc, c_md, c_cells, c_tflags, c_pc;
     val_t        c_clos, c_defs, c_glob;
     logic [7:0]  c_nst, c_nexc, c_scope, c_rcf, c_npos, c_nkwo, c_ndef, c_ncell, c_cn;
     logic        c_fast, c_ismod;
@@ -1649,19 +1669,47 @@ module mpy_core
             default: halt(ABI_HALT_BUS, fe_fault_addr);
         endcase
     endtask
-    task automatic rd(input logic [31:0] a, input state_e nxt);
-        m_addr <= a; m_we <= 1'b0; m_tag_we <= 1'b0; m_be <= 4'hF; m_req <= 1'b1;
-        wret <= nxt; st <= S_MWAIT;
+    function automatic logic sim_page(input logic [31:0] a);
+        sim_page = (mpy_region_of(a) == MPY_REGION_SIM);
+    endfunction
+    // A simulator-page access waits until no posted store is outstanding,
+    // so its ack cannot coincide with a store's (mpy_soc ORs the two).
+    task automatic issue_blocking(input logic [31:0] a, input state_e nxt);
+        wret <= nxt;
+        if (sim_page(a) && (wpend != 3'd0 || wwait)) st <= S_MDRAIN;
+        else begin m_req <= 1'b1; st <= S_MWAIT; end
     endtask
+    task automatic rd(input logic [31:0] a, input state_e nxt);
+        m_addr <= a; m_we <= 1'b0; m_tag_we <= 1'b0; m_be <= 4'hF;
+        issue_blocking(a, nxt);
+    endtask
+    // A posted store: present it and go on (see wwait).
+    task automatic post(input logic [31:0] a, input state_e nxt);
+        if (sim_page(a)) issue_blocking(a, nxt);
+        else begin m_req <= 1'b1; wwait <= 1'b1; st <= nxt; end
+    endtask
+    task automatic bload(input logic [31:0] a);
+        m_addr <= a; m_we <= 1'b0; m_tag_we <= 1'b0; m_be <= 4'hF;
+        m_req <= 1'b1; lwait <= 1'b1;
+    endtask
+    // Start the raw-code header burst of a call (S_CF_RC).
+    task automatic rc_burst();
+        bload(c_rc); bl_n <= 8'd1; bl_k <= 3'd0;
+        st <= S_CF_RC;
+    endtask
+    function automatic logic [3:0] fault_code(input logic [3:0] reason);
+        fault_code = (reason == MPY_FAULT_UNALIGNED) ? ABI_HALT_UNALIGNED :
+                     (reason == MPY_FAULT_FLASH_STORE) ? ABI_HALT_FLASH_STORE : ABI_HALT_BUS;
+    endfunction
     task automatic wr(input logic [31:0] a, input val_t v, input state_e nxt);
         m_addr <= a; m_wdata <= v[31:0]; m_wtag <= v[35:32];
-        m_we <= 1'b1; m_tag_we <= 1'b1; m_be <= 4'hF; m_req <= 1'b1;
-        wret <= nxt; st <= S_MWAIT;
+        m_we <= 1'b1; m_tag_we <= 1'b1; m_be <= 4'hF;
+        post(a, nxt);
     endtask
     task automatic wrb(input logic [31:0] a, input logic [7:0] b, input state_e nxt);
         m_addr <= {a[31:2], 2'b00}; m_wdata <= {4{b}}; m_wtag <= 4'd0;
-        m_we <= 1'b1; m_tag_we <= 1'b0; m_be <= 4'b0001 << a[1:0]; m_req <= 1'b1;
-        wret <= nxt; st <= S_MWAIT;
+        m_we <= 1'b1; m_tag_we <= 1'b0; m_be <= 4'b0001 << a[1:0];
+        post({a[31:2], 2'b00}, nxt);
     endtask
     function automatic logic [31:0] scr_addr(input logic [3:0] id, input logic [3:0] wi);
         logic [31:0] basew;
@@ -1798,6 +1846,10 @@ module mpy_core
             rsp <= 5'd0;
             m_req <= 1'b0; m_we <= 1'b0; m_tag_we <= 1'b0; m_be <= 4'hF;
             m_addr <= 32'd0; m_wdata <= 32'd0; m_wtag <= 4'd0;
+            wwait <= 1'b0; wpend <= 3'd0; wf_w <= 2'd0; wf_r <= 2'd0;
+            wfault_p <= 1'b0; wfault_code <= 4'd0; wfault_addr <= 32'd0;
+            lwait <= 1'b0; bl_n <= 8'd0; bl_k <= 3'd0;
+            for (int k = 0; k < WQ; k++) wfifo[k] <= 32'd0;
             gc_alloc_req <= 1'b0; gc_collect_req <= 1'b0;
             alu_start <= 1'b0; hm_start <= 1'b0; aalu_pend <= 1'b0; aalu_ready <= 1'b0; aalu_slot <= 4'd0; aalu_ret <= S_FETCH;
             mb_valid_o <= 0; mb_op_o <= 0; mb_set_o <= 0;
@@ -1866,7 +1918,39 @@ module mpy_core
             sp_d <= sp;
             if (aalu_pend && alu_done) aalu_ready <= 1'b1;
 
-            if (rf_pend && st != S_MWAIT && st != S_AALU_WB && st != S_RF_SPILL && st != S_RF_SPILL2 &&
+            // Posted-store bookkeeping (before the sequencer, which may
+            // present the next store in a grant cycle and so set wwait again).
+            if (lwait && m_gnt_i) lwait <= 1'b0;
+            if (wwait && m_gnt_i) begin
+                wwait <= 1'b0;
+                wfifo[wf_w] <= m_addr;
+                wf_w <= wf_w + 2'd1;
+                // The store that publishes the override dict keeps the probe
+                // flop; nothing reads bov before this grant.
+                if (m_tag_we && m_addr == ABI_SYSROOT_BASE + 4 * ABI_SR_FW7)
+                    bov <= {m_wtag, m_wdata};
+            end
+            if (m_ack_i && wpend != 3'd0) begin
+                wf_r <= wf_r + 2'd1;
+                if (m_fault_i && !wfault_p) begin
+                    wfault_p <= 1'b1;
+                    wfault_addr <= wfifo[wf_r];
+                    wfault_code <= (m_fault_reason_i == MPY_FAULT_UNALIGNED) ? ABI_HALT_UNALIGNED :
+                                   (m_fault_reason_i == MPY_FAULT_FLASH_STORE) ? ABI_HALT_FLASH_STORE :
+                                   ABI_HALT_BUS;
+                end
+            end
+            wpend <= wpend + ((wwait && m_gnt_i) ? 3'd1 : 3'd0) - ((m_ack_i && wpend != 3'd0) ? 3'd1 : 3'd0);
+`ifndef SYNTHESIS
+            if (wpend == 3'(WQ) && wwait && m_gnt_i) $error("posted-store queue overflow");
+`endif
+
+            if (wfault_p) begin
+                if (st != S_HALT) halt(wfault_code, wfault_addr);
+            end else if (wwait && !m_gnt_i) begin
+                // A posted store is still waiting for the port: hold.
+            end else if (rf_pend && st != S_MWAIT && st != S_FL_H && st != S_FL_S &&
+                st != S_CF_B && st != S_CF_RC && st != S_CF_Q && st != S_AALU_WB && st != S_RF_SPILL && st != S_RF_SPILL2 &&
                 st != S_RF_SPILL_W &&
                 st != S_RF_RELOAD && st != S_RF_RELOAD_R && st != S_RF_RELOAD_G) begin
                 if (sp >= 7'(MPY_RF_DEPTH)) begin
@@ -1880,14 +1964,10 @@ module mpy_core
             end else case (st)
             S_HALT: ;
 
-            S_MWAIT: if (m_ack_i) begin
+            // Acks of older posted stores come first; this access's is the
+            // one that arrives with none outstanding.
+            S_MWAIT: if (m_ack_i && wpend == 3'd0) begin
                 md <= m_rdata_i; mt <= m_rtag_i;
-                // The store that publishes the override dict keeps the probe
-                // flop. It is matched on the registered address when the store
-                // completes, not on the computed address at issue; nothing
-                // reads bov while the core waits here.
-                if (m_we && m_tag_we && !m_fault_i && m_addr == ABI_SYSROOT_BASE + 4 * ABI_SR_FW7)
-                    bov <= {m_wtag, m_wdata};
                 if (m_fault_i) begin
                     case (m_fault_reason_i)
                         MPY_FAULT_UNALIGNED: halt(ABI_HALT_UNALIGNED, m_addr);
@@ -1896,6 +1976,8 @@ module mpy_core
                     endcase
                 end else st <= wret;
             end
+
+            S_MDRAIN: if (wpend == 3'd0 && !wwait) begin m_req <= 1'b1; st <= S_MWAIT; end
 
             // Move one scratch image between sA/sV and the reservation.
             S_SCR: if (scr_i == scr_words(scr_cmd)) begin
@@ -2039,34 +2121,73 @@ module mpy_core
             S_NEW_IR2: wr(ab_ptr(8'd0), at_v, S_CALL);
 
             // ---- bytecode function call ----
-            S_CF: begin ab_lo0 <= ab_lo; rd(adr(ab_q) + 8, S_CF1); end
-            S_CF1: begin c_rc <= md; rd(adr(ab_q) + 12, S_CF2); end
-            S_CF2: begin c_clos <= mv; rd(adr(ab_q) + 16, S_CF3); end
-            S_CF3: begin c_defs <= mv; rd(adr(ab_q) + 24, S_CF4); end
-            S_CF4: begin
-                c_glob <= mv;
-                if (c_clos != VNULL) rd(adr(c_clos), S_CF_CLN);
-                else st <= S_CF_SIG;
+            // Call setup reads three blocks by burst (see S_FL_H): the
+            // function object's words +8..+24, the raw code's header words
+            // 0..5, and the module's qstr and constant bases.
+            S_CF: begin
+                ab_lo0 <= ab_lo;
+                bload(adr(ab_q) + 32'd8); bl_n <= 8'd1; bl_k <= 3'd0;
+                st <= S_CF_B;
+            end
+            S_CF_B: begin
+                if (bl_n != 8'd5 && (!lwait || m_gnt_i)) begin
+                    bload(adr(ab_q) + 32'd8 + {22'd0, bl_n, 2'b00});
+                    bl_n <= bl_n + 8'd1;
+                end
+                if (m_ack_i && wpend == 3'd0) begin
+                    if (m_fault_i) halt(fault_code(m_fault_reason_i), adr(ab_q) + 32'd8 + {27'd0, bl_k, 2'b00});
+                    else begin
+                        bl_k <= bl_k + 3'd1;
+                        case (bl_k)
+                            3'd0: c_rc <= m_rdata_i;
+                            3'd1: c_clos <= {m_rtag_i, m_rdata_i};
+                            3'd2: c_defs <= {m_rtag_i, m_rdata_i};
+                            3'd3: ;  // +20 is not used here
+                            default: begin
+                                c_glob <= {m_rtag_i, m_rdata_i};
+                                if (c_clos != VNULL) rd(adr(c_clos), S_CF_CLN);
+                                else rc_burst();
+                            end
+                        endcase
+                    end
+                end
             end
             S_CF_CLN: begin c_cn <= md[7:0]; st <= S_CF_CLI; end
-            S_CF_CLI: if (c_cn == 8'd0) st <= S_CF_SIG;
+            S_CF_CLI: if (c_cn == 8'd0) rc_burst();
                       else if (ab_lo <= 8'd2) raise_err(ABI_ERR_STAR_ARGS, VNULL, VNULL);
                       else rd(adr(c_clos) + 4 * c_cn, S_CF_CLP);
             S_CF_CLP: begin
                 wr(ab_ptr(ab_lo - 8'd1), mv, S_CF_CLI);
                 ab_lo <= ab_lo - 8'd1; c_cn <= c_cn - 8'd1;
             end
-            S_CF_SIG: rd(c_rc + 4 * ABI_RC_SIG, S_CF_SIG2);
-            S_CF_SIG2: begin
-                c_nst <= md[7:0]; c_nexc <= md[15:8]; c_scope <= md[23:16]; c_rcf <= md[31:24];
-                rd(c_rc + 4 * ABI_RC_ARGS, S_CF_ARGS);
-            end
-            S_CF_ARGS: begin
-                c_npos <= md[7:0]; c_nkwo <= md[15:8]; c_ndef <= md[23:16]; c_ncell <= md[31:24];
-                rd(c_rc + 4 * ABI_RC_CELLS, S_CF_CHK);
+            S_CF_SIG: rc_burst();
+            S_CF_RC: begin
+                if (bl_n != 8'd6 && (!lwait || m_gnt_i)) begin
+                    bload(c_rc + {22'd0, bl_n, 2'b00});
+                    bl_n <= bl_n + 8'd1;
+                end
+                if (m_ack_i && wpend == 3'd0) begin
+                    if (m_fault_i) halt(fault_code(m_fault_reason_i), c_rc + {27'd0, bl_k, 2'b00});
+                    else begin
+                        bl_k <= bl_k + 3'd1;
+                        case (bl_k)
+                            3'(ABI_RC_OP_START): c_pc <= m_rdata_i;
+                            3'(ABI_RC_SIG): begin
+                                c_nst <= m_rdata_i[7:0]; c_nexc <= m_rdata_i[15:8];
+                                c_scope <= m_rdata_i[23:16]; c_rcf <= m_rdata_i[31:24];
+                            end
+                            3'(ABI_RC_ARGS): begin
+                                c_npos <= m_rdata_i[7:0]; c_nkwo <= m_rdata_i[15:8];
+                                c_ndef <= m_rdata_i[23:16]; c_ncell <= m_rdata_i[31:24];
+                            end
+                            3'(ABI_RC_CELLS): c_cells <= m_rdata_i;
+                            3'(ABI_RC_MODULE): begin c_md <= m_rdata_i; st <= S_CF_CHK; end
+                            default: ;  // ABI_RC_ARG_NAMES
+                        endcase
+                    end
+                end
             end
             S_CF_CHK: begin
-                c_cells <= md;
                 v0 = noframe ? ABI_FRAME_BASE : stk_top;
                 // v0 + 4 * (17 + n_state + 3 * n_exc): the narrow fields are
                 // summed first (with stk_off when there is a frame, at most
@@ -2102,16 +2223,28 @@ module mpy_core
                 lc_inval();
                 st <= S_LCLR;
             end
-            S_LCLR: if (i0 == nloc) rd(c_rc + 4 * ABI_RC_OP_START, S_CF_PC);
-                    else wr(loc_ptr(i0), VNULL, S_LCLR2);
-            S_LCLR2: begin i0 <= i0 + 8'd1; st <= S_LCLR; end
-            S_CF_PC: begin pc <= md; op_pc <= md; rd(c_rc + 4 * ABI_RC_MODULE, S_CF_MD); end
-            S_CF_MD: begin c_md <= md; rd(md + 4 * ABI_MD_QSTRS, S_CF_Q); end
-            S_CF_Q: begin qbase <= md; rd(c_md + 4 * ABI_MD_CONSTS, S_CF_C); end
-            S_CF_C: begin
-                cbase <= md;
-                if (c_fast) st <= S_BF;
-                else st <= S_BS;
+            S_LCLR: if (i0 == nloc) begin
+                        pc <= c_pc; op_pc <= c_pc;
+                        bload(c_md + 4 * ABI_MD_QSTRS); bl_n <= 8'd1; bl_k <= 3'd0;
+                        st <= S_CF_Q;
+                    end else begin
+                        wr(loc_ptr(i0), VNULL, S_LCLR);
+                        i0 <= i0 + 8'd1;
+                    end
+            S_CF_Q: begin
+                if (bl_n != 8'd2 && (!lwait || m_gnt_i)) begin
+                    bload(c_md + 4 * ABI_MD_CONSTS);
+                    bl_n <= bl_n + 8'd1;
+                end
+                if (m_ack_i && wpend == 3'd0) begin
+                    if (m_fault_i) halt(fault_code(m_fault_reason_i), c_md + {27'd0, bl_k, 2'b00});
+                    else if (bl_k == 3'd0) begin qbase <= m_rdata_i; bl_k <= 3'd1; end
+                    else begin
+                        cbase <= m_rdata_i;
+                        if (c_fast) st <= S_BF;
+                        else st <= S_BS;
+                    end
+                end
             end
             // fast positional binding
             S_BF: begin
@@ -2208,44 +2341,54 @@ module mpy_core
                         sw_i <= sw_i + 32'd1;
                     end
 
+            // The 17 header words arrive by a burst: a load is presented
+            // every cycle the previous one has been granted (bl_n counts
+            // them) and each ack is applied in order (fl_i counts those).
             S_FILL: begin
-                fl_i <= 32'd0; fe_flush <= 1'b1; lc_inval();
+                fl_i <= 32'd0; bl_n <= 8'd0; fe_flush <= 1'b1; lc_inval();
                 if (!fl_img) fbase <= fl_base;
-                rd(fl_base, S_FL_H);
+                st <= S_FL_H;
             end
             S_FL_H: begin
-                case (fl_i)
-                    4'd0: if (!fl_img) fprev <= md;
-                    4'd1: rc <= md;
-                    4'd2: pc <= md;
-                    4'd3: op_pc <= md;
-                    4'd4: begin sp <= md[6:0]; xsp <= md[12:8]; fflags <= md[31:24]; end
-                    4'd5: begin frk <= md[3:0]; fcont <= md[15:8]; nexc <= md[20:16]; end
-                    4'd6: glb <= mv;
-                    4'd7: loc <= mv;
-                    4'd8: fun <= mv;
-                    4'd9: aux <= mv;
-                    4'd10: aux2 <= mv;
-                    4'd11: aux3 <= mv;
-                    4'd12: qbase <= md;
-                    4'd13: cbase <= md;
-                    4'd14: gen <= mv;
-                    4'd15: spill_hp <= md;
-                    default: if (fl_i == 32'd16) begin
-                        rf_base <= md[5:0];
-                        nloc <= md[13:6];
-                        spilled_reals <= md[29:14];
-                        exc_base <= fl_base + 32'h44 + ({24'd0, md[13:6]} << 2);
-                        stack_base <= fl_base + ((32'd17 + {24'd0, md[13:6]} + 32'd3 * {27'd0, nexc}) << 2);
+                if (bl_n != 8'd17 && (!lwait || m_gnt_i)) begin
+                    bload(fl_base + {22'd0, bl_n, 2'b00});
+                    bl_n <= bl_n + 8'd1;
+                end
+                if (m_ack_i && wpend == 3'd0) begin
+                    if (m_fault_i) halt(fault_code(m_fault_reason_i), fl_base + (fl_i << 2));
+                    else begin
+                        case (fl_i)
+                            4'd0: if (!fl_img) fprev <= m_rdata_i;
+                            4'd1: rc <= m_rdata_i;
+                            4'd2: pc <= m_rdata_i;
+                            4'd3: op_pc <= m_rdata_i;
+                            4'd4: begin sp <= m_rdata_i[6:0]; xsp <= m_rdata_i[12:8]; fflags <= m_rdata_i[31:24]; end
+                            4'd5: begin frk <= m_rdata_i[3:0]; fcont <= m_rdata_i[15:8]; nexc <= m_rdata_i[20:16]; end
+                            4'd6: glb <= {m_rtag_i, m_rdata_i};
+                            4'd7: loc <= {m_rtag_i, m_rdata_i};
+                            4'd8: fun <= {m_rtag_i, m_rdata_i};
+                            4'd9: aux <= {m_rtag_i, m_rdata_i};
+                            4'd10: aux2 <= {m_rtag_i, m_rdata_i};
+                            4'd11: aux3 <= {m_rtag_i, m_rdata_i};
+                            4'd12: qbase <= m_rdata_i;
+                            4'd13: cbase <= m_rdata_i;
+                            4'd14: gen <= {m_rtag_i, m_rdata_i};
+                            4'd15: spill_hp <= m_rdata_i;
+                            default: if (fl_i == 32'd16) begin
+                                rf_base <= m_rdata_i[5:0];
+                                nloc <= m_rdata_i[13:6];
+                                spilled_reals <= m_rdata_i[29:14];
+                                exc_base <= fl_base + 32'h44 + ({24'd0, m_rdata_i[13:6]} << 2);
+                                stack_base <= fl_base + ((32'd17 + {24'd0, m_rdata_i[13:6]} + 32'd3 * {27'd0, nexc}) << 2);
+                            end
+                        endcase
+                        md <= m_rdata_i; mt <= m_rtag_i;
+                        if (fl_i == 32'd16) begin
+                            fl_i <= 32'd0; fl_k <= 2'd0; bl_n <= 8'd0;
+                            if (fl_img) st <= S_FL_L;
+                            else begin sw_k <= 2'd0; gosub(S_XLOAD, S_FL_S); end
+                        end else fl_i <= fl_i + 32'd1;
                     end
-                endcase
-                if (fl_i == 32'd16) begin
-                    fl_i <= 32'd0; fl_k <= 2'd0;
-                    if (fl_img) st <= S_FL_L;
-                    else begin sw_k <= 2'd0; gosub(S_XLOAD, S_FL_S); end
-                end else begin
-                    fl_i <= fl_i + 32'd1;
-                    rd(fl_base + ((fl_i + 32'd1) << 2), S_FL_H);
                 end
             end
             S_FL_L: if (fl_i == nloc) begin fl_i <= 32'd0; fl_k <= 2'd0; st <= S_FL_X0; end
@@ -2254,20 +2397,28 @@ module mpy_core
             // fl_img: copy every exception word into the reserve frame, then
             // load the top. A plain fill never reaches here.
             S_FL_X0: if (fl_i == 32'(xsp) * 32'd3) begin
-                         fl_i <= 32'd0; fl_img <= 1'b0; sw_k <= 2'd0;
+                         fl_i <= 32'd0; bl_n <= 8'd0; fl_img <= 1'b0; sw_k <= 2'd0;
                          gosub(S_XLOAD, S_FL_S);
                      end else rd(exc_base + (fl_i << 2), S_FL_X);
             S_FL_X: begin
                 wr(exc_words(fbase) + (fl_i << 2), mv, S_FL_X0);
                 fl_i <= fl_i + 32'd1;
             end
-            S_FL_S: if (fl_i == sp) ret();
-                    else rd(stack_base + (fl_i << 2), S_FL_S2);
-            S_FL_S2: begin
-                rf[`SX(fl_i[6:0])] <= mv;
-                fl_i <= fl_i + 32'd1;
-                st <= S_FL_S;
-            end
+            // The resident stack, by the same kind of burst.
+            S_FL_S: if (fl_i == 32'(sp)) ret();
+                    else begin
+                        if (bl_n != {1'b0, sp} && (!lwait || m_gnt_i)) begin
+                            bload(stack_base + {22'd0, bl_n, 2'b00});
+                            bl_n <= bl_n + 8'd1;
+                        end
+                        if (m_ack_i && wpend == 3'd0) begin
+                            if (m_fault_i) halt(fault_code(m_fault_reason_i), stack_base + (fl_i << 2));
+                            else begin
+                                rf[`SX(fl_i[6:0])] <= {m_rtag_i, m_rdata_i};
+                                fl_i <= fl_i + 32'd1;
+                            end
+                        end
+                    end
 
             S_RET: if (frk == ABI_RK_HALT) halt(ABI_HALT_CLEAN, 32'd0);
                    else begin r_rk <= frk; fl_base <= fprev; gosub(S_FILL, S_RET_D); end
