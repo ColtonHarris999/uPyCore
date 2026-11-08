@@ -1994,10 +1994,11 @@ module mpy_core
             if (wpend == 3'(WQ) && wwait && m_gnt_i) $error("posted-store queue overflow");
 `endif
 
-            if (wfault_p) begin
-                if (st != S_HALT) halt(wfault_code, wfault_addr);
-            end else if (wwait && !m_gnt_i) begin
-                // A posted store is still waiting for the port: hold.
+            // One test for both reasons the sequencer does not step, so the
+            // case's late values pass a single mux: a posted store that
+            // faulted halts, and one still waiting for the port holds.
+            if (wfault_p || (wwait && !m_gnt_i)) begin
+                if (wfault_p && st != S_HALT) halt(wfault_code, wfault_addr);
             end else if (rf_pend && st != S_MWAIT && st != S_FL_H && st != S_FL_S &&
                 st != S_CF_B && st != S_CF_RC && st != S_CF_Q && st != S_CX && st != S_SCR && st != S_AALU_WB && st != S_RF_SPILL && st != S_RF_SPILL2 &&
                 st != S_RF_SPILL_W &&
