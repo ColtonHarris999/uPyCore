@@ -90,6 +90,45 @@ the clamp (fixed from reset release), and its worst path in the SoC is
 5.4 ns. The GC table SRAM costs at most +0.33 % cycles on the merged
 firmware (`bulk_extended_keys`); every other workload is within +0.06 %.
 
+### After the benchmark round (`benchmark`, November 2026)
+
+The performance round (posted stores and burst loads, call-path bursts,
+complex arithmetic, getattr/setattr/dict.get/ord/chr/float/int/type
+natives, core GET_ITER, list/tuple membership) was checked against
+`main` at `f15327a`, whose converted RTL closed at 10 and 11 ns in the
+team's Genus/Innovus runs. OpenSTA was not available, so the comparison
+uses `upycore/tools/sta/` (method in `run.py`: slang, flat `synth -noabc`,
+async resets dropped as the constraints false-path them, ABC `&nf`
+mapping with buffering onto the sky130 typical liberty, and a liberty
+table timer). The numbers compare the two RTLs; they are not Genus ns.
+
+Three paths the round first made longer were fixed before merging:
+
+| Path | Cause | Fix |
+| --- | --- | --- |
+| address arithmetic → `m_req`, `st`, `wret` | the core decoded the region of every address it presented (simulator-page ordering) | `mpy_soc` orders simulator-page accesses (`c_out`), so the core presents every access the same way |
+| copy scoreboard → `mpy_mem` arbitration → core register enables | the posted-store hold read the combinational grant | a one-entry skid in `mpy_soc`; the core sees only `m_busy_i`, a flop |
+| decoder → `st` and the scratch-address register | fault, hold and push intercept were three priority levels ahead of the microcode case | one stop test from flops (`rf_icpt`); the case's values pass one mux |
+
+Result, same flow on both RTLs (worst register-to-register path; FPU
+paths are unchanged and identical in both):
+
+| | `f15327a` | `benchmark` |
+| --- | ---: | ---: |
+| `mpy_core`, mapped, worst non-FPU path | 12.16 | 11.98 |
+| `mpy_core`, unmapped (deterministic), worst non-FPU path | 15.69 (`pc`) | 15.69 (`pc`) |
+| `mpy_soc`, unmapped, worst non-FPU path | 16.72 (copy engine) | 16.11 (copy engine) |
+| `mpy_core` input to register (class I/O delay is half the period) | 2.6 | 4.5 (`m_rdata_i` → `stack_base`) |
+
+The input-to-register paths are longer than before (the frame-fill
+burst takes header words straight from `m_rdata_i`, and the posted-store
+hold reads `m_busy_i`) but stay under 40 % of the register-to-register
+plateau against the 50 % the constraints allow. `mpy_core` has 14,713
+flops (+587: the store-address FIFO, burst counters, complex operands).
+The SoC reset is now a 2-flop synchronizer (`por_n`): the class
+constraints false-path only the `rst_n_i` port, so the reset tree from
+those flops is timed (recovery/removal) in the SoC run.
+
 ## Cycle cost
 
 Same images on the baseline and the new simulator (`upycore/tools/clock_bench.py`):

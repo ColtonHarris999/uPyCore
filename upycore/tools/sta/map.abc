@@ -1,0 +1,4 @@
+&get -n
+&nf -D 1000
+&put
+buffer -p
