@@ -67,6 +67,7 @@ module mpy_soc #(
     logic [3:0]  c_be, c_wtag;
     logic [31:0] c_addr, c_wdata;
     logic        c_ack, c_fault;
+    logic        c_gnt;      // the core's request was taken: by mpy_mem, or the sim page (sim_go)
     logic [31:0] c_rdata;
     logic [3:0]  c_rtag, c_fault_reason;
 
@@ -169,7 +170,7 @@ module mpy_soc #(
         .clk_i, .rst_n_i(sys_rst_n),
         .m_req_o(c_req), .m_we_o(c_we), .m_tag_we_o(c_tag_we), .m_be_o(c_be),
         .m_addr_o(c_addr), .m_wdata_o(c_wdata), .m_wtag_o(c_wtag),
-        .m_gnt_i(m_gnt[P_CORE]), .m_ack_i(c_ack), .m_rdata_i(c_rdata), .m_rtag_i(c_rtag),
+        .m_gnt_i(c_gnt), .m_ack_i(c_ack), .m_rdata_i(c_rdata), .m_rtag_i(c_rtag),
         .m_fault_i(c_fault), .m_fault_reason_i(c_fault_reason),
         .f_req_o(f_req), .f_addr_o(f_addr), .f_gnt_i(m_gnt[P_FETCH]), .f_ack_i(m_ack[P_FETCH]),
         .f_rdata_i(m_rdata[P_FETCH]), .f_fault_i(m_fault[P_FETCH]),
@@ -282,6 +283,25 @@ module mpy_soc #(
     logic c_sim;
     assign c_sim = (mpy_region_of(c_addr) == MPY_REGION_SIM);
 
+    // The core posts stores and pipelines loads, and takes acks in order.
+    // A simulator-page access is answered here, so it is granted (sim_go,
+    // which the core sees as its grant) only when none of the core's memory
+    // accesses is still waiting for its ack; until then it is held in
+    // s_pend (the core holds the request fields while it is ungranted).
+    // c_out counts the core's memory accesses granted and not yet acked.
+    logic        s_pend, sim_go;
+    logic [2:0]  c_out;
+    assign sim_go = (s_pend || (c_req && c_sim)) && c_out == 3'd0;
+    assign c_gnt = m_gnt[P_CORE] || sim_go;
+    always_ff @(posedge clk_i or negedge por_n) begin
+        if (!por_n) begin
+            s_pend <= 1'b0; c_out <= 3'd0;
+        end else begin
+            s_pend <= (s_pend || (c_req && c_sim)) && !sim_go;
+            c_out <= c_out + (m_gnt[P_CORE] ? 3'd1 : 3'd0) - (m_ack[P_CORE] ? 3'd1 : 3'd0);
+        end
+    end
+
     logic        sim_ack;
     logic [31:0] sim_rdata;
     logic        sim_halt;
@@ -295,7 +315,7 @@ module mpy_soc #(
         end else begin
             sim_ack <= 1'b0;
             con_valid_o <= 1'b0;
-            if (c_req && c_sim) begin
+            if (sim_go) begin
                 sim_ack <= 1'b1;
                 sim_rdata <= 32'd0;
                 if (c_we) begin

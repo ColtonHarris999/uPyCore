@@ -136,9 +136,10 @@ later. Multi-word reads (the frame header and stack on a return, the
 function object, raw-code header and module bases on a call) are bursts:
 a load is presented in every cycle the previous one was granted, and the
 acks are applied in order. A single load still waits for its ack, which
-arrives after those of older stores. Accesses to the simulator page,
-which `mpy_soc` answers itself, first wait for every posted store's ack
-(`S_MDRAIN`), so the two acks never meet.
+arrives after those of older stores. `mpy_soc` answers accesses to the
+simulator page itself, and grants one only when none of the core's memory
+accesses is still waiting for its ack, so acks stay in order without the
+core decoding the address it presents.
 
 ## Async ALU
 

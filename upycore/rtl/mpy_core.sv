@@ -267,7 +267,6 @@ module mpy_core
         S_BOOT,
         S_HALT,
         S_MWAIT,
-        S_MDRAIN,
         S_AL,
         S_AL_OOM,
         S_AL_OOM2,
@@ -1008,8 +1007,8 @@ module mpy_core
     // whose acks are still to come; their addresses wait in wfifo so a
     // faulting store still halts with its own address. A load still waits
     // for its own ack, which the port returns after the older stores' acks.
-    // Accesses to the simulator page never reach mpy_mem: they drain the
-    // posted stores first (S_MDRAIN) and wait for their ack.
+    // A simulator-page access is answered by mpy_soc, which grants it only
+    // when no memory access of the core is outstanding (see mpy_soc).
     localparam int WQ = 4;
     logic        wwait;
     logic [2:0]  wpend;
@@ -1716,24 +1715,16 @@ module mpy_core
             default: halt(ABI_HALT_BUS, fe_fault_addr);
         endcase
     endtask
-    function automatic logic sim_page(input logic [31:0] a);
-        sim_page = (mpy_region_of(a) == MPY_REGION_SIM);
-    endfunction
-    // A simulator-page access waits until no posted store is outstanding,
-    // so its ack cannot coincide with a store's (mpy_soc ORs the two).
-    task automatic issue_blocking(input logic [31:0] a, input state_e nxt);
-        wret <= nxt;
-        if (sim_page(a) && (wpend != 3'd0 || wwait)) st <= S_MDRAIN;
-        else begin m_req <= 1'b1; st <= S_MWAIT; end
-    endtask
+    // The request fields never depend on where the address points: mpy_soc
+    // grants a simulator-page access only once the core's memory accesses
+    // have all been acked, so acks still arrive in order.
     task automatic rd(input logic [31:0] a, input state_e nxt);
         m_addr <= a; m_we <= 1'b0; m_tag_we <= 1'b0; m_be <= 4'hF;
-        issue_blocking(a, nxt);
+        m_req <= 1'b1; wret <= nxt; st <= S_MWAIT;
     endtask
     // A posted store: present it and go on (see wwait).
     task automatic post(input logic [31:0] a, input state_e nxt);
-        if (sim_page(a)) issue_blocking(a, nxt);
-        else begin m_req <= 1'b1; wwait <= 1'b1; st <= nxt; end
+        m_req <= 1'b1; wwait <= 1'b1; st <= nxt;
     endtask
     task automatic bload(input logic [31:0] a);
         m_addr <= a; m_we <= 1'b0; m_tag_we <= 1'b0; m_be <= 4'hF;
@@ -2034,8 +2025,6 @@ module mpy_core
                     endcase
                 end else st <= wret;
             end
-
-            S_MDRAIN: if (wpend == 3'd0 && !wwait) begin m_req <= 1'b1; st <= S_MWAIT; end
 
             // Move one scratch image between sA/sV and the reservation.
             S_SCR: if (scr_i == scr_words(scr_cmd)) begin
