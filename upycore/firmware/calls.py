@@ -436,6 +436,11 @@ def _bind_wide(fun, n_pos, directory):
     return _bind(fun, _tuple_of_list(args), _tuple_of_list(kw))
 
 
+def _new__type_fb(cls, *args):
+    # type(...) for what the core's native does not take.
+    return type____new__(cls, *args)
+
+
 def type____new__(cls, *args):
     n = len(args)
     if n == 1:

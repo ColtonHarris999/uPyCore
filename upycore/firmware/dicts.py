@@ -289,7 +289,13 @@ def dict__copy(self):
     return d
 
 
-def dict__get(self, key, default=None):
+def _dict__get_fb(self, key, default=None):
+    # dict.get() for what the core's native does not take.
+    if not _isdict(self) and _isinst(self):
+        # A dict subclass instance: the dict it wraps.
+        sub = _subobj(self)
+        if sub is not NULL:
+            self = sub
     v = _dget(self, key)
     if v is NULL:
         return default

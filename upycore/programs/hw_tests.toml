@@ -219,6 +219,7 @@ set_grow_basic = { file = "hw/containers/set_grow_basic.py" }
 ca_copy = { file = "hw/containers/ca_copy.py" }
 
 [strings]
+ord_chr_slice = { file = "hw/strings/ord_chr_slice.py" }
 text = { file = "hw/strings/text.py" }
 unicode = { file = "hw/strings/unicode.py" }
 bytesobj = { file = "hw/strings/bytesobj.py" }
@@ -322,6 +323,7 @@ class_const = { file = "hw/objects/class_const.py" }
 class_two_instances = { file = "hw/objects/class_two_instances.py" }
 
 [builtins]
+ctor_native = { file = "hw/builtins/ctor_native.py" }
 hash_equivalence = { file = "hw/builtins/hash_equivalence.py", cycles = 100_000_000 }
 array_slice_bounds = { cycles = 80_000_000 }
 int_bytes_bounds = { cycles = 80_000_000 }

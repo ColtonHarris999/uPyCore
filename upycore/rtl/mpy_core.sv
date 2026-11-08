@@ -879,6 +879,15 @@ module mpy_core
         S_NAT_WC5,
         S_NAT_BC0,
         S_NAT_LK,
+        S_NAT_DG,
+        S_N_DG,
+        S_N_ORD,
+        S_N_ORD2,
+        S_N_RQ,
+        S_N_NEW1,
+        S_N_NEW2,
+        S_N_NEW_L,
+        S_N_NEW_H,
         S_NAT_GR1,
         S_NAT_GR2,
         S_NAT_LA,
@@ -4430,6 +4439,14 @@ module mpy_core
                     // anything is written. x0 index, x1 len, x2 items, x3 i.
                     ABI_N_LIST_COPY: if(v0!=1 || !is_mut(mv,ABI_MUT_LIST) || cfg_sl==0) st<=S_NAT_FB;
                         else begin t[0]<=mv;ss_store<=0;ss_native<=1;ss_back<=S_SL_COPY_N;st<=S_SL_BEGIN;end
+                    // ord() of a one-byte str, qstr or bytes; chr() of 0..127
+                    // from the image's table of one-character qstrs.
+                    ABI_N_ORD: if (v0 != 32'd1 || !(strlike(mv) || tg(mv) == ABI_TAG_BYTES)) st <= S_NAT_FB;
+                        else begin si_v <= mv; gosub(S_SINFO, S_N_ORD); end
+                    ABI_N_CHR: if (v0 != 32'd1 || tg(mv) != ABI_TAG_INT || v1 >= 32'd128) st <= S_NAT_FB;
+                        else rd(h_chars + (v1 << 2), S_N_RQ);
+                    ABI_N_DICT_GET: if ((v0 != 32'd2 && v0 != 32'd3) || !is_mut(mv, ABI_MUT_DICT)) st <= S_NAT_FB;
+                        else rd(ab_ptr(ab_lo + 8'd1), S_NAT_DG);
                     ABI_N_LIST_POP: if ((v0 != 32'd1 && v0 != 32'd2) || !is_mut(mv, ABI_MUT_LIST)) st <= S_NAT_FB;
                         else begin
                             t[2] <= mv; x0 <= 32'hFFFF_FFFF;
@@ -4452,6 +4469,12 @@ module mpy_core
                         end
                     ABI_N_NEW_RANGE: if (v0 < 32'd2 || v0 > 32'd4) st <= S_NAT_FB;
                         else begin x0 <= v0; rd(ab_ptr(ab_lo + 8'd1), S_NAT_RG1); end
+                    // float(x) / int(x) for exactly float / int (argument 0 is
+                    // the class) and an int, bool or float x.
+                    // type(x) the same way: the core's S_TYPEOF.
+                    ABI_N_NEW_FLOAT, ABI_N_NEW_INT, ABI_N_NEW_TYPE: if (v0 != 32'd2) st <= S_NAT_FB;
+                        else rd(TT + 4 * ((nid == ABI_N_NEW_FLOAT) ? ABI_T_FLOAT :
+                                          (nid == ABI_N_NEW_INT) ? ABI_T_INT : ABI_T_TYPE), S_N_NEW1);
                     ABI_N_NEW_OBJECT: if (v0 != 32'd1) st <= S_NAT_FB;
                         else begin t[0] <= mv; alloc(32'd3, S_N_OBJ); end
                     default: st <= S_NAT_FB;
@@ -4543,6 +4566,41 @@ module mpy_core
             end
             S_NAT_BC0: begin si_v <= mv; gosub(S_DADDR, S_N_BC1); end
             S_NAT_LK: lookup(ab_q, mv, VNULL, LK_FIND, is_mut(ab_q, ABI_MUT_SET), S_N_LOOKUP);
+            S_N_ORD: if (si_len != 32'd1) st <= S_NAT_FB;
+                     else rd({si_addr[31:2], 2'b00}, S_N_ORD2);
+            S_N_ORD2: if (byte_of(md, si_addr[1:0]) >= 8'd128 && tg(si_v) != ABI_TAG_BYTES) st <= S_NAT_FB;
+                      else deliver(vint({24'd0, byte_of(md, si_addr[1:0])}), crk);
+            S_N_RQ: deliver({ABI_TAG_QSTR, md}, crk);
+            // float(int64): its two words, then the same int64 + 0.0.
+            S_N_NEW_L: begin na[31:0] <= md; rd(m_addr + 32'd4, S_N_NEW_H); end
+            S_N_NEW_H: begin na[63:32] <= md; alu_start <= 1'b1; st <= S_N_ABS_W; end
+            S_N_NEW1: if (mv != ab_q) st <= S_NAT_FB;
+                      else rd(ab_ptr(ab_lo + 8'd1), S_N_NEW2);
+            // float: x + 0.0 (what float.__new__ does for an int); int: the
+            // ALU's truncation, which errs on nan and inf. S_N_ABS_W
+            // delivers the result, boxing an int that needs 64 bits.
+            S_N_NEW2: begin
+                nb_f <= 1'b1; nb <= 64'd0; n_small <= 1'b0; n_un <= 1'b0;
+                na_f <= (tg(mv) == ABI_TAG_FLOAT);
+                na <= (tg(mv) == ABI_TAG_FLOAT) ? {32'd0, mv[31:0]} : sx64(ival(mv));
+                if (nid == ABI_N_NEW_TYPE) begin ty_v <= mv; gosub(S_TYPEOF, S_N_TYPEOF); end
+                else if (nid == ABI_N_NEW_FLOAT && tg(mv) == ABI_TAG_FLOAT) deliver(mv, crk);
+                else if (nid == ABI_N_NEW_INT && tg(mv) == ABI_TAG_INT) deliver(mv, crk);
+                else if (nid == ABI_N_NEW_INT && is_bool(mv)) deliver(vint({31'd0, mv == VTRUE}), crk);
+                else if (nid == ABI_N_NEW_FLOAT && (tg(mv) == ABI_TAG_INT || is_bool(mv))) begin
+                    alu_op <= ALU_ADD; alu_start <= 1'b1; st <= S_N_ABS_W;
+                end else if (nid == ABI_N_NEW_FLOAT && tg(mv) == ABI_TAG_INT64) begin
+                    alu_op <= ALU_ADD; rd(adr(mv), S_N_NEW_L);
+                end else if (nid == ABI_N_NEW_INT && tg(mv) == ABI_TAG_FLOAT) begin
+                    nb_f <= 1'b0; alu_op <= ALU_F2I; alu_start <= 1'b1; st <= S_N_ABS_W;
+                end else st <= S_NAT_FB;
+            end
+            S_NAT_DG: lookup(ab_q, mv, VNULL, LK_FIND, 1'b0, S_N_DG);
+            // dict.get: the value, else the default (argument 2) or None.
+            S_N_DG: if (lk_cx) st <= S_NAT_FB;
+                    else if (lk_found) deliver(lk_res, crk);
+                    else if (ab_pe - ab_lo == 8'd3) rd(ab_ptr(ab_lo + 8'd2), S_N_RV);
+                    else deliver(VNONE, crk);
             S_NAT_GR1: begin t[1] <= mv; rd(ab_ptr(ab_lo + 8'd2), S_NAT_GR2); end
             S_NAT_GR2: begin t[2] <= mv; st <= S_GR0; end
             S_NAT_LA: begin t[3] <= mv; gosub(S_LA, S_N_NONE); end

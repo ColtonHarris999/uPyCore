@@ -475,6 +475,11 @@ def _parse_float(s):
     return v
 
 
+def _new__float_fb(cls, *args):
+    # float(...) for what the core's native does not take.
+    return float____new__(cls, *args)
+
+
 def float____new__(cls, *args):
     n = len(args)
     if n > 1:

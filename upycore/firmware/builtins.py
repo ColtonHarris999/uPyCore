@@ -137,6 +137,11 @@ def _int_value(args):
     raise TypeError(_s("can't convert ", _tname(x), ' to int'))
 
 
+def _new__int_fb(cls, *args):
+    # int(...) for what the core's native does not take.
+    return int____new__(cls, *args)
+
+
 def int____new__(cls, *args):
     v = _int_value(args)
     if cls is not int:
@@ -227,16 +232,23 @@ def any(iterable):
     return False
 
 
-def chr(i):
+def _chr_fb(i):
+    # chr() for what the core's native does not take (mp_obj_get_int first).
+    if not _isint(i):
+        raise TypeError(_s("can't convert ", _tname(i), ' to int'))
+    if _tag(i) == TAG_INT64:
+        raise OverflowError('overflow converting long int to machine word')
     if i < 0 or i > 1114111:
         raise ValueError('char not in range(0x110000)')
     return _chr_code(i)
 
 
-def ord(c):
-    if _tag(c) == TAG_BYTES or _isbarr(c):
+def _ord_fb(c):
+    # ord() for what the core's native does not take. A bytearray is not
+    # a str to MicroPython's ord.
+    if _tag(c) == TAG_BYTES:
         if _slen(c) != 1:
-            raise TypeError('ord() expected a character, but string of length %d found' if False else 'ord() expected a character')
+            raise TypeError(_s('ord() expected a character, but string of length ', _istr(_slen(c)), ' found'))
         return _byte(c, 0)
     if not _isstr(c):
         raise TypeError(_s("can't convert '", _tname(c), "' object to str implicitly"))

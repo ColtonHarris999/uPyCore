@@ -324,6 +324,19 @@ NATIVES = [
     # core's LOAD_ATTR / STORE_ATTR microcode when it finds or stores the
     # attribute itself; anything else calls _getattr_fb / _setattr_fb
     "getattr", "setattr",
+    # dict.get(key[, default]) of an exact dict by the core's lookup; a key
+    # it cannot hash or compare calls _dict__get_fb
+    "dict.get",
+    # ord() of a one-byte str/qstr/bytes and chr() of an int below 128 (the
+    # image's one-character qstrs); anything else calls _ord_fb / _chr_fb
+    "ord", "chr",
+    # float(x) and int(x) of an int, bool or float on the ALU; anything else
+    # (str, objects, subclasses, int64, nan/inf) calls _new__float_fb /
+    # _new__int_fb
+    "new.float", "new.int",
+    # type(x) by the core's S_TYPEOF; type(name, bases, dict) and metaclass
+    # calls go to _new__type_fb
+    "new.type",
 ]
 NATIVE_ID = {name: i for i, name in enumerate(NATIVES)}
 
