@@ -444,6 +444,13 @@ module mpy_core
         S_GC_T,
         S_GC_W,
         S_GI,
+        S_GH,
+        S_GH_K,
+        S_GH_R0,
+        S_GH_R1,
+        S_GH_R2,
+        S_GH_W,
+        S_GH_PUT,
         S_GI_AT,
         S_GI_FB,
         S_GI_K,
@@ -2804,7 +2811,7 @@ module mpy_core
                            sp <= sp - 7'd1; aux <= vint(32'h65); fcont <= ABI_CONT_REDISPATCH;
                            hook(ABI_HOOK_WARN, ABI_RK_CONT, 8'd1, vint(32'd0), VNULL, VNULL, VNULL);
                        end else begin op <= 8'h65; sp <= sp - 7'd1; end
-                8'h5e: begin sp <= sp - 7'd1; hook(ABI_HOOK_GETITER, ABI_RK_PUSH, 8'd1, rf[`SX(6'(sp - 7'd1))], VNULL, VNULL, VNULL); end
+                8'h5e: begin t[0] <= rf[`SX(6'(sp - 7'd1))]; st <= S_GH; end
                 8'h5f: begin t[0] <= rf[`SX(6'(sp - 7'd1))]; b1 <= (ovr == ABI_OVR_PYOBJ); ovr <= ABI_OVR_NONE; st <= S_GI; end
                 8'h4b: st <= S_FI_PRE;
                 8'h2a: begin
@@ -3559,7 +3566,13 @@ module mpy_core
                         rf[`SX(6'(sp + 7'd2))] <= vint(ABI_IT_STR);
                         sp <= sp + 7'd3; st <= S_FETCH;
                     end
-            S_GI_K: if (md == ABI_OB_DICT_VIEW) rd(adr(t[0]) + 8, S_GI_V0);
+            // A generator or a firmware iterator object (reversed, ...) is
+            // its own iterator: what the GETITER hook would return.
+            S_GI_K: if (md == ABI_OB_GENERATOR || md == ABI_OB_ITEROBJ) begin
+                        rf[`SX(sp)] <= vint(32'd0); rf[`SX(6'(sp + 7'd1))] <= vint(32'd0);
+                        rf[`SX(6'(sp + 7'd2))] <= vint(ABI_IT_PYOBJ);
+                        sp <= sp + 7'd3; st <= S_FETCH;
+                    end else if (md == ABI_OB_DICT_VIEW) rd(adr(t[0]) + 8, S_GI_V0);
                     else begin at_q <= ABI_Q_ITER_D; gosub_scr(SCR_AT, S_AT, S_GI_AT); end
             S_GI_V0: begin rf[`SX(6'(sp - 7'd1))] <= mv; rd(adr(t[0]) + 12, S_GI_V1); end
             S_GI_V1: begin
@@ -3571,6 +3584,34 @@ module mpy_core
                     crk <= ABI_RK_CONT; fcont <= ABI_CONT_GETITER; pc <= op_pc;
                     wr(ab_ptr(8'd0), at_v, S_AB_31);
                 end else st <= S_GI_FB;
+            // ---- GET_ITER (heap iterator) ----
+            // _getiter's answer for the common kinds: an iterator or a
+            // generator is itself; a list, tuple, bytes, bytearray, dict, set
+            // or range gets a new 4-word ITER like _mk_riter's. Anything else
+            // takes the hook.
+            S_GH: if (tg(t[0]) == ABI_TAG_ITER) st <= S_FETCH;
+                  else if (tg(t[0]) == ABI_TAG_TUPLE || tg(t[0]) == ABI_TAG_BYTES || is_mut(t[0], ABI_MUT_LIST) ||
+                           is_mut(t[0], ABI_MUT_BYTEARRAY) || is_mut(t[0], ABI_MUT_DICT) || is_mut(t[0], ABI_MUT_SET)) begin
+                      wb_v[0] <= t[0]; wb_v[1] <= vint(32'd0); wb_v[2] <= vint(32'd0);
+                      wb_v[3] <= vint(is_mut(t[0], ABI_MUT_DICT) ? ABI_IT_DICT :
+                                      is_mut(t[0], ABI_MUT_SET) ? ABI_IT_SET : ABI_IT_SEQ);
+                      alloc(32'd4, S_GH_W);
+                  end else if (tg(t[0]) == ABI_TAG_RANGE) rd(adr(t[0]), S_GH_R0);
+                  else if (tg(t[0]) == ABI_TAG_OBJECT) rd(adr(t[0]), S_GH_K);
+                  else begin
+                      sp <= sp - 7'd1;
+                      hook(ABI_HOOK_GETITER, ABI_RK_PUSH, 8'd1, t[0], VNULL, VNULL, VNULL);
+                  end
+            S_GH_K: if (md == ABI_OB_GENERATOR || md == ABI_OB_ITEROBJ) st <= S_FETCH;
+                    else begin
+                        sp <= sp - 7'd1;
+                        hook(ABI_HOOK_GETITER, ABI_RK_PUSH, 8'd1, t[0], VNULL, VNULL, VNULL);
+                    end
+            S_GH_R0: begin wb_v[0] <= mv; rd(adr(t[0]) + 4, S_GH_R1); end
+            S_GH_R1: begin wb_v[1] <= mv; rd(adr(t[0]) + 8, S_GH_R2); end
+            S_GH_R2: begin wb_v[2] <= mv; wb_v[3] <= vint(ABI_IT_RANGE); alloc(32'd4, S_GH_W); end
+            S_GH_W: begin t[2] <= {ABI_TAG_ITER, al_a}; wblock(al_a, 4'd4, S_GH_PUT); end
+            S_GH_PUT: begin rf[`SX(6'(sp - 7'd1))] <= t[2]; st <= S_FETCH; end
             S_GI_FB: begin
                 fcont <= ABI_CONT_GETITER; pc <= op_pc;
                 hook(ABI_HOOK_GETITER, ABI_RK_CONT, 8'd1, t[0], VNULL, VNULL, VNULL);

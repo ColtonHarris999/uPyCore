@@ -66,6 +66,22 @@ def _keyeq(a, b):
         return False
     if _isint(a) and _isint(b):
         return a == b
+    if _tag(a) == TAG_TUPLE and _tag(b) == TAG_TUPLE:
+        # mp_obj_equal of two tuples, item by item, without the binop
+        # dispatch: an identical item that is not a float or complex is
+        # equal (a NaN is not equal to itself).
+        n = _ld(a, 0)
+        if n != _ld(b, 0):
+            return False
+        i = 1
+        while i <= n:
+            x = _ld(a, i)
+            y = _ld(b, i)
+            if not (x is y and _tag(x) != TAG_FLOAT and _tag(x) != TAG_COMPLEX):
+                if not _equal(x, y):
+                    return False
+            i += 1
+        return True
     return _equal(a, b)
 
 
