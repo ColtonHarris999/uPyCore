@@ -213,6 +213,8 @@ set_grow_basic = { file = "hw/containers/set_grow_basic.py" }
 ca_copy = { file = "hw/containers/ca_copy.py" }
 
 [strings]
+# Expected values use the common Python subset of chr and ord.
+character_conversion = { file = "hw/strings/character_conversion.py", oracle = false }
 text = { file = "hw/strings/text.py" }
 unicode = { file = "hw/strings/unicode.py" }
 bytesobj = { file = "hw/strings/bytesobj.py" }

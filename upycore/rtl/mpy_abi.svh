@@ -232,6 +232,8 @@ localparam logic [7:0] ABI_N_LIST_POP = 8'd45;
 localparam logic [7:0] ABI_N_LIST_INSERT = 8'd46;
 localparam logic [7:0] ABI_N_WCOPY_STEP = 8'd47;
 localparam logic [7:0] ABI_N_LIST_COPY = 8'd48;
+localparam logic [7:0] ABI_N_CHR = 8'd49;
+localparam logic [7:0] ABI_N_ORD = 8'd50;
 
 localparam logic [7:0] ABI_HOOK_BOOT = 8'd0;
 localparam logic [7:0] ABI_HOOK_RAISE = 8'd1;
@@ -495,7 +497,7 @@ localparam int ABI_DICT_WORDS = 4;
 localparam int ABI_STR_HDR_WORDS = 3;
 localparam int ABI_ITER_WORDS = 4;
 localparam int ABI_N_TYPES = 65;
-localparam int ABI_N_NATIVES = 49;
+localparam int ABI_N_NATIVES = 51;
 localparam logic [31:0] ABI_SYSROOT_BASE = 32'h20008080;
 localparam logic [31:0] ABI_ARGBUF_BASE = 32'h20008100;
 localparam logic [31:0] ABI_GC_POOL_BASE = 32'h20008500;

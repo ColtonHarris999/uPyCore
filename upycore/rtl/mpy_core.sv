@@ -967,7 +967,8 @@ module mpy_core
         S_SL_CORE_LEN,
         S_SL_DONE,
         S_LA_OLD_CLEAR,
-        S_LA_APPEND
+        S_LA_APPEND,
+        S_N_CHR, S_N_ORD_INFO, S_N_ORD_BYTE
     } state_e;
 
     state_e st, wret;
@@ -4012,6 +4013,11 @@ module mpy_core
                                   else alloc(32'd3 + ((v1 + 32'd3) >> 2), S_N_STRNEW);
                     ABI_N_STRFIN: rd(adr(mv), S_N_SF0);
                     ABI_N_LOOKUP: rd(ab_ptr(ab_lo + 8'd1), S_NAT_LK);
+                    ABI_N_CHR: if (v0 != 1 || !intlike(mv) || ival(mv) > 32'd127) st <= S_NAT_FB;
+                        else rd(h_chars + (ival(mv) << 2), S_N_CHR);
+                    ABI_N_ORD: if (v0 != 1 || !(strlike(mv) || tg(mv) == ABI_TAG_BYTES ||
+                                               is_mut(mv, ABI_MUT_BYTEARRAY))) st <= S_NAT_FB;
+                        else begin si_v <= mv; gosub(S_SINFO, S_N_ORD_INFO); end
                     ABI_N_TICKS: deliver(vint({2'b00, cyc[29:0]}), crk);
                     ABI_N_GC: gosub(S_GC, S_N_NONE);
                     ABI_N_GCINFO: deliver(vint((v1 == 32'd0) ? (gc_free_i << 4) : (v1 == 32'd1) ? (gc_total_i << 4) : gc_collections_i), crk);
@@ -4142,6 +4148,16 @@ module mpy_core
             S_NAT_LD: rd(padr(ab_q) + (mv[31:0] << 2), S_N_RV);
             S_NAT_ST1: begin x0 <= mv[31:0]; rd(ab_ptr(ab_lo + 8'd2), S_NAT_ST2); end
             S_NAT_ST2: wr(padr(ab_q) + (x0 << 2), mv, S_N_NONE);
+            // Single-byte character conversion shares the string descriptor
+            // reader and ASCII table. Decode multibyte Unicode in firmware.
+            S_N_CHR: deliver({ABI_TAG_QSTR, md}, crk);
+            S_N_ORD_INFO: if (si_len != 1) st <= S_NAT_FB;
+                else begin x0 <= si_addr; rd({si_addr[31:2], 2'b00}, S_N_ORD_BYTE); end
+            S_N_ORD_BYTE: begin
+                v2 = {24'd0, byte_of(md, x0[1:0])};
+                if (strlike(ab_q) && v2[7]) st <= S_NAT_FB;
+                else deliver(vint(v2), crk);
+            end
             S_NAT_PEEK: begin
                 v2 = padr(ab_q) + mv[31:0];
                 x3 <= v2; rd({v2[31:2], 2'b00}, S_N_PEEK8);

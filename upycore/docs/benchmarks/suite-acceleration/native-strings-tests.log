@@ -1,0 +1,36 @@
+hw_tests: 32 test(s), 3 job(s), compiler mpy-cross
+PASS  strings/unicode  cycles=48406
+PASS  strings/bytesobj  cycles=264944
+PASS  strings/text  cycles=414072
+PASS  strings/bytearray_repr  cycles=166098
+PASS  strings/format  cycles=199413
+PASS  strings/slice_str_clamp  cycles=74291
+PASS  strings/slice_str_long  cycles=74359
+PASS  strings/slice_str_unicode  cycles=112363
+PASS  strings/slice_str_step  cycles=102319
+PASS  strings/slice_list_step  cycles=113133
+PASS  strings/slice_str_empty  cycles=63853
+PASS  strings/slice_str_scan  cycles=56931
+PASS  strings/slice_str_neg_trap  cycles=33466
+PASS  strings/slice_damerau  cycles=51011
+PASS  strings/str_eq_runtime_long  cycles=58473
+PASS  strings/str_consts  cycles=25204
+PASS  strings/string_ops  cycles=31369
+PASS  strings/list_repeat_jaro  cycles=36260
+PASS  strings/list_concat_damerau  cycles=32774
+PASS  strings/build_string  cycles=48528
+PASS  strings/str_subscr_long  cycles=25240
+PASS  strings/str_subscr_loop  cycles=24520
+PASS  strings/str_subscr_unicode  cycles=71013
+PASS  strings/str_subscr_oob_trap  cycles=58520
+PASS  strings/str_subscr_char_oob_trap  cycles=64977
+PASS  strings/str_dict_key_runtime  cycles=51585
+PASS  strings/str_dict_key_runtime_del  cycles=52675
+PASS  strings/jaro_window  cycles=58194
+PASS  strings/str_search_methods  cycles=233407
+PASS  strings/str_p5e_batch2  cycles=109330
+PASS  strings/str_p5e_batch3  cycles=182049
+PASS  strings/bytearray_index  cycles=4004668
+
+  strings       32 passed    0 failed
+hw_tests: 32 of 32 passed in 32s

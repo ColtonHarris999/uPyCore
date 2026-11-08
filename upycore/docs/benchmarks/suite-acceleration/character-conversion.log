@@ -1,0 +1,7 @@
+hw_tests: 2 test(s), 2 job(s), compiler mpy-cross
+PASS  control/for_iter_str_unicode  cycles=47070
+PASS  strings/character_conversion  cycles=244733
+
+  control        1 passed    0 failed
+  strings        1 passed    0 failed
+hw_tests: 2 of 2 passed in 1s

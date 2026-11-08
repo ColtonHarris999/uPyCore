@@ -17,6 +17,14 @@ Each completed row matches the original source/harness hash and result callback.
 
 Validation: 11/11 existing slice/complex tests, 1/1 square-root-extreme test, 32/32 string tests, 8/8 targeted tests with accelerators disabled, and 8/8 targeted tests compiled by uPy2 passed. The new extreme test uses exact arithmetic expected booleans; no pinned Unix MicroPython oracle was available. These targeted checks do not replace full-suite acceptance.
 
+## Restored character conversion fast paths
+
+On top of the recovered checkpoint, native `chr` uses the existing ASCII character table and native `ord` reads a single byte using the existing string descriptor reader. Unicode and error handling use firmware. Invalid `chr` arguments now raise before reaching the character table.
+
+`core_str` completed in **12,884,642 cycles** with its original source/harness hash and result callback. That is 64.3% below the historical 36,137,718 cycles and 56.9% below the 29,900,130-cycle recovery checkpoint. At 12 ns this projects to **154.616 ms**, below the 190.5 ms comparison target. The retained MCU timings have the comparability limits described above.
+
+The 32 existing string tests and both targeted character conversion/Unicode iterator tests passed. The character conversion test also passed with uPy2 and the accelerators disabled. The implementation adds three controller states and reuses the existing scratch registers, string descriptor reader and character table. Physical timing, area and power are unmeasured.
+
 ## Earlier observations whose raw artifacts were lost
 
 The workspace twice reverted to an older snapshot on continuation. Previous acceleration worktrees, commits and raw logs are absent from the current filesystem and were not published to GitHub. The following values were observed earlier in this conversation, but must be reproduced before acceptance; they are NOT measurements of the recovered branch.

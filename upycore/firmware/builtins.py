@@ -218,13 +218,27 @@ def any(iterable):
     return False
 
 
-def chr(i):
+def _chr_fb(i):
+    # MicroPython's implicit integer conversion accepts __int__, but does
+    # not truncate a float. Validate before using the value as an address.
+    v = _int_maybe(i)
+    if v is NULL and _tag(i) == TAG_OBJECT:
+        f = _tlookup(_ld(i, 1), '__int__')
+        if f is not NULL:
+            v = _call_member(f, i, ())
+            if _tag(v) != TAG_INT and _tag(v) != TAG_INT64:
+                raise TypeError('integer required')
+    if v is NULL:
+        raise TypeError('integer required')
+    if v < -2147483648 or v > 2147483647:
+        raise OverflowError('overflow converting long int to machine word')
+    i = v
     if i < 0 or i > 1114111:
         raise ValueError('char not in range(0x110000)')
     return _chr_code(i)
 
 
-def ord(c):
+def _ord_fb(c):
     if _tag(c) == TAG_BYTES or _isbarr(c):
         if _slen(c) != 1:
             raise TypeError('ord() expected a character, but string of length %d found' if False else 'ord() expected a character')
