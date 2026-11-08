@@ -13,6 +13,26 @@ the tool and library setup stay exactly as the class has them.
 This flow produced the 18 ns post-route result and the Genus reports that
 `upycore/docs/timing_100mhz.md` and `timing_10ns.md` start from.
 
+## Before the next run (November 2026 RTL)
+
+- **Regenerate `converted/`.** The RTL changed (`main` c788c64), so
+  `converted/*.v` and `RTL_STAMP` are stale and `sweep.sh` stops until
+  `convert_rtl.sh` is run where sv2v works (sv2v 0.0.13.1) and the result
+  is pushed.
+- **Timing.** The round was compared with f15327a (the RTL that closed at
+  10 and 11 ns) in an open flow (`upycore/tools/sta/`,
+  `docs/timing_10ns.md`): `mpy_core` and `mpy_soc` are at or below the
+  baseline's worst paths. Input-to-register paths are longer (about 40 %
+  of the register-to-register plateau; the constraints allow 50 %).
+- **Core port.** `mpy_core`'s `m_gnt_i` is now `m_busy_i` (a flop in
+  `mpy_soc`: its one-entry request skid is full).
+- **Reset.** `mpy_soc` synchronizes `rst_n_i` with two flops (`por_n`);
+  the false path covers only the port, so the reset tree from those flops
+  is timed (recovery/removal) in a chip run.
+- **Flops.** `mpy_core` grew by 587 flops (store-address FIFO, burst
+  counters, complex operands); `check_syn.py` has the new counts.
+- **Power.** `activity/upycore_pystone.saif.gz` is the new RTL's run.
+
 ## Do not commit class files
 
 The class materials are under a course NDA. The design folder this script
@@ -80,7 +100,7 @@ python3 ~/upycore/upycore/synth/hammer/check_syn.py
 It lists errors (marking the expected ones from Hammer's placeholder
 `DEFAULT_CLOCK`), warnings by id with the dangerous kinds marked, latch
 cells and black boxes in the netlist, and the flop count against the RTL
-(slang counts: `mpy_alu` 6127, `mpy_decode` 461, `mpy_core` 14275). Genus
+(slang counts: `mpy_alu` 6148, `mpy_decode` 461, `mpy_core` 14862). Genus
 drops constant and duplicate flops, so 85 to 100% of the RTL count is
 normal. It exits 1 if anything needs a look.
 
@@ -203,10 +223,15 @@ The converted files also read cleanly in Yosys's own Verilog parser.
 Vectorless power (Genus guessing how often each net toggles) does not
 compare two different cores fairly. `activity/upycore_pystone.saif.gz` is
 the switching activity of `mpy_core` running perf_bench `misc_pystone`
-(300 loops, MicroPython startup included: 12,769,713 cycles at the
-testbench's 10 ns clock; the benchmark itself is 12,172,954, the run less
-the 596,759-cycle `misc_pystone_base.py`). It matches the RTL from aba9ce0
-on (timing pipelines toward 10 ns, short-list engine, GC table SRAM).
+(`activity/misc_pystone_timed.py`: 300 loops, MicroPython startup
+included: 6,635,675 cycles at the testbench's 10 ns clock; the benchmark
+itself is 6,262,469, the run less the 373,206-cycle
+`activity/misc_pystone_base.py`). It matches the RTL from the November
+benchmark round on (`main` c788c64: posted stores and burst loads, the
+core request skid, the new natives). `upycore_pystone_f15327a.saif.gz` is
+the same run on the RTL from aba9ce0 to f15327a (timing pipelines toward
+10 ns, short-list engine, GC table SRAM; 12,769,713 cycles, benchmark
+12,172,954).
 `upycore_pystone_9a20eb2.saif.gz` is the same run on 9a20eb2's RTL (shared
 SRAM, pipelined ALU; 12,769,729 cycles, benchmark 12,174,564), the RTL of
 the 2500 x 2500 p20 runs.
@@ -219,7 +244,8 @@ netlists synthesized before that change. To regenerate it:
 ```sh
 verilator --trace-saif -DMPY_SAIF ...   # the flags mpy_build.py uses, --Mdir build/mpy_soc_saif/obj
 MPY_SIM=build/mpy_soc_saif/obj/Vtb_mpy_soc MPY_SIM_ARGS=+SAIF=pystone.saif \
-    python3 upycore/tools/mpy_build.py run -v --max-cycles 4000000000 misc_pystone_timed.py
+    python3 upycore/tools/mpy_build.py run -v --max-cycles 4000000000 \
+    upycore/synth/hammer/activity/misc_pystone_timed.py
 ```
 
 Read it into Genus on the mapped netlist, at the simulated 10 ns period:
