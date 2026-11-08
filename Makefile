@@ -55,6 +55,8 @@ test: $(MPY_CROSS)
 	$(PYTHON) upycore/tests/test_memory_layout.py
 	$(PYTHON) upycore/tests/test_numeric_const.py
 	$(PYTHON) upycore/tests/test_compiler_host.py
+	$(PYTHON) upycore/tests/test_runtime_profile.py
+	$(PYTHON) upycore/tools/mpy_image.py --check upycore/programs/mpy/phase1
 	$(PYTHON) upycore/tools/compiler_suite.py
 	$(PYTHON) upycore/tools/unit_tests.py
 	$(PYTHON) $(BUILD_PY) sim
@@ -82,6 +84,8 @@ test-host: $(MPY_CROSS)
 	$(PYTHON) upycore/tests/test_memory_layout.py
 	$(PYTHON) upycore/tests/test_numeric_const.py
 	$(PYTHON) upycore/tests/test_compiler_host.py
+	$(PYTHON) upycore/tests/test_runtime_profile.py
+	$(PYTHON) upycore/tools/mpy_image.py --check upycore/programs/mpy/phase1
 	$(PYTHON) upycore/tools/compiler_suite.py
 
 test-compiler: $(MPY_CROSS)

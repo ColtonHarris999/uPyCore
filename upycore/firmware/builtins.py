@@ -197,7 +197,17 @@ def _int_from_bytes(cls, data, byteorder='big', _ignored=None):
 
 
 def abs(x):
-    if _tag(x) == TAG_COMPLEX or (_tag(x) == TAG_OBJECT and _ld(x, 0) == OB_INSTANCE):
+    # mp_unary_op(MP_UNARY_OP_ABS): a bool is the int 0 or 1, a float drops
+    # its sign bit (objfloat.c tests signbit, so -0.0 and -nan become
+    # positive), and everything else is its type's unary op.
+    t = _tag(x)
+    if t == TAG_FLOAT:
+        return _frombits(_u32(_pay(x)) & 2147483647)
+    if x is True:
+        return 1
+    if x is False:
+        return 0
+    if t == TAG_COMPLEX or (t == TAG_OBJECT and _ld(x, 0) == OB_INSTANCE):
         return _unop(UNOP_ABS, x)
     if x < 0:
         return -x
@@ -263,30 +273,48 @@ def pow(x, y, z=_MISSING):
     return v % z
 
 
+def _nearbyint(x):
+    # nearbyint() in round-half-even mode, as a float. A binary32 at or
+    # above 2**23 in magnitude, or inf/nan, is already integral.
+    if not (x > -8388608.0 and x < 8388608.0):
+        return x
+    base = _floor(x)
+    diff = x - base
+    if diff > 0.5 or (diff == 0.5 and (_ftoi(base) & 1)):
+        base = base + 1.0
+    if base == 0.0 and _pay(x) < 0:
+        return -0.0
+    return base
+
+
 def round(number, ndigits=_MISSING):
-    if _tag(number) == TAG_OBJECT:
+    # mp_builtin_round (py/modbuiltins.c).
+    t = _tag(number)
+    if t == TAG_OBJECT:
         f = _tlookup(_ld(number, 1), '__round__')
         if f is not NULL:
             if ndigits == _MISSING:
                 return _call_member(f, number, ())
             return _call_member(f, number, (ndigits,))
+    if t == TAG_INT or t == TAG_INT64:
+        if ndigits == _MISSING or ndigits >= 0:
+            return number
+        mult = 10 ** (-ndigits)
+        half = mult // 2
+        modulo = number % mult
+        rounded = number - modulo
+        if half > modulo:
+            return rounded
+        if modulo > half:
+            return rounded + mult
+        if (number // mult) & 1:
+            return rounded + mult
+        return rounded
     x = number + 0.0
     if ndigits == _MISSING:
-        # round half to even
-        base = _floor(x)
-        diff = x - base
-        if diff > 0.5:
-            return base + 1
-        if diff < 0.5:
-            return _ftoi(base) if _ftoi(base) is not STOP else base
-        i = _ftoi(base)
-        if i is STOP:
-            return base
-        if i & 1:
-            return i + 1
-        return i
-    p = 10.0 ** ndigits
-    return round(x * p) / p
+        return int(_nearbyint(x))
+    mult = 10.0 ** ndigits
+    return _nearbyint(x * mult) / mult
 
 
 def _minmax(args, kw, is_max):

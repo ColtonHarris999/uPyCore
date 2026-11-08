@@ -44,6 +44,11 @@ complex_nan_eq = { file = "hw/alu/complex_nan_eq.py" }
 complex_type_trap = { file = "hw/alu/complex_type_trap.py" }
 unary_invert_float_trap = { file = "hw/alu/unary_invert_float_trap.py" }
 compare_op_type_trap = { file = "hw/alu/compare_op_type_trap.py" }
+complex_abs = { file = "hw/alu/complex_abs.py", cycles = 30_000_000 }
+complex_div = { file = "hw/alu/complex_div.py", cycles = 30_000_000 }
+complex_pow = { file = "hw/alu/complex_pow.py", cycles = 60_000_000 }
+abs_edge = { file = "hw/alu/abs_edge.py" }
+round_edge = { file = "hw/alu/round_edge.py", cycles = 30_000_000 }
 
 [control]
 branch = { file = "hw/control/branch.py" }
@@ -160,6 +165,7 @@ list_setslice_rhs = { file = "hw/containers/list_setslice_rhs.py" }
 list_pop_insert = { file = "hw/containers/list_pop_insert.py" }
 shortlist = { file = "hw/containers/shortlist.py", cycles = 180_000_000, timeout = 2400 }
 shortlist_methods = { file = "hw/containers/shortlist_methods.py" }
+wide_display = { file = "hw/containers/wide_display.py", cycles = 80_000_000 }
 list_slice_step = { file = "hw/containers/list_slice_step.py", cycles = 120_000_000, timeout = 900 }
 list_concat_type_trap = { file = "hw/containers/list_concat_type_trap.py" }
 list_comp_fast_clear = { file = "hw/containers/list_comp_fast_clear.py" }

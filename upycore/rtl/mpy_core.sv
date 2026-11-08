@@ -1086,7 +1086,7 @@ module mpy_core
     logic [31:0] srd_addr;
     val_t        srd_v;
     logic [31:0] srd_p0;
-    logic [7:0]  srd_hops;
+    logic [15:0] srd_hops;
     logic [15:0] drop_left, ur_target;
     logic        drop_push_en;
     val_t        drop_push_v, ur_val;
@@ -1166,7 +1166,7 @@ module mpy_core
     logic [31:0] at_q; logic [1:0] at_kind; logic at_ty, at_objd;
     val_t        at_v;
     val_t        tr_v; logic tr_r, tr_x;
-    logic        tb_src, tb_nz; logic [7:0] tb_from, tb_n, tb_i; logic [31:0] tb_a; val_t tb_v;
+    logic        tb_src, tb_nz; logic [7:0] tb_from; logic [15:0] tb_n, tb_i; logic [31:0] tb_a; val_t tb_v;
     val_t        wb_v [0:7]; logic [31:0] wb_a; logic [3:0] wb_n, wb_i;
     logic it_stop, it_py, it_h; val_t it_val;
     // Resident microcode image. One subsystem at a time; SRAM holds the rest.
@@ -1988,18 +1988,18 @@ module mpy_core
 
             // Anything else callable goes through _call(obj, args, kw).
             S_HCALL: begin
-                tb_src <= 1'b0; tb_nz <= 1'b0; tb_from <= ab_lo; tb_n <= ab_pe - ab_lo;
+                tb_src <= 1'b0; tb_nz <= 1'b0; tb_from <= ab_lo; tb_n <= 16'(8'(ab_pe - ab_lo));
                 gosub(S_TUP, S_HC1);
             end
             S_HC1: begin
-                t[0] <= tb_v; tb_src <= 1'b0; tb_nz <= 1'b1; tb_from <= ab_pe; tb_n <= {ab_nkw[6:0], 1'b0};
+                t[0] <= tb_v; tb_src <= 1'b0; tb_nz <= 1'b1; tb_from <= ab_pe; tb_n <= {8'd0, ab_nkw[6:0], 1'b0};
                 gosub(S_TUP, S_HC2);
             end
             S_HC2: hook(ABI_HOOK_CALL, crk, 8'd3, ab_q, t[0], tb_v, VNULL);
 
             // Instance of a class with TF_INST.
             S_NEW: if (c_tflags & ABI_TF_EXC) begin
-                       tb_src <= 1'b0; tb_nz <= 1'b0; tb_from <= ab_lo; tb_n <= ab_pe - ab_lo;
+                       tb_src <= 1'b0; tb_nz <= 1'b0; tb_from <= ab_lo; tb_n <= 16'(8'(ab_pe - ab_lo));
                        gosub(S_TUP, S_NEW_X);
                    end else alloc(32'd3, S_NEW_I);
             S_NEW_X: begin t[0] <= tb_v; alloc(32'd5, S_NEW_XA); end
@@ -2118,7 +2118,7 @@ module mpy_core
             S_BF_VA: if (c_scope & ABI_SCOPE_VARARGS) begin
                     tb_src <= 1'b0; tb_nz <= 1'b0;
                     tb_from <= ab_lo + c_npos;
-                    tb_n <= (ab_pe - ab_lo > c_npos) ? (ab_pe - ab_lo - c_npos) : 8'd0;
+                    tb_n <= (ab_pe - ab_lo > c_npos) ? 16'(8'(ab_pe - ab_lo - c_npos)) : 16'd0;
                     gosub(S_TUP, S_BF_VA2);
                 end else st <= S_BF_KW;
             S_BF_VA2: begin wr(loc_ptr(c_npos + c_nkwo), tb_v, S_BF_KW); end
@@ -2153,11 +2153,11 @@ module mpy_core
             S_BS_Q: begin
                 fflags <= fflags | FF_NOTB; fcont <= ABI_CONT_BIND;
                 t[2] <= mv;
-                tb_src <= 1'b0; tb_nz <= 1'b0; tb_from <= ab_lo; tb_n <= ab_pe - ab_lo;
+                tb_src <= 1'b0; tb_nz <= 1'b0; tb_from <= ab_lo; tb_n <= 16'(8'(ab_pe - ab_lo));
                 gosub(S_TUP, S_BS1);
             end
             S_BS1: begin
-                t[0] <= tb_v; tb_src <= 1'b0; tb_nz <= 1'b1; tb_from <= ab_pe; tb_n <= {ab_nkw[6:0], 1'b0};
+                t[0] <= tb_v; tb_src <= 1'b0; tb_nz <= 1'b1; tb_from <= ab_pe; tb_n <= {8'd0, ab_nkw[6:0], 1'b0};
                 gosub(S_TUP, S_BS2);
             end
             S_BS2: hook(ABI_HOOK_BIND, ABI_RK_CONT, 8'd3, t[2], t[0], tb_v, VNULL);
@@ -2337,7 +2337,7 @@ module mpy_core
                         srd_g <= aux[15:0];
                         srd_addr <= mpy_rf_link_addr(rf[`SX(7'd0)]);
                         srd_off <= spilled_reals - 16'd1 - aux[15:0];
-                        srd_hops <= 8'd0;
+                        srd_hops <= 16'd0;
                         st <= S_CVK_SW0;
                     end
                 end
@@ -2584,14 +2584,14 @@ module mpy_core
                 8'h4b: st <= S_FI_PRE;
                 8'h2a: begin
                     tb_src <= 1'b1; tb_nz <= 1'b0; tb_from <= 8'(sp - 7'(arg));
-                    stk_from <= stk_depth - 16'(arg); tb_n <= arg[7:0];
+                    stk_from <= stk_depth - 16'(arg); tb_n <= arg[15:0];
                     gosub(S_TUP, S_BT_R);
                 end
                 8'h2b: alloc(32'd3 + ((arg < 32'd4) ? 32'd4 : arg), S_BL_A);
                 8'h2c: alloc(32'd4 + 2 * arg, S_BM_A);
                 8'h2d: begin
                     tb_src <= 1'b1; tb_nz <= 1'b0; tb_from <= 8'(sp - 7'(arg));
-                    stk_from <= stk_depth - 16'(arg); tb_n <= arg[7:0];
+                    stk_from <= stk_depth - 16'(arg); tb_n <= arg[15:0];
                     gosub(S_TUP, S_BSET_R);
                 end
                 8'h2e: alloc(32'd5, S_SLICE_A);
@@ -3400,7 +3400,7 @@ module mpy_core
 
             // ---- containers ----
             S_BT_R: begin
-                drop_left <= {8'd0, tb_n};
+                drop_left <= tb_n;
                 drop_push_en <= 1'b1;
                 drop_push_v <= tb_v;
                 drop_then <= S_FETCH;
@@ -3410,26 +3410,27 @@ module mpy_core
                 v0 = (arg < 32'd4) ? 32'd4 : arg;
                 wb_v[0] <= vint(arg); wb_v[1] <= vint(v0); wb_v[2] <= {ABI_TAG_CONT, al_a + 32'd12};
                 t[0] <= vmut(al_a, ABI_MUT_LIST);
-                i0 <= 8'd0;
+                // gi, not the 8-bit i0: a list display can hold more than 255 items.
+                gi <= 32'd0;
                 wblock(al_a, 4'd3, S_BL_L);
             end
-            S_BL_L: if (i0 == arg[7:0]) begin
-                        drop_left <= {8'd0, arg[7:0]};
+            S_BL_L: if (gi == arg) begin
+                        drop_left <= arg[15:0];
                         drop_push_en <= 1'b1;
                         drop_push_v <= t[0];
                         drop_then <= S_FETCH;
                         st <= S_DROP;
                     end else begin
-                        v0 = 32'(stk_depth) - arg + 32'(i0);
+                        v0 = 32'(stk_depth) - arg + gi;
                         if (stk_hit(v0[15:0])) begin
-                            wr(adr(t[0]) + 12 + 4 * i0, stk_val(v0[15:0]), S_BL_L);
-                            i0 <= i0 + 8'd1;
+                            wr(adr(t[0]) + 12 + 4 * gi, stk_val(v0[15:0]), S_BL_L);
+                            gi <= gi + 32'd1;
                         end else begin
                             srd_g <= v0[15:0];
                             gosub(S_SRD, S_BL_W);
                         end
                     end
-            S_BL_W: begin wr(adr(t[0]) + 12 + 4 * i0, srd_v, S_BL_L); i0 <= i0 + 8'd1; end
+            S_BL_W: begin wr(adr(t[0]) + 12 + 4 * gi, srd_v, S_BL_L); gi <= gi + 32'd1; end
             S_BM_A: begin
                 wb_v[0] <= vint(32'd0); wb_v[1] <= vint(arg);
                 wb_v[2] <= (arg == 32'd0) ? VNULL : {ABI_TAG_CONT, al_a + 32'd16};
@@ -3437,8 +3438,8 @@ module mpy_core
                 rf[`SX(sp)] <= vmut(al_a, ABI_MUT_DICT); sp <= sp + 7'd1;
                 wblock(al_a, 4'd4, S_FETCH);
             end
-            S_BSET_R: if ({8'd0, tb_n} > resident_reals) begin
-                    drop_left <= {8'd0, tb_n};
+            S_BSET_R: if (tb_n > resident_reals) begin
+                    drop_left <= tb_n;
                     drop_push_en <= 1'b0;
                     drop_then <= S_BSET_H;
                     st <= S_DROP;
@@ -3487,7 +3488,7 @@ module mpy_core
                 c_rc <= md;
                 if (op == 8'h20 || op == 8'h21) begin
                     tb_src <= 1'b1; tb_nz <= 1'b0; tb_from <= 8'(sp - 7'(ext));
-                    stk_from <= stk_depth - 16'(ext); tb_n <= ext;
+                    stk_from <= stk_depth - 16'(ext); tb_n <= {8'd0, ext};
                     gosub(S_TUP, S_MF_CL);
                 end else begin t[0] <= VNULL; st <= S_MF_RT; end
             end
@@ -3578,12 +3579,12 @@ module mpy_core
                         x0 <= srd_addr + 32'd4 + (32'((v0[5:0] + 6'd7) >> 3) << 2)
                               + ((v0 - 32'd1 - 32'(srd_off)) << 2);
                         st <= S_CVK_SWN;
-                    end else if (v1 == 32'd0 || srd_hops == 8'd64)
+                    end else if (v1 == 32'd0 || srd_hops == spilled_reals)
                         halt(ABI_HALT_INTERNAL, 32'h0000_C0C1);
                     else begin
                         srd_off <= srd_off - v0[15:0];
                         srd_addr <= v1;
-                        srd_hops <= srd_hops + 8'd1;
+                        srd_hops <= srd_hops + 16'd1;
                         st <= S_CVK_SW0;
                     end
                 end
@@ -4087,7 +4088,7 @@ module mpy_core
                     ABI_N_BASEEXCEPTION_INIT: if (v0 < 32'd1 || tg(mv) != ABI_TAG_OBJECT) st <= S_NAT_FB;
                         else begin
                             t[0] <= mv;
-                            tb_src <= 1'b0; tb_nz <= 1'b0; tb_from <= ab_lo + 8'd1; tb_n <= ab_pe - ab_lo - 8'd1;
+                            tb_src <= 1'b0; tb_nz <= 1'b0; tb_from <= ab_lo + 8'd1; tb_n <= 16'(8'(ab_pe - ab_lo - 8'd1));
                             gosub(S_TUP, S_N_BEI);
                         end
                     ABI_N_NEW_RANGE: if (v0 < 32'd2 || v0 > 32'd4) st <= S_NAT_FB;
@@ -5041,16 +5042,16 @@ module mpy_core
             S_LA_RET: ret();
 
             // tuple from ARGBUF (tb_src=0) or rf (tb_src=1)
-            S_TUP: if (tb_n == 8'd0) begin tb_v <= {ABI_TAG_TUPLE, h_empty}; ret(); end
+            S_TUP: if (tb_n == 16'd0) begin tb_v <= {ABI_TAG_TUPLE, h_empty}; ret(); end
                    else alloc(32'd1 + tb_n, S_TUP_A);
-            S_TUP_A: begin tb_a <= al_a; tb_i <= 8'd0; wr(al_a, vint(32'(tb_n)), S_TUP_L); end
+            S_TUP_A: begin tb_a <= al_a; tb_i <= 16'd0; wr(al_a, vint(32'(tb_n)), S_TUP_L); end
             S_TUP_L: if (tb_i == tb_n) begin tb_v <= {ABI_TAG_TUPLE, tb_a}; ret(); end
                      else if (!tb_src) rd(ab_ptr(8'(tb_from + tb_i)), S_TUP_AB);
                      else begin
-                         v0 = {16'd0, stk_from} + 32'(tb_i);
+                         v0 = {16'd0, stk_from} + {16'd0, tb_i};
                          if (stk_hit(v0[15:0])) begin
                              wr(tb_a + 4 + 4 * tb_i, stk_val(v0[15:0]), S_TUP_L);
-                             tb_i <= tb_i + 8'd1;
+                             tb_i <= tb_i + 16'd1;
                          end else begin
                              srd_g <= v0[15:0];
                              gosub(S_SRD, S_TUP_W);
@@ -5059,9 +5060,9 @@ module mpy_core
             S_TUP_AB: begin
                 if (tb_nz && mv == VNULL) wr(tb_a + 4 + 4 * tb_i, vint(32'd0), S_TUP_L);
                 else wr(tb_a + 4 + 4 * tb_i, mv, S_TUP_L);
-                tb_i <= tb_i + 8'd1;
+                tb_i <= tb_i + 16'd1;
             end
-            S_TUP_W: begin wr(tb_a + 4 + 4 * tb_i, srd_v, S_TUP_L); tb_i <= tb_i + 8'd1; end
+            S_TUP_W: begin wr(tb_a + 4 + 4 * tb_i, srd_v, S_TUP_L); tb_i <= tb_i + 16'd1; end
 
             // is_t a subclass of is_c?
             S_ISSUB: if (is_c == ty_obj || is_c == is_t) begin is_r <= 1'b1; ret(); end
@@ -5338,7 +5339,7 @@ module mpy_core
             end else begin
                 srd_addr <= mpy_rf_link_addr(rf[`SX(7'd0)]);
                 srd_off <= spilled_reals - 16'd1 - srd_g;
-                srd_hops <= 8'd0;
+                srd_hops <= 16'd0;
                 st <= S_SRD_T0;
             end
             S_SRD_T0: rd(srd_addr, S_SRD_T1);
@@ -5348,13 +5349,13 @@ module mpy_core
                 if (v0 != 32'd0 && srd_off < v0[15:0])
                     rd(srd_addr + 32'd4 + (32'((v0[5:0] + 6'd7) >> 3) << 2)
                        + ((v0 - 32'd1 - 32'(srd_off)) << 2), S_SRD_GOT);
-                else if (v1 == 32'd0 || srd_hops == 8'd64) begin
+                else if (v1 == 32'd0 || srd_hops == spilled_reals) begin
                     srd_v <= VNULL;
                     ret();
                 end else begin
                     srd_off <= srd_off - v0[15:0];
                     srd_addr <= v1;
-                    srd_hops <= srd_hops + 8'd1;
+                    srd_hops <= srd_hops + 16'd1;
                     st <= S_SRD_T0;
                 end
             end

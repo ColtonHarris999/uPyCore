@@ -2,9 +2,12 @@
 import tempfile
 import contextlib
 import io
+import sys
 import unittest
 from pathlib import Path
-import runtime_profile as p
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+import runtime_profile as p  # noqa: E402
 from runtime_profile_compare import compare
 import copy
 

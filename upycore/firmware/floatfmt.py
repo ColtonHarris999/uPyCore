@@ -564,124 +564,376 @@ def _parse_complex(s):
 
 
 # ---------------------------------------------------------------------------
-# libm-ish helpers for complex **. Binary32 range reduction; accurate enough
-# for the values the arithmetic tests print.
+# Binary32 libm kernels for complex ** (py/objcomplex.c calls sqrtf, logf,
+# atan2f, expf, cosf, sinf). Ports of the pinned lib/libm routines, the ones
+# bare-metal MicroPython ports use, in the C operation order; every +, -, *,
+# / rounds to binary32 on the FPU exactly as the C does. The same kernels
+# serve upycore/runtime/math.py, which cannot share these firmware-private
+# names. Results are within 1 ulp of the unix oracle's glibc.
 
 def _fsqrt(x):
+    # The core sends float ** 0.5 to the FPU's correctly rounded square
+    # root, so this is sqrtf bit for bit (inf, nan and +0 included).
     if x < 0.0:
         return _frombits(2143289344)
-    if x == 0.0:
+    return x ** 0.5
+
+
+def _lm_p2(k):
+    # 2.0 ** k for -149 <= k <= 127, exactly.
+    if k >= -126:
+        return _frombits((k + 127) << 23)
+    return _frombits(1 << (k + 149))
+
+
+def _lm_scalbn(y, n):
+    # musl scalbnf.
+    if n > 127:
+        y = y * _lm_p2(127)
+        n -= 127
+        if n > 127:
+            y = y * _lm_p2(127)
+            n -= 127
+            if n > 127:
+                n = 127
+    elif n < -126:
+        y = y * _lm_p2(-102)
+        n += 102
+        if n < -126:
+            y = y * _lm_p2(-102)
+            n += 102
+            if n < -126:
+                n = -126
+    return y * _lm_p2(n)
+
+
+def _lm_ksin(x, y, iy):
+    # kf_sin.c
+    if -7.450581e-09 < x < 7.450581e-09:
         return x
-    g = x
-    if g > 1.0:
-        g = x * 0.5
-    i = 0
-    while i < 12:
-        g = (g + x / g) * 0.5
-        i += 1
-    return g
+    z = x * x
+    v = z * x
+    r = 0.008333333767950535 + z * (-0.00019841270113829523 + z * (2.7557314297155244e-06 + z * (-2.5050759688838298e-08 + z * 1.5896910177115586e-10)))
+    if iy == 0:
+        return x + v * (-0.1666666716337204 + z * r)
+    return x - ((z * (0.5 * y - v * r) - y) - v * -0.1666666716337204)
 
 
-def _fexp(x):
-    if x > 88.0:
-        return _frombits(2139095040)
-    if x < -100.0:
+def _lm_kcos(x, y):
+    # kf_cos.c
+    ax = -x if x < 0.0 else x
+    if ax < 7.450581e-09:
+        return 1.0
+    z = x * x
+    r = z * (0.0416666679084301 + z * (-0.0013888889225199819 + z * (2.4801587642286904e-05 + z * (-2.7557314297155244e-07 + z * (2.087572337217125e-09 + z * -1.135964759757524e-11)))))
+    if ax < 0.30000001192092896:
+        return 1.0 - (0.5 * z - (z * r - x * y))
+    if ax > 0.78125:
+        qx = 0.28125
+    else:
+        qx = ax * 0.25
+    hz = 0.5 * z - qx
+    a = 1.0 - qx
+    return a - (hz - (z * r - x * y))
+
+
+# 2/pi as 31-bit windows (ef_rem_pio2.c two_over_pi): _LM_W31[k - 1] holds
+# bits k .. k+30, bit k weighing 2^-k.
+_LM_W31 = (
+    1367130551, 586777454, 1173554908, 199626169, 399252338, 798504676,
+    1597009353, 1046535059, 2093070119, 2038656590, 1929829532, 1712175417,
+    1276867186, 406250724, 812501448, 1625002897, 1102522146, 57560644,
+    115121288, 230242576, 460485152, 920970305, 1841940610, 1536397573,
+    925311498, 1850622997, 1553762346, 960041044, 1920082089, 1692680530,
+    1237877413, 328271178, 656542356, 1313084713, 478685779, 957371559,
+    1914743119, 1682002591, 1216521535, 285559423, 571118846, 1142237692,
+    136991736, 273983472, 547966945, 1095933890, 44384132, 88768265,
+    177536531, 355073063, 710146126, 1420292253, 693100858, 1386201717,
+    624919786, 1249839573, 352195499, 704390999, 1408781999, 670080351,
+    1340160702, 532837757, 1065675514, 2131351028, 2115218408, 2082953169,
+    2018422691, 1889361735, 1631239823, 1114995999, 82508350, 165016701,
+    330033402, 660066805, 1320133610, 492783572, 985567145, 1971134291,
+    1794784934, 1442086221, 736688794, 1473377588, 799271529, 1598543059,
+    1049602470, 2099204941, 2050926235, 1954368823, 1761253998, 1375024349,
+    602565051, 1205130103, 262776558, 525553116, 1051106232, 2102212464,
+    2056941280, 1966398912, 1785314177, 1423144707, 698805766, 1397611533,
+    647739419, 1295478838, 443474029, 886948059, 1773896118, 1400308589,
+    653133531, 1306267062, 465050476, 930100952, 1860201905, 1572920162,
+    998356677, 1996713354, 1845943060, 1544402473, 941321298, 1882642597,
+    1617801546, 1088119445, 28755243, 57510486, 115020972, 230041945,
+    460083891, 920167782, 1840335564, 1533187481, 918891314, 1837782628,
+    1528081609, 908679571, 1817359143, 1487234639, 826985630, 1653971260,
+    1160458872, 173434097, 346868194, 693736388, 1387472776, 627461904,
+    1254923809, 362363971, 724727943, 1449455886, 751428124, 1502856249,
+    858228850, 1716457700, 1285431752, 423379856, 846759712, 1693519425,
+    1239555202, 331626756, 663253512, 1326507024, 505530400, 1011060801,
+)
+_LM_NPIO2_HW = (
+    0x3fc90f00, 0x40490f00, 0x4096cb00, 0x40c90f00, 0x40fb5300, 0x4116cb00,
+    0x412fed00, 0x41490f00, 0x41623100, 0x417b5300, 0x418a3a00, 0x4196cb00,
+    0x41a35c00, 0x41afed00, 0x41bc7e00, 0x41c90f00, 0x41d5a000, 0x41e23100,
+    0x41eec200, 0x41fb5300, 0x4203f200, 0x420a3a00, 0x42108300, 0x4216cb00,
+    0x421d1400, 0x42235c00, 0x4229a500, 0x422fed00, 0x42363600, 0x423c7e00,
+    0x4242c700, 0x42490f00,
+)
+
+
+def _lm_bits(x):
+    return _u32(_pay(x))
+
+
+def _lm_tpbits(k0, n):
+    if k0 >= 1:
+        return _LM_W31[k0 - 1] >> (31 - n)
+    return _LM_W31[0] >> (31 - n + 1 - k0)
+
+
+def _lm_rem_big(ax):
+    # |x| > 2^7*pi/2, reduced exactly with 64-bit limbs over 2/pi.
+    b = _lm_bits(ax)
+    ex = (b >> 23) - 150
+    m = (b & 0x7FFFFF) | 0x800000
+    k0 = ex - 2
+    a = m * _lm_tpbits(k0 + 60, 31)
+    q = ((m * _lm_tpbits(k0, 29)) & 0x1FFFFFFF) << 32
+    q = (q + ((m * _lm_tpbits(k0 + 29, 31)) << 1) + (a >> 30)) & 0x1FFFFFFFFFFFFFFF
+    n = (q + 0x200000000000000) >> 58
+    fr = q - (n << 58)
+    neg = fr < 0
+    if neg:
+        fr = -fr
+    if fr == 0:
+        return n, 0.0, 0.0
+    sh = ((_lm_bits(float(fr)) >> 23) - 127) - 30
+    if sh >= 0:
+        ft = fr >> sh
+    else:
+        ft = fr << -sh
+    r = ft * 1686629713
+    hi = float(r)
+    lo = float(r - int(hi))
+    sc = _lm_p2(sh - 88)
+    y0 = hi * sc
+    y1 = lo * sc
+    if neg:
+        return n, -y0, -y1
+    return n, y0, y1
+
+
+def _lm_rem_pio2(x):
+    # ef_rem_pio2.c: x = n*pi/2 + y0 + y1.
+    hx = _lm_bits(x)
+    ix = hx & 0x7FFFFFFF
+    neg = hx & 0x80000000
+    if ix < 0x4016cbe4:
+        if not neg:
+            z = x - 1.5707855224609375
+            if (ix & 0xfffffff0) != 0x3fc90fd0:
+                y0 = z - 1.0804334124259185e-05
+                return 1, y0, (z - y0) - 1.0804334124259185e-05
+            z -= 1.0804273e-05
+            y0 = z - 6.07709993438732e-11
+            return 1, y0, (z - y0) - 6.07709993438732e-11
+        z = x + 1.5707855224609375
+        if (ix & 0xfffffff0) != 0x3fc90fd0:
+            y0 = z + 1.0804334124259185e-05
+            return -1, y0, (z - y0) + 1.0804334124259185e-05
+        z += 1.0804273e-05
+        y0 = z + 6.07709993438732e-11
+        return -1, y0, (z - y0) + 6.07709993438732e-11
+    if ix <= 0x43490f80:
+        t = -x if neg else x
+        n = int(t * 0.6366198 + 0.5)
+        fn = float(n)
+        r = t - fn * 1.5707855224609375
+        w = fn * 1.0804334124259185e-05
+        y0 = r - w
+        if n >= 32 or (ix & 0xffffff00) == _LM_NPIO2_HW[n - 1]:
+            j = ix >> 23
+            i = j - ((_lm_bits(y0) >> 23) & 0xff)
+            if i > 8:
+                t = r
+                w = fn * 1.0804273e-05
+                r = t - w
+                w = fn * 6.07709993438732e-11 - ((t - r) - w)
+                y0 = r - w
+                i = j - ((_lm_bits(y0) >> 23) & 0xff)
+                if i > 25:
+                    t = r
+                    w = fn * 6.077094383272197e-11
+                    r = t - w
+                    w = fn * 6.123234e-17 - ((t - r) - w)
+                    y0 = r - w
+        y1 = (r - y0) - w
+        if neg:
+            return -n, -y0, -y1
+        return n, y0, y1
+    n, y0, y1 = _lm_rem_big(-x if neg else x)
+    if neg:
+        return -n, -y0, -y1
+    return n, y0, y1
+
+
+def _lm_sincos(x, want_cos):
+    # sf_sin.c / sf_cos.c without the domain error (complex ** gives nan).
+    ax = -x if x < 0.0 else x
+    if ax <= 0.785398006439209:
+        return _lm_kcos(x, 0.0) if want_cos else _lm_ksin(x, 0.0, 0)
+    if x != x or ax == _frombits(2139095040):
+        return x - x
+    n, y0, y1 = _lm_rem_pio2(x)
+    n = (n + 1 if want_cos else n) & 3
+    if n == 0:
+        return _lm_ksin(y0, y1, 1)
+    if n == 1:
+        return _lm_kcos(y0, y1)
+    if n == 2:
+        return -_lm_ksin(y0, y1, 1)
+    return -_lm_kcos(y0, y1)
+
+
+def _lm_exp(x):
+    # musl expf (lib/libm/math.c).
+    hx = _lm_bits(x)
+    sign = hx >> 31
+    hx &= 0x7FFFFFFF
+    if hx >= 0x42aeac50:
+        if hx >= 0x7f800000:
+            if hx > 0x7f800000 or not sign:
+                return x
+        if hx >= 0x42b17218 and not sign:
+            return _frombits(2139095040)
+        if sign and hx >= 0x42cff1b5:
+            return 0.0
+    if hx > 0x3eb17218:
+        if hx > 0x3f851592:
+            k = int(1.4426950216293335 * x + (-0.5 if sign else 0.5))
+        else:
+            k = 1 - sign - sign
+        hi = x - k * 0.693145751953125
+        lo = k * 1.428606765330187e-06
+        x = hi - lo
+    elif hx > 0x39000000:
+        k = 0
+        hi = x
+        lo = 0.0
+    else:
+        return 1.0 + x
+    xx = x * x
+    c = x - xx * (0.16666625440120697 + xx * -0.0027667332906275988)
+    y = 1.0 + (x * c / (2.0 - c) - lo + hi)
+    if k == 0:
+        return y
+    return _lm_scalbn(y, k)
+
+
+def _lm_log(x):
+    # musl logf (lib/libm/math.c), for x > 0 (and inf, nan).
+    ix = _lm_bits(x)
+    k = 0
+    if ix < 0x00800000:
+        k = -25
+        x = x * 33554432.0
+        ix = _lm_bits(x)
+    elif ix >= 0x7f800000:
+        return x
+    elif ix == 0x3f800000:
         return 0.0
-    # e**x = 2**(x/ln2) via a short series on the fractional part.
-    n = _ftoi(x * 1.44269504 + (0.5 if x >= 0.0 else -0.5))
-    if n is STOP:
-        n = 0
-    f = x - n * 0.693147182
-    t = 1.0
-    a = 1.0
-    k = 1
-    while k < 12:
-        a = a * f / k
-        t = t + a
-        k += 1
-    return t * _frombits((127 + n) << 23) if -126 <= n <= 127 else (t * (2.0 ** n))
+    ix += 0x3f800000 - 0x3f3504f3
+    k += (ix >> 23) - 0x7f
+    ix = (ix & 0x007fffff) + 0x3f3504f3
+    x = _frombits(ix)
+    f = x - 1.0
+    s = f / (2.0 + f)
+    z = s * s
+    w = z * z
+    t1 = w * (0.40000972151756287 + w * 0.24279078841209412)
+    t2 = z * (0.6666666269302368 + w * 0.2849878668785095)
+    R = t2 + t1
+    hfsq = 0.5 * f * f
+    dk = float(k)
+    return s * (hfsq + R) + dk * 9.05800061445916e-06 - hfsq + f + dk * 0.6931381225585938
 
 
-def _flog(x):
-    if x < 0.0:
-        return _frombits(2143289344)
-    if x == 0.0:
-        return -_frombits(2139095040)
-    b = _u32(_pay(x))
-    exp = ((b >> 23) & 255) - 127
-    m = _frombits((b & 8388607) | 1065353216)
-    # ln(m) for m in [1, 2): ln(1+z), z in [0, 1)
-    z = m - 1.0
-    zp = z
-    s = z
-    k = 2
-    sign = -1.0
-    while k < 16:
-        zp = zp * z
-        s = s + sign * zp / k
-        sign = -sign
-        k += 1
-    return s + exp * 0.693147182
+# atanf.c constants as their binary32 bit patterns, so no decimal parse is involved.
+_LM_ATANHI = (0x3eed6338, 0x3f490fda, 0x3f7b985e, 0x3fc90fda)
+_LM_ATANLO = (0x31ac3769, 0x33222168, 0x33140fb4, 0x33a22168)
+_LM_AT = (0x3eaaaaa9, 0xbe4cca98, 0x3e11f50d, 0xbdda1247, 0x3d7cac25)
 
 
-def _fatan(x):
-    neg = _pay(x) < 0
-    if neg:
-        x = -x
-    flip = x > 1.0
-    if flip:
-        x = 1.0 / x
-    z = x
-    zp = x
-    s = x
-    k = 1
-    sign = -1.0
-    while k < 12:
-        zp = zp * x * x
-        s = s + sign * zp / (2 * k + 1)
-        sign = -sign
-        k += 1
-    if flip:
-        s = 1.57079637 - s
-    if neg:
-        return -s
-    return s
+def _lm_atan(x):
+    # atanf.c (musl).
+    ix = _lm_bits(x)
+    sign = ix >> 31
+    ix &= 0x7fffffff
+    if ix >= 0x4c800000:
+        if x != x:
+            return x
+        z = _frombits(_LM_ATANHI[3]) + _lm_p2(-120)
+        return -z if sign else z
+    if ix < 0x3ee00000:
+        if ix < 0x39800000:
+            return x
+        idx = -1
+    else:
+        x = -x if sign else x
+        if ix < 0x3f980000:
+            if ix < 0x3f300000:
+                idx = 0
+                x = (2.0 * x - 1.0) / (2.0 + x)
+            else:
+                idx = 1
+                x = (x - 1.0) / (x + 1.0)
+        elif ix < 0x401c0000:
+            idx = 2
+            x = (x - 1.5) / (1.0 + 1.5 * x)
+        else:
+            idx = 3
+            x = -1.0 / x
+    z = x * x
+    w = z * z
+    at = _LM_AT
+    s1 = z * (_frombits(at[0]) + w * (_frombits(at[2]) + w * _frombits(at[4])))
+    s2 = w * (_frombits(at[1]) + w * _frombits(at[3]))
+    if idx < 0:
+        return x - x * (s1 + s2)
+    z = _frombits(_LM_ATANHI[idx]) - ((x * (s1 + s2) - _frombits(_LM_ATANLO[idx])) - x)
+    return -z if sign else z
 
 
-def _fatan2(y, x):
-    if x > 0.0:
-        return _fatan(y / x)
-    if x < 0.0:
-        a = _fatan(y / x)
-        if _pay(y) < 0 or (y == 0.0 and _pay(y) < 0):
-            return a - 3.14159274
-        return a + 3.14159274
-    if y > 0.0:
-        return 1.57079637
-    if y < 0.0:
-        return -1.57079637
-    return 0.0
-
-
-def _fsin(x):
-    # Reduce to [-pi, pi] with a 2*pi multiply.
-    t = x * 0.159154937
-    n = _ftoi(t + (0.5 if t >= 0.0 else -0.5))
-    if n is STOP:
-        n = 0
-    x = x - n * 6.28318548
-    z = x
-    zp = x
-    s = x
-    k = 1
-    sign = -1.0
-    while k < 8:
-        zp = zp * x * x
-        s = s + sign * zp / ((2 * k) * (2 * k + 1))
-        sign = -sign
-        k += 1
-    return s
-
-
-def _fcos(x):
-    return _fsin(x + 1.57079637)
+def _lm_atan2(y, x):
+    # atan2f.c (musl).
+    if x != x or y != y:
+        return x + y
+    ix = _lm_bits(x)
+    iy = _lm_bits(y)
+    if ix == 0x3f800000:
+        return _lm_atan(y)
+    m = ((iy >> 31) & 1) | ((ix >> 30) & 2)
+    ix &= 0x7fffffff
+    iy &= 0x7fffffff
+    pi = _frombits(0x40490fdb)
+    if iy == 0:
+        if m <= 1:
+            return y
+        return pi if m == 2 else -pi
+    if ix == 0:
+        return -pi / 2.0 if m & 1 else pi / 2.0
+    if ix == 0x7f800000:
+        if iy == 0x7f800000:
+            return (pi / 4.0, -pi / 4.0, 3.0 * pi / 4.0, -3.0 * pi / 4.0)[m]
+        return (0.0, -0.0, pi, -pi)[m]
+    if ix + (26 << 23) < iy or iy == 0x7f800000:
+        return -pi / 2.0 if m & 1 else pi / 2.0
+    if (m & 2) and iy + (26 << 23) < ix:
+        z = 0.0
+    else:
+        q = y / x
+        z = _lm_atan(-q if q < 0.0 else q)
+    if m == 0:
+        return z
+    if m == 1:
+        return -z
+    if m == 2:
+        return pi - (z - _frombits(0xb3bbbd2e))
+    return (z - _frombits(0xb3bbbd2e)) - pi

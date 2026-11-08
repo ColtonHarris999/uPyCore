@@ -3,9 +3,9 @@
 
 Each suite program and frozen module is compiled both ways. The ``.mpy``
 bytes must match, except for the float-spelling difference recorded in
-uPy2's ``DEVIATIONS.md`` (the two spellings parse as the same float and
-nothing else in the file differs). A file ``mpy-cross`` rejects must be
-rejected by ``mpyc`` too.
+uPy2's ``DEVIATIONS.md``: the two spellings give the same binary32 through
+the device linker's parser, and nothing else in the file differs. A file
+``mpy-cross`` rejects must be rejected by ``mpyc`` too.
 
     python3 upycore/tools/compiler_suite.py
     python3 upycore/tools/compiler_suite.py --nstate
@@ -26,6 +26,7 @@ import mpy_build as build  # noqa: E402
 from mpy_catalog import Catalog  # noqa: E402
 from mpy_file import read_mpy  # noqa: E402
 from mpy_prelude import decode_prelude  # noqa: E402
+from mpy_link import FOLDED_FLOAT_CONSTS, f32_bits, mp_parse_float  # noqa: E402
 
 
 def _mpyc():
@@ -65,6 +66,15 @@ def _compile_both(path: Path, source_name: str) -> tuple[bytes | None, bytes | N
     return ref, mine, "differ"
 
 
+def _device_bits(text) -> int:
+    """The binary32 the linker gives a float constant's text on the device."""
+
+    text = text.decode() if isinstance(text, bytes) else str(text)
+    if text in FOLDED_FLOAT_CONSTS:
+        return FOLDED_FLOAT_CONSTS[text]
+    return f32_bits(mp_parse_float(text))
+
+
 def _float_spelling_only(MPY, mine: bytes, ref: bytes) -> bool:
     try:
         a = MPY.decode(mine)
@@ -77,14 +87,29 @@ def _float_spelling_only(MPY, mine: bytes, ref: bytes) -> bool:
         return False
     differing = 0
     for x, y in zip(a.objs, b.objs):
-        if x == y:
-            continue
-        if x.kind != MPY.OBJ_FLOAT or y.kind != MPY.OBJ_FLOAT:
+        same = _same_on_device(MPY, x, y)
+        if same is None:
             return False
-        if float(x.payload) != float(y.payload):
-            return False
-        differing += 1
+        differing += not same
     return differing > 0
+
+
+def _same_on_device(MPY, x, y):
+    """True if x and y are equal, False if only float spellings differ (the
+    same binary32 on the device, also inside const tuples), None otherwise."""
+
+    if x == y:
+        return True
+    if x.kind == MPY.OBJ_FLOAT and y.kind == MPY.OBJ_FLOAT:
+        return False if _device_bits(x.payload) == _device_bits(y.payload) else None
+    if x.kind != y.kind or not isinstance(x.payload, list) or not isinstance(y.payload, list):
+        return None
+    if len(x.payload) != len(y.payload):
+        return None
+    for u, v in zip(x.payload, y.payload):
+        if _same_on_device(MPY, u, v) is None:
+            return None
+    return False
 
 
 def suite_sources() -> list[tuple[str, Path]]:

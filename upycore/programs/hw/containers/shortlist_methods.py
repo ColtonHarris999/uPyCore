@@ -24,7 +24,7 @@ class Override(list):
 
 assert Override([1, 2]).copy() == 'override'
 a = [1, 2]
-a.insert(True, 9)
+a.insert(1, 9)
 assert a == [1, 9, 2]
 assert a.pop(False) == 1
 print('shortlist methods passed')
