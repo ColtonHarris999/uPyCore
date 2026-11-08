@@ -28,6 +28,69 @@ Already fixed by the ongoing work, and not repeated below:
   (`979af61`);
 - the `converted/*.v` netlists were regenerated (`612df65`).
 
+## Implementation status (2026-11-08)
+
+The items below were implemented after the review. Measurements:
+`perf_inventory.py` (MicroPython `perf_bench`, `run()` cycles) and pystone
+(`timing_bench.py` source, 300 loops), on the same toolchain, before
+(`7f837a2`) and after.
+
+| Workload | Before (`7f837a2`) | After | Change |
+| --- | ---: | ---: | ---: |
+| pystone (300 loops) | 12,118,317 | 11,376,711 | −6.12% |
+| bm_chaos | 6,948,057 | 6,514,714 | −6.24% |
+| bm_fannkuch | 1,557,883 | 1,222,304 | −21.54% |
+| bm_fft | 126,511,032 | 114,006,070 | −9.88% |
+| bm_float | 10,116,886 | 8,888,688 | −12.14% |
+| bm_hexiom | 57,598,499 | 52,958,870 | −8.06% |
+| bm_nqueens | 115,923,106 | 105,167,968 | −9.28% |
+| bm_wordcount | 22,934,138 | 21,906,937 | −4.48% |
+| core_locals | 93,410,486 | 84,450,064 | −9.59% |
+| core_qstr | 607,828 | 556,980 | −8.37% |
+| core_str | 36,138,426 | 33,169,284 | −8.22% |
+| core_yield_from | 10,028,620 | 9,997,283 | −0.31% |
+| misc_aes | 2,344,808 | 2,185,698 | −6.79% |
+| misc_mandel | 72,749,009 | 59,834,828 | −17.75% |
+| misc_pystone | 12,183,290 | 11,441,678 | −6.09% |
+| misc_raytrace | 11,031,168 | 10,203,308 | −7.50% |
+| int/float arithmetic loops (`timing_bench.py`) | | | −9.5% to −21.4% |
+
+Every result matches the oracle and the baseline. The hardware suite passes
+500 of 500 (mpy-cross), and the 28 RTL benches pass.
+
+| Item | Status |
+| --- | --- |
+| A1 `abs(complex)` | Done: `_fsqrt` uses the FPU's correctly rounded `** 0.5` |
+| A2 complex `**` | Done: `objcomplex.c` order with ported `lib/libm` kernels (`_lm_*`, new `atanf`/`atan2f`); within a few ulp of the oracle |
+| A3 complex `/` | Done: `objcomplex.c` order |
+| A4 `abs()` | Done: sign-bit float abs, bools as ints, and **B7** a core native (`ABI_N_ABS`, `ALU_ABS`) with `_abs_fb` for everything else |
+| A5 `round()` | Done: `mp_builtin_round` semantics |
+| A6 binary32 folding in `mpy-cross` | **Deferred**: a binary32 `mpy-cross` breaks uPy2's byte-exact contract with `mpy-cross`; needs a matching uPy2 change. Documented in `known_limitations.md` |
+| A7 SSE oracle | Done (`mpconfigvariant.mk`); no golden changed |
+| B3 skip `S_FETCH` | Done (`go_next()` for 14 fall-through sites; `S_DEC` re-checks spill/reload/fault) |
+| B4 numeric fast path | Done (`S_BIN`/`S_UN` → `S_NUM_GO` for unboxed operands) |
+| B5 image wait state 0 | Done |
+| B11 GC zeroing | Done: one zero store per grant (`mem_gnt_i`) |
+| B12 short-list streaming | Done: reads and writes issue on every grant |
+| C1 GC table in SRAM | Done earlier by `bd8cf62` |
+| C3 dead complex FPU logic | Done: `upycore_fpu` is a 64-bit scalar unit |
+| C4 dead RTL | `mpy_container` removed; `mpy_periph`/`mpy_irq` marked not integrated; `mpy_regfile` and `mpy_prelude_decode` kept for their benches |
+| D2 scoreboard bounds | Done: range ends, aligned bases and valid bits registered at push (collection and short-list) |
+| D3 reset | Done: 2-flop synchronizer; boot, GC and core resets are flop outputs. The two remaining `SYNCASYNCNET` lint warnings are those flops also read as data, which is intended |
+| E1 tests | Done: `alu/complex_abs`, `complex_div`, `complex_pow`, `abs_edge`, `round_edge`, `containers/wide_display` |
+| E3 golden check | Done: addresses compared masked |
+| E4 CI | Partly: `goldens` job, profile protocol test and phase-1 check in `make test-host`; no lint job yet |
+| E5 `TESTING.md` | Done |
+| E7 suite | `compiler_suite` compares float spellings by device binary32 (also inside const tuples); `shortlist_methods` no longer asserts a bool-index insert; `star_wide_oom` fills deterministically and binds its globals before measuring |
+| F2–F5 docs | Done: README, `NOTICE.md`, `planning/` archived, `known_limitations.md`, stale doc passages |
+| F1 license | **Open**: the owners must choose a project license (`NOTICE.md` lists third-party terms) |
+| Not started | B1, B2, B6, B8, B9, B10, C2, C5, D1, D4, D5, E2, E6, F6 |
+
+Found and fixed while implementing: `BUILD_LIST`, `BUILD_TUPLE` and
+`BUILD_SET` with 256 or more items lost elements (8-bit counters), and the
+spill-chain walk gave up after 64 chunks, so a display of about 500 or
+more items read `NULL`s.
+
 ---
 
 ## 1. Summary

@@ -196,10 +196,11 @@ def _int_from_bytes(cls, data, byteorder='big', _ignored=None):
     return n
 
 
-def abs(x):
-    # mp_unary_op(MP_UNARY_OP_ABS): a bool is the int 0 or 1, a float drops
-    # its sign bit (objfloat.c tests signbit, so -0.0 and -nan become
-    # positive), and everything else is its type's unary op.
+def _abs_fb(x):
+    # abs() for what the core's native does not take: INT64, complex,
+    # instances, an ALU overflow, and errors. mp_unary_op(MP_UNARY_OP_ABS):
+    # a float drops its sign bit (objfloat.c tests signbit), a bool is an
+    # int, and anything else is its type's unary op or a TypeError.
     t = _tag(x)
     if t == TAG_FLOAT:
         return _frombits(_u32(_pay(x)) & 2147483647)
@@ -207,11 +208,9 @@ def abs(x):
         return 1
     if x is False:
         return 0
-    if t == TAG_COMPLEX or (t == TAG_OBJECT and _ld(x, 0) == OB_INSTANCE):
-        return _unop(UNOP_ABS, x)
-    if x < 0:
-        return -x
-    return x
+    if t == TAG_INT or t == TAG_INT64:
+        return -x if x < 0 else x
+    return _unop(UNOP_ABS, x)
 
 
 def all(iterable):

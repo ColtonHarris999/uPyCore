@@ -145,9 +145,9 @@ def sqrt(x):
     if x > 0.0:
         if x == inf:
             return x
-        # The FPU's power unit is accurate to about 51 bits before rounding
-        # (upycore_fp_pow.sv), and a correctly rounded binary32 square root
-        # needs 2*24+2 = 50, so x ** 0.5 is the correctly rounded sqrt.
+        # The FPU sends ** 0.5 to the divider's correctly rounded binary64
+        # square root (upycore_fpu.sv, S_POW_SQRT); rounding that to binary32
+        # is correctly rounded too (53 >= 2*24+2).
         return x ** 0.5
     if x == 0.0 or x != x:
         return x

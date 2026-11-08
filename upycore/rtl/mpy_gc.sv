@@ -70,6 +70,8 @@ module mpy_gc #(
     output logic [31:0] mem_addr_o,
     output logic [31:0] mem_wdata_o,
     output logic [3:0]  mem_wtag_o,
+    // The port took the request this unit presents (or mpy_soc holds).
+    input  logic        mem_gnt_i,
     input  logic        mem_ack_i,
     input  logic [31:0] mem_rdata_i,
     input  logic [3:0]  mem_rtag_i
@@ -95,6 +97,7 @@ module mpy_gc #(
         end
     end
     localparam int SW = $clog2(STACK_DEPTH + 1);
+    localparam int SI = $clog2(STACK_DEPTH);   // stack index; ssp < STACK_DEPTH when it indexes
 
     localparam logic [1:0] A_FREE = 2'd0;
     localparam logic [1:0] A_HEAD = 2'd1;
@@ -106,8 +109,7 @@ module mpy_gc #(
         G_IDLE,
         G_SCAN,       // alloc: look for a free run
         G_CLAIM,      // alloc: write HEAD/TAIL
-        G_ZERO,       // alloc: zero the words
-        G_ZERO_W,
+        G_ZERO,       // alloc: zero the words, one store per grant
         G_ROOT,       // collect: read the next root word
         G_ROOT_W,
         G_POP,        // drain the mark stack
@@ -131,6 +133,8 @@ module mpy_gc #(
 
     logic [BW-1:0] rover, idx, run_start, run_len, need, scanned;
     logic [31:0]   zaddr, zend;
+    logic          zwait;         // a zero store is presented and not yet granted
+    logic [2:0]    zout;          // zero stores granted or presented, not yet acked
     logic [31:0]   raddr, rhi;
     logic          rsel;          // 0: root range 0, 1: root range 1
     logic [31:0]   lnk_addr, lnk_next;
@@ -304,6 +308,8 @@ module mpy_gc #(
             need           <= '0;
             scanned        <= '0;
             zaddr          <= '0;
+            zwait          <= 1'b0;
+            zout           <= '0;
             zend           <= '0;
             raddr          <= '0;
             rhi            <= '0;
@@ -345,7 +351,7 @@ module mpy_gc #(
                 mk_wr <= 1'b1;
                 mk_wb <= mk_cb;
                 if (ssp < SW'(STACK_DEPTH)) begin
-                    stk[ssp] <= mk_cb;
+                    stk[SI'(ssp)] <= mk_cb;
                     ssp <= ssp + 1'b1;
                 end else begin
                     ovf <= 1'b1;
@@ -453,26 +459,33 @@ module mpy_gc #(
                     end
                 end
 
+                // Stream the zero stores: the next goes out as soon as the
+                // port has taken the previous one, and the allocation
+                // completes when every store has been acknowledged.
                 G_ZERO: begin
-                    if (zaddr == zend) begin
-                        alloc_done_o <= 1'b1;
-                        alloc_ok_o   <= 1'b1;
-                        alloc_addr_o <= POOL_BASE + {run_start, 4'b0000};
-                        st           <= G_IDLE;
-                    end else begin
+                    logic       issue;
+                    logic [2:0] zout_n;
+                    issue  = (zaddr != zend) && (!zwait || mem_gnt_i);
+                    zout_n = zout + (issue ? 3'd1 : 3'd0) - (mem_ack_i ? 3'd1 : 3'd0);
+                    zout  <= zout_n;
+                    if (issue) begin
                         mem_req_o    <= 1'b1;
                         mem_we_o     <= 1'b1;
                         mem_tag_we_o <= 1'b1;
                         mem_addr_o   <= zaddr;
                         mem_wdata_o  <= '0;
                         mem_wtag_o   <= '0;
-                        st           <= G_ZERO_W;
+                        zaddr        <= zaddr + 32'd4;
+                        zwait        <= 1'b1;
+                    end else if (mem_gnt_i) begin
+                        zwait        <= 1'b0;
                     end
-                end
-                G_ZERO_W: begin
-                    if (mem_ack_i) begin
-                        zaddr <= zaddr + 32'd4;
-                        st    <= G_ZERO;
+                    if (zaddr == zend && (!zwait || mem_gnt_i) && zout_n == 3'd0) begin
+                        alloc_done_o <= 1'b1;
+                        alloc_ok_o   <= 1'b1;
+                        alloc_addr_o <= POOL_BASE + {run_start, 4'b0000};
+                        zwait        <= 1'b0;
+                        st           <= G_IDLE;
                     end
                 end
 
@@ -575,7 +588,7 @@ module mpy_gc #(
 
                 G_POP: if (!mk_busy) begin
                     if (ssp != '0) begin
-                        oblk  <= stk[ssp - 1'b1];
+                        oblk  <= stk[SI'(ssp - 1'b1)];
                         oword <= '0;
                         tl_have <= 1'b0;
                         ssp   <= ssp - 1'b1;

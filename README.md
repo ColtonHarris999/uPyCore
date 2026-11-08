@@ -10,12 +10,23 @@ each stage is its own call, and the firmware collects between them. The
 space supplies its runtime heap (see Memory and boot).
 
 The unix oracle is MicroPython v1.29.0 built as the `upycore` variant
-(`sys.platform` and `sys.implementation.name` are `upycore`).
+(`sys.platform` and `sys.implementation.name` are `upycore`): 32-bit,
+long-long ints, binary32 floats evaluated in SSE (no x87 excess precision),
+so its float results are those of a binary32 MCU.
+
+Status: every program in the hardware suite passes on the simulator. The
+last post-route timing result is 18 ns; the RTL now estimates about 10.5 ns
+([`timing_10ns.md`](upycore/docs/timing_10ns.md)), and 10 ns post-route is
+not yet shown. The SoC has no UART, GPIO or timer: console output is a byte
+port and the image boots from SPI NAND (`mpy_periph` is unit-tested but not
+integrated). Language and library gaps are in
+[`known_limitations.md`](upycore/docs/known_limitations.md).
 
 ## Run a program
 
-Requires Python 3 and Verilator 5.032 or newer. `make test` builds `mpy-cross`
-from `vendor/micropython` when the binary is missing.
+Requires Python 3.11 or newer and Verilator 5.032 or newer. `make test`
+builds `mpy-cross` from `vendor/micropython` when the binary is missing.
+[`TESTING.md`](TESTING.md) lists every test layer and its requirements.
 
 ```bash
 make test
@@ -25,7 +36,8 @@ python3 upycore/tools/mpy_build.py oracle upycore/programs/hello.py
 
 `run` prints the program's stdout and stderr and exits with the program's
 status. `oracle` runs the same file on the unix port. Build that port with
-`make oracle` (needs `i686-linux-gnu-gcc`).
+`make oracle` (needs `i686-linux-gnu-gcc` and the i386 loader, `libc6-i386`
+or `libc6:i386`).
 
 ## Hardware suite
 
@@ -68,10 +80,12 @@ python3 upycore/tools/unit_tests.py alu gc
 
 ## Accelerators
 
-[`upycore/docs/mpy_hash.md`](upycore/docs/mpy_hash.md) describes the standalone
-MicroPython hash engine and pipelined hash-to-slot unit for future rehashing,
-their equivalence tests, and the hash/modulo/memory tradeoffs. They are not
-yet connected to the SoC.
+The collection accelerator (`mpy_collection`) holds the word and byte copy
+engines, the bulk map engine with its MicroPython-compatible hash unit and
+hash-to-slot rehash pipeline, and the short-list engine for small list
+operations ([`collection_accelerator.md`](upycore/docs/collection_accelerator.md),
+[`mpy_hash.md`](upycore/docs/mpy_hash.md),
+[`shortlist_engine.md`](upycore/docs/shortlist_engine.md)).
 
 Bulk word copies run on the container accelerator while the core goes on
 to the next instruction, and a binary op that cannot fail retires before
@@ -95,8 +109,7 @@ the testbench's NAND model; without it the simulation streams the image
 files straight into the loader.
 [`upycore/docs/mpy_boot.md`](upycore/docs/mpy_boot.md) has the boot
 stream, the SPI commands, why the blocks are one 36-bit port, and the
-EE 477 SRAM macro setup. The frozen uPy2 compiler does not fit the image
-SRAM, so `compile`, `exec` and `eval` programs do not link.
+EE 477 SRAM macro setup.
 
 ```bash
 python3 upycore/tools/mpy_build.py run -v --nand upycore/programs/hello.py
@@ -138,14 +151,21 @@ backend flow.
 
 | Path | Role |
 | --- | --- |
-| `upycore/rtl` | Hart, datapath, memory, and collector |
+| `upycore/rtl` | Hart, datapath, memory, collector and accelerators |
 | `upycore/firmware` | Device firmware, MicroPython source joined into one `.mpy` |
-| `upycore/tools` | Image linker, ABI tables, and `mpy_build.py` |
-| `upycore/programs` | Example programs |
+| `upycore/runtime` | `array`, `math`, `cmath`, `random`, `io`: frozen into programs that import them |
+| `upycore/compiler` | On-device driver for the frozen uPy2 compiler |
+| `upycore/tools` | Image linker, ABI tables, `mpy_build.py`, test runners and benchmarks |
+| `upycore/tests` | Host unit tests |
+| `upycore/tb` | RTL unit testbenches |
+| `upycore/programs` | Hardware suite (`hw/`, `hw_tests.toml`), benchmarks and examples |
 | `upycore/targets/upycore.json` | Pinned bytecode catalog |
+| `upycore/synth` | Design Compiler and Hammer (Genus/Innovus) flow scripts |
+| `upycore/docs` | As-built design documents and recorded measurements |
 | `variants/upycore` | 32-bit unix oracle |
 | `vendor/micropython` | MicroPython v1.29.0 pin |
-| `planning/` | Design history for the move off the CPython hart |
+| `vendor/upy2` | The uPy2 compiler (`mpyc`) |
+| `planning/` | Open plans and the archived design history |
 
 Clone with the MicroPython pin:
 
@@ -153,4 +173,4 @@ Clone with the MicroPython pin:
 git clone --recurse-submodules <this-repo>
 ```
 
-`make test` covers a hello program and a raised `ValueError`.
+Third-party code and its terms are listed in [`NOTICE.md`](NOTICE.md).

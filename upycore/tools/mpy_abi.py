@@ -317,6 +317,8 @@ NATIVES = [
     "list.pop", "list.insert",
     "_wcopy_step",  # (dst, doff, src, soff, n, step): dst[doff+i] = src[soff+i*step], core loop
     "list.copy",  # exact short list copy; ordinary fallback otherwise
+    # abs(int | bool | float) on the ALU; anything else calls _abs_fb
+    "abs",
 ]
 NATIVE_ID = {name: i for i, name in enumerate(NATIVES)}
 

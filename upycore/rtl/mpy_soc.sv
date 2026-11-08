@@ -131,14 +131,34 @@ module mpy_soc #(
     logic [31:0] ld_wdata;
     logic [3:0]  ld_wtag;
 
+    // Reset. rst_n_i asserts asynchronously and is released through two
+    // flops (por_n), so no flop sees the external edge's release. Every
+    // block reset below is a flop output, never a gate: the boot loader
+    // starts after the SRAM clear, the collector after a good boot, and
+    // the core and accelerator once the collector's table is clear.
+    logic [1:0]  por_q;
+    logic        por_n, boot_rst_n, gc_rst_n;
     always_ff @(posedge clk_i or negedge rst_n_i) begin
-        if (!rst_n_i) sys_rst_n <= 1'b0;
-        else if (mem_ready && boot_done && !boot_err_o && !g_busy) sys_rst_n <= 1'b1;
+        if (!rst_n_i) por_q <= 2'b00;
+        else          por_q <= {por_q[0], 1'b1};
+    end
+    assign por_n = por_q[1];
+
+    always_ff @(posedge clk_i or negedge por_n) begin
+        if (!por_n) begin
+            boot_rst_n <= 1'b0;
+            gc_rst_n   <= 1'b0;
+            sys_rst_n  <= 1'b0;
+        end else begin
+            if (mem_ready) boot_rst_n <= 1'b1;
+            if (boot_done && !boot_err_o) gc_rst_n <= 1'b1;
+            if (mem_ready && boot_done && !boot_err_o && gc_rst_n && !g_busy) sys_rst_n <= 1'b1;
+        end
     end
     assign boot_done_o = sys_rst_n;
 
     mpy_boot u_boot (
-        .clk_i, .rst_n_i(rst_n_i && mem_ready),
+        .clk_i, .rst_n_i(boot_rst_n),
         .sck_o(nand_sck_o), .cs_n_o(nand_cs_n_o), .mosi_o(nand_mosi_o), .miso_i(nand_miso_i),
         .ld_we_o(ld_we), .ld_idx_o(ld_idx), .ld_wdata_o(ld_wdata), .ld_wtag_o(ld_wtag),
         .image_words_o(image_words), .pool_bytes_o(requested_pool),
@@ -196,7 +216,7 @@ module mpy_soc #(
         // (mpy_abi.GC_TABLE_BYTES), not the whole address window.
         .POOL_BYTES(ABI_GC_TABLE_BYTES)
     ) u_gc (
-        .clk_i, .rst_n_i(rst_n_i && boot_done && !boot_err_o),
+        .clk_i, .rst_n_i(gc_rst_n),
         .pool_bytes_i(active_pool),
         .alloc_req_i(g_alloc_req), .alloc_nbytes_i(g_alloc_nbytes),
         .alloc_done_o(g_alloc_done), .alloc_ok_o(g_alloc_ok), .alloc_addr_o(g_alloc_addr),
@@ -207,7 +227,7 @@ module mpy_soc #(
         .collections_o(g_coll), .overflows_o(g_ovf),
         .mem_req_o(gm_req), .mem_we_o(gm_we), .mem_tag_we_o(gm_tag_we),
         .mem_addr_o(gm_addr), .mem_wdata_o(gm_wdata), .mem_wtag_o(gm_wtag),
-        .mem_ack_i(gm_ack), .mem_rdata_i(gm_rdata), .mem_rtag_i(gm_rtag)
+        .mem_gnt_i(m_gnt[P_GC]), .mem_ack_i(gm_ack), .mem_rdata_i(gm_rdata), .mem_rtag_i(gm_rtag)
     );
 
     mpy_collection #(.TYPE_CACHE(CA_TYPE_CACHE), .SHORTLIST_MAX(SHORTLIST_MAX)) u_ca (
@@ -249,7 +269,7 @@ module mpy_soc #(
         .FLASH_WAIT_STATES(FLASH_WAIT_STATES),
         .SRAM_LATENCY(SRAM_LATENCY)
     ) u_mem (
-        .clk_i, .rst_n_i, .image_words_i(image_words),
+        .clk_i, .rst_n_i(por_n), .image_words_i(image_words),
         .req_i(m_req), .we_i(m_we), .tag_we_i(m_tag_we), .be_i(m_be),
         .addr_i(m_addr), .wdata_i(m_wdata), .wtag_i(m_wtag),
         .gnt_o(m_gnt), .ack_o(m_ack), .rdata_o(m_rdata), .rtag_o(m_rtag),
@@ -267,8 +287,8 @@ module mpy_soc #(
     logic        sim_halt;
     logic [31:0] sim_halt_val;
 
-    always_ff @(posedge clk_i or negedge rst_n_i) begin
-        if (!rst_n_i) begin
+    always_ff @(posedge clk_i or negedge por_n) begin
+        if (!por_n) begin
             sim_ack <= 1'b0; sim_rdata <= 32'd0;
             con_valid_o <= 1'b0; con_err_o <= 1'b0; con_byte_o <= 8'd0;
             sim_halt <= 1'b0; sim_halt_val <= 32'd0;
@@ -312,8 +332,8 @@ module mpy_soc #(
     assign m_wtag    = {am_wtag, 4'd0, c_wtag, gm_wtag};
     assign am_gnt    = m_gnt[P_CA];
 
-    always_ff @(posedge clk_i or negedge rst_n_i) begin
-        if (!rst_n_i) begin
+    always_ff @(posedge clk_i or negedge por_n) begin
+        if (!por_n) begin
             c_pend <= 1'b0; g_pend <= 1'b0;
         end else begin
             c_pend <= c_want && !m_gnt[P_CORE];

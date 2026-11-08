@@ -10,8 +10,8 @@ folder for a uPyCore top (or for Hazard3, the baseline). It copies the
 example rather than guessing the class's file formats, so the Makefile and
 the tool and library setup stay exactly as the class has them.
 
-Nothing here has been run on the lab machines yet. Every step was checked
-against a mock of the class layout only.
+This flow produced the 18 ns post-route result and the Genus reports that
+`upycore/docs/timing_100mhz.md` and `timing_10ns.md` start from.
 
 ## Do not commit class files
 
@@ -24,7 +24,6 @@ creates contains the class Makefile and cfg files, so keep it in your
 ```sh
 git clone https://github.com/coltonharris999/upycore.git ~/upycore
 cd ~/upycore
-git checkout synth      # until it is merged
 
 # Start with the ALU: smaller, so tool problems show up fast.
 python3 upycore/synth/hammer/make_hammer_design.py \
@@ -167,7 +166,6 @@ clock at the same period so its flops are timed.
   image leaves) is a `fakeram_d600_w64` macro; run `make sram` first.
   Boot selects the active subset after subtracting the image from shared
   SRAM.
-- Not `mpy_container`: no other module instantiates it.
 - `mpy_soc`: the whole chip, with the four 128 KiB SRAM blocks as
   `fakeram_d32768_w36` macros, the GC table as a `fakeram_d600_w64` macro
   and the SPI NAND boot loader. The script

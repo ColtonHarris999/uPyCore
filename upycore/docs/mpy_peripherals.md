@@ -4,6 +4,13 @@ Status: the v1 register model. The RTL is `upycore/rtl/mpy_periph.sv` and
 `upycore/rtl/mpy_irq.sv`. The executable copy of the edge and UART rules is
 `upycore/tools/mpy_periph_model.py`.
 
+**Not integrated.** `mpy_periph` and `mpy_irq` are verified by
+`tb_mpy_periph` against that model, but `mpy_soc` does not instantiate
+them: the SoC has no UART, GPIO, timer or interrupt path yet, and the
+firmware has no `machine` module. Integration needs the MMIO window on the
+core's data port in `mpy_soc`, the IRQ hook at bytecode boundaries in
+`mpy_core`, and the `machine` module.
+
 This file is the host register model. Blink and echo traces are checked
 against it. The unix port's `machine` module is a different peripheral
 model and is not the oracle for edges. `print` and

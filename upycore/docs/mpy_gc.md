@@ -4,7 +4,7 @@ Status: `upycore/rtl/mpy_gc.sv` is the tracer and the pool allocator.
 `mpy_soc` hands it the memory port while an allocation or a collection
 is in progress.
 
-The encoding is planning/micropython_pivot_plan.md §0.5 and §0.6. Tag
+The encoding is planning/old/micropython_pivot_plan.md §0.5 and §0.6. Tag
 numbers live in `upycore/rtl/mpy_defs.svh`.
 
 ## Words

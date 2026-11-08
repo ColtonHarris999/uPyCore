@@ -587,6 +587,7 @@ module mpy_core
         S_N_FTOI,
         S_N_FTOI_B,
         S_N_FTOI_W,
+        S_N_ABS_W,
         S_N_HASH,
         S_NS_START,S_NS_N,S_NS_MODE, S_NR_N,S_NR_SHIP, S_MH_TAB, S_MH_N, S_MH_HASH, S_MH_USED,
         S_MB_SRC, S_MB_OP, S_MB_D0, S_MB_D1, S_MB_D2, S_MB_FLAGS,
@@ -1721,6 +1722,16 @@ module mpy_core
         if (scr_id != SCR_NONE && scr_id != dest) scr_go_store_gosub(scr_id, target, back);
         else gosub(target, back);
     endtask
+    // Finish an instruction that left pc on the next one: register the next
+    // instruction's bytes now (the same flop-to-flop window path S_FETCH
+    // uses) and decode next cycle, skipping S_FETCH. S_DEC sends anything
+    // S_FETCH would have handled (spill, reload, accelerator fault) back
+    // there. Only for ops that change neither pc nor the fetch stream.
+    task automatic go_next();
+        if (fe_avail != 6'd0 && !ca_fault_i) begin
+            dq_bytes <= d_bytes; dq_n <= d_n; st <= S_DEC;
+        end else st <= S_FETCH;
+    endtask
     task automatic halt(input logic [3:0] code, input logic [31:0] value);
         halted <= 1'b1; hcode <= code; hval <= value; st <= S_HALT;
     endtask
@@ -2447,7 +2458,10 @@ module mpy_core
                      // otherwise the word at pc is still on its way
             // The decoder sees the bytes the fetch queue has from pc on (up
             // to 8). A truncated instruction with fewer waits for the rest.
-            S_DEC: if (d_trunc) begin
+            // Entered from S_FETCH or straight from an instruction's end
+            // (go_next); in the second case S_FETCH's checks happen here.
+            S_DEC: if (ca_fault_i || sp >= 7'(RF_SPILL_AT) || (has_link && sp <= 7'(RF_RELOAD_AT))) st <= S_FETCH;
+                   else if (d_trunc) begin
                        if (dq_n == 4'd8) halt(ABI_HALT_BAD_OPCODE, pc);
                        else if (fe_fault) fetch_fault();
                        else st <= S_FETCH;
@@ -2471,7 +2485,7 @@ module mpy_core
                     if (lc_is_hit(vi)) begin
                         vs0 = {4'd0, lc_hit_way(vi)};
                         if (lc_d[vs0[2:0]] == VNULL && !(fflags & FF_FW)) raise_msg(ABI_MSG_LOCAL_UNBOUND);
-                        else begin push(lc_d[vs0[2:0]]); lc_note(vs0[2:0]); st <= S_FETCH; end
+                        else begin push(lc_d[vs0[2:0]]); lc_note(vs0[2:0]); go_next(); end
                     end else begin
                         i0 <= vi; rd(loc_ptr(vi), S_LDF);
                     end
@@ -2509,19 +2523,19 @@ module mpy_core
                         else if (op == 8'h29) rd(loc_ptr(vi), S_DDREF);
                         else rd(loc_ptr(vi), S_LDEL);
                     end
-                end else if (op >= 8'h70 && op < 8'hb0) begin push(vint(32'(op) - 32'h80)); st <= S_FETCH; end
+                end else if (op >= 8'h70 && op < 8'hb0) begin push(vint(32'(op) - 32'h80)); go_next(); end
                 else if (op >= 8'hd0 && op < 8'hd7) begin
                     n_o <= op - 8'hd0; st <= S_UN;
                 end else if (op >= 8'hd7 && op < 8'hfa) begin
                     n_o <= op - 8'hd7; st <= S_BIN;
                 end else case (op)
                 8'h10: rd(qbase + 4 * arg, S_LCS);
-                8'h22: begin push(vint(arg)); st <= S_FETCH; end
+                8'h22: begin push(vint(arg)); go_next(); end
                 8'h23: rd(cbase + 4 * arg, S_LCO);
-                8'h50: begin push(VFALSE); st <= S_FETCH; end
-                8'h51: begin push(VNONE); st <= S_FETCH; end
-                8'h52: begin push(VTRUE); st <= S_FETCH; end
-                8'h53: begin push(VNULL); st <= S_FETCH; end
+                8'h50: begin push(VFALSE); go_next(); end
+                8'h51: begin push(VNONE); go_next(); end
+                8'h52: begin push(VTRUE); go_next(); end
+                8'h53: begin push(VNULL); go_next(); end
                 8'h24, 8'h25, 8'h26, 8'h27, 8'h28, 8'h29: halt(ABI_HALT_INTERNAL, 32'h0000_10CA);
                 8'h11, 8'h12, 8'h16, 8'h17, 8'h19, 8'h1a, 8'h13, 8'h14, 8'h18, 8'h15,
                 8'h1b, 8'h1c:
@@ -2532,21 +2546,21 @@ module mpy_core
                     t[0] <= rf[`SX(6'(sp - 7'd2))]; t[1] <= rf[`SX(6'(sp - 7'd1))]; t[6] <= rf[`SX(6'(sp - 7'd3))];
                     st <= S_SSUB;
                 end
-                8'h57: begin push(rf[`SX(6'(sp - 7'd1))]); st <= S_FETCH; end
+                8'h57: begin push(rf[`SX(6'(sp - 7'd1))]); go_next(); end
                 8'h58: begin
                     rf[`SX(sp)] <= rf[`SX(6'(sp - 7'd2))]; rf[`SX(6'(sp + 7'd1))] <= rf[`SX(6'(sp - 7'd1))];
-                    sp <= sp + 7'd2; st <= S_FETCH;
+                    sp <= sp + 7'd2; go_next();
                 end
-                8'h59: begin sp <= sp - 7'd1; st <= S_FETCH; end
+                8'h59: begin sp <= sp - 7'd1; go_next(); end
                 8'h5a: begin
                     rf[`SX(6'(sp - 7'd1))] <= rf[`SX(6'(sp - 7'd2))]; rf[`SX(6'(sp - 7'd2))] <= rf[`SX(6'(sp - 7'd1))];
-                    st <= S_FETCH;
+                    go_next();
                 end
                 8'h5b: begin
                     rf[`SX(6'(sp - 7'd3))] <= rf[`SX(6'(sp - 7'd1))];
                     rf[`SX(6'(sp - 7'd2))] <= rf[`SX(6'(sp - 7'd3))];
                     rf[`SX(6'(sp - 7'd1))] <= rf[`SX(6'(sp - 7'd2))];
-                    st <= S_FETCH;
+                    go_next();
                 end
                 8'h42: begin pc <= jt_c; st <= S_FETCH; end
                 8'h43, 8'h44, 8'h45, 8'h46: begin tr_v <= rf[`SX(6'(sp - 7'd1))]; gosub(S_TR, S_JT); end
@@ -3843,7 +3857,14 @@ module mpy_core
                     n_un <= 1'b1;
                     alu_op <= (v0 == ABI_UNOP_POSITIVE) ? ALU_POS : (v0 == ABI_UNOP_NEGATIVE) ? ALU_NEG : ALU_INVERT;
                     t[0] <= rf[`SX(6'(sp - 7'd1))]; t[1] <= vint(32'd0);
-                    st <= S_NUM;
+                    // An unboxed operand goes straight to S_NUM_GO; only an
+                    // INT64 needs S_NUM to load its two words.
+                    if (tg(rf[`SX(6'(sp - 7'd1))]) != ABI_TAG_INT64) begin
+                        na_f <= (tg(rf[`SX(6'(sp - 7'd1))]) == ABI_TAG_FLOAT);
+                        na <= sx64(ival(rf[`SX(6'(sp - 7'd1))]));
+                        nb_f <= 1'b0; nb <= 64'd0;
+                        st <= S_NUM_GO;
+                    end else st <= S_NUM;
                 end else begin
                     sp <= sp - 7'd1;
                     hook(ABI_HOOK_UNOP, ABI_RK_PUSH, 8'd2, vint(v0), rf[`SX(6'(sp - 7'd1))], VNULL, VNULL);
@@ -3861,7 +3882,15 @@ module mpy_core
                 else if (numlike(rf[`SX(6'(sp - 7'd2))]) && numlike(rf[`SX(6'(sp - 7'd1))]) &&
                          (v0 <= ABI_BINOP_NOT_EQUAL || (v0 >= ABI_BINOP_INPLACE_OR && v0 <= ABI_BINOP_POWER))) begin
                     alu_op <= (v0 >= ABI_BINOP_INPLACE_OR && v0 < ABI_BINOP_OR) ? 6'(v0 + 32'd13) : 6'(v0);
-                    st <= S_NUM;
+                    // Unboxed operands go straight to S_NUM_GO; an INT64
+                    // takes S_NUM / S_NUM_B to load its words.
+                    if (tg(rf[`SX(6'(sp - 7'd2))]) != ABI_TAG_INT64 && tg(rf[`SX(6'(sp - 7'd1))]) != ABI_TAG_INT64) begin
+                        na_f <= (tg(rf[`SX(6'(sp - 7'd2))]) == ABI_TAG_FLOAT);
+                        nb_f <= (tg(rf[`SX(6'(sp - 7'd1))]) == ABI_TAG_FLOAT);
+                        na <= sx64(ival(rf[`SX(6'(sp - 7'd2))]));
+                        nb <= sx64(ival(rf[`SX(6'(sp - 7'd1))]));
+                        st <= S_NUM_GO;
+                    end else st <= S_NUM;
                 end else if (v0 == ABI_BINOP_EQUAL || v0 == ABI_BINOP_NOT_EQUAL) st <= S_EQ;
                 else st <= S_BIN_FB;
             end
@@ -3927,7 +3956,7 @@ module mpy_core
                 alu_start <= 1'b1;
                 if (cfg_aalu && aalu_safe(alu_op, n_un, na_f, nb_f, na, nb)) begin
                     aalu_pend <= 1'b1; aalu_slot <= `SX(6'(sp - 7'd2));
-                    sp <= sp - 7'd1; st <= S_FETCH;
+                    sp <= sp - 7'd1; go_next();
                 end else st <= S_NUM_W;
             end
             S_NUM_W: if (alu_done) begin
@@ -3961,7 +3990,7 @@ module mpy_core
             S_NUM_PUT: begin
                 if (n_un) rf[`SX(6'(sp - 7'd1))] <= t[2];
                 else begin rf[`SX(6'(sp - 7'd2))] <= t[2]; sp <= sp - 7'd1; end
-                st <= S_FETCH;
+                go_next();
             end
 
             // =================================================================
@@ -4020,6 +4049,15 @@ module mpy_core
                         t[0] <= mv; t[1] <= vint(32'd0); n_un <= 1'b1; alu_op <= ALU_F2I;
                         st <= S_N_FTOI;
                     end
+                    // abs() of an int, bool or float on the ALU (ALU_ABS clears a
+                    // float's sign bit, so -0.0 and -nan come out positive).
+                    ABI_N_ABS: if (v0 != 32'd1 || !(tg(mv) == ABI_TAG_INT || tg(mv) == ABI_TAG_FLOAT || is_bool(mv)))
+                            st <= S_NAT_FB;
+                        else begin
+                            na_f <= (tg(mv) == ABI_TAG_FLOAT); na <= sx64(ival(mv));
+                            nb_f <= 1'b0; nb <= 64'd0; n_small <= 1'b0;
+                            alu_op <= ALU_ABS; alu_start <= 1'b1; st <= S_N_ABS_W;
+                        end
                     ABI_N_INEXT: if (tg(mv) != ABI_TAG_ITER) deliver(VNULL, crk);
                         else begin t[3] <= mv; i0 <= 8'd0; st <= S_N_IN_LD; end
                     ABI_N_GRESUME: if (v0 != 32'd3) st <= S_NAT_FB;
@@ -4406,6 +4444,12 @@ module mpy_core
             end
             S_N_FTOI_W: if (alu_done) begin
                 if (alu_err != AE_NONE) deliver(VSTOP, crk);
+                else if (fits32(alu_res)) deliver(vint(alu_res[31:0]), crk);
+                else alloc(32'd2, S_N_FTOI_B);
+            end
+            S_N_ABS_W: if (alu_done) begin
+                if (alu_err != AE_NONE) st <= S_NAT_FB;
+                else if (alu_kind == AK_FLOAT) deliver({ABI_TAG_FLOAT, alu_res[31:0]}, crk);
                 else if (fits32(alu_res)) deliver(vint(alu_res[31:0]), crk);
                 else alloc(32'd2, S_N_FTOI_B);
             end

@@ -5,9 +5,10 @@ and returns a signed 31-bit hash, sign extended to 32 bits. This is the ABI
 in `mpy_abi.py`, including boxed INT64 and COMPLEX values; it is not the
 expanded register format described in older planning documents.
 `mpy_hash_slot.sv` overlaps this engine with `upycore_umod_seq` and returns
-the unsigned slot `uint32_t(hash) % alloc`. These blocks are standalone
-building blocks for a future rehash accelerator. They are not connected to
-the SoC or substituted for the existing core/firmware hash paths yet.
+the unsigned slot `uint32_t(hash) % alloc`. Both are part of the SoC:
+`mpy_bulk` and `mpy_map_engine` (in `mpy_collection`) use `mpy_hash`, and
+`mpy_bulk`'s rehash stream (`mpy_rehash_stream`) runs `mpy_hash_slot`. The
+core's own lookup path still hashes in microcode.
 
 ## MicroPython behavior
 

@@ -131,7 +131,7 @@ synth-gates:
 
 # One self-contained .sv per top in build/dc/ for Design Compiler
 # (upycore/synth/dc/README.md).
-DC_TOPS ?= mpy_alu mpy_decode mpy_container mpy_core
+DC_TOPS ?= mpy_alu mpy_decode mpy_core
 dc-src:
 	$(PYTHON) upycore/tools/mpy_dc_unit.py $(DC_TOPS)
 

@@ -101,7 +101,6 @@ BENCHES = [
     Bench("mpy_alu", list(mpy_synth.ALU_FILES), r"^PASS mpy_alu "),
     Bench("mpy_boot", ["mpy_boot.sv", "../tb/tb_spi_nand.sv"], r"^PASS mpy_boot "),
     Bench("mpy_ca", ["mpy_ca.sv", "bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv"], r"^PASS mpy_ca "),
-    Bench("mpy_container", ["mpy_container.sv"], r"^PASS mpy_container"),
     Bench("mpy_decode", ["mpy_decode.sv"], r"^mpy_decode checks: \d+ ok", _decode_args),
     Bench("mpy_fetch", ["bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv", "mpy_fetch.sv"],
           r"^PASS mpy_fetch "),

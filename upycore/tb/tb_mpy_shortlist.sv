@@ -40,7 +40,8 @@ module tb_mpy_shortlist #(parameter int MAX_ELEMS=16);
     always @(posedge clk)begin
         if(!rst)stalled<=0;
         else begin
-            if(stalled && (!req || {we,addr,wt,wd}!==held))$fatal(1,"request changed before grant");
+            // A fatal fault may withdraw a request that was still waiting.
+            if(stalled && !failed && (!req || {we,addr,wt,wd}!==held))$fatal(1,"request changed before grant");
             stalled<=req && !gnt;
             if(req && !gnt)held<={we,addr,wt,wd};
         end

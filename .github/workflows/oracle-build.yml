@@ -1,7 +1,7 @@
 name: Oracle build
 
 # Cached image for the pinned MicroPython unix oracle and mpy-cross.
-# goldens-fresh is the later gating job; this one builds the tools.
+# all-tests.yml's goldens job checks the goldens; this one builds the tools.
 # No schedule: the GC nightly stays manual, and this job is not a soak.
 on:
   pull_request:
@@ -14,7 +14,6 @@ on:
   push:
     branches:
       - main
-      - mpy_translation
     paths:
       - "vendor/**"
       - "variants/**"

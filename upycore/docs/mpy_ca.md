@@ -1,9 +1,9 @@
 # Container accelerator, scoreboard, and async ALU
 
-This branch also has an experimental bulk map engine. See
-[collection_accelerator.md](collection_accelerator.md) for implemented paths,
-measurements and the remaining gaps relative to the paper design. The copy
-engine descriptions and historical measurements below predate that integration.
+The bulk map engine and the short-list engine share this accelerator's
+queue and scoreboard; see [collection_accelerator.md](collection_accelerator.md)
+and [shortlist_engine.md](shortlist_engine.md). The copy engine descriptions
+and historical measurements below predate those engines.
 
 Status: `upycore/rtl/mpy_ca.sv` is the container accelerator (CA). It
 sits beside `mpy_core` and `mpy_gc` on the `mpy_soc` memory port. The
