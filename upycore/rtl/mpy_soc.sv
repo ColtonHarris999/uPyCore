@@ -67,6 +67,11 @@ module mpy_soc #(
     logic [3:0]  c_be, c_wtag;
     logic [31:0] c_addr, c_wdata;
     logic        c_ack, c_fault;
+    logic        c_pend;     // the skid holds an earlier core request (the core's m_busy_i)
+    // The core request presented to mpy_mem and the sim page (see the skid).
+    logic        p_req, p_sim, p_we, p_tag_we, p_taken, sim_go;
+    logic [3:0]  p_be, p_wtag;
+    logic [31:0] p_addr, p_wdata;
     logic [31:0] c_rdata;
     logic [3:0]  c_rtag, c_fault_reason;
 
@@ -131,14 +136,34 @@ module mpy_soc #(
     logic [31:0] ld_wdata;
     logic [3:0]  ld_wtag;
 
+    // Reset. rst_n_i asserts asynchronously and is released through two
+    // flops (por_n), so no flop sees the external edge's release. Every
+    // block reset below is a flop output, never a gate: the boot loader
+    // starts after the SRAM clear, the collector after a good boot, and
+    // the core and accelerator once the collector's table is clear.
+    logic [1:0]  por_q;
+    logic        por_n, boot_rst_n, gc_rst_n;
     always_ff @(posedge clk_i or negedge rst_n_i) begin
-        if (!rst_n_i) sys_rst_n <= 1'b0;
-        else if (mem_ready && boot_done && !boot_err_o && !g_busy) sys_rst_n <= 1'b1;
+        if (!rst_n_i) por_q <= 2'b00;
+        else          por_q <= {por_q[0], 1'b1};
+    end
+    assign por_n = por_q[1];
+
+    always_ff @(posedge clk_i or negedge por_n) begin
+        if (!por_n) begin
+            boot_rst_n <= 1'b0;
+            gc_rst_n   <= 1'b0;
+            sys_rst_n  <= 1'b0;
+        end else begin
+            if (mem_ready) boot_rst_n <= 1'b1;
+            if (boot_done && !boot_err_o) gc_rst_n <= 1'b1;
+            if (mem_ready && boot_done && !boot_err_o && gc_rst_n && !g_busy) sys_rst_n <= 1'b1;
+        end
     end
     assign boot_done_o = sys_rst_n;
 
     mpy_boot u_boot (
-        .clk_i, .rst_n_i(rst_n_i && mem_ready),
+        .clk_i, .rst_n_i(boot_rst_n),
         .sck_o(nand_sck_o), .cs_n_o(nand_cs_n_o), .mosi_o(nand_mosi_o), .miso_i(nand_miso_i),
         .ld_we_o(ld_we), .ld_idx_o(ld_idx), .ld_wdata_o(ld_wdata), .ld_wtag_o(ld_wtag),
         .image_words_o(image_words), .pool_bytes_o(requested_pool),
@@ -149,7 +174,7 @@ module mpy_soc #(
         .clk_i, .rst_n_i(sys_rst_n),
         .m_req_o(c_req), .m_we_o(c_we), .m_tag_we_o(c_tag_we), .m_be_o(c_be),
         .m_addr_o(c_addr), .m_wdata_o(c_wdata), .m_wtag_o(c_wtag),
-        .m_ack_i(c_ack), .m_rdata_i(c_rdata), .m_rtag_i(c_rtag),
+        .m_busy_i(c_pend), .m_ack_i(c_ack), .m_rdata_i(c_rdata), .m_rtag_i(c_rtag),
         .m_fault_i(c_fault), .m_fault_reason_i(c_fault_reason),
         .f_req_o(f_req), .f_addr_o(f_addr), .f_gnt_i(m_gnt[P_FETCH]), .f_ack_i(m_ack[P_FETCH]),
         .f_rdata_i(m_rdata[P_FETCH]), .f_fault_i(m_fault[P_FETCH]),
@@ -196,7 +221,7 @@ module mpy_soc #(
         // (mpy_abi.GC_TABLE_BYTES), not the whole address window.
         .POOL_BYTES(ABI_GC_TABLE_BYTES)
     ) u_gc (
-        .clk_i, .rst_n_i(rst_n_i && boot_done && !boot_err_o),
+        .clk_i, .rst_n_i(gc_rst_n),
         .pool_bytes_i(active_pool),
         .alloc_req_i(g_alloc_req), .alloc_nbytes_i(g_alloc_nbytes),
         .alloc_done_o(g_alloc_done), .alloc_ok_o(g_alloc_ok), .alloc_addr_o(g_alloc_addr),
@@ -207,11 +232,11 @@ module mpy_soc #(
         .collections_o(g_coll), .overflows_o(g_ovf),
         .mem_req_o(gm_req), .mem_we_o(gm_we), .mem_tag_we_o(gm_tag_we),
         .mem_addr_o(gm_addr), .mem_wdata_o(gm_wdata), .mem_wtag_o(gm_wtag),
-        .mem_ack_i(gm_ack), .mem_rdata_i(gm_rdata), .mem_rtag_i(gm_rtag)
+        .mem_gnt_i(m_gnt[P_GC]), .mem_ack_i(gm_ack), .mem_rdata_i(gm_rdata), .mem_rtag_i(gm_rtag)
     );
 
     mpy_collection #(.TYPE_CACHE(CA_TYPE_CACHE), .SHORTLIST_MAX(SHORTLIST_MAX)) u_ca (
-        .cache_clear_i(g_collect_req || g_collect_done),.cache_write_i(m_gnt[P_CORE] && c_we),.cache_addr_i(c_addr),
+        .cache_clear_i(g_collect_req || g_collect_done),.cache_write_i(m_gnt[P_CORE] && p_we),.cache_addr_i(p_addr),
         .clk_i,.rst_n_i(sys_rst_n),
         .copy_reverse_i(ca_reverse),.copy_byte_i(ca_byte),.copy_valid_i(ca_valid),.copy_ready_o(ca_ready),
         .copy_src_i(ca_src),.copy_dst_i(ca_dst),.copy_n_i(ca_n),
@@ -236,7 +261,7 @@ module mpy_soc #(
         .sl_put_value_i(sl_put_value),
         .sl_response_o(sl_response),
         .sl_response_ready_i(sl_response_ready),
-        .idle_o(ca_idle),.chk_addr_i(c_addr),.chk_we_i(c_we),.chk_busy_o(ca_busy),
+        .idle_o(ca_idle),.chk_addr_i(p_addr),.chk_we_i(p_we),.chk_busy_o(ca_busy),
         .req_o(am_req),.we_o(am_we),.addr_o(am_addr),.wdata_o(am_wdata),.wtag_o(am_wtag),
         .gnt_i(am_gnt),.ack_i(am_ack),.fault_i(m_fault[P_CA]),.fault_reason_i(m_fault_reason[P_CA]),
         .rdata_i(m_rdata[P_CA]),.rtag_i(m_rtag[P_CA]),
@@ -249,7 +274,7 @@ module mpy_soc #(
         .FLASH_WAIT_STATES(FLASH_WAIT_STATES),
         .SRAM_LATENCY(SRAM_LATENCY)
     ) u_mem (
-        .clk_i, .rst_n_i, .image_words_i(image_words),
+        .clk_i, .rst_n_i(por_n), .image_words_i(image_words),
         .req_i(m_req), .we_i(m_we), .tag_we_i(m_tag_we), .be_i(m_be),
         .addr_i(m_addr), .wdata_i(m_wdata), .wtag_i(m_wtag),
         .gnt_o(m_gnt), .ack_o(m_ack), .rdata_o(m_rdata), .rtag_o(m_rtag),
@@ -262,61 +287,101 @@ module mpy_soc #(
     logic c_sim;
     assign c_sim = (mpy_region_of(c_addr) == MPY_REGION_SIM);
 
+    // The core's port. The core posts stores and pipelines loads, and takes
+    // acks in order. A request mpy_mem (or the sim page) does not take in
+    // the cycle it is presented moves into a one-entry skid (c_pend, k_*),
+    // so the core goes on without seeing the grant; the core waits only
+    // when it presents another request while the skid is full (m_busy_i,
+    // a flop). The skid's request goes first. p_* is what is presented.
+    // A simulator-page access is answered here; it is taken (sim_go) only
+    // when none of the core's memory accesses is still waiting for its ack
+    // (c_out counts those), so the acks stay in order.
+    logic        k_we, k_tag_we, k_sim;
+    logic [3:0]  k_be, k_wtag;
+    logic [31:0] k_addr, k_wdata;
+    logic [2:0]  c_out;
+    assign p_req = c_pend || c_req;
+    assign p_sim = c_pend ? k_sim : c_sim;
+    assign p_we = c_pend ? k_we : c_we;
+    assign p_tag_we = c_pend ? k_tag_we : c_tag_we;
+    assign p_be = c_pend ? k_be : c_be;
+    assign p_wtag = c_pend ? k_wtag : c_wtag;
+    assign p_addr = c_pend ? k_addr : c_addr;
+    assign p_wdata = c_pend ? k_wdata : c_wdata;
+    assign sim_go = p_req && p_sim && c_out == 3'd0;
+    assign p_taken = m_gnt[P_CORE] || sim_go;
+    always_ff @(posedge clk_i or negedge por_n) begin
+        if (!por_n) begin
+            c_pend <= 1'b0; c_out <= 3'd0;
+            k_we <= 1'b0; k_tag_we <= 1'b0; k_sim <= 1'b0;
+            k_be <= 4'd0; k_wtag <= 4'd0; k_addr <= 32'd0; k_wdata <= 32'd0;
+        end else begin
+            if (c_pend) begin
+                if (p_taken) c_pend <= 1'b0;
+            end else if (c_req && !p_taken) begin
+                c_pend <= 1'b1;
+                k_we <= c_we; k_tag_we <= c_tag_we; k_sim <= c_sim;
+                k_be <= c_be; k_wtag <= c_wtag; k_addr <= c_addr; k_wdata <= c_wdata;
+            end
+            c_out <= c_out + (m_gnt[P_CORE] ? 3'd1 : 3'd0) - (m_ack[P_CORE] ? 3'd1 : 3'd0);
+        end
+    end
+
     logic        sim_ack;
     logic [31:0] sim_rdata;
     logic        sim_halt;
     logic [31:0] sim_halt_val;
 
-    always_ff @(posedge clk_i or negedge rst_n_i) begin
-        if (!rst_n_i) begin
+    always_ff @(posedge clk_i or negedge por_n) begin
+        if (!por_n) begin
             sim_ack <= 1'b0; sim_rdata <= 32'd0;
             con_valid_o <= 1'b0; con_err_o <= 1'b0; con_byte_o <= 8'd0;
             sim_halt <= 1'b0; sim_halt_val <= 32'd0;
         end else begin
             sim_ack <= 1'b0;
             con_valid_o <= 1'b0;
-            if (c_req && c_sim) begin
+            if (sim_go) begin
                 sim_ack <= 1'b1;
                 sim_rdata <= 32'd0;
-                if (c_we) begin
-                    case ((c_addr - ABI_SIM_BASE) >> 2)
-                        32'(ABI_SIM_STDOUT): begin con_valid_o <= 1'b1; con_err_o <= 1'b0; con_byte_o <= c_wdata[7:0]; end
-                        32'(ABI_SIM_STDERR): begin con_valid_o <= 1'b1; con_err_o <= 1'b1; con_byte_o <= c_wdata[7:0]; end
-                        32'(ABI_SIM_HALT): begin sim_halt <= 1'b1; sim_halt_val <= c_wdata; end
+                if (p_we) begin
+                    case ((p_addr - ABI_SIM_BASE) >> 2)
+                        32'(ABI_SIM_STDOUT): begin con_valid_o <= 1'b1; con_err_o <= 1'b0; con_byte_o <= p_wdata[7:0]; end
+                        32'(ABI_SIM_STDERR): begin con_valid_o <= 1'b1; con_err_o <= 1'b1; con_byte_o <= p_wdata[7:0]; end
+                        32'(ABI_SIM_HALT): begin sim_halt <= 1'b1; sim_halt_val <= p_wdata; end
                         default: ;
                     endcase
-                end else if (((c_addr - ABI_SIM_BASE) >> 2) == 32'(ABI_SIM_CYCLES)) begin
+                end else if (((p_addr - ABI_SIM_BASE) >> 2) == 32'(ABI_SIM_CYCLES)) begin
                     sim_rdata <= core_cycles;
                 end
             end
         end
     end
 
-    // Memory ports. The core and the collector pulse a request and hold its
-    // fields until the ack, so a request mpy_mem does not grant at once is
-    // kept pending here; the accelerator holds req until am_gnt. mpy_mem
+    // Memory ports. The collector pulses a request and holds its fields
+    // until the ack, so a request mpy_mem does not grant at once is kept
+    // pending here; the core's goes to the skid above; the accelerator holds
+    // req until am_gnt. mpy_mem
     // grants each of the four interleaved blocks to one port per cycle
     // (collector first, then core, then accelerator), so masters that touch
     // different blocks run in the same cycle. The core's request waits while
     // the accelerator's scoreboard marks its word busy.
-    logic c_pend, g_pend, c_want, g_want;
-    assign c_want = c_pend || (c_req && !c_sim);
+    logic g_pend, c_want, g_want;
+    assign c_want = p_req && !p_sim;
     assign g_want = g_pend || gm_req;
 
     assign m_req     = {am_req, f_req && sys_rst_n, c_want && !ca_busy, g_want};
-    assign m_we      = {am_we, 1'b0, c_we, gm_we};
-    assign m_tag_we  = {am_we, 1'b0, c_tag_we, gm_tag_we};
-    assign m_be      = {4'hF, 4'hF, c_be, 4'hF};
-    assign m_addr    = {am_addr, f_addr, c_addr, gm_addr};
-    assign m_wdata   = {am_wdata, 32'd0, c_wdata, gm_wdata};
-    assign m_wtag    = {am_wtag, 4'd0, c_wtag, gm_wtag};
+    assign m_we      = {am_we, 1'b0, p_we, gm_we};
+    assign m_tag_we  = {am_we, 1'b0, p_tag_we, gm_tag_we};
+    assign m_be      = {4'hF, 4'hF, p_be, 4'hF};
+    assign m_addr    = {am_addr, f_addr, p_addr, gm_addr};
+    assign m_wdata   = {am_wdata, 32'd0, p_wdata, gm_wdata};
+    assign m_wtag    = {am_wtag, 4'd0, p_wtag, gm_wtag};
     assign am_gnt    = m_gnt[P_CA];
 
-    always_ff @(posedge clk_i or negedge rst_n_i) begin
-        if (!rst_n_i) begin
-            c_pend <= 1'b0; g_pend <= 1'b0;
+    always_ff @(posedge clk_i or negedge por_n) begin
+        if (!por_n) begin
+            g_pend <= 1'b0;
         end else begin
-            c_pend <= c_want && !m_gnt[P_CORE];
             g_pend <= g_want && !m_gnt[P_GC];
         end
     end

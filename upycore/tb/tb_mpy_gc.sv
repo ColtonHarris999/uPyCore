@@ -54,7 +54,7 @@ module tb_mpy_gc;
         .collections_o(collections), .overflows_o(overflows),
         .mem_req_o(mem_req), .mem_we_o(mem_we), .mem_tag_we_o(mem_tag_we),
         .mem_addr_o(mem_addr), .mem_wdata_o(mem_wdata), .mem_wtag_o(mem_wtag),
-        .mem_ack_i(mem_ack), .mem_rdata_i(mem_rdata), .mem_rtag_i(mem_rtag)
+        .mem_gnt_i(mem_req), .mem_ack_i(mem_ack), .mem_rdata_i(mem_rdata), .mem_rtag_i(mem_rtag)
     );
 
     // Word memory, one-cycle access as mpy_mem with SRAM_LATENCY = 0.

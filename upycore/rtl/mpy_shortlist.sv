@@ -27,16 +27,21 @@ module mpy_shortlist #(parameter int MAX_ELEMS=16) (
     output logic [3:0] fault_reason_o
 );
     localparam int CW=$clog2(MAX_ELEMS+1);
-    typedef enum logic [3:0] {IDLE, READ_REQ, READ_WAIT, WRITE_REQ, WRITE_WAIT,
+    localparam int IW=(MAX_ELEMS>1) ? $clog2(MAX_ELEMS) : 1;  // buffer index; issued/acked < count <= MAX_ELEMS when used
+    // READ and WRITE stream: a request goes out on every grant while words
+    // remain, and acks (in order) are counted separately, so the engine
+    // keeps the pipelined port busy instead of waiting out each round trip.
+    // Every read is acked before the first write is issued.
+    typedef enum logic [3:0] {IDLE, READ, WRITE,
         CLEAR_REQ, CLEAR_WAIT, PUT_REQ, PUT_WAIT, LENGTH_REQ, LENGTH_WAIT,
         DONE, FAILED} state_t;
     state_t st;
     logic [35:0] buffer [0:MAX_ELEMS-1];
-    logic [CW-1:0] count, index;
+    logic [CW-1:0] count, issued, acked;
     logic [31:0] src, dst, read_addr, write_addr, clear_addr, put_addr, header, new_length;
     logic reverse_words, clear_tail, put_value, write_length;
     logic [35:0] value;
-    logic [32:0] source_end, source_low, dest_end;
+    logic [32:0] source_end, source_low, dest_end, header_end;
     logic [32:0] cmd_span, cmd_low, cmd_high, cmd_dst_end;
     always_comb begin
         cmd_span = (n_i == 0) ? 33'd0 : (({1'b0,n_i}-33'd1)<<2);
@@ -46,13 +51,14 @@ module mpy_shortlist #(parameter int MAX_ELEMS=16) (
         ready_o = st==IDLE;
         idle_o = st==IDLE;
         response_o = st==DONE;
-        req_o = st==READ_REQ || st==WRITE_REQ || st==CLEAR_REQ || st==PUT_REQ || st==LENGTH_REQ;
-        we_o = st!=READ_REQ;
+        req_o = ((st==READ || st==WRITE) && issued!=count) ||
+                st==CLEAR_REQ || st==PUT_REQ || st==LENGTH_REQ;
+        we_o = st!=READ;
         addr_o = read_addr;
         wdata_o = 32'd0; wtag_o = 4'd0;
         case (st)
-            WRITE_REQ,WRITE_WAIT: begin
-                addr_o=write_addr; wdata_o=buffer[index][31:0]; wtag_o=buffer[index][35:32];
+            WRITE: begin
+                addr_o=write_addr; wdata_o=buffer[IW'(issued)][31:0]; wtag_o=buffer[IW'(issued)][35:32];
             end
             CLEAR_REQ,CLEAR_WAIT: begin addr_o=clear_addr; wdata_o=ABI_CTL_NULL; wtag_o=MPY_TAG_CONTROL; end
             PUT_REQ,PUT_WAIT: begin addr_o=put_addr; wdata_o=value[31:0]; wtag_o=value[35:32]; end
@@ -65,7 +71,7 @@ module mpy_shortlist #(parameter int MAX_ELEMS=16) (
             if(chk_we_i && {1'b0,chk_addr_i}>=source_low && {1'b0,chk_addr_i}<source_end) chk_busy_o=1;
             if(clear_tail && chk_addr_i==clear_addr) chk_busy_o=1;
             if(put_value && chk_addr_i==put_addr) chk_busy_o=1;
-            if(write_length && chk_addr_i>=header && {1'b0,chk_addr_i}<{1'b0,header}+33'd12) chk_busy_o=1;
+            if(write_length && chk_addr_i>=header && {1'b0,chk_addr_i}<header_end) chk_busy_o=1;
         end
     end
     task automatic finish_items();
@@ -76,18 +82,18 @@ module mpy_shortlist #(parameter int MAX_ELEMS=16) (
     endtask
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if(!rst_n_i) begin
-            st<=IDLE;count<=0;index<=0;src<=0;dst<=0;read_addr<=0;write_addr<=0;
+            st<=IDLE;count<=0;issued<=0;acked<=0;src<=0;dst<=0;read_addr<=0;write_addr<=0;
             clear_addr<=0;put_addr<=0;header<=0;new_length<=0;
             reverse_words<=0;clear_tail<=0;put_value<=0;write_length<=0;value<=0;
-            source_low<=0;source_end<=0;dest_end<=0;
+            source_low<=0;source_end<=0;dest_end<=0;header_end<=0;
             fault_o<=0;fault_addr_o<=0;fault_reason_o<=0;
         end else case(st)
             IDLE: if(valid_i) begin
-                src<=src_i;dst<=dst_i;count<=CW'(n_i);index<=0;
+                src<=src_i;dst<=dst_i;count<=CW'(n_i);issued<=0;acked<=0;
                 read_addr<=src_i;write_addr<=dst_i;reverse_words<=reverse_i;
                 clear_tail<=clear_i;clear_addr<=clear_addr_i;put_value<=put_i;
                 put_addr<=put_addr_i;value<=put_value_i;write_length<=length_i;
-                header<=header_i;new_length<=new_length_i;
+                header<=header_i;new_length<=new_length_i;header_end<={1'b0,header_i}+33'd12;
                 source_low<=n_i==0 ? 33'd0 : cmd_low;
                 source_end<=n_i==0 ? 33'd0 : cmd_high;dest_end<=cmd_dst_end;
                 if(n_i>MAX_ELEMS || (n_i!=0 && (src_i[1:0]!=0 || dst_i[1:0]!=0 ||
@@ -95,26 +101,42 @@ module mpy_shortlist #(parameter int MAX_ELEMS=16) (
                    (clear_i && clear_addr_i[1:0]!=0) || (put_i && put_addr_i[1:0]!=0) ||
                    (length_i && (header_i[1:0]!=0 || header_i>32'hfffffff3))) begin
                     fault_o<=1;fault_addr_o<=src_i;fault_reason_o<=MPY_FAULT_BUS;st<=FAILED;
-                end else if(n_i!=0) st<=READ_REQ;
+                end else if(n_i!=0) st<=READ;
                 else if(clear_i) st<=CLEAR_REQ;
                 else if(put_i) st<=PUT_REQ;
                 else if(length_i) st<=LENGTH_REQ;
                 else st<=DONE;
             end
-            READ_REQ: if(gnt_i) st<=READ_WAIT;
-            READ_WAIT: if(ack_i) begin
-                if(fault_i) begin fault_o<=1;fault_addr_o<=read_addr;fault_reason_o<=fault_reason_i;st<=FAILED;end
-                else begin
-                    buffer[index]<={rtag_i,rdata_i};
-                    if(index+1==count) begin index<=0;st<=WRITE_REQ;end
-                    else begin index<=index+1'b1;read_addr<=reverse_words ? read_addr-32'd4 : read_addr+32'd4;st<=READ_REQ;end
+            READ: begin
+                if(gnt_i && issued!=count) begin
+                    issued<=issued+1'b1;
+                    read_addr<=reverse_words ? read_addr-32'd4 : read_addr+32'd4;
+                end
+                if(ack_i) begin
+                    if(fault_i) begin
+                        fault_o<=1;fault_reason_o<=fault_reason_i;st<=FAILED;
+                        fault_addr_o<=reverse_words ? src-(32'(acked)<<2) : src+(32'(acked)<<2);
+                    end else begin
+                        buffer[IW'(acked)]<={rtag_i,rdata_i};
+                        acked<=acked+1'b1;
+                        if(acked+1'b1==count) begin issued<=0;acked<=0;st<=WRITE;end
+                    end
                 end
             end
-            WRITE_REQ: if(gnt_i) st<=WRITE_WAIT;
-            WRITE_WAIT: if(ack_i) begin
-                if(fault_i) begin fault_o<=1;fault_addr_o<=write_addr;fault_reason_o<=fault_reason_i;st<=FAILED;end
-                else if(index+1==count) finish_items();
-                else begin index<=index+1'b1;write_addr<=write_addr+32'd4;st<=WRITE_REQ;end
+            WRITE: begin
+                if(gnt_i && issued!=count) begin
+                    issued<=issued+1'b1;
+                    write_addr<=write_addr+32'd4;
+                end
+                if(ack_i) begin
+                    if(fault_i) begin
+                        fault_o<=1;fault_reason_o<=fault_reason_i;st<=FAILED;
+                        fault_addr_o<=dst+(32'(acked)<<2);
+                    end else begin
+                        acked<=acked+1'b1;
+                        if(acked+1'b1==count) finish_items();
+                    end
+                end
             end
             CLEAR_REQ: if(gnt_i) st<=CLEAR_WAIT;
             CLEAR_WAIT: if(ack_i) begin

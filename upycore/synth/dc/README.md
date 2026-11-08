@@ -13,7 +13,7 @@ on the UW ECE lab machines.
 1. Write single-file sources (any machine with Python 3):
 
    ```sh
-   make dc-src            # build/dc/mpy_alu.sv, mpy_decode.sv, mpy_container.sv, mpy_core.sv
+   make dc-src            # build/dc/mpy_alu.sv, mpy_decode.sv, mpy_core.sv
    ```
 
    The RTL shares localparams and functions through file-scope `` `include``
@@ -55,8 +55,8 @@ on the UW ECE lab machines.
 
 - `mpy_core`: the processor (ALU, FPU and decoder included). This is the
   headline number.
-- `mpy_alu`, `mpy_decode`, `mpy_container`: smaller and quicker; start with
-  `mpy_alu` to shake out tool problems.
+- `mpy_alu`, `mpy_decode`: smaller and quicker; start with `mpy_alu` to
+  shake out tool problems.
 - **Not** `mpy_mem` or `mpy_soc`: the SRAM and flash are plain arrays
   (768 KiB) and would become millions of flip-flops. Report memory area
   separately from SRAM macros.

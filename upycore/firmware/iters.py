@@ -250,6 +250,10 @@ def reversed____new__(cls, seq):
     _st(o, 1, cls)
     _st(o, 2, seq)
     _st(o, 3, n - 1)
+    if _tag(seq) == TAG_RANGE:
+        # Word 4: the range's step, so __next__ computes start + i * step
+        # instead of indexing the range through _subscr.
+        _st(o, 4, _ld(seq, 2))
     return o
 
 
@@ -257,7 +261,12 @@ def reversed____next__(self):
     i = _ld(self, 3)
     if i < 0:
         raise StopIteration()
-    v = _ld(self, 2)[i]
+    seq = _ld(self, 2)
+    step = _ld(self, 4)
+    if step is not NULL:
+        v = _ld(seq, 0) + i * step
+    else:
+        v = seq[i]
     _st(self, 3, i - 1)
     return v
 

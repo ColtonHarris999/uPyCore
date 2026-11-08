@@ -569,8 +569,11 @@ def _num_binop(op, a, b):
             return _complex(ar / br, ai / br)
         if br == 0.0:
             return _complex(ai / bi, -ar / bi)
+        # objcomplex.c scales the divisor, then multiplies.
         d = br * br + bi * bi
-        return _complex((ar * br + ai * bi) / d, (ai * br - ar * bi) / d)
+        br = br / d
+        bi = bi / -d
+        return _complex(ar * br - ai * bi, ar * bi + ai * br)
     if op == BINOP_POWER or op == BINOP_INPLACE_POWER:
         return _cpow(ar, ai, br, bi)
     if op == BINOP_EQUAL:
@@ -581,20 +584,19 @@ def _num_binop(op, a, b):
 
 
 def _cpow(ar, ai, br, bi):
-    # py/objcomplex.c: z1**z2 = exp(z2*ln(z1))
-    if br == 0.0 and bi == 0.0:
-        return _complex(1.0, 0.0)
-    if ar == 0.0 and ai == 0.0:
-        if bi != 0.0 or br < 0:
-            raise ZeroDivisionError('0.0 to a complex power')
-        return _complex(0.0, 0.0)
-    ln1 = _flog(ar * ar + ai * ai)
-    ln1 = 0.5 * ln1
-    ln2 = _fatan2(ai, ar)
-    x3 = br * ln1 - bi * ln2
-    y3 = br * ln2 + bi * ln1
-    mag = _fexp(x3)
-    return _complex(mag * _fcos(y3), mag * _fsin(y3))
+    # py/objcomplex.c MP_BINARY_OP_POWER, step for step:
+    # z1**z2 = exp(x3)*(cos(y3) + i*sin(y3)).
+    abs1 = _fsqrt(ar * ar + ai * ai)
+    if abs1 == 0.0:
+        if bi == 0.0 and br >= 0.0:
+            return _complex(1.0 if br == 0.0 else 0.0, ai)
+        raise ZeroDivisionError('0.0 to a complex power')
+    ln1 = _lm_log(abs1)
+    arg1 = _lm_atan2(ai, ar)
+    x3 = br * ln1 - bi * arg1
+    y3 = bi * ln1 + br * arg1
+    exp_x3 = _lm_exp(x3)
+    return _complex(exp_x3 * _lm_sincos(y3, True), exp_x3 * _lm_sincos(y3, False))
 
 
 def _floor(x):

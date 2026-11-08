@@ -7,15 +7,9 @@ def _list_of_iter(x):
         return _list_of_seq(x)
     if _tag(x) == TAG_TUPLE:
         return _list_of_seq(x)
-    if _isstr(x) or _tag(x) == TAG_BYTES or _isbarr(x):
-        out = []
-        for ch in x:
-            out.append(ch)
-        return out
-    out = []
-    for a in x:
-        out.append(a)
-    return out
+    # A comprehension appends with the core's LIST_APPEND, not a method call
+    # per item.
+    return [a for a in x]
 
 
 def _list_extend(lst, it):

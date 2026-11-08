@@ -48,6 +48,10 @@ module mpy_collection #(parameter bit TYPE_CACHE=0, parameter int SHORTLIST_MAX=
         logic [2:0] op;
         logic [31:0] src, sn, dst, dn, used, header, source_header, hashes;
         logic [31:0] src_end, dst_end;
+        // Scoreboard bounds, formed at push so the core's request path
+        // sees only compares against flops (no adders, no alignment mux).
+        logic [31:0] src_lo, dst_lo, hashes_end, header_end, source_header_end;
+        logic hashes_v, header_v, source_header_v;
         logic [31:0] qcount, qbase, qext;
     } command_t;
     command_t queue [2];
@@ -95,18 +99,17 @@ module mpy_collection #(parameter bit TYPE_CACHE=0, parameter int SHORTLIST_MAX=
             // Once a copy starts, its own scoreboard releases completed words.
             // A map retains whole-table ownership through count publication.
             if (occupied[i] && !(running && !owner_bulk && !owner_byte && head == 1'(i))) begin
-                if (chk_addr_i >= (queue[i].bytes_mode ? {queue[i].dst[31:2],2'b00} : queue[i].dst) && chk_addr_i < queue[i].dst_end)
+                if (chk_addr_i >= queue[i].dst_lo && chk_addr_i < queue[i].dst_end)
                     chk_busy_o = 1;
-                if (chk_we_i && chk_addr_i >= (queue[i].bytes_mode ? {queue[i].src[31:2],2'b00} : queue[i].src) && chk_addr_i < queue[i].src_end)
+                if (chk_we_i && chk_addr_i >= queue[i].src_lo && chk_addr_i < queue[i].src_end)
                     chk_busy_o = 1;
-                if (queue[i].bulk) begin
-                    if (chk_we_i && queue[i].hashes != 0 && chk_addr_i >= queue[i].hashes && chk_addr_i < queue[i].hashes+(queue[i].sn<<2))
-                        chk_busy_o = 1;
-                    if (queue[i].header != 0 && chk_addr_i >= queue[i].header && chk_addr_i < queue[i].header+16)
-                        chk_busy_o = 1;
-                    if (chk_we_i && queue[i].source_header != 0 && chk_addr_i >= queue[i].source_header && chk_addr_i < queue[i].source_header+16)
-                        chk_busy_o = 1;
-                end
+                // The *_v bits are only set for bulk commands.
+                if (chk_we_i && queue[i].hashes_v && chk_addr_i >= queue[i].hashes && chk_addr_i < queue[i].hashes_end)
+                    chk_busy_o = 1;
+                if (queue[i].header_v && chk_addr_i >= queue[i].header && chk_addr_i < queue[i].header_end)
+                    chk_busy_o = 1;
+                if (chk_we_i && queue[i].source_header_v && chk_addr_i >= queue[i].source_header && chk_addr_i < queue[i].source_header_end)
+                    chk_busy_o = 1;
             end
         end
     end
@@ -132,6 +135,14 @@ module mpy_collection #(parameter bit TYPE_CACHE=0, parameter int SHORTLIST_MAX=
                 queue[tail].source_header<=bulk_valid_i ? bulk_source_header_i : 32'd0;
                 queue[tail].src_end<=bulk_valid_i ? bulk_src_i+(bulk_sn_i<<(bulk_set_i?2:3)) : copy_byte_i ? ((copy_src_i+copy_n_i+3)&32'hfffffffc) : copy_src_i+(copy_n_i<<2);
                 queue[tail].dst_end<=bulk_valid_i ? bulk_dst_i+(bulk_dn_i<<(bulk_set_i?2:3)) : copy_byte_i ? ((copy_dst_i+copy_n_i+3)&32'hfffffffc) : copy_dst_i+(copy_n_i<<2);
+                queue[tail].src_lo<=bulk_valid_i ? bulk_src_i : copy_byte_i ? {copy_src_i[31:2],2'b00} : copy_src_i;
+                queue[tail].dst_lo<=bulk_valid_i ? bulk_dst_i : copy_byte_i ? {copy_dst_i[31:2],2'b00} : copy_dst_i;
+                queue[tail].hashes_v<=bulk_valid_i && bulk_hashes_i!=0;
+                queue[tail].header_v<=bulk_valid_i && bulk_header_i!=0;
+                queue[tail].source_header_v<=bulk_valid_i && bulk_source_header_i!=0;
+                queue[tail].hashes_end<=bulk_hashes_i+(bulk_sn_i<<2);
+                queue[tail].header_end<=bulk_header_i+32'd16;
+                queue[tail].source_header_end<=bulk_source_header_i+32'd16;
                 queue[tail].qcount<=qstr_count_i;
                 queue[tail].qbase<=qstr_base_i;
                 queue[tail].qext<=qstr_ext_i;

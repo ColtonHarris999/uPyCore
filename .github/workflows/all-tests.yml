@@ -52,6 +52,23 @@ jobs:
       - name: RTL unit testbenches
         run: make docker-test-unit
 
+  # Goldens against the unix oracle (32-bit, SSE binary32). No simulator.
+  goldens:
+    name: goldens
+    if: github.event.action != 'edited' || github.event.changes.base.ref.from
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Oracle toolchain
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-i686-linux-gnu libc6-i386 patch
+
+      - name: Build the oracle and check every golden
+        run: make oracle-variant check-goldens
+
   # Hardware tests, one job per area of upycore/programs/hw_tests.toml.
   # Each job verilates once, then runs the area from mpy-cross and from uPy2.
   # The compiler area calls compile/exec/eval on the hart, so that job is
@@ -93,7 +110,7 @@ jobs:
   # matches. It is a gate over the area jobs, not one suite run.
   all-tests:
     name: all-tests
-    needs: [host-tools, unit, hardware]
+    needs: [host-tools, unit, goldens, hardware]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     steps:
@@ -109,4 +126,5 @@ jobs:
           fi
           test "${{ needs.host-tools.result }}" = "success"
           test "${{ needs.unit.result }}" = "success"
+          test "${{ needs.goldens.result }}" = "success"
           test "${{ needs.hardware.result }}" = "success"

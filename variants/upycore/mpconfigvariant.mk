@@ -26,3 +26,8 @@ MPY_TOOL_FLAGS = -mlongint-impl longlong
 # The common variant header lives next to the stock unix variants, not
 # next to this directory.
 CFLAGS_EXTRA += -I$(TOP)/ports/unix/variants
+
+# Evaluate binary32 arithmetic in binary32. The i686 default is x87, whose
+# 80-bit intermediates make float expressions differ from a binary32 MCU
+# (Cortex-M4F, ESP32) and from the hart, which rounds every operation.
+CFLAGS_EXTRA += -msse2 -mfpmath=sse

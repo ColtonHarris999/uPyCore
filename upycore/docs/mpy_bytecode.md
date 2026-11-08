@@ -43,7 +43,7 @@ arguments the usual way, then returns a generator object and does not
 fetch. The object is six words: kind, type, the function, a status
 integer (bit 0 set while the body is running), a pending exception or
 `None`, and a `CONT` pointer to the frame block. The block is the
-16-word frame header, the state words, and the exception records. Saved
+17-word frame header, the state words, and the exception records. Saved
 `pc == 0` means the generator has finished.
 
 `YIELD_VALUE` (opcode `0x67`) captures the top of stack, stores `None`

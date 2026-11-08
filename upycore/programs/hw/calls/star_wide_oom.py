@@ -11,23 +11,30 @@ def f(*a):
 
 
 def fill():
+    # Big blocks first, then 64-byte ones into a list sized in advance, so
+    # no list growth can fail before the heap has no 64-byte hole left.
     try:
         while True:
             blobs.append(bytes(4096))
     except MemoryError:
         pass
+    i = 0
     try:
-        while True:
-            small.append(bytes(64))
+        while i < len(small):
+            small[i] = bytes(64)
+            i += 1
     except MemoryError:
         pass
 
 
+# Bind every global first, so the module dict does not grow after the
+# baseline and count as held memory.
+seq = blobs = small = pad = got = now = None
 gc.collect()
 empty = gc.mem_free()
 seq = (1,) * 200
 blobs = []
-small = []
+small = [None] * 600
 pad = bytes(64)
 got = 1
 fill()

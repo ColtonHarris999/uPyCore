@@ -1,0 +1,22 @@
+0.0
+0.0
+2.5
+2.5
+inf
+1
+0
+5
+5
+1073741824
+1073741825
+2147483648
+1099511627776
+4611686018427387904
+4611686018427387904
+nan
+5.0
+mag
+TypeError unsupported type for __abs__: 'str'
+TypeError unsupported type for __abs__: 'NoneType'
+TypeError unsupported type for __abs__: 'list'
+TypeError function takes 1 positional arguments but 2 were given

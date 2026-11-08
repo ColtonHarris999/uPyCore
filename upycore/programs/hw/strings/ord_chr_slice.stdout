@@ -1,0 +1,48 @@
+97
+0
+127
+233
+8364
+97
+255
+90
+TypeError ord() expected a character, but string of length 0 found
+TypeError ord() expected a character, but string of length 2 found
+TypeError ord() expected a character, but string of length 0 found
+TypeError ord() expected a character, but string of length 2 found
+TypeError can't convert 'bytearray' object to str implicitly
+TypeError can't convert 'int' object to str implicitly
+TypeError can't convert 'NoneType' object to str implicitly
+['\x00', '\t', '\n', 'A', 'a', '~', '\x7f', '', 'é', '€', '😀']
+ '\x00'
+ValueError
+ValueError
+OverflowError
+TypeError
+TypeError
+'' '' b'byt' bytearray(b'')
+' Ze' 'él' b'es ' bytearray(b' b')
+'n of P' 'lo ' b'and' bytearray(b'byte')
+'f Python,' 'o wör' b' mo' bytearray(b'ytearr')
+'ython, by Ti' 'wörld ' b're ' bytearray(b'tearray')
+'on, by Tim Pete' 'örld €ur' b'byt' bytearray(b'earray')
+' by Tim Peters' 'ld €uro' b'es' bytearray(b'array')
+' Tim Peters' 'd €uro' b'' bytearray(b'rray')
+'m Peters' '€uro' b'' bytearray(b'ray')
+'eters' 'uro' b'' bytearray(b'ay')
+'rs' 'o' b'' bytearray(b'y')
+'' '' b'' bytearray(b'')
+'' 'ers' 'Th' True ''
+1 1
+None dflt
+two two
+None dflt
+tup tup
+None dflt
+0 0
+f f
+two two
+None dflt
+1 5
+TypeError unsupported type for __hash__: 'list'
+[('Peters', 3), ('Python,', 3), ('The', 3), ('Tim', 3), ('Zen', 3), ('by', 3), ('of', 3)]

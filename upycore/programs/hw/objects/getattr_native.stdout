@@ -1,0 +1,13 @@
+1 1 9
+2 5 5 prop
+m m
+True {'x': 2}
+3 3 3
+AttributeError 'A' object has no attribute 'missing'
+TypeError can't convert 'int' object to str implicitly
+TypeError
+dyn:q dyn:q
+7 7 7
+0 dflt
+('v',)
+3 2 1

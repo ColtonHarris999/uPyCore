@@ -1,9 +1,9 @@
 # Container accelerator, scoreboard, and async ALU
 
-This branch also has an experimental bulk map engine. See
-[collection_accelerator.md](collection_accelerator.md) for implemented paths,
-measurements and the remaining gaps relative to the paper design. The copy
-engine descriptions and historical measurements below predate that integration.
+The bulk map engine and the short-list engine share this accelerator's
+queue and scoreboard; see [collection_accelerator.md](collection_accelerator.md)
+and [shortlist_engine.md](shortlist_engine.md). The copy engine descriptions
+and historical measurements below predate those engines.
 
 Status: `upycore/rtl/mpy_ca.sv` is the container accelerator (CA). It
 sits beside `mpy_core` and `mpy_gc` on the `mpy_soc` memory port. The
@@ -125,8 +125,27 @@ keeps no owner register.
 The CA uses the cycles the core leaves idle. A core access does not wait
 for a CA access to SRAM: the port is ready again one cycle after it takes
 one, and the core wins that cycle. A CA read from flash can hold the core
-for its wait states. The core is latency-bound (one access at a time), so
-the pipelined port does not change its own cycle counts.
+for its wait states.
+
+The core uses the pipelined port in two ways. A store is posted: the
+sequencer goes on once the port has taken it. `mpy_soc` keeps a request
+`mpy_mem` does not grant at once in a one-entry skid and presents it ahead
+of the core's next one, so the core never sees the grant itself (a
+cross-module path from the arbiter and the copy scoreboard into every
+core register enable); it stops only when it presents a store while the
+skid is full (`m_busy_i`, a flop). `mpy_mem` writes the SRAM (and the map
+cache snoops the write) in the grant cycle, so a store is complete for
+every master once granted. The core counts the store's ack still to come
+(`wpend`) and keeps its address in a 4-entry FIFO, so a faulting store
+halts with its own address a few cycles later. Multi-word reads (the
+frame header and stack on a return, the function object, raw-code header
+and module bases on a call, scratch images, complex operands) are bursts:
+a load is presented in every cycle the previous one was taken, and the
+acks are applied in order. A single load still waits for its ack, which
+arrives after those of older stores. `mpy_soc` answers accesses to the
+simulator page itself, and takes one only when none of the core's memory
+accesses is still waiting for its ack, so acks stay in order without the
+core decoding the address it presents.
 
 ## Async ALU
 

@@ -44,6 +44,12 @@ complex_nan_eq = { file = "hw/alu/complex_nan_eq.py" }
 complex_type_trap = { file = "hw/alu/complex_type_trap.py" }
 unary_invert_float_trap = { file = "hw/alu/unary_invert_float_trap.py" }
 compare_op_type_trap = { file = "hw/alu/compare_op_type_trap.py" }
+complex_abs = { file = "hw/alu/complex_abs.py", cycles = 30_000_000 }
+complex_div = { file = "hw/alu/complex_div.py", cycles = 30_000_000 }
+complex_pow = { file = "hw/alu/complex_pow.py", cycles = 60_000_000 }
+complex_fast = { file = "hw/alu/complex_fast.py", cycles = 60_000_000 }
+abs_edge = { file = "hw/alu/abs_edge.py" }
+round_edge = { file = "hw/alu/round_edge.py", cycles = 30_000_000 }
 
 [control]
 branch = { file = "hw/control/branch.py" }
@@ -141,6 +147,7 @@ varkw_dup_trap = { file = "hw/calls/varkw_dup_trap.py" }
 varkw_kwonly_missing_trap = { file = "hw/calls/varkw_kwonly_missing_trap.py" }
 
 [containers]
+in_seq_int = { file = "hw/containers/in_seq_int.py" }
 bulk_maps = { file = "hw/containers/bulk_maps.py", cycles = 300_000_000 }
 tuple_index_bounds = { cycles = 80_000_000 }
 lists = { file = "hw/containers/lists.py" }
@@ -160,6 +167,7 @@ list_setslice_rhs = { file = "hw/containers/list_setslice_rhs.py" }
 list_pop_insert = { file = "hw/containers/list_pop_insert.py" }
 shortlist = { file = "hw/containers/shortlist.py", cycles = 180_000_000, timeout = 2400 }
 shortlist_methods = { file = "hw/containers/shortlist_methods.py" }
+wide_display = { file = "hw/containers/wide_display.py", cycles = 80_000_000 }
 list_slice_step = { file = "hw/containers/list_slice_step.py", cycles = 120_000_000, timeout = 900 }
 list_concat_type_trap = { file = "hw/containers/list_concat_type_trap.py" }
 list_comp_fast_clear = { file = "hw/containers/list_comp_fast_clear.py" }
@@ -211,6 +219,7 @@ set_grow_basic = { file = "hw/containers/set_grow_basic.py" }
 ca_copy = { file = "hw/containers/ca_copy.py" }
 
 [strings]
+ord_chr_slice = { file = "hw/strings/ord_chr_slice.py" }
 text = { file = "hw/strings/text.py" }
 unicode = { file = "hw/strings/unicode.py" }
 bytesobj = { file = "hw/strings/bytesobj.py" }
@@ -280,6 +289,7 @@ raise_after_call_loop = { file = "hw/exceptions/raise_after_call_loop.py" }
 
 [objects]
 classes = { file = "hw/objects/classes.py" }
+getattr_native = { file = "hw/objects/getattr_native.py" }
 inherit = { file = "hw/objects/inherit.py" }
 mro_diamond = { file = "hw/objects/mro_diamond.py", oracle = true }
 mro_repeat = { file = "hw/objects/mro_repeat.py", oracle = true }
@@ -313,6 +323,7 @@ class_const = { file = "hw/objects/class_const.py" }
 class_two_instances = { file = "hw/objects/class_two_instances.py" }
 
 [builtins]
+ctor_native = { file = "hw/builtins/ctor_native.py" }
 hash_equivalence = { file = "hw/builtins/hash_equivalence.py", cycles = 100_000_000 }
 array_slice_bounds = { cycles = 80_000_000 }
 int_bytes_bounds = { cycles = 80_000_000 }

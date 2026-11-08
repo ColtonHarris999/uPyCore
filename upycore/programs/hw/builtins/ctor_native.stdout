@@ -1,0 +1,58 @@
+0.0 0
+0.0 0
+1.0 1
+-7.0 -7
+1073741800.0 1073741824
+-1073741800.0 -1073741824
+2147483600.0 2147483647
+1099511600000.0 1099511627776
+1.0 1
+0.0 0
+0.0 0
+-0.0 0
+1.5 1
+-2.75 -2
+10000000000.0 10000000000
+-3000000000.0 -3000000000
+2500000000.0 2500000000
+16777216.0 16777217
+123456790.0 123456789
+0
+0
+0
+-1
+2147483648
+2147483648
+-2147483648
+9199999718183141376
+OverflowError can't convert inf to int
+OverflowError can't convert inf to int
+ValueError can't convert NaN to int
+0.0 0 1.25 -42 255 2000.0
+2.0 True 4 True
+9.5
+int
+float
+str
+bytes
+list
+tuple
+dict
+set
+NoneType
+bool
+range
+complex
+type
+type
+function
+int
+Fl
+1
+float ValueError
+int ValueError
+float TypeError
+int TypeError
+float TypeError
+int TypeError
+TypeError

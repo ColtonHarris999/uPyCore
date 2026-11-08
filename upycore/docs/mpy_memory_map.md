@@ -44,8 +44,10 @@ link lives in the header, so a later spill frees one register per copied
 value (the first spill of a chain frees one fewer, because the new link
 occupies a freed slot). A walk reads one header word per chunk.
 
-There is no DRAM. There is no L1 and no L2. SRAM is one cycle. Flash adds
-`MPY_FLASH_WAIT_STATES` (default 1) on top of that cycle. The fetch queue
+There is no DRAM. There is no L1 and no L2. SRAM is one cycle. The image
+region is the same SRAM, so it adds no wait state
+(`MPY_FLASH_WAIT_STATES` is 0; the parameter remains for an external image
+memory). The fetch queue
 ([`mpy_boot.md`](mpy_boot.md#instruction-fetch)) holds instruction bytes
 only. It is not part of this data map.
 

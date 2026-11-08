@@ -4,7 +4,7 @@
 // Names below are the locked catalog. Current RTL does not read every one.
 /* verilator lint_off UNUSEDPARAM */
 
-// MicroPython value encoding (planning/micropython_pivot_plan.md §0.5, §6 item 6).
+// MicroPython value encoding (planning/old/micropython_pivot_plan.md §0.5, §6 item 6).
 // One architectural value is a 4-bit tag beside a 32-bit payload. The register
 // file is one 36-bit array. SRAM and flash data words stay 32 bits.
 
@@ -114,7 +114,9 @@ localparam logic [31:0] MPY_SIM_BASE  = 32'hE000_0000;
 localparam logic [31:0] MPY_SIM_BYTES = 32'd256;
 
 localparam int MPY_SRAM_LATENCY       = 1;
-localparam int MPY_FLASH_WAIT_STATES  = 1;
+// The image region is the same on-chip SRAM as data (mpy_mem), so it needs
+// no extra wait state. Kept as a parameter for an external image memory.
+localparam int MPY_FLASH_WAIT_STATES  = 0;
 
 localparam int MPY_SRAM_WORDS      = MPY_MEM_WORDS;  // maximum, reduced by image at boot
 localparam int MPY_FLASH_WORDS     = MPY_MEM_WORDS; // maximum image window

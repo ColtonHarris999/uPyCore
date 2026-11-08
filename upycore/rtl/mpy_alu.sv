@@ -359,7 +359,7 @@ module mpy_alu (
 
     // Float unit in binary64.
     logic [4:0]   fop;
-    logic [127:0] fres;
+    logic [63:0]  fres;
     logic [31:0]  fnarrow;
     logic [63:0]  fres_r;
     logic         fexc, fdone, fstall, fbusy;
@@ -377,8 +377,8 @@ module mpy_alu (
     end
     upycore_fpu u_fpu (
         .clk_i(clk_i), .rst_n_i(rst_n_i), .start_i(st == A_FPU),
-        .op_i(fop), .complex_i(1'b0),
-        .op_a_i({64'd0, fa64_r}), .op_b_i({64'd0, fb64_r}),
+        .op_i(fop),
+        .op_a_i(fa64_r), .op_b_i(fb64_r),
         .result_o(fres), .exception_o(fexc), .done_o(fdone), .stall_o(fstall), .busy_o(fbusy)
     );
     mpy_f32_narrow u_narrow (.d_i(fres_r), .q_o(fnarrow));
@@ -560,7 +560,7 @@ module mpy_alu (
                         st <= A_IDLE;
                         done_o <= 1'b1;
                     end else begin
-                        fres_r <= fres[63:0];
+                        fres_r <= fres;
                         st <= A_FNAR;
                     end
                 end
@@ -621,6 +621,6 @@ module mpy_alu (
     // verilator lint_off UNUSEDSIGNAL
     logic unused;
     assign unused = ^{izero, mul_stall, mul_busy, pow_stall, pow_busy, div_zero, div_stall, div_busy,
-                      fstall, fbusy, fres[127:64]};
+                      fstall, fbusy};
     // verilator lint_on UNUSEDSIGNAL
 endmodule

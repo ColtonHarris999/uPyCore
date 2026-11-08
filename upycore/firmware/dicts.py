@@ -66,6 +66,22 @@ def _keyeq(a, b):
         return False
     if _isint(a) and _isint(b):
         return a == b
+    if _tag(a) == TAG_TUPLE and _tag(b) == TAG_TUPLE:
+        # mp_obj_equal of two tuples, item by item, without the binop
+        # dispatch: an identical item that is not a float or complex is
+        # equal (a NaN is not equal to itself).
+        n = _ld(a, 0)
+        if n != _ld(b, 0):
+            return False
+        i = 1
+        while i <= n:
+            x = _ld(a, i)
+            y = _ld(b, i)
+            if not (x is y and _tag(x) != TAG_FLOAT and _tag(x) != TAG_COMPLEX):
+                if not _equal(x, y):
+                    return False
+            i += 1
+        return True
     return _equal(a, b)
 
 
@@ -289,7 +305,13 @@ def dict__copy(self):
     return d
 
 
-def dict__get(self, key, default=None):
+def _dict__get_fb(self, key, default=None):
+    # dict.get() for what the core's native does not take.
+    if not _isdict(self) and _isinst(self):
+        # A dict subclass instance: the dict it wraps.
+        sub = _subobj(self)
+        if sub is not NULL:
+            self = sub
     v = _dget(self, key)
     if v is NULL:
         return default
@@ -393,6 +415,16 @@ def _set_freeze(s, like):
 
 def _set_add_iter(dst, src):
     if _isset(src) and _mapbulk(dst, src, 1):
+        return
+    if _ld(dst, 0) == 0 and _ld(dst, 1) == 0:
+        # An empty set without a table (set(x), frozenset(x), a new union):
+        # the core's SET_ADD inserts and grows in hardware, in the same
+        # order and to the same sizes as _map_put, so a comprehension
+        # builds the table and dst takes it over (its flags word stays).
+        tmp = {k for k in src}
+        _st(dst, 2, _ld(tmp, 2))
+        _st(dst, 1, _ld(tmp, 1))
+        _st(dst, 0, _ld(tmp, 0))
         return
     for k in src:
         _map_put(dst, k, NULL, True)

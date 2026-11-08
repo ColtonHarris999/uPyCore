@@ -88,6 +88,9 @@ def _f(x):
     t = type(x)
     if t is float:
         return x
+    if t is int:
+        # What float(x) does for an int, without the call.
+        return x + 0.0
     # bool is not an int subclass on MicroPython, so it is named here.
     if t is bool or isinstance(x, int) or isinstance(x, float):
         return float(x)
@@ -145,9 +148,9 @@ def sqrt(x):
     if x > 0.0:
         if x == inf:
             return x
-        # The FPU's power unit is accurate to about 51 bits before rounding
-        # (upycore_fp_pow.sv), and a correctly rounded binary32 square root
-        # needs 2*24+2 = 50, so x ** 0.5 is the correctly rounded sqrt.
+        # The FPU sends ** 0.5 to the divider's correctly rounded binary64
+        # square root (upycore_fpu.sv, S_POW_SQRT); rounding that to binary32
+        # is correctly rounded too (53 >= 2*24+2).
         return x ** 0.5
     if x == 0.0 or x != x:
         return x
@@ -308,7 +311,7 @@ def _rem_pio2(x):
         # Medium size.
         t = abs(x)
         n = int(t * 0.6366198 + 0.5)
-        fn = float(n)
+        fn = n + 0.0
         r = t - fn * 1.5707855224609375
         w = fn * 1.0804334124259185e-05
         y0 = r - w
