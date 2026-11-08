@@ -32,28 +32,29 @@ Already fixed by the ongoing work, and not repeated below:
 
 The items below were implemented after the review. Measurements:
 `perf_inventory.py` (MicroPython `perf_bench`, `run()` cycles) and pystone
-(`timing_bench.py` source, 300 loops), on the same toolchain, before
-(`7f837a2`) and after.
+(`timing_bench.py` source, 300 loops), on the same toolchain: before
+(`7f837a2`), after the first round (`07f7bbf`), and after B1 (posted
+stores and burst loads). Change is from `7f837a2` to B1.
 
-| Workload | Before (`7f837a2`) | After | Change |
-| --- | ---: | ---: | ---: |
-| pystone (300 loops) | 12,118,317 | 11,376,711 | −6.12% |
-| bm_chaos | 6,948,057 | 6,514,714 | −6.24% |
-| bm_fannkuch | 1,557,883 | 1,222,304 | −21.54% |
-| bm_fft | 126,511,032 | 114,006,070 | −9.88% |
-| bm_float | 10,116,886 | 8,888,688 | −12.14% |
-| bm_hexiom | 57,598,499 | 52,958,870 | −8.06% |
-| bm_nqueens | 115,923,106 | 105,167,968 | −9.28% |
-| bm_wordcount | 22,934,138 | 21,906,937 | −4.48% |
-| core_locals | 93,410,486 | 84,450,064 | −9.59% |
-| core_qstr | 607,828 | 556,980 | −8.37% |
-| core_str | 36,138,426 | 33,169,284 | −8.22% |
-| core_yield_from | 10,028,620 | 9,997,283 | −0.31% |
-| misc_aes | 2,344,808 | 2,185,698 | −6.79% |
-| misc_mandel | 72,749,009 | 59,834,828 | −17.75% |
-| misc_pystone | 12,183,290 | 11,441,678 | −6.09% |
-| misc_raytrace | 11,031,168 | 10,203,308 | −7.50% |
-| int/float arithmetic loops (`timing_bench.py`) | | | −9.5% to −21.4% |
+| Workload | Before (`7f837a2`) | `07f7bbf` | B1 | Change |
+| --- | ---: | ---: | ---: | ---: |
+| pystone (300 loops) | 12,118,317 | 11,376,711 | 7,862,846 | −35.12% |
+| bm_chaos | 6,948,057 | 6,514,714 | 4,630,635 | −33.35% |
+| bm_fannkuch | 1,557,883 | 1,222,304 | 1,089,840 | −30.04% |
+| bm_fft | 126,511,032 | 114,006,070 | 84,669,609 | −33.07% |
+| bm_float | 10,116,886 | 8,888,688 | 6,897,023 | −31.83% |
+| bm_hexiom | 57,598,499 | 52,958,870 | 37,033,358 | −35.70% |
+| bm_nqueens | 115,923,106 | 105,167,968 | 76,020,859 | −34.42% |
+| bm_wordcount | 22,934,138 | 21,906,937 | 14,691,382 | −35.94% |
+| core_locals | 93,410,486 | 84,450,064 | 65,325,099 | −30.07% |
+| core_qstr | 607,828 | 556,980 | 398,100 | −34.50% |
+| core_str | 36,138,426 | 33,169,284 | 23,241,031 | −35.69% |
+| core_yield_from | 10,028,620 | 9,997,283 | 4,498,677 | −55.14% |
+| misc_aes | 2,344,808 | 2,185,698 | 1,564,805 | −33.27% |
+| misc_mandel | 72,749,009 | 59,834,828 | 43,918,564 | −39.63% |
+| misc_pystone | 12,183,290 | 11,441,678 | 7,927,682 | −34.93% |
+| misc_raytrace | 11,031,168 | 10,203,308 | 7,101,999 | −35.62% |
+| int/float arithmetic loops (`timing_bench.py`) | | | | −13.5% to −32.3% |
 
 Every result matches the oracle and the baseline. The hardware suite passes
 500 of 500 (mpy-cross), and the 28 RTL benches pass.
