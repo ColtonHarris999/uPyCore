@@ -33,31 +33,51 @@ Already fixed by the ongoing work, and not repeated below:
 The items below were implemented after the review. Measurements:
 `perf_inventory.py` (MicroPython `perf_bench`, `run()` cycles) and pystone
 (`timing_bench.py` source, 300 loops), on the same toolchain: before
-(`7f837a2`), after the first round (`07f7bbf`), and after B1 (posted
-stores and burst loads). Change is from `7f837a2` to B1.
+(`7f837a2`), after the first round (`07f7bbf`), after B1 (posted stores
+and burst loads), and latest (the benchmark-gap work below).
+Change is from `7f837a2` to latest; the geometric mean over the 15
+programs is 3.32x.
 
-| Workload | Before (`7f837a2`) | `07f7bbf` | B1 | Change |
-| --- | ---: | ---: | ---: | ---: |
-| pystone (300 loops) | 12,118,317 | 11,376,711 | 7,862,846 | −35.12% |
-| bm_chaos | 6,948,057 | 6,514,714 | 4,630,635 | −33.35% |
-| bm_fannkuch | 1,557,883 | 1,222,304 | 1,089,840 | −30.04% |
-| bm_fft | 126,511,032 | 114,006,070 | 84,669,609 | −33.07% |
-| bm_float | 10,116,886 | 8,888,688 | 6,897,023 | −31.83% |
-| bm_hexiom | 57,598,499 | 52,958,870 | 37,033,358 | −35.70% |
-| bm_nqueens | 115,923,106 | 105,167,968 | 76,020,859 | −34.42% |
-| bm_wordcount | 22,934,138 | 21,906,937 | 14,691,382 | −35.94% |
-| core_locals | 93,410,486 | 84,450,064 | 65,325,099 | −30.07% |
-| core_qstr | 607,828 | 556,980 | 398,100 | −34.50% |
-| core_str | 36,138,426 | 33,169,284 | 23,241,031 | −35.69% |
-| core_yield_from | 10,028,620 | 9,997,283 | 4,498,677 | −55.14% |
-| misc_aes | 2,344,808 | 2,185,698 | 1,564,805 | −33.27% |
-| misc_mandel | 72,749,009 | 59,834,828 | 43,918,564 | −39.63% |
-| misc_pystone | 12,183,290 | 11,441,678 | 7,927,682 | −34.93% |
-| misc_raytrace | 11,031,168 | 10,203,308 | 7,101,999 | −35.62% |
-| int/float arithmetic loops (`timing_bench.py`) | | | | −13.5% to −32.3% |
+| Workload | Before (`7f837a2`) | `07f7bbf` | B1 | Latest | Change |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| pystone (300 loops) | 12,118,317 | 11,376,711 | 7,862,846 | 6,330,841 | −47.76% |
+| bm_chaos | 6,948,057 | 6,514,714 | 4,630,635 | 3,950,473 | −43.14% |
+| bm_fannkuch | 1,557,883 | 1,222,304 | 1,089,840 | 1,088,976 | −30.10% |
+| bm_fft | 126,511,032 | 114,006,070 | 84,669,609 | 11,724,532 | −90.73% |
+| bm_float | 10,116,886 | 8,888,688 | 6,897,023 | 3,941,223 | −61.04% |
+| bm_hexiom | 57,598,499 | 52,958,870 | 37,033,358 | 17,480,169 | −69.65% |
+| bm_nqueens | 115,923,106 | 105,167,968 | 76,020,859 | 17,796,076 | −84.65% |
+| bm_wordcount | 22,934,138 | 21,906,937 | 14,691,382 | 7,955,907 | −65.31% |
+| core_locals | 93,410,486 | 84,450,064 | 65,325,099 | 6,167,330 | −93.40% |
+| core_qstr | 607,828 | 556,980 | 398,100 | 381,262 | −37.27% |
+| core_str | 36,138,426 | 33,169,284 | 23,241,031 | 8,826,549 | −75.58% |
+| core_yield_from | 10,028,620 | 9,997,283 | 4,498,677 | 4,449,935 | −55.63% |
+| misc_aes | 2,344,808 | 2,185,698 | 1,564,805 | 1,510,315 | −35.59% |
+| misc_mandel | 72,749,009 | 59,834,828 | 43,918,564 | 5,348,352 | −92.65% |
+| misc_pystone | 12,183,290 | 11,441,678 | 7,927,682 | 6,379,489 | −47.64% |
+| misc_raytrace | 11,031,168 | 10,203,308 | 7,101,999 | 6,527,797 | −40.82% |
+| int/float arithmetic loops (`timing_bench.py`) | | | | | −13.6% to −27.1%; int64 → float −87.9% |
 
 Every result matches the oracle and the baseline. The hardware suite passes
-500 of 500 (mpy-cross), and the 28 RTL benches pass.
+505 of 505 (mpy-cross) on the latest RTL.
+
+Benchmark-gap work (after B1), aimed at the programs furthest behind the
+reference microcontrollers; each item names the program it was found in:
+
+| Change | Where | Found in |
+| --- | --- | --- |
+| Complex `+ - *` with complex/float operands and `abs(complex)` on the ALU, objcomplex.c order | `S_CX*` | misc_mandel, bm_fft |
+| `getattr`/`setattr` natives over the LOAD_ATTR/STORE_ATTR microcode; a default for a plain-instance miss | `at_nat`, `S_GA_*` | core_locals |
+| `set(iterable)` via the core's SET_ADD; `int in list/tuple` scan; GET_ITER for common iterables and generators | `S_INS_*`, `S_GH*`, `S_GI_K` | bm_nqueens, bm_hexiom |
+| `dict.get`, `ord`, `chr`, `float()`, `int()`, `type()` natives | `S_N_DG`, `S_N_ORD*`, `S_N_NEW*` | bm_wordcount, core_str, bm_float |
+| Burst scratch-image loads; a lookup probe skips S_KEYEQ for two different qstrs/small ints | `S_SCR`, `S_LK_K` | bm_wordcount |
+| Firmware: byte-copy str slices, comprehension-built lists, `reversed(range)` arithmetic, tuple key equality, math `x + 0.0` | firmware, `runtime/math.py` | core_str, bm_nqueens, bm_hexiom, bm_float |
+
+Found while testing them and fixed: `getattr(o, name)` without a default
+returned `(0,)` on a miss (the linker copies the `_MISSING` sentinel),
+`chr()` of a non-int faulted, and `setattr`/`ord`/`chr` error types and
+messages differed from MicroPython. Open: a user `__setattr__` is never
+called, and built-in exception instances accept new attributes.
 
 | Item | Status |
 | --- | --- |
