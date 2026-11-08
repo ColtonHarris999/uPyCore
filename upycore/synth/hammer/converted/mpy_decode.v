@@ -1,4 +1,4 @@
-// Generated from the uPyCore RTL by mpy_dc_unit.py and sv2v v0.0.12
+// Generated from the uPyCore RTL by mpy_dc_unit.py and sv2v v0.0.13
 // (see ../README.md). Do not edit; regenerate with convert_rtl.sh.
 module mpy_decode (
 	instr_valid_i,

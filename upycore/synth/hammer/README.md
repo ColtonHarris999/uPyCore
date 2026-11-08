@@ -15,12 +15,12 @@ This flow produced the 18 ns post-route result and the Genus reports that
 
 ## Before the next run (November 2026 RTL)
 
-- **Regenerate `converted/`.** The RTL changed (`main` c788c64), so
-  `converted/*.v` and `RTL_STAMP` are stale and `sweep.sh` stops until
-  `convert_rtl.sh` is run where sv2v works (sv2v 0.0.13.1) and the result
-  is pushed.
-- **Timing.** The round was compared with f15327a (the RTL that closed at
-  10 and 11 ns) in an open flow (`upycore/tools/sta/`,
+- **`converted/` is regenerated** for this RTL (sv2v v0.0.13; against
+  0.0.13.1 the output differs only in sv2v's internal helper names). A
+  simulation built from `converted/mpy_core.v` runs pystone in exactly the
+  RTL's 6,635,675 cycles.
+- **Timing.** The round was compared with f15327a (whose full chip met
+  10 ns in synthesis and whose core closed at 15 ns after place and route) in an open flow (`upycore/tools/sta/`,
   `docs/timing_10ns.md`): `mpy_core` and `mpy_soc` are at or below the
   baseline's worst paths. Input-to-register paths are longer (about 40 %
   of the register-to-register plateau; the constraints allow 50 %).
