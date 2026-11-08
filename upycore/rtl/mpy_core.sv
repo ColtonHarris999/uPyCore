@@ -82,8 +82,9 @@ module mpy_core
     output logic [31:0] m_addr_o,
     output logic [31:0] m_wdata_o,
     output logic [3:0]  m_wtag_o,
-    // The port took the request presented this cycle (mpy_mem's grant).
-    input  logic        m_gnt_i,
+    // The port still holds an earlier request (mpy_soc's skid is full), so
+    // the one presented this cycle is not taken. A flop in mpy_soc.
+    input  logic        m_busy_i,
     input  logic        m_ack_i,
     input  logic [31:0] m_rdata_i,
     input  logic [3:0]  m_rtag_i,
@@ -999,28 +1000,26 @@ module mpy_core
 
     // memory port
     logic        m_req, m_we, m_tag_we;
-    // Posted stores. A store to memory is complete for every master once
-    // the port grants it (mpy_mem writes the SRAM in the grant cycle and
-    // completes accesses in order), so the sequencer moves on as soon as it
-    // is presented: wwait holds the sequencer only in a cycle where the
-    // store is presented and not yet granted. wpend counts granted stores
-    // whose acks are still to come; their addresses wait in wfifo so a
-    // faulting store still halts with its own address. A load still waits
-    // for its own ack, which the port returns after the older stores' acks.
-    // A simulator-page access is answered by mpy_soc, which grants it only
-    // when no memory access of the core is outstanding (see mpy_soc).
+    // Posted stores. The port takes a request in the cycle it is presented
+    // unless m_busy_i (mpy_soc keeps an ungranted request in a one-entry
+    // skid and serves it first, in order), so the sequencer moves on after
+    // presenting a store; it stops only while a store waits on m_busy_i.
+    // wpend counts stores taken whose acks are still to come; their
+    // addresses wait in wfifo so a faulting store still halts with its own
+    // address. A load waits for its own ack, which comes after the older
+    // stores' acks. A simulator-page access is answered by mpy_soc after
+    // the core's memory accesses (see mpy_soc).
     localparam int WQ = 4;
-    logic        wwait;
+    logic        m_wait;        // a request presented this cycle is not taken
+    assign m_wait = m_req && m_busy_i;
     logic [2:0]  wpend;
     logic [31:0] wfifo [0:WQ-1];
     logic [1:0]  wf_w, wf_r;
     logic        wfault_p;
-    // Burst loads (frame fill, call setup): a load is presented while earlier ones are
-    // still in flight; lwait marks one presented and not yet granted, and
-    // the next is presented only once it has been. Their acks arrive in
-    // order after any older posted stores' and are consumed by the burst
-    // state, which never waits in a frozen cycle.
-    logic        lwait;
+    // Burst loads (frame fill, call setup): a load is presented every cycle
+    // the previous one is taken (!m_wait). Their acks arrive in order after
+    // any older posted stores' and are consumed by the burst state, which
+    // is never stopped.
     logic [7:0]  bl_n;
     logic [2:0]  bl_k;          // acks taken by a call-setup burst
     logic [3:0]  wfault_code;
@@ -1722,13 +1721,13 @@ module mpy_core
         m_addr <= a; m_we <= 1'b0; m_tag_we <= 1'b0; m_be <= 4'hF;
         m_req <= 1'b1; wret <= nxt; st <= S_MWAIT;
     endtask
-    // A posted store: present it and go on (see wwait).
+    // A posted store: present it and go on (see m_busy_i).
     task automatic post(input logic [31:0] a, input state_e nxt);
-        m_req <= 1'b1; wwait <= 1'b1; st <= nxt;
+        m_req <= 1'b1; st <= nxt;
     endtask
     task automatic bload(input logic [31:0] a);
         m_addr <= a; m_we <= 1'b0; m_tag_we <= 1'b0; m_be <= 4'hF;
-        m_req <= 1'b1; lwait <= 1'b1;
+        m_req <= 1'b1;
     endtask
     // Start a complex operation on a and b (b unused for CX_ABS): the
     // first word of the operand burst, or straight to the ALU for floats.
@@ -1895,9 +1894,9 @@ module mpy_core
             rsp <= 5'd0;
             m_req <= 1'b0; m_we <= 1'b0; m_tag_we <= 1'b0; m_be <= 4'hF;
             m_addr <= 32'd0; m_wdata <= 32'd0; m_wtag <= 4'd0;
-            wwait <= 1'b0; wpend <= 3'd0; wf_w <= 2'd0; wf_r <= 2'd0;
+            wpend <= 3'd0; wf_w <= 2'd0; wf_r <= 2'd0;
             wfault_p <= 1'b0; wfault_code <= 4'd0; wfault_addr <= 32'd0;
-            lwait <= 1'b0; bl_n <= 8'd0; bl_k <= 3'd0;
+            bl_n <= 8'd0; bl_k <= 3'd0;
             for (int k = 0; k < WQ; k++) wfifo[k] <= 32'd0;
             gc_alloc_req <= 1'b0; gc_collect_req <= 1'b0;
             alu_start <= 1'b0; hm_start <= 1'b0; aalu_pend <= 1'b0; aalu_ready <= 1'b0; aalu_slot <= 4'd0; aalu_ret <= S_FETCH;
@@ -1945,7 +1944,9 @@ module mpy_core
             lc_fi <= 4'd0;
             lc_pick_r <= 3'd0;
         end else begin
-            m_req <= 1'b0;
+            // A request not taken stays presented (its fields are not
+            // changed until it is: stores stop the sequencer, loads wait).
+            m_req <= m_req && m_busy_i;
             lc_pick_r <= lc_pick_lru();
 `ifndef SYNTHESIS
             if (cfg_lc_n != 4'd0 && lc_pick_lru() != lc_pick_ref())
@@ -1968,14 +1969,12 @@ module mpy_core
             if (aalu_pend && alu_done) aalu_ready <= 1'b1;
 
             // Posted-store bookkeeping (before the sequencer, which may
-            // present the next store in a grant cycle and so set wwait again).
-            if (lwait && m_gnt_i) lwait <= 1'b0;
-            if (wwait && m_gnt_i) begin
-                wwait <= 1'b0;
+            // present the next request in the cycle this one is taken).
+            if (m_req && m_we && !m_busy_i) begin
                 wfifo[wf_w] <= m_addr;
                 wf_w <= wf_w + 2'd1;
                 // The store that publishes the override dict keeps the probe
-                // flop; nothing reads bov before this grant.
+                // flop; nothing reads bov before it is taken.
                 if (m_tag_we && m_addr == ABI_SYSROOT_BASE + 4 * ABI_SR_FW7)
                     bov <= {m_wtag, m_wdata};
             end
@@ -1989,15 +1988,16 @@ module mpy_core
                                    ABI_HALT_BUS;
                 end
             end
-            wpend <= wpend + ((wwait && m_gnt_i) ? 3'd1 : 3'd0) - ((m_ack_i && wpend != 3'd0) ? 3'd1 : 3'd0);
+            wpend <= wpend + ((m_req && m_we && !m_busy_i) ? 3'd1 : 3'd0) - ((m_ack_i && wpend != 3'd0) ? 3'd1 : 3'd0);
 `ifndef SYNTHESIS
-            if (wpend == 3'(WQ) && wwait && m_gnt_i) $error("posted-store queue overflow");
+            if (wpend == 3'(WQ) && m_req && m_we && !m_busy_i) $error("posted-store queue overflow");
 `endif
 
             // One test for both reasons the sequencer does not step, so the
             // case's late values pass a single mux: a posted store that
-            // faulted halts, and one still waiting for the port holds.
-            if (wfault_p || (wwait && !m_gnt_i)) begin
+            // faulted halts, and one still waiting on m_busy_i holds. A
+            // waiting load does not stop it: its state waits for the ack.
+            if (wfault_p || (m_req && m_we && m_busy_i)) begin
                 if (wfault_p && st != S_HALT) halt(wfault_code, wfault_addr);
             end else if (rf_pend && st != S_MWAIT && st != S_FL_H && st != S_FL_S &&
                 st != S_CF_B && st != S_CF_RC && st != S_CF_Q && st != S_CX && st != S_SCR && st != S_AALU_WB && st != S_RF_SPILL && st != S_RF_SPILL2 &&
@@ -2043,7 +2043,7 @@ module mpy_core
             end else begin
                 // A load is a burst (see S_FL_H): bl_n words presented,
                 // scr_i taken.
-                if (bl_n != {4'd0, scr_words(scr_cmd)} && (!lwait || m_gnt_i)) begin
+                if (bl_n != {4'd0, scr_words(scr_cmd)} && !m_wait) begin
                     bload(scr_addr(scr_cmd, bl_n[3:0]));
                     bl_n <= bl_n + 8'd1;
                 end
@@ -2187,7 +2187,7 @@ module mpy_core
                 st <= S_CF_B;
             end
             S_CF_B: begin
-                if (bl_n != 8'd5 && (!lwait || m_gnt_i)) begin
+                if (bl_n != 8'd5 && !m_wait) begin
                     bload(adr(ab_q) + 32'd8 + {22'd0, bl_n, 2'b00});
                     bl_n <= bl_n + 8'd1;
                 end
@@ -2219,7 +2219,7 @@ module mpy_core
             end
             S_CF_SIG: rc_burst();
             S_CF_RC: begin
-                if (bl_n != 8'd6 && (!lwait || m_gnt_i)) begin
+                if (bl_n != 8'd6 && !m_wait) begin
                     bload(c_rc + {22'd0, bl_n, 2'b00});
                     bl_n <= bl_n + 8'd1;
                 end
@@ -2289,7 +2289,7 @@ module mpy_core
                         i0 <= i0 + 8'd1;
                     end
             S_CF_Q: begin
-                if (bl_n != 8'd2 && (!lwait || m_gnt_i)) begin
+                if (bl_n != 8'd2 && !m_wait) begin
                     bload(c_md + 4 * ABI_MD_CONSTS);
                     bl_n <= bl_n + 8'd1;
                 end
@@ -2407,7 +2407,7 @@ module mpy_core
                 st <= S_FL_H;
             end
             S_FL_H: begin
-                if (bl_n != 8'd17 && (!lwait || m_gnt_i)) begin
+                if (bl_n != 8'd17 && !m_wait) begin
                     bload(fl_base + {22'd0, bl_n, 2'b00});
                     bl_n <= bl_n + 8'd1;
                 end
@@ -2464,7 +2464,7 @@ module mpy_core
             // The resident stack, by the same kind of burst.
             S_FL_S: if (fl_i == 32'(sp)) ret();
                     else begin
-                        if (bl_n != {1'b0, sp} && (!lwait || m_gnt_i)) begin
+                        if (bl_n != {1'b0, sp} && !m_wait) begin
                             bload(stack_base + {22'd0, bl_n, 2'b00});
                             bl_n <= bl_n + 8'd1;
                         end
@@ -4282,7 +4282,7 @@ module mpy_core
             // Complex operands: words 0-1 are a's (re, im), 2-3 are b's;
             // bl_n is the next word to present, bl_k the next to arrive.
             S_CX: begin
-                if (!lwait || m_gnt_i) begin
+                if (!m_wait) begin
                     if (bl_n == 8'd1) begin bload(cx_pa + 32'd4); bl_n <= 8'd2; end
                     else if (bl_n == 8'd2 && cx_bcx) begin bload(cx_pb); bl_n <= 8'd3; end
                     else if (bl_n == 8'd3) begin bload(cx_pb + 32'd4); bl_n <= 8'd4; end

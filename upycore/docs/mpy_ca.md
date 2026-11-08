@@ -128,16 +128,22 @@ one, and the core wins that cycle. A CA read from flash can hold the core
 for its wait states.
 
 The core uses the pipelined port in two ways. A store is posted: the
-sequencer goes on as soon as the port grants it, since `mpy_mem` writes
-the SRAM (and the map cache snoops the write) in the grant cycle. The core
-counts the store's ack still to come (`wpend`) and keeps its address in a
-4-entry FIFO, so a faulting store halts with its own address a few cycles
-later. Multi-word reads (the frame header and stack on a return, the
-function object, raw-code header and module bases on a call) are bursts:
-a load is presented in every cycle the previous one was granted, and the
+sequencer goes on once the port has taken it. `mpy_soc` keeps a request
+`mpy_mem` does not grant at once in a one-entry skid and presents it ahead
+of the core's next one, so the core never sees the grant itself (a
+cross-module path from the arbiter and the copy scoreboard into every
+core register enable); it stops only when it presents a store while the
+skid is full (`m_busy_i`, a flop). `mpy_mem` writes the SRAM (and the map
+cache snoops the write) in the grant cycle, so a store is complete for
+every master once granted. The core counts the store's ack still to come
+(`wpend`) and keeps its address in a 4-entry FIFO, so a faulting store
+halts with its own address a few cycles later. Multi-word reads (the
+frame header and stack on a return, the function object, raw-code header
+and module bases on a call, scratch images, complex operands) are bursts:
+a load is presented in every cycle the previous one was taken, and the
 acks are applied in order. A single load still waits for its ack, which
 arrives after those of older stores. `mpy_soc` answers accesses to the
-simulator page itself, and grants one only when none of the core's memory
+simulator page itself, and takes one only when none of the core's memory
 accesses is still waiting for its ack, so acks stay in order without the
 core decoding the address it presents.
 
