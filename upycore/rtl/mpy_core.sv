@@ -1084,6 +1084,13 @@ module mpy_core
     val_t        xp;
     logic        noframe;
     logic        rf_pend;
+    // The pending push (rf_pend) lands before the state runs, except in the
+    // states that take memory acks or move the register file themselves.
+    logic        rf_icpt;
+    assign rf_icpt = rf_pend && st != S_MWAIT && st != S_FL_H && st != S_FL_S &&
+        st != S_CF_B && st != S_CF_RC && st != S_CF_Q && st != S_CX && st != S_SCR && st != S_AALU_WB &&
+        st != S_RF_SPILL && st != S_RF_SPILL2 && st != S_RF_SPILL_W &&
+        st != S_RF_RELOAD && st != S_RF_RELOAD_R && st != S_RF_RELOAD_G;
     val_t        rf_pend_v;
     state_e      rf_resume;
     logic [31:0] spill_addr;
@@ -1993,17 +2000,17 @@ module mpy_core
             if (wpend == 3'(WQ) && m_req && m_we && !m_busy_i) $error("posted-store queue overflow");
 `endif
 
-            // One test for both reasons the sequencer does not step, so the
-            // case's late values pass a single mux: a posted store that
-            // faulted halts, and one still waiting on m_busy_i holds. A
-            // waiting load does not stop it: its state waits for the ack.
-            if (wfault_p || (m_req && m_we && m_busy_i)) begin
-                if (wfault_p && st != S_HALT) halt(wfault_code, wfault_addr);
-            end else if (rf_pend && st != S_MWAIT && st != S_FL_H && st != S_FL_S &&
-                st != S_CF_B && st != S_CF_RC && st != S_CF_Q && st != S_CX && st != S_SCR && st != S_AALU_WB && st != S_RF_SPILL && st != S_RF_SPILL2 &&
-                st != S_RF_SPILL_W &&
-                st != S_RF_RELOAD && st != S_RF_RELOAD_R && st != S_RF_RELOAD_G) begin
-                if (sp >= 7'(MPY_RF_DEPTH)) begin
+            // One test for every reason the microcode case does not run this
+            // cycle, so the case's late values pass a single mux: a posted
+            // store that faulted halts, one still waiting on m_busy_i holds
+            // (a waiting load does not: its state waits for the ack), and a
+            // pending push lands in the register file (rf_icpt).
+            if (wfault_p || (m_req && m_we && m_busy_i) || rf_icpt) begin
+                if (wfault_p) begin
+                    if (st != S_HALT) halt(wfault_code, wfault_addr);
+                end else if (m_req && m_we && m_busy_i) begin
+                    // hold
+                end else if (sp >= 7'(MPY_RF_DEPTH)) begin
                     rf_resume <= st;
                     st <= S_RF_SPILL;
                 end else begin
