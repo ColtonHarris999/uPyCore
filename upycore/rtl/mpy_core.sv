@@ -860,6 +860,9 @@ module mpy_core
         S_NAT_FB0,
         S_NAT_ISI,
         S_NAT_GA,
+        S_GA_K,
+        S_GA_T,
+        S_GA_F,
         S_NAT_SA1,
         S_NAT_SA2,
         S_NAT_MK,
@@ -935,7 +938,6 @@ module mpy_core
         S_N_STRNEW_A,
         S_N_STRNEW_B,
         S_SCR,
-        S_SCR_CAP,
         S_RH_LKA,
         S_RH_LKB,
         S_RH_LKC,
@@ -1796,7 +1798,7 @@ module mpy_core
     endtask
     task automatic scr_go_load(input logic [3:0] id, input state_e back);
         scr_cmd <= id; scr_i <= 4'd0; scr_storing <= 1'b0; scr_gosub_p <= 1'b0;
-        scr_ret <= back; st <= S_SCR;
+        bl_n <= 8'd0; scr_ret <= back; st <= S_SCR;
     endtask
     task automatic scr_go_store_gosub(input logic [3:0] id, input state_e target, input state_e back);
         scr_cmd <= id; scr_i <= 4'd0; scr_storing <= 1'b1; scr_gosub_p <= 1'b1;
@@ -1999,7 +2001,7 @@ module mpy_core
             end else if (wwait && !m_gnt_i) begin
                 // A posted store is still waiting for the port: hold.
             end else if (rf_pend && st != S_MWAIT && st != S_FL_H && st != S_FL_S &&
-                st != S_CF_B && st != S_CF_RC && st != S_CF_Q && st != S_CX && st != S_AALU_WB && st != S_RF_SPILL && st != S_RF_SPILL2 &&
+                st != S_CF_B && st != S_CF_RC && st != S_CF_Q && st != S_CX && st != S_SCR && st != S_AALU_WB && st != S_RF_SPILL && st != S_RF_SPILL2 &&
                 st != S_RF_SPILL_W &&
                 st != S_RF_RELOAD && st != S_RF_RELOAD_R && st != S_RF_RELOAD_G) begin
                 if (sp >= 7'(MPY_RF_DEPTH)) begin
@@ -2041,12 +2043,21 @@ module mpy_core
                 else
                     wr(scr_addr(scr_cmd, scr_i), {4'd0, sA[scr_i[2:0]]}, S_SCR);
                 scr_i <= scr_i + 4'd1;
-            end else rd(scr_addr(scr_cmd, scr_i), S_SCR_CAP);
-            S_SCR_CAP: begin
-                if (scr_tag(scr_cmd, scr_i)) sV[scr_i[2:0]] <= mv;
-                else sA[scr_i[2:0]] <= md;
-                scr_i <= scr_i + 4'd1;
-                st <= S_SCR;
+            end else begin
+                // A load is a burst (see S_FL_H): bl_n words presented,
+                // scr_i taken.
+                if (bl_n != {4'd0, scr_words(scr_cmd)} && (!lwait || m_gnt_i)) begin
+                    bload(scr_addr(scr_cmd, bl_n[3:0]));
+                    bl_n <= bl_n + 8'd1;
+                end
+                if (m_ack_i && wpend == 3'd0) begin
+                    if (m_fault_i) halt(fault_code(m_fault_reason_i), scr_addr(scr_cmd, scr_i));
+                    else begin
+                        if (scr_tag(scr_cmd, scr_i)) sV[scr_i[2:0]] <= {m_rtag_i, m_rdata_i};
+                        else sA[scr_i[2:0]] <= m_rdata_i;
+                        scr_i <= scr_i + 4'd1;
+                    end
+                end
             end
 
             // ---------------- boot ----------------
@@ -3018,6 +3029,12 @@ module mpy_core
             // is the firmware's.
             S_LA_R: if (at_nat) begin
                 if (at_kind == 2'd1) deliver(at_v, crk);
+                // A miss with a default on a plain instance: the default,
+                // unless the type has __getattr__ (or is a native subclass)
+                // or the name is one _special_attr answers.
+                else if (at_kind == 2'd0 && ab_pe - ab_lo == 8'd3 && tg(t[0]) == ABI_TAG_OBJECT &&
+                         at_q != ABI_Q_CLASS_D && at_q != ABI_Q_DICT_D)
+                    rd(adr(t[0]), S_GA_K);
                 else st <= S_NAT_FB;
             end else case (at_kind)
                 2'd1: begin
@@ -4734,6 +4751,11 @@ module mpy_core
                           at_q <= mv[31:0]; at_nat <= 1'b1; t[0] <= ab_q;
                           gosub_scr(SCR_AT, S_AT, S_LA_R);
                       end
+            S_GA_K: if (md != ABI_OB_INSTANCE) st <= S_NAT_FB;
+                    else rd(adr(t[0]) + 32'd4, S_GA_T);
+            S_GA_T: rd(adr(mv) + 32'd28, S_GA_F);
+            S_GA_F: if (md & (ABI_TF_GETATTR | ABI_TF_NATIVE_SUB)) st <= S_NAT_FB;
+                    else rd(ab_ptr(ab_lo + 8'd2), S_N_RV);
             S_NAT_SA1: if (tg(mv) != ABI_TAG_QSTR) st <= S_NAT_FB;
                        else begin at_q <= mv[31:0]; rd(ab_ptr(ab_lo + 8'd2), S_NAT_SA2); end
             S_NAT_SA2: begin at_nat <= 1'b1; t[0] <= ab_q; t[6] <= mv; st <= S_SA; end
@@ -5355,6 +5377,10 @@ module mpy_core
                         if (!lk_hasav) begin lk_hasav <= 1'b1; `lk_avail <= `lk_slot; end
                         st <= S_LK_NX;
                     end else if (mv == t[5]) st <= S_LK_HIT;
+                    // Two different qstrs, or two different small ints, are
+                    // different keys (S_KEYEQ's first answers): next slot.
+                    else if ((tg(mv) == ABI_TAG_QSTR && tg(t[5]) == ABI_TAG_QSTR) ||
+                             (tg(mv) == ABI_TAG_INT && tg(t[5]) == ABI_TAG_INT)) st <= S_LK_NX;
                     else begin ke_a <= mv; ke_b <= t[5]; gosub(S_KEYEQ, S_LK_KE); end
             S_LK_KE: if (ke_cx) begin lk_cx <= 1'b1; ret(); end
                      else if (scr_id != SCR_LK) scr_ensure(SCR_LK, S_LK_KE);

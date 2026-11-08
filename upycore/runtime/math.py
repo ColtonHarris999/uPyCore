@@ -88,6 +88,9 @@ def _f(x):
     t = type(x)
     if t is float:
         return x
+    if t is int:
+        # What float(x) does for an int, without the call.
+        return x + 0.0
     # bool is not an int subclass on MicroPython, so it is named here.
     if t is bool or isinstance(x, int) or isinstance(x, float):
         return float(x)
@@ -308,7 +311,7 @@ def _rem_pio2(x):
         # Medium size.
         t = abs(x)
         n = int(t * 0.6366198 + 0.5)
-        fn = float(n)
+        fn = n + 0.0
         r = t - fn * 1.5707855224609375
         w = fn * 1.0804334124259185e-05
         y0 = r - w
