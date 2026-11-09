@@ -201,8 +201,33 @@ module iocore_top #(
     assign rgn = region(d_addr);
     assign off = d_addr[7:0];
     assign bad_size = (rgn != R_DATA) && (d_be != 4'hF || d_addr[1:0] != 2'b00);
-    assign d_gnt = d_req && ((rgn != R_UART || uart_ready) && (rgn != R_BRIDGE || br_ready) || bad_size);
+    // Accesses to the six blocks ported from the epic branch (PWM to pin
+    // mux) reach them a clock later, from flops (pw_*), and answer a clock
+    // after that: their write logic is deep (the I2C controller's command
+    // start, the watchdog's kick and count), and from the core's address
+    // it was the island's longest path. No data access is granted while
+    // one is in the stage, so the answers stay in order (the core waits
+    // for each rvalid anyway).
+    logic        pw_v, pw_we;
+    logic [3:0]  pw_rgn;
+    logic [7:0]  pw_off;
+    logic [31:0] pw_wdata;
+    logic        ep_take;
+    assign d_gnt = d_req && !pw_v && ((rgn != R_UART || uart_ready) && (rgn != R_BRIDGE || br_ready)
+                                      || bad_size);
     assign take  = d_req && d_gnt;
+    assign ep_take = take && !bad_size && rgn >= R_PWM;
+    always_ff @(posedge io_clk_i or negedge core_rst_n) begin
+        if (!core_rst_n) begin
+            pw_v <= 1'b0; pw_we <= 1'b0; pw_rgn <= R_NONE; pw_off <= 8'h0; pw_wdata <= 32'h0;
+        end else begin
+            pw_v <= ep_take;
+            pw_we <= d_we; pw_rgn <= rgn; pw_off <= off; pw_wdata <= d_wdata;
+        end
+    end
+    function automatic logic ep_req(input logic [3:0] r);
+        return pw_v && pw_rgn == r;
+    endfunction
 
     // ---- data SRAM ----
     logic           m_v, m_w;
@@ -316,22 +341,22 @@ module iocore_top #(
     logic [3:0]  pwm;
     logic        spi_sck, spi_mosi, spi_miso, scl_low, sda_low, scl_in, sda_in, uart_rxd_mux, uart_txd;
     logic        wdt_reset;
-    iocore_pwm u_pwm (.clk_i(io_clk_i), .rst_n_i(core_rst_n), .req_i(take && !bad_size && rgn == R_PWM),
-        .we_i(d_we), .off_i({4'h2, off}), .wdata_i(d_wdata), .rdata_o(pwm_rdata), .pwm_o(pwm), .wrap_o());
-    iocore_spi u_spi (.clk_i(io_clk_i), .rst_n_i(core_rst_n), .req_i(take && !bad_size && rgn == R_SPI),
-        .we_i(d_we), .off_i({4'h3, off}), .wdata_i(d_wdata), .rdata_o(spi_rdata),
+    iocore_pwm u_pwm (.clk_i(io_clk_i), .rst_n_i(core_rst_n), .req_i(ep_req(R_PWM)),
+        .we_i(pw_we), .off_i({4'h2, pw_off}), .wdata_i(pw_wdata), .rdata_o(pwm_rdata), .pwm_o(pwm), .wrap_o());
+    iocore_spi u_spi (.clk_i(io_clk_i), .rst_n_i(core_rst_n), .req_i(ep_req(R_SPI)),
+        .we_i(pw_we), .off_i({4'h3, pw_off}), .wdata_i(pw_wdata), .rdata_o(spi_rdata),
         .sck_o(spi_sck), .mosi_o(spi_mosi), .miso_i(spi_miso), .irq_o(spi_irq));
-    iocore_i2c u_i2c (.clk_i(io_clk_i), .rst_n_i(core_rst_n), .req_i(take && !bad_size && rgn == R_I2C),
-        .we_i(d_we), .off_i({4'h4, off}), .wdata_i(d_wdata), .rdata_o(i2c_rdata),
+    iocore_i2c u_i2c (.clk_i(io_clk_i), .rst_n_i(core_rst_n), .req_i(ep_req(R_I2C)),
+        .we_i(pw_we), .off_i({4'h4, pw_off}), .wdata_i(pw_wdata), .rdata_o(i2c_rdata),
         .scl_low_o(scl_low), .sda_low_o(sda_low), .scl_i(scl_in), .sda_i(sda_in), .irq_o(i2c_irq));
-    iocore_wdt u_wdt (.clk_i(io_clk_i), .rst_n_i(core_rst_n), .req_i(take && !bad_size && rgn == R_WDT),
-        .we_i(d_we), .off_i({4'h5, off}), .wdata_i(d_wdata), .rdata_o(wdt_rdata),
+    iocore_wdt u_wdt (.clk_i(io_clk_i), .rst_n_i(core_rst_n), .req_i(ep_req(R_WDT)),
+        .we_i(pw_we), .off_i({4'h5, pw_off}), .wdata_i(pw_wdata), .rdata_o(wdt_rdata),
         .tick_i(ms_tick), .wdt_reset_o(wdt_reset));
-    iocore_adc u_adc (.clk_i(io_clk_i), .rst_n_i(core_rst_n), .req_i(take && !bad_size && rgn == R_ADC),
-        .we_i(d_we), .off_i({4'h8, off}), .wdata_i(d_wdata), .rdata_o(adc_rdata),
+    iocore_adc u_adc (.clk_i(io_clk_i), .rst_n_i(core_rst_n), .req_i(ep_req(R_ADC)),
+        .we_i(pw_we), .off_i({4'h8, pw_off}), .wdata_i(pw_wdata), .rdata_o(adc_rdata),
         .adc_start_o, .adc_chan_o, .adc_done_i, .adc_code_i);
-    iocore_pinmux u_mux (.clk_i(io_clk_i), .rst_n_i(core_rst_n), .req_i(take && !bad_size && rgn == R_MUX),
-        .we_i(d_we), .off_i({4'h9, off}), .wdata_i(d_wdata), .rdata_o(mux_rdata),
+    iocore_pinmux u_mux (.clk_i(io_clk_i), .rst_n_i(core_rst_n), .req_i(ep_req(R_MUX)),
+        .we_i(pw_we), .off_i({4'h9, pw_off}), .wdata_i(pw_wdata), .rdata_o(mux_rdata),
         .gpio_out_i(g_out), .gpio_oe_i(g_oe), .pwm_i(pwm), .spi_sck_i(spi_sck), .spi_mosi_i(spi_mosi),
         .i2c_scl_low_i(scl_low), .i2c_sda_low_i(sda_low), .uart_txd_i(uart_txd),
         .uart_rxd_pin_i(uart_rxd_i), .spi_miso_o(spi_miso), .i2c_scl_o(scl_in), .i2c_sda_o(sda_in),
@@ -368,23 +393,29 @@ module iocore_top #(
         if (!core_rst_n) begin
             d_rvalid <= 1'b0; d_err <= 1'b0; sel_q <= R_NONE; rdata_q <= 32'h0;
         end else begin
-            d_rvalid <= take;
+            // A ported block answers from the stage, a clock later.
+            d_rvalid <= (take && !ep_take) || pw_v;
             d_err    <= take && (rgn == R_NONE || bad_size);
-            sel_q    <= rgn;
-            case (rgn)
-                R_SYS:   rdata_q <= sys_rdata;
-                R_TIMER: rdata_q <= timer_rdata;
-                R_UART:  rdata_q <= uart_rdata;
-                R_BRIDGE: rdata_q <= br_rdata;
-                R_GPIO:  rdata_q <= gpio_rdata;
-                R_PWM:   rdata_q <= pwm_rdata;
-                R_SPI:   rdata_q <= spi_rdata;
-                R_I2C:   rdata_q <= i2c_rdata;
-                R_WDT:   rdata_q <= wdt_rdata;
-                R_ADC:   rdata_q <= adc_rdata;
-                R_MUX:   rdata_q <= mux_rdata;
-                default: rdata_q <= 32'h0;
-            endcase
+            sel_q    <= pw_v ? pw_rgn : rgn;
+            if (pw_v) begin
+                case (pw_rgn)
+                    R_PWM:   rdata_q <= pwm_rdata;
+                    R_SPI:   rdata_q <= spi_rdata;
+                    R_I2C:   rdata_q <= i2c_rdata;
+                    R_WDT:   rdata_q <= wdt_rdata;
+                    R_ADC:   rdata_q <= adc_rdata;
+                    default: rdata_q <= mux_rdata;
+                endcase
+            end else begin
+                case (rgn)
+                    R_SYS:   rdata_q <= sys_rdata;
+                    R_TIMER: rdata_q <= timer_rdata;
+                    R_UART:  rdata_q <= uart_rdata;
+                    R_BRIDGE: rdata_q <= br_rdata;
+                    R_GPIO:  rdata_q <= gpio_rdata;
+                    default: rdata_q <= 32'h0;
+                endcase
+            end
         end
     end
     assign d_rdata = (sel_q == R_DATA) ? m_q : rdata_q;
