@@ -616,3 +616,15 @@ con_input = { file = "hw/console/con_input.py", oracle = false }
 con_input_uart = { file = "hw/console/con_input.py", golden_base = "hw/console/con_input_uart", oracle = false, sim_args = ["+CONSOLE=uart", '+UART_IN=bob\rax\x08c\r\nxyzrest of line\n', "+UART_IN_US=3000"], cycles = 40_000_000, timeout = 300 }
 repl_friendly = { file = "hw/console/repl.py", golden_base = "hw/console/repl_friendly", repl = true, uart_script = "hw/console/repl_friendly.uart", oracle = false, sim_args = ["+CONSOLE=uart"], cycles = 400_000_000, timeout = 3600 }
 repl_raw = { file = "hw/console/repl.py", golden_base = "hw/console/repl_raw", repl = true, uart_script = "hw/console/repl_raw.uart", oracle = false, sim_args = ["+CONSOLE=uart"], cycles = 400_000_000, timeout = 3600 }
+con_print_usb = { file = "hw/console/con_print.py", golden_base = "hw/console/con_print_usb", oracle = false, usb_script = "hw/console/con_print_usb.usb", sim_args = ["+CONSOLE=usb"], cycles = 400_000_000, timeout = 1800 }
+con_input_usb = { file = "hw/console/con_input.py", golden_base = "hw/console/con_input_usb", oracle = false, usb_script = "hw/console/con_input_usb.usb", sim_args = ["+CONSOLE=usb"], cycles = 400_000_000, timeout = 1800 }
+repl_friendly_usb = { file = "hw/console/repl.py", golden_base = "hw/console/repl_friendly_usb", repl = true, usb_script = "hw/console/repl_friendly_usb.usb", oracle = false, sim_args = ["+CONSOLE=usb"], cycles = 800_000_000, timeout = 3600 }
+
+# USB CDC (phase 7): the I/O core's no2usb SIE and TinyUSB, the console on
+# USB (+CONSOLE=usb), and the bench's USB host (iocore/tb/tb_usb_host.sv)
+# running each test's .usb script. Hand-written goldens.
+[usb]
+usb_loopback = { file = "hw/usb/loopback.py", oracle = false, usb_script = "hw/usb/loopback.usb", sim_args = ["+CONSOLE=usb"], cycles = 400_000_000, timeout = 1800 }
+usb_ctrl_c = { file = "hw/usb/ctrl_c.py", oracle = false, usb_script = "hw/usb/ctrl_c.usb", sim_args = ["+CONSOLE=usb"], cycles = 400_000_000, timeout = 1800 }
+usb_suspend = { file = "hw/usb/suspend.py", oracle = false, usb_script = "hw/usb/suspend.usb", sim_args = ["+CONSOLE=usb"], cycles = 400_000_000, timeout = 1800 }
+usb_repl_raw = { file = "hw/usb/repl_raw.py", oracle = false, repl = true, usb_script = "hw/usb/repl_raw.usb", sim_args = ["+CONSOLE=usb"], cycles = 800_000_000, timeout = 3600 }

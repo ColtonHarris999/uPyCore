@@ -67,6 +67,12 @@ module iocore_top #(
     // synchronizes it).
     output logic        wdt_toggle_o,
 
+    // USB: the SIE's 48 MHz clock and the D+/D- pads (iocore_usb).
+    input  logic        usb_clk_i,
+    inout  wire         usb_dp_io,
+    inout  wire         usb_dn_io,
+    output logic        usb_pu_o,
+
     // The timer's microsecond and millisecond counts in gray code, from
     // flops, for mpy_iobr's tick crossing (one bit changes per count).
     output logic [31:0] us_gray_o,
@@ -101,6 +107,7 @@ module iocore_top #(
     (* keep *) logic [NPINS-1:0] q_gpio_i;
     (* keep *) logic q_adc_done_i;
     (* keep *) logic [11:0] q_adc_code_i;
+    (* keep *) logic q_usb_clk_i;
     always_ff @(posedge io_clk_i) begin
         q_io_rst_n_i <= io_rst_n_i;
         q_run_i <= run_i;
@@ -123,6 +130,7 @@ module iocore_top #(
         q_gpio_i <= gpio_i;
         q_adc_done_i <= adc_done_i;
         q_adc_code_i <= adc_code_i;
+        q_usb_clk_i <= usb_clk_i;
     end
     // Outputs start at flops (their own sources, not the inputs).
     (* keep *) logic r_ld_pop_o;
@@ -185,6 +193,9 @@ module iocore_top #(
     (* keep *) logic r_wdt_toggle_o;
     always_ff @(posedge io_clk_i) r_wdt_toggle_o <= r_wdt_toggle_o + 1'b1;
     assign wdt_toggle_o = r_wdt_toggle_o;
+    (* keep *) logic r_usb_pu_o;
+    always_ff @(posedge io_clk_i) r_usb_pu_o <= r_usb_pu_o + 1'b1;
+    assign usb_pu_o = r_usb_pu_o;
     (* keep *) logic [31:0] r_us_gray_o;
     always_ff @(posedge io_clk_i) r_us_gray_o <= r_us_gray_o + 1'b1;
     assign us_gray_o = r_us_gray_o;

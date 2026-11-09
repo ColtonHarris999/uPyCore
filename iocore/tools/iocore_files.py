@@ -25,7 +25,15 @@ HAZARD3_RTL = [f"vendor/hazard3/hdl/{n}" for n in (
     "hazard3_regfile_1w2r.v", "hazard3_triggers.v")]
 HAZARD3_INCDIRS = ["vendor/hazard3/hdl"]
 
-ISLAND_RTL = [
+# The USB device (phase 7): the vendored no2usb SIE, unmodified, behind
+# iocore/rtl/usb (generic iCE40 cells, the usb_clk bridge).
+NO2USB_RTL = [f"vendor/no2usb/rtl/{n}.v" for n in (
+    "usb_crc", "usb_ep_buf", "usb_ep_status", "usb_phy", "usb_rx_ll", "usb_rx_pkt",
+    "usb_trans", "usb_tx_ll", "usb_tx_pkt", "usb")]
+USB_RTL = ["iocore/rtl/usb/bsg_mem_1r1w_sync_mask_write_bit.sv", "iocore/rtl/usb/ice40_cells.sv"] + NO2USB_RTL + ["iocore/rtl/usb/iocore_usb.sv"]
+USB_INCDIRS = ["vendor/no2usb/rtl", "iocore/rtl/usb"]
+
+ISLAND_RTL = USB_RTL + [
     "upycore/rtl/bsg_mem_1rw_sync_mask_write_bit.sv",
     "iocore/rtl/iocore_timer.sv", "iocore/rtl/iocore_uart.sv", "iocore/rtl/iocore_bridge.sv", "iocore/rtl/iocore_gpio.sv",
     "iocore/rtl/iocore_pwm.sv", "iocore/rtl/iocore_spi.sv", "iocore/rtl/iocore_i2c.sv",
@@ -41,7 +49,7 @@ def island(core: str = "both") -> tuple[list[str], list[str]]:
     needs only the chosen one's sources, but a simulator build that can pick
     either at run time needs both."""
 
-    files, inc = [], []
+    files, inc = [], list(USB_INCDIRS)
     if core in ("cve2", "both"):
         files += CVE2_RTL
         inc += CVE2_INCDIRS

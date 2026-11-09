@@ -9,13 +9,13 @@
 # ~/ee477/ee477-designs-module1/upycore_v2_p12 ...). Each run takes one Genus
 # license and several cores, so start three or four at a time.
 #
-# The whole chip with its seven SRAM macros (four image/data blocks, the GC
-# table, the I/O island's code and data): TOP=mpy_soc sweep.sh start 20 15
+# The whole chip with its sixteen SRAM macros (four image/data blocks, the GC
+# table, the I/O island's code and data, the USB SIE's nine): TOP=mpy_soc sweep.sh start 20 15
 # runs `make sram` and then `make syn` in each folder (upycore_soc_p20 ...),
 # with the core from converted/mpy_core.v and the die DIE="w h" in um
 # (default 4000 3000). SOC_RTL=converted takes the whole chip from
 # converted/mpy_soc.v instead, for when Genus rejects the generated
-# SystemVerilog. status then also counts the macros in each netlist (want 7).
+# SystemVerilog. status then also counts the macros in each netlist (want 16).
 # io_clk (the I/O island) is 20 ns in every folder; IO_PERIOD=<ns> changes it.
 set -e
 here=$(cd "$(dirname "$0")" && pwd)

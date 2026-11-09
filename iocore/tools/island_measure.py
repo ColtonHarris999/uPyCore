@@ -35,6 +35,14 @@ module bsg_mem_1rw_sync_mask_write_bit #(parameter int width_p = 1, parameter in
     input logic [addr_width_lp-1:0] addr_i, input logic v_i, input logic [width_p-1:0] w_mask_i,
     input logic w_i, output logic [width_p-1:0] data_o);
 endmodule
+(* blackbox *)
+module bsg_mem_1r1w_sync_mask_write_bit #(parameter int width_p = 1, parameter int els_p = 1,
+    parameter int read_write_same_addr_p = 0,
+    parameter int addr_width_lp = (els_p > 1) ? $clog2(els_p) : 1) (
+    input logic clk_i, input logic reset_i, input logic w_v_i, input logic [width_p-1:0] w_mask_i,
+    input logic [addr_width_lp-1:0] w_addr_i, input logic [width_p-1:0] w_data_i, input logic r_v_i,
+    input logic [addr_width_lp-1:0] r_addr_i, output logic [width_p-1:0] r_data_o);
+endmodule
 """
 
 
@@ -50,16 +58,47 @@ def split_verilog(files: list[str]) -> tuple[list[str], list[str]]:
 
 # Tops that are not the island: the hart-side bridge (its FIFOs are the
 # clock-domain crossing, counted in the I/O work's area budget).
-OTHER_TOPS = {"mpy_iobr": (["upycore/rtl/mpy_async_fifo.sv", "upycore/rtl/mpy_iobr.sv"], [])}
+OTHER_TOPS = {"mpy_iobr": (["upycore/rtl/mpy_async_fifo.sv", "upycore/rtl/mpy_iobr.sv"], []),
+              # The USB device alone (it is also inside iocore_top).
+              "iocore_usb": (F.USB_RTL, F.USB_INCDIRS)}
+
+
+def _yosys_usb(files: list[str]) -> list[str]:
+    """Copies of two no2usb files for the open flow, the vendored files
+    unchanged (every simulator and the class flow read them as they are):
+    usb.v wraps one asynchronously reset register block in `if (IRQ)`,
+    which Yosys's flop inference rejects (the copy drops the wrapper, the
+    same logic for IRQ = 1, iocore_usb's setting); usb_rx_ll.v gives one
+    register an initial value "for simulation benefit only", which becomes
+    a $initstate cell the timer cannot read (the copy drops it)."""
+    edits = {
+        "vendor/no2usb/rtl/usb.v": ("\talways @(posedge clk or posedge rst)\n\t\tif (IRQ) begin\n",
+                                    "\talways @(posedge clk or posedge rst)\n\t\tbegin\n"),
+        "vendor/no2usb/rtl/usb_rx_ll.v": ("reg  [1:0] dec_sym_1 = 2'b00;", "reg  [1:0] dec_sym_1;"),
+    }
+    out = []
+    for f in files:
+        if f in edits:
+            old, new = edits[f]
+            text = (ROOT / f).read_text()
+            assert old in text, f"{f} changed: update _yosys_usb"
+            dst = ROOT / "build" / "iocore" / "measure" / ("no2usb_" + Path(f).name)
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_text(text.replace(old, new))
+            f = str(dst.relative_to(ROOT))
+        out.append(f)
+    return out
 
 
 def sources(core: str, top: str) -> tuple[list[str], list[str]]:
-    return OTHER_TOPS[top] if top in OTHER_TOPS else F.island(core)
+    files, inc = OTHER_TOPS[top] if top in OTHER_TOPS else F.island(core)
+    return _yosys_usb(list(files)), inc
 
 
 def area(core: str, mul: int, lib: Path, top: str, out: Path, params: list[str]) -> dict:
     files, inc = sources(core, top)
-    files = [f for f in files if not f.endswith("bsg_mem_1rw_sync_mask_write_bit.sv")]
+    files = [f for f in files if not f.endswith(("bsg_mem_1rw_sync_mask_write_bit.sv",
+                                                 "bsg_mem_1r1w_sync_mask_write_bit.sv"))]
 
     rel = os.path.relpath(out, ROOT)
     (out / "bb.sv").write_text(BLACKBOX)
@@ -96,10 +135,19 @@ F_CORE = {"cve2": 0, "hazard3": 1}
 
 def timing(core: str, mul: int, lib: Path, top: str, out: Path, params: list[str]) -> dict:
     files, inc = sources(core, top)
+    usb = any("no2usb" in f for f in files)
     # The clock gate is a clock-tree cell, not a data path (see the stand-in).
-    files = [("iocore/rtl/sta/cve2_clock_gate.sv" if f.endswith("cve2_clock_gate.sv") else f) for f in files]
+    files = [("iocore/rtl/sta/cve2_clock_gate.sv" if f.endswith("cve2_clock_gate.sv") else
+              "iocore/rtl/sta/bsg_mem_1r1w_sync_mask_write_bit.sv"
+              if f.endswith("bsg_mem_1r1w_sync_mask_write_bit.sv") else f) for f in files]
+    # The island's io_clk timing: the USB device is a pin-flop stand-in (its
+    # SIE samples on both usb_clk edges, which this timer does not model).
+    if top != "iocore_usb" and any("no2usb" in f for f in files):
+        files = [f for f in files if "no2usb" not in f and not f.startswith(("iocore/rtl/usb/",
+                 "build/iocore/measure/", "iocore/rtl/sta/bsg_mem_1r1w"))] + ["iocore/rtl/sta/iocore_usb.sv"]
     cmd = [sys.executable, str(ROOT / "upycore/tools/sta/run.py"), f"{top}_{core}_m{mul}",
            "--module", top, "--lib", str(lib), "--out", str(out / "sta"), "--groups", "60",
+           *(["--techmap-async"] if usb else []),
            "--rtl", *files] + ([] if top in OTHER_TOPS else
                                 ["--param", f"CORE={F_CORE[core]}", "--param", f"MUL={mul}"])
     for p in params:

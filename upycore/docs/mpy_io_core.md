@@ -2,8 +2,8 @@
 
 Status: phases 0 to 4 of [`planning/rv_io_core_plan.md`](../../planning/rv_io_core_plan.md)
 (the island, the hart-side bridge, the boot section, polled board I/O, the
-UART console, events on the hart, the remaining peripherals, system reset
-and the REPL). USB is added by a later phase; this page grows with it. Progress and gate results:
+UART console, events on the hart, the remaining peripherals, system reset,
+the REPL, the synthesis handoff, measurements, and USB). Progress and gate results:
 [`planning/rv_io_core_progress.md`](../../planning/rv_io_core_progress.md).
 
 Board I/O goes through a small RV32 core, the **I/O core**, that owns every
@@ -70,6 +70,9 @@ core takes as an access fault.
 | `0x8000_8000` | 4 KB | Watchdog (`iocore_wdt`) |
 | `0x8000_9000` | 4 KB | ADC interface (`iocore_adc`) |
 | `0x8000_A000` | 4 KB | Pin mux (`iocore_pinmux`) |
+| `0x8001_0000` | 16 KB | USB SIE registers (no2usb's Wishbone bus, a word per 16-bit register; endpoint status at `+0x2000`) |
+| `0x8002_0000` | 2 KB | USB RX endpoint buffer |
+| `0x8003_0000` | 2 KB | USB TX endpoint buffer |
 
 Both SRAMs are one-port macros (`bsg_mem_1rw_sync_mask_write_bit`, which
 the class flow swaps for `fakeram`). While the core is held in reset, the
@@ -639,6 +642,79 @@ The REPL follows `shared/runtime/pyexec.c` and
 Each command is compiled on the hart by the frozen compiler, which takes
 about 15 million hart cycles for a short line (0.15 s at 100 MHz); the
 REPL tests run for minutes of simulation because of it.
+
+## USB
+
+The I/O core has a full-speed USB device: the vendored no2usb SIE
+(`vendor/no2usb/rtl`, `48e3f00a`, unmodified; `EPDW` 32, no event FIFO,
+interrupt line on) with TinyUSB's CDC ACM class (`vendor/tinyusb`,
+`b549ac1d`, the commit MicroPython v1.29.0 pins) in the firmware. With
+the `usb` strap it is the console, as on RP2 boards. The pieces, ported
+from the epic branch's USB coprocessor:
+
+- **Clocks.** The SIE runs on its own 48 MHz `usb_clk`, endpoint
+  buffers included (`ep_clk` is `usb_clk`). `iocore_usb` carries one I/O
+  core access at a time across: the request is held in io_clk flops and a
+  toggle crosses through two `usb_clk` flops; the SIE side does the access
+  (a Wishbone cycle until its ack, a buffer read a clock later, a buffer
+  write) and holds the answer while its toggle crosses back through two
+  io_clk flops. `iocore_top` grants no other data access meanwhile; an
+  access takes about two `usb_clk` and three io_clk cycles plus the
+  Wishbone cycle. The SIE's interrupt reaches the island through two
+  flops (IRQ source 5); the firmware polls instead.
+- **iCE40 primitives.** no2usb instantiates `SB_RAM40_4K` and `SB_IO`.
+  `iocore/rtl/usb/ice40_cells.sv` replaces them for simulation and the
+  ASIC: each RAM is a 256 × 16 one-read-one-write RAM with a bit mask
+  (`iocore_usb_ram256x16`, behind BaseJump's
+  `bsg_mem_1r1w_sync_mask_write_bit`, the macro boundary), with the
+  primitive's narrow-mode bit layout that no2usb's buffers rely on; the
+  transaction microcode ROM is a constant function
+  (`usb_trans_mc.svh`, written by `iocore/tools/gen_usb_mc.py` from
+  no2usb's `utils/microcode.py`), so it is logic; `SB_IO`'s registers
+  are flops and its tristate pin is `iocore_usb_pad`, the pad cell's
+  place. Nine RAMs: the RX and TX endpoint buffers (2 KB each) and the
+  endpoint status table (512 B).
+- **Firmware.** `iocore/sw/usb`: the no2usb TinyUSB driver ported to the
+  pinned TinyUSB (each change marked `upycore port`), the descriptors
+  (VID:PID `1209:5550`, the pid.codes test range; one CDC ACM function)
+  and `tusb_config.h`. The main loop calls `tud_int_handler` and
+  `tud_task` with the `usb` strap. Console output waits in CON until the
+  host has the port open (DTR), for at most 2 s after the I/O core
+  starts, and is then dropped while nobody listens, as MicroPython's CDC
+  console drops it; it is cooked (`\n` as `\r\n`) as on the UART. CDC
+  OUT goes to CON_RX, the armed interrupt character to the `KBD` event.
+  The production image is 13,384 bytes of code and 2,456 bytes of `.bss`
+  (budget 14 KB and 7 KB).
+- **Bench.** `iocore/tb/tb_usb_host.sv` (the epic branch's host,
+  unchanged in behavior) drives D+ and D− at 12 Mbit/s with NRZI, bit
+  stuffing and both CRCs, resets the bus for 10 ms, sends SOF every
+  millisecond, and enumerates the device as Linux does a CDC ACM function
+  (descriptors, `SET_ADDRESS`, `SET_CONFIGURATION`, `SET_LINE_CODING`,
+  `SET_CONTROL_LINE_STATE` with DTR); then it moves bulk OUT and polls
+  bulk IN. `+USB_SCRIPT` runs a session (`text`, `send`, `wait`,
+  `sleep`, `suspend`, `loopback`, `finish`); the bytes it reads are the
+  program's stdout with the `usb` strap.
+
+Size and timing in the open flow (`iocore/tools/island_measure.py`):
+the USB block is 23,570 µm² of logic (565 flops) besides its nine RAMs
+(4.5 KB); the island with it is 197,782 µm², and its worst io_clk path,
+still CVE2's store address into the UART's counters, is 19.96 ns (from
+18.93: the region decode and the grant hold grew). The SIE's own
+`usb_clk` paths are not timed in this flow, which has no model for the
+PHY's negative-edge input register (`SB_IO`'s `D_IN_1`); the island's
+timing run puts a pin-flop stand-in (`iocore/rtl/sta/iocore_usb.sv`) in
+the block's place, and the class flow times `usb_clk` (Synthesis).
+
+Tests: the `usb` area has `usb_loopback` (4 KB host → bulk OUT →
+`sys.stdin` → `sys.stdout` → bulk IN, every byte checked),
+`usb_ctrl_c` (Ctrl-C over CDC ends a running loop), `usb_suspend`
+(SOF stops for 5 ms, the SIE reports the suspend, resume, the console
+works on) and `usb_repl_raw` (an `mpremote` raw REPL session); the
+`console` area runs `con_print`, `con_input` and `repl_friendly` over
+USB too, against the same goldens as over the UART. `unit_tests.py
+iocore_usb` checks the `usb_clk` crossing: random reads and writes of the
+endpoint status table and buffer accesses at twelve clock ratios
+(1:3 to 3:1).
 
 ## Benches and tests
 

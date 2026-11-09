@@ -104,6 +104,13 @@ IOCORE_CODE_SRAM_MACRO = {"name": "fakeram_d4096_w32", "family": "1rw", "depth":
                           "mask": True, "mux": 1, "vt": ""}
 IOCORE_DATA_SRAM_MACRO = {"name": "fakeram_d2048_w32", "family": "1rw", "depth": 2048, "width": 32,
                           "mask": True, "mux": 1, "vt": ""}
+# The USB SIE's nine 256 x 16 RAMs (endpoint buffers and status; the
+# microcode ROM is logic): BaseJump's bsg_mem_1r1w_sync_mask_write_bit,
+# one read and one write port on usb_clk (iocore/rtl/usb/ice40_cells.sv).
+USB_SRAM_MACRO = {"name": "fakeram_d256_w16", "family": "1r1w", "depth": 256, "width": 16,
+                  "mask": True, "mux": 1, "vt": ""}
+USB_SRAM_BLOCKS = 9
+USB_SRAM_MODEL = "iocore/rtl/usb/bsg_mem_1r1w_sync_mask_write_bit.sv"
 
 # Gate mapping the SRAM blocks as flops is a long memory job (the class
 # flow uses macros instead), so mem and soc stay elaborate-only here.

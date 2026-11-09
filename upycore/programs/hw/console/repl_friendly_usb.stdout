@@ -1,0 +1,29 @@
+MicroPython 062cf49b48 on 2026-10-14; upycore
+Type "help()" for more information.
+>>> 1 + 2
+3
+>>> for i in range(3):
+...     print(i * i)
+...     [K
+0
+1
+4
+>>> 1 // 0
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+ZeroDivisionError: divide by zero
+>>> while True:
+...     pass
+...     [K
+Traceback (most recent call last):
+  File "<stdin>", line 2, in <module>
+KeyboardInterrupt: 
+>>> abc
+>>> 
+MicroPython 062cf49b48 on 2026-10-14; upycore
+Type "help()" for more information.
+>>> 
+MPY: soft reboot
+MicroPython 062cf49b48 on 2026-10-14; upycore
+Type "help()" for more information.
+>>> 

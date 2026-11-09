@@ -39,6 +39,12 @@
 //   +PULSE=<pin>,<start us>,<period us>,<n> the bench drives pad <pin>: n periods, high for the
 //                                           first half of each, from <start> µs after boot
 //   +UART_IN_PATTERN=<n>                    with +UART_IN_US: n bytes 'a'..'z' repeating, back to back
+//   +USB_SCRIPT=<path>                      attach the USB host model (iocore/tb/tb_usb_host.sv)
+//                                           and run its script; with +CONSOLE=usb the bytes it
+//                                           reads are the program's stdout. The run ends with
+//                                           MPY_SESSION_END when the script finishes, or
+//                                           MPY_USB_FAIL <why>. +USB_DEBUG traces transactions
+//   +USB_CLK_NS=<ns>                        usb_clk period (default 20.833: 48 MHz)
 //
 // Board I/O runs end with summary lines before the last line (hw_tests.py
 // compares them with a test's .io golden): `MPY_IO gpio<i> edges=<n>
@@ -78,6 +84,21 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
         #(io_clk_ns * 0.37);
         forever #(io_clk_ns / 2.0) io_clk = ~io_clk;
     end
+    // USB: its own 48 MHz clock, the host's 15k pull-downs on D+ and D-,
+    // and the device's 1.5k pull-up on D+ (usb_pu).
+    real usb_clk_ns = 20.8333;
+    logic usb_clk = 1'b0;
+    initial begin
+        real r;
+        if ($value$plusargs("USB_CLK_NS=%f", r)) usb_clk_ns = r;
+        #(usb_clk_ns * 0.61);
+        forever #(usb_clk_ns / 2.0) usb_clk = ~usb_clk;
+    end
+    wire  usb_dp, usb_dn;
+    logic usb_pu;
+    assign (weak0, weak1) usb_dp = usb_pu ? 1'b1 : 1'b0;
+    assign (weak0, weak1) usb_dn = 1'b0;
+    tb_usb_host u_host (.dp(usb_dp), .dn(usb_dn));
     logic [1:0] console_sel = 2'd0;
     initial begin
         string c;
@@ -139,6 +160,7 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
         .uart0_rxd_i(uart0_rxd), .uart0_txd_o(uart0_txd),
         .gpio_o(gpio_out), .gpio_oe_o(gpio_oe), .gpio_pu_o(gpio_pu), .gpio_pd_o(gpio_pd), .gpio_i(gpio_in),
         .adc_start_o(adc_start), .adc_chan_o(adc_chan), .adc_done_i(adc_done), .adc_code_i(adc_code),
+        .usb_clk_i(usb_clk), .usb_dp_io(usb_dp), .usb_dn_io(usb_dn), .usb_pu_o(usb_pu),
         .ioc_dbg_valid_o(ioc_dbg_valid), .ioc_dbg_byte_o(ioc_dbg_byte)
     );
 
@@ -208,6 +230,11 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
             end
             $display("%s\"", line);
         end
+        // The USB host: configured, bytes the device accepted, bytes read,
+        // suspends the host made.
+        if (u_host.active)
+            $display("MPY_IO usb configured=%0d tx=%0d rx=%0d suspends=%0d",
+                     u_host.configured, u_host.tx_total, u_host.rx_n, u_host.suspends);
     endtask
 
     // A plusarg string with C-style escapes, as bytes.
@@ -403,7 +430,7 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
     initial begin
         n = 0;
         @(posedge rst_n);
-        while (!halted && !boot_err && !script_done && n < max_cycles) begin
+        while (!halted && !boot_err && !script_done && !u_host.done && !u_host.failed && n < max_cycles) begin
             @(posedge clk);
             n++;
         end
@@ -420,7 +447,30 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
                 if ($realtime - quiet > 2.0e6) break;
             end
         end
+        // A USB console drains after the halt too: until the host's script
+        // has finished, or CON is empty and 2 ms pass (at most 200 ms).
+        if (console_sel == 2'd2 && halted) begin
+            realtime quiet;
+            quiet = $realtime;
+            for (int k = 0; k < 200000 && !u_host.done && !u_host.failed; k++) begin
+                #(1us);
+                if (!u_soc.u_iobr.u_con.r_empty || !u_host.active) quiet = $realtime;
+                if (!u_host.active && $realtime - quiet > 2.0e6) break;
+                if (u_host.active && u_host.configured && $realtime - quiet > 2.0e6
+                    && u_host.txq.size() == 0) break;
+            end
+        end
         io_summary();
+        // The USB console: what the host read from CDC IN is stdout.
+        if (console_sel == 2'd2)
+            for (int k = 0; k < u_host.rx_n; k++) begin
+                if (fd_out != 0) $fwrite(fd_out, "%c", u_host.rxmem[k % 65536]);
+                else $write("%c", u_host.rxmem[k % 65536]);
+            end
+        if (u_host.failed) begin
+            $display("MPY_USB_FAIL %s", u_host.fail_msg);
+            if (fd_err != 0) $fwrite(fd_err, "USB host: %s\n", u_host.fail_msg);
+        end
         if (fd_out != 0) $fclose(fd_out);
         if (fd_meas != 0) $fclose(fd_meas);
         if (fd_err != 0) $fclose(fd_err);
@@ -428,11 +478,11 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
             $display("MPY_SESSION_STUCK step=%0d", script_step);
         if (boot_err)
             $display("MPY_BOOT_ERROR cycles=%0d", n);
-        else if (script_done)
-            $display("MPY_SESSION_END cycles=%0d ops=%0d gc=%0d", cycles, ops, gc_coll);
         else if (halted)
             $display("MPY_HALT code=%0d value=%08x cycles=%0d ops=%0d gc=%0d free=%0d boot=%0d",
                      halt_code, halt_value, cycles, ops, gc_coll, gc_free, boot_cycles);
+        else if (script_done || (u_host.done && !u_host.failed))
+            $display("MPY_SESSION_END cycles=%0d ops=%0d gc=%0d", cycles, ops, gc_coll);
         else
             $display("MPY_TIMEOUT cycles=%0d ops=%0d gc=%0d pc=%08x op=%02x",
                      cycles, ops, gc_coll, trace_pc, trace_op);

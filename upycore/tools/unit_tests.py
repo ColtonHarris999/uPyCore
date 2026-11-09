@@ -167,6 +167,8 @@ BENCHES = [
     _iocore_block("adc", ["iocore/rtl/iocore_adc.sv", "iocore/tb/tb_adc_model.sv"], r"^PASS: iocore adc",
                   _model_args("--adc-plusargs")),
     _iocore_block("wdt", ["iocore/rtl/iocore_wdt.sv"], r"^PASS: iocore wdt", _model_args("--wdt-plusargs")),
+    Bench("iocore_usb", list(iocore_files.USB_RTL), r"^PASS tb_iocore_usb ", top="tb_iocore_usb",
+          tb="iocore/tb/tb_iocore_usb.sv", incdirs=list(iocore_files.USB_INCDIRS), flags=IOCORE_FLAGS),
     Bench("iocore_cve2", _island("cve2")[0], r"^PASS tb_iocore ", _iocore_app("hello", "+UART_IN=AB"),
           top="tb_iocore", tb="iocore/tb/tb_iocore.sv", incdirs=_island("cve2")[1],
           parameters={"CORE": 0}, flags=IOCORE_FLAGS),

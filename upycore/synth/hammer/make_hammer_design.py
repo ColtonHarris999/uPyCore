@@ -47,7 +47,8 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1] / "tools"))
 from mpy_dc_unit import write_unit  # noqa: E402
 from mpy_synth import (CORE_FILES, GC_SRAM_MACRO, IOCORE_CODE_SRAM_MACRO, IOCORE_DATA_SRAM_MACRO,  # noqa: E402
-                       SRAM_BLOCKS, SRAM_MACRO, SRAM_MODEL, TOPS)
+                       SRAM_BLOCKS, SRAM_MACRO, SRAM_MODEL, TOPS, USB_SRAM_BLOCKS, USB_SRAM_MACRO,
+                       USB_SRAM_MODEL)
 
 # BaseJump STL sources for the SRAM wrapper, in the class src.yml style.
 # The fakeram hook swaps each 32768 x 36 bsg_mem_1rw_sync_mask_write_bit
@@ -60,6 +61,11 @@ BSG_SRAM_FILES = [
     "${bsg_root}/bsg_misc/bsg_clkgate_optional.v",
     "${bsg_root}/bsg_mem/bsg_mem_1rw_sync_mask_write_bit.v",
     "${bsg_root}/bsg_mem/bsg_mem_1rw_sync_mask_write_bit_synth.v",
+]
+# The one-read-one-write wrapper the USB SIE's RAMs use.
+BSG_SRAM_1R1W_FILES = [
+    "${bsg_root}/bsg_mem/bsg_mem_1r1w_sync_mask_write_bit.v",
+    "${bsg_root}/bsg_mem/bsg_mem_1r1w_sync_mask_write_bit_synth.v",
 ]
 
 try:
@@ -100,6 +106,8 @@ IO_IN_PORTS = "adc_done_i adc_code_i* gpio_i*"
 IO_OUT_PORTS = ("uart0_txd_o gpio_o* gpio_oe_o* gpio_pu_o* gpio_pd_o* adc_start_o adc_chan_o* "
                 "ioc_dbg_valid_o ioc_dbg_byte_o*")
 IO_ASYNC_PORTS = "uart0_rxd_i console_sel_i*"
+# The USB device's pads (iocore_usb, on usb_clk).
+USB_PORTS = "usb_dp_io usb_dn_io usb_pu_o"
 IO_DOMAIN = """
 # The I/O island's clock, asynchronous to core_clk.
 set io_clk_period {io_period}
@@ -128,6 +136,25 @@ set_output_delay -min 0 -clock io_clk $io_out
 # The UART RX line and the console strap are asynchronous: each goes
 # through two flops before any logic.
 set_false_path -from [get_ports {{{io_async}}}]
+
+# The USB SIE's 48 MHz clock, asynchronous to the others. The island's
+# accesses cross to it behind a request toggle and come back behind an
+# answer toggle (iocore_usb), each through two flops: bounded like the
+# io_clk crossings. Nothing connects usb_clk and core_clk.
+set usb_clk_period {usb_period}
+create_clock -period $usb_clk_period -name usb_clk [get_ports {usb_clock}]
+set_clock_uncertainty {uncertainty} [get_clocks usb_clk]
+set usb_max [expr {{min($io_clk_period, $usb_clk_period)}}]
+set_max_delay $usb_max -from [get_clocks io_clk] -to [get_clocks usb_clk]
+set_max_delay $usb_max -from [get_clocks usb_clk] -to [get_clocks io_clk]
+set_false_path -from [get_clocks core_clk] -to [get_clocks usb_clk]
+set_false_path -from [get_clocks usb_clk] -to [get_clocks core_clk]
+
+# D+ and D- come in through the PHY's two flops (the host's bit clock is
+# not ours); their drive, enable and the pull-up switch leave usb_clk flops.
+set_false_path -from [get_ports {{usb_dp_io usb_dn_io}}]
+set_output_delay -max [expr {{$io_frac * $usb_clk_period}}] -clock usb_clk [get_ports {{{usb_ports}}}]
+set_output_delay -min 0 -clock usb_clk [get_ports {{{usb_ports}}}]
 """
 
 
@@ -208,6 +235,7 @@ def main() -> int:
                     help="the I/O island's clock port, asynchronous to the core clock "
                          "(default io_clk_i for mpy_soc, none otherwise)")
     ap.add_argument("--io-period", default="20", help="io_clk period in ns (default 20 = 50 MHz)")
+    ap.add_argument("--usb-period", default="20.833", help="usb_clk period in ns (default 48 MHz)")
     ap.add_argument("--also-clock", action="append", default=[],
                     help="another clock port at the same period (Hazard3: clk_always_on)")
     ap.add_argument("--sv2v", type=Path, metavar="SV2V",
@@ -280,7 +308,7 @@ def main() -> int:
         macros.append(GC_SRAM_MACRO)
     island = args.top in TOPS and "iocore/rtl/iocore_top.sv" in TOPS[args.top]
     if srams and island:
-        macros += [IOCORE_CODE_SRAM_MACRO, IOCORE_DATA_SRAM_MACRO]
+        macros += [IOCORE_CODE_SRAM_MACRO, IOCORE_DATA_SRAM_MACRO, USB_SRAM_MACRO]
     io_clock = args.io_clock or ("io_clk_i" if island else None)
     extra_v: list[Path] = []
     if args.core_v:
@@ -290,7 +318,7 @@ def main() -> int:
         core_v = vdir / args.core_v.name
         shutil.copy(args.core_v, core_v)
         extra_v.append(core_v)
-        skip = tuple(CORE_FILES) + ((SRAM_MODEL,) if srams else ())
+        skip = tuple(CORE_FILES) + ((SRAM_MODEL, USB_SRAM_MODEL) if srams else ())
         unit = write_unit(args.top, vdir, skip=skip)
         write_unit(args.top, dest / "golden")
     elif args.rtl:
@@ -302,7 +330,7 @@ def main() -> int:
             # as the golden reference for equivalence checking.
             write_unit(args.top, dest / "golden")
     else:
-        unit = write_unit(args.top, vdir, skip=(SRAM_MODEL,) if srams else ())
+        unit = write_unit(args.top, vdir, skip=(SRAM_MODEL, USB_SRAM_MODEL) if srams else ())
     if args.sv2v:
         # Keep the .sv out of v/, so only the converted file is there. It is
         # the golden reference for equivalence checking (lec_dofile.py).
@@ -361,12 +389,14 @@ def main() -> int:
     if io_clock:
         io_domain = IO_DOMAIN.format(io_period=args.io_period, io_clock=io_clock,
                                      uncertainty=args.uncertainty, io_in=IO_IN_PORTS,
-                                     io_out=IO_OUT_PORTS, io_async=IO_ASYNC_PORTS)
+                                     io_out=IO_OUT_PORTS, io_async=IO_ASYNC_PORTS,
+                                     usb_period=args.usb_period, usb_clock="usb_clk_i",
+                                     usb_ports=USB_PORTS)
     sdc.write_text(CONSTRAINTS.format(top=args.top, period=args.period, io_frac=args.io_frac,
                                       io_domain=io_domain,
-                                      io_in_ports=(f" {io_clock} {IO_IN_PORTS} {IO_ASYNC_PORTS}"
-                                                   if io_clock else ""),
-                                      data_out=(f"[remove_from_collection [all_outputs] [get_ports {{{IO_OUT_PORTS}}}]]"
+                                      io_in_ports=(f" {io_clock} usb_clk_i {IO_IN_PORTS} {IO_ASYNC_PORTS} "
+                                                   f"usb_dp_io usb_dn_io" if io_clock else ""),
+                                      data_out=(f"[remove_from_collection [all_outputs] [get_ports {{{IO_OUT_PORTS} {USB_PORTS}}}]]"
                                                 if io_clock else "[all_outputs]"),
                                       uncertainty=args.uncertainty, clock=args.clock,
                                       reset=args.reset,
@@ -397,7 +427,7 @@ def main() -> int:
         files = [f"v/{f.name}" for f in vfiles]
         warnings.append("example had no input_files; used v/<file>, check the path style")
     if srams:
-        files = BSG_SRAM_FILES + files
+        files = BSG_SRAM_FILES + (BSG_SRAM_1R1W_FILES if island else []) + files
         # ${bsg_root} needs Hammer's subst; keep the example's other meta.
         meta = _get(src_doc, "synthesis.inputs.input_files_meta") or []
         meta = [meta] if isinstance(meta, str) else list(meta)
@@ -428,11 +458,12 @@ def main() -> int:
     print(f"  clock      {args.clock} @ {args.period} ns (cfg/constraints.tcl)")
     if io_clock:
         print(f"  clock      {io_clock} @ {args.io_period} ns, asynchronous (io_clk)")
+        print(f"  clock      usb_clk_i @ {args.usb_period} ns, asynchronous (usb_clk)")
     for f in files:
         print(f"  input file {f}")
     if srams:
         for m in macros:
-            n = SRAM_BLOCKS if m is SRAM_MACRO else 1
+            n = SRAM_BLOCKS if m is SRAM_MACRO else USB_SRAM_BLOCKS if m is USB_SRAM_MACRO else 1
             print(f"  SRAM       {n} x {m['name']} (vlsi.inputs.sram_parameters)")
         print("             run `make sram`, then place them (README.md, SRAM macros)")
     for w in warnings:

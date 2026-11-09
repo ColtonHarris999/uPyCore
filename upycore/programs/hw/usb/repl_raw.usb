@@ -1,0 +1,11 @@
+# mpremote's way in (tools/mpremote/mpremote/transport_serial.py): interrupt,
+# then the raw REPL, a command, back to the friendly REPL
+wait >>>\x20
+text \r\x03\x03
+text \r\x01
+wait raw REPL; CTRL-B to exit\r\n>
+text print(1+1)\x04
+wait OK2\r\n\x04\x04>
+text \r\x02
+wait >>>\x20
+finish

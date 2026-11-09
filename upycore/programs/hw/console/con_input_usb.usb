@@ -1,0 +1,5 @@
+# con_input.py with the console on USB: the same bytes the uart run types.
+wait name?\x20
+text bob\rax\x08c\r\nxyzrest of line\n
+wait line 'zrest of line\\n'\r\n
+finish

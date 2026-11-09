@@ -75,7 +75,7 @@ RTL = [
     "upycore/rtl/mpy_gc.sv", "upycore/rtl/mpy_ca.sv", "upycore/rtl/bsg_mem_1rw_sync_mask_write_bit.sv",
     "upycore/rtl/mpy_mem.sv", "upycore/rtl/mpy_boot.sv", "upycore/rtl/mpy_async_fifo.sv",
     "upycore/rtl/mpy_iobr.sv", "upycore/rtl/mpy_soc.sv",
-    "upycore/tb/tb_spi_nand.sv", "iocore/tb/tb_uart_line.sv", "iocore/tb/tb_spi_flash.sv",
+    "upycore/tb/tb_spi_nand.sv", "iocore/tb/tb_uart_line.sv", "iocore/tb/tb_spi_flash.sv", "iocore/tb/tb_usb_host.sv",
     "iocore/tb/tb_i2c_target.sv", "iocore/tb/tb_adc_model.sv", "upycore/tb/tb_mpy_soc.sv",
 ]
 # The I/O island (the I/O core, CVE2, and its peripherals): iocore/tools.

@@ -23,6 +23,14 @@ CFLAGS   := $(ARCH) -Os -g -ffunction-sections -fdata-sections -fno-common -Wall
 LDFLAGS  := $(ARCH) --specs=picolibc.specs -nostartfiles -T$(COMMON)/iocore.ld -Wl,--gc-sections
 
 SRCS     := $(wildcard $(CURDIR)/$(APP)/*.c) $(EXTRA_SRCS)
+# The production firmware has the USB device: TinyUSB's CDC ACM on the
+# no2usb SIE (vendor/tinyusb, iocore/sw/usb).
+ifeq ($(APP),fw)
+TINYUSB  ?= $(ROOT)/vendor/tinyusb
+SRCS     += $(addprefix $(TINYUSB)/,src/tusb.c src/common/tusb_fifo.c src/device/usbd.c \
+              src/class/cdc/cdc_device.c) $(wildcard $(CURDIR)/usb/*.c)
+CFLAGS   += -DTUP_DCD_ENDPOINT_MAX=8 -I$(CURDIR)/usb -I$(TINYUSB)/src
+endif
 OBJS     := $(addprefix $(OUT)/,$(notdir $(SRCS:.c=.o))) $(OUT)/crt0.o
 
 .PHONY: all clean

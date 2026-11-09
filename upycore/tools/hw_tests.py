@@ -135,6 +135,9 @@ class Test:
     # A host session on the UART (tb_mpy_soc +UART_SCRIPT), from
     # upycore/programs; the run ends when the session does.
     uart_script: str | None = None
+    # A USB host session (tb_mpy_soc +USB_SCRIPT, iocore/tb/tb_usb_host.sv),
+    # from upycore/programs; the run ends when the script does.
+    usb_script: str | None = None
 
     @property
     def source(self) -> Path:
@@ -320,6 +323,7 @@ def run_device(t: Test, compiler: str = "mpy-cross") -> Outcome:
     try:
         image = build.build_program(t.source, work, t.source.name, _modules(t), compiler, repl=t.repl)
         script = [f"+UART_SCRIPT={PROGRAMS / t.uart_script}"] if t.uart_script else []
+        script += [f"+USB_SCRIPT={PROGRAMS / t.usb_script}"] if t.usb_script else []
         res = build.run_image(image, max_cycles=t.cycles, timeout=t.timeout,
                               sim_args=[*t.sim_args, *script, *EXTRA_SIM_ARGS])
     except build.BuildError as exc:

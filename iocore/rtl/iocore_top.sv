@@ -14,6 +14,8 @@
 //   0x8000_5000  PWM (iocore_pwm)       0x8000_6000  SPI (iocore_spi)
 //   0x8000_7000  I2C (iocore_i2c)       0x8000_8000  WDT (iocore_wdt)
 //   0x8000_9000  ADC (iocore_adc)       0x8000_A000  pin mux (iocore_pinmux)
+//   0x8001_0000  USB SIE registers      0x8002_0000  USB RX buffer (2 KB)
+//   0x8003_0000  USB TX buffer (2 KB)   (iocore_usb, on usb_clk)
 // The six blocks are the epic branch's, each fed its old offset (0x200,
 // 0x300, 0x400, 0x500, 0x800, 0x900) plus the low byte of the address.
 // Anything else answers with an error (a load or store access fault).
@@ -84,6 +86,12 @@ module iocore_top #(
     // The watchdog's reset request: a toggle per expiry (the hart side
     // synchronizes it).
     output logic        wdt_toggle_o,
+
+    // USB: the SIE's 48 MHz clock and the D+/D- pads (iocore_usb).
+    input  logic        usb_clk_i,
+    inout  wire         usb_dp_io,
+    inout  wire         usb_dn_io,
+    output logic        usb_pu_o,
 
     // The timer's microsecond and millisecond counts in gray code, from
     // flops, for mpy_iobr's tick crossing (one bit changes per count).
@@ -171,7 +179,8 @@ module iocore_top #(
     // ---- data port decode ----
     localparam logic [3:0] R_NONE = 4'd0, R_DATA = 4'd1, R_SYS = 4'd2, R_TIMER = 4'd3,
                            R_UART = 4'd4, R_BRIDGE = 4'd5, R_GPIO = 4'd6, R_PWM = 4'd7,
-                           R_SPI = 4'd8, R_I2C = 4'd9, R_WDT = 4'd10, R_ADC = 4'd11, R_MUX = 4'd12;
+                           R_SPI = 4'd8, R_I2C = 4'd9, R_WDT = 4'd10, R_ADC = 4'd11, R_MUX = 4'd12,
+                           R_USB = 4'd13, R_USB_RX = 4'd14, R_USB_TX = 4'd15;
     function automatic logic [3:0] region(input logic [31:0] a);
         if (a >= 32'h0001_0000 && a < 32'h0001_0000 + 32'(DATA_WORDS * 4)) return R_DATA;
         if (a[31:12] == 20'h80000) return R_SYS;
@@ -185,6 +194,9 @@ module iocore_top #(
         if (a[31:12] == 20'h80008) return R_WDT;
         if (a[31:12] == 20'h80009) return R_ADC;
         if (a[31:12] == 20'h8000A) return R_MUX;
+        if (a[31:14] == 18'(32'h8001_0000 >> 14)) return R_USB;
+        if (a[31:11] == 21'(32'h8002_0000 >> 11)) return R_USB_RX;
+        if (a[31:11] == 21'(32'h8003_0000 >> 11)) return R_USB_TX;
         return R_NONE;
     endfunction
 
@@ -213,10 +225,15 @@ module iocore_top #(
     logic [7:0]  pw_off;
     logic [31:0] pw_wdata;
     logic        ep_take;
-    assign d_gnt = d_req && !pw_v && ((rgn != R_UART || uart_ready) && (rgn != R_BRIDGE || br_ready)
+    logic        usb_busy, usb_done, usb_take, usb_irq;
+    logic [31:0] usb_rdata;
+    assign d_gnt = d_req && !pw_v && !usb_busy && ((rgn != R_UART || uart_ready) && (rgn != R_BRIDGE || br_ready)
                                       || bad_size);
     assign take  = d_req && d_gnt;
-    assign ep_take = take && !bad_size && rgn >= R_PWM;
+    assign ep_take = take && !bad_size && rgn >= R_PWM && rgn <= R_MUX;
+    // A USB access answers when the bridge has carried it to usb_clk and
+    // back (iocore_usb); no data access is granted meanwhile.
+    assign usb_take = take && !bad_size && rgn >= R_USB;
     always_ff @(posedge io_clk_i or negedge core_rst_n) begin
         if (!core_rst_n) begin
             pw_v <= 1'b0; pw_we <= 1'b0; pw_rgn <= R_NONE; pw_off <= 8'h0; pw_wdata <= 32'h0;
@@ -278,8 +295,8 @@ module iocore_top #(
     assign br_sel    = take && !bad_size && rgn == R_BRIDGE;
     assign gpio_sel  = take && !bad_size && rgn == R_GPIO;
 
-    // Sources: 0 UART0, 1 bridge, 2 GPIO, 3 SPI, 4 I2C.
-    assign irq_src = {{(NIRQ-5){1'b0}}, i2c_irq, spi_irq, gpio_irq, br_irq, uart_irq};
+    // Sources: 0 UART0, 1 bridge, 2 GPIO, 3 SPI, 4 I2C, 5 USB.
+    assign irq_src = {{(NIRQ-6){1'b0}}, usb_irq, i2c_irq, spi_irq, gpio_irq, br_irq, uart_irq};
     assign irq_ext = |(irq_src & irq_en_r);
 
     always_comb begin
@@ -388,16 +405,26 @@ module iocore_top #(
         .dn_pop_o, .dn_data_i, .dn_empty_i
     );
 
+    // ---- USB ----
+    iocore_usb u_usb (
+        .io_clk_i, .rst_n_i(core_rst_n), .req_i(usb_take),
+        .kind_i(rgn == R_USB ? 2'd0 : rgn == R_USB_RX ? 2'd1 : 2'd2), .we_i(d_we),
+        .addr_i(d_addr[13:2]), .wdata_i(d_wdata), .busy_o(usb_busy), .done_o(usb_done),
+        .rdata_o(usb_rdata), .irq_o(usb_irq),
+        .usb_clk_i, .usb_dp_io, .usb_dn_io, .usb_pu_o
+    );
+
     // ---- responses: the clock after the take ----
     always_ff @(posedge io_clk_i or negedge core_rst_n) begin
         if (!core_rst_n) begin
             d_rvalid <= 1'b0; d_err <= 1'b0; sel_q <= R_NONE; rdata_q <= 32'h0;
         end else begin
             // A ported block answers from the stage, a clock later.
-            d_rvalid <= (take && !ep_take) || pw_v;
+            d_rvalid <= (take && !ep_take && !usb_take) || pw_v || usb_done;
             d_err    <= take && (rgn == R_NONE || bad_size);
-            sel_q    <= pw_v ? pw_rgn : rgn;
-            if (pw_v) begin
+            sel_q    <= pw_v ? pw_rgn : usb_done ? R_USB : rgn;
+            if (usb_done) rdata_q <= usb_rdata;
+            else if (pw_v) begin
                 case (pw_rgn)
                     R_PWM:   rdata_q <= pwm_rdata;
                     R_SPI:   rdata_q <= spi_rdata;

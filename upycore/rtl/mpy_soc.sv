@@ -84,6 +84,11 @@ module mpy_soc #(
     output logic [3:0]  adc_chan_o,
     input  logic        adc_done_i,
     input  logic [11:0] adc_code_i,
+    // USB (the I/O core's no2usb SIE): its own 48 MHz clock and the pads.
+    input  logic        usb_clk_i,
+    inout  wire         usb_dp_io,
+    inout  wire         usb_dn_io,
+    output logic        usb_pu_o,
     output logic        ioc_dbg_valid_o,
     output logic [7:0]  ioc_dbg_byte_o
 );
@@ -595,6 +600,7 @@ module mpy_soc #(
         .gpio_o, .gpio_oe_o, .gpio_pu_o, .gpio_pd_o, .gpio_i,
         .us_gray_o(b_us_gray), .ms_gray_o(b_ms_gray),
         .adc_start_o, .adc_chan_o, .adc_done_i, .adc_code_i, .wdt_toggle_o(b_wdt_toggle),
+        .usb_clk_i, .usb_dp_io, .usb_dn_io, .usb_pu_o,
         .dbg_valid_o(ioc_dbg_valid_o), .dbg_byte_o(ioc_dbg_byte_o), .halt_o(), .halt_value_o(),
         .sleep_o()
     );

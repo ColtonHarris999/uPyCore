@@ -18,7 +18,7 @@ Status: every program in the hardware suite passes on the simulator. The
 last post-route timing result is 18 ns; the RTL now estimates about 10.5 ns
 ([`timing_10ns.md`](upycore/docs/timing_10ns.md)), and 10 ns post-route is
 not yet shown. Board I/O (GPIO, UART, timers, PWM, SPI, I2C, ADC,
-watchdog, the UART console and the REPL) goes through an RV32 I/O core in
+watchdog, USB CDC, the console and the REPL) goes through an RV32 I/O core in
 its own clock domain (see Board I/O); the image boots from SPI NAND.
 Language and library gaps are in
 [`known_limitations.md`](upycore/docs/known_limitations.md).
@@ -78,11 +78,12 @@ import `machine` or `time` get the board I/O firmware, frozen `machine`
 and `time` modules with MicroPython v1.29.0's API (`Pin` with `irq`,
 `UART`, `Timer` callbacks, `PWM`, `SPI`, `I2C`, `ADC`, `WDT`, `reset`),
 `micropython.schedule`, and Ctrl-C; the I/O core's firmware is loaded from
-the boot stream. With the `uart` console strap (`+CONSOLE=uart` on the
-bench) console I/O is on the I/O core's UART, and a REPL image runs
+the boot stream. With the `usb` or `uart` console strap (`+CONSOLE=usb` or `uart` on the
+bench) console I/O is on the I/O core's USB CDC port (no2usb and TinyUSB;
+the bench has a full-speed USB host) or its UART, and a REPL image runs
 MicroPython's friendly and raw REPL there (`mpremote` works against it).
 Design and tests: [`upycore/docs/mpy_io_core.md`](upycore/docs/mpy_io_core.md);
-the hardware suite's `io`, `irq`, `system` and `console` areas.
+the hardware suite's `io`, `irq`, `system`, `console` and `usb` areas.
 
 ```bash
 python3 upycore/tools/hw_tests.py --area io

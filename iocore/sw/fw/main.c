@@ -4,6 +4,7 @@
 // Spec: upycore/docs/mpy_io_core.md (Firmware, Commands, State page).
 #include "iocore.h"
 #include "proto.h"
+#include "tusb.h"
 
 // ---- state page ----
 static uint32_t seq;               // CMD words finished (PG_SEQ)
@@ -295,6 +296,43 @@ static void command(uint32_t w) {
     }
 }
 
+// ---- the USB console (the usb strap): TinyUSB CDC ACM ----
+// Output waits in CON until the host has the port open (DTR), for at most
+// USB_HOLD_MS after the I/O core starts; after that, with no host listening
+// it is dropped, as MicroPython's CDC console drops it. It is cooked as on
+// the UART. Input goes to CON_RX; the armed interrupt character is the KBD
+// event instead.
+#define USB_HOLD_MS 2000u
+static int usb_suspended;
+
+static void usb_console(void) {
+    tud_int_handler(0);
+    tud_task();
+    int live = tud_mounted() && !usb_suspended;
+    if (live && tud_cdc_connected()) {
+        while (tud_cdc_write_available() >= 2) {
+            uint32_t c = BR_CON;
+            if (!(c & (1u << 31))) break;
+            uint8_t b = (uint8_t)c;
+            if (b == '\n' && con_prev != '\r') tud_cdc_write_char('\r');
+            tud_cdc_write_char((char)b);
+            con_prev = b;
+        }
+        tud_cdc_write_flush();
+    } else if (TMR_MS >= USB_HOLD_MS) {
+        while (BR_CON & (1u << 31)) { }
+    }
+    while (live && tud_cdc_available() && !(BR_STATUS & BR_ST_CONRX_FULL)) {
+        int c = tud_cdc_read_char();
+        if (c < 0) break;
+        if ((kbd_char & 0x100) && (uint8_t)c == (uint8_t)kbd_char) event(EV_KBD);
+        else BR_CONRX = (uint32_t)c;
+    }
+}
+
+void tud_suspend_cb(bool remote_wakeup_en) { (void)remote_wakeup_en; usb_suspended = 1; }
+void tud_resume_cb(void) { usb_suspended = 0; }
+
 // Everything the loop does between commands.
 static void service(void) {
     // UART0 hardware FIFO into the RX ring (a full ring drops the byte, as
@@ -306,7 +344,7 @@ static void service(void) {
         uart_last_rx_us = now;
         uart_rx_seen = 1;
         // The console's armed interrupt character is the KBD event, not a byte.
-        if (con_mode != 0 && (kbd_char & 0x100) && (uint8_t)d == (uint8_t)kbd_char) {
+        if (con_mode == 1 && (kbd_char & 0x100) && (uint8_t)d == (uint8_t)kbd_char) {
             event(EV_KBD);
             continue;
         }
@@ -328,6 +366,7 @@ static void service(void) {
             con_prev = b;
         }
     }
+    if (con_mode == 2) usb_console();
     // TX ring into the UART's hardware FIFO.
     while (tx_head != tx_tail && !(UART_STATUS & UART_ST_TXFULL)) UART_DATA = tx_ring[tx_tail++ % RING];
     // Software timers.
@@ -396,6 +435,10 @@ int main(void) {
     // UART0 starts at 115200 8N1 (the console's rate, and machine.UART's
     // default), so bytes that arrive before machine.UART() are kept.
     UART_BAUD = (hz + 57600) / 115200;
+    if (con_mode == 2) {
+        tusb_rhport_init_t init = { .role = TUSB_ROLE_DEVICE, .speed = TUSB_SPEED_FULL };
+        tusb_init(0, &init);
+    }
     page(PG_VERSION, 0x494F0000u | PROTO_VERSION);
     for (;;) {
         if (BR_STATUS & BR_ST_CMD) {
