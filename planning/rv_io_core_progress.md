@@ -181,3 +181,50 @@ Deviations from the plan:
   RAM: a dual-port RAM across the two clocks would be a custom macro.
 - The console redirect (CON) went into phase 1's bridge so the FIFO set
   was built and tested once.
+
+## Phase 2: polled board I/O, machine and time, the UART console
+
+Commit `3621aca`.
+
+Built:
+
+- The I/O core's production firmware (`iocore/sw/fw`): one polled loop
+  that runs the hart's commands (pins, UART0, four software timers on the
+  microsecond counter, SYS), a 256-byte RX ring and a 256-byte TX ring on
+  UART0, and keeps the state page current (pin levels, UART0 counts,
+  timer counts, and `SEQ`, the count of finished commands that orders a
+  command before a later page read). The island's SYS block reports
+  io_clk (`FREQ`) and the console strap.
+- Frozen `machine` (`Pin`, `UART`, `Timer`, `mem32`, `freq`, `idle`) and
+  `time` (`ticks_*`, `sleep*`, `time`, `time_ns`) with MicroPython
+  v1.29.0's signatures, linked only into images that import them.
+- The console firmware (`upycore/firmware/io/console.py`): `sys.stdin`,
+  `sys.stdout`, `sys.stderr` and `input()` with `readline.c`'s echo and
+  editing, reading CON_RX. With the `uart` strap the I/O core moves CON
+  to UART0 TX and UART0 RX to CON_RX.
+- The bench: pad traces and the UART line model's bytes as `MPY_IO` lines
+  (a test's `.io` golden), per-test plusargs and per-strap goldens, the
+  UART console drained after the halt.
+- Tests: `io` gains `pin_loop`, `blink` (at the pad), `uart_echo` (115200
+  8N1 at the pins), `sleep_accuracy`, `ticks`; the new `console` area has
+  `con_print` and `con_input`, each on the `sim` and the `uart` strap.
+
+| Gate | Result |
+| --- | --- |
+| G1 | PASS: 23 of 23 workloads at +0.000 % |
+| G2 | PASS: 519 of 519 pass; 505 with the baseline's cycles, 0 moved, 14 new |
+| G3 | PASS: `mpy_core` 578 of 578 groups, none slower by > 0.1 (27.389 → 27.389 ns); `mpy_soc` 1,104 of 1,105 matched, none slower by > 0.1 (the unmatched one is the `hvalid` flow noise of phase 1) |
+| G4 | PASS: 505 identical, 0 differ, 14 not in both trees |
+| G5 | PASS: island 137,862 µm² + `mpy_iobr` 176,796 µm² = 314,658 of 450,000 |
+
+Unit benches: 31 of 31. The `io` and `console` areas give the same
+output at io_clk = hart/2, hart/1 and hart × 1.5 (`--sim-arg
++IO_CLK_NS=20`, `10`, `6.667`).
+
+Deviations from the plan:
+
+- The UART console sent `\n` as is in this phase; phase 4 cooks it to
+  `\r\n` as MicroPython's console does, and those goldens changed then.
+- An `OSError` raised by the I/O modules prints its errno alone (the base
+  firmware's `OSError` text), where MicroPython prints `[Errno 19]
+  ENODEV`.

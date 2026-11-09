@@ -1,0 +1,192 @@
+{
+ "io_clk_ns": 20.0,
+ "gpio": {
+  "toggle()": {
+   "changes": 200,
+   "rate_per_s": 108580.59517443828,
+   "interval_ns": {
+    "n": 199,
+    "min": 8160.0,
+    "mean": 9209.748743718594,
+    "max": 11820.0,
+    "stdev": 1653.8304669016684
+   }
+  },
+  "value(v)": {
+   "changes": 200,
+   "rate_per_s": 94378.9956936619,
+   "interval_ns": {
+    "n": 199,
+    "min": 8240.0,
+    "mean": 10595.577889447237,
+    "max": 12040.0,
+    "stdev": 1754.4271474736506
+   }
+  },
+  "on()/off()": {
+   "changes": 200,
+   "rate_per_s": 128508.14315419685,
+   "interval_ns": {
+    "n": 199,
+    "min": 4580.0,
+    "mean": 7781.608040201005,
+    "max": 8380.0,
+    "stdev": 1213.6466197886023
+   }
+  }
+ },
+ "irq": {
+  "stdout": "edges 1000",
+  "edges": 1000,
+  "missed": 0,
+  "latency_ns": {
+   "soft, main in time.sleep_ms": {
+    "n": 253,
+    "min": 56370.0,
+    "mean": 58235.05928853755,
+    "max": 62730.0,
+    "stdev": 1136.5458455053463
+   },
+   "soft, main in a loop": {
+    "n": 247,
+    "min": 56060.0,
+    "mean": 58088.78542510122,
+    "max": 60140.0,
+    "stdev": 1094.1135017754461
+   },
+   "hard=True, main in time.sleep_ms": {
+    "n": 252,
+    "min": 41210.0,
+    "mean": 43202.81746031746,
+    "max": 66620.0,
+    "stdev": 1915.6851520017321
+   },
+   "hard=True, main in a loop": {
+    "n": 248,
+    "min": 40880.0,
+    "mean": 42901.37096774193,
+    "max": 44960.0,
+    "stdev": 1079.3944947451605
+   }
+  },
+  "edge_to_evt_pend_ns": {
+   "soft, main in time.sleep_ms": {
+    "n": 253,
+    "min": 5440.0,
+    "mean": 7260.790513833992,
+    "max": 9140.0,
+    "stdev": 1071.597827887005
+   },
+   "soft, main in a loop": {
+    "n": 247,
+    "min": 5440.0,
+    "mean": 7264.6963562753035,
+    "max": 9160.0,
+    "stdev": 1071.4720893074448
+   },
+   "hard=True, main in time.sleep_ms": {
+    "n": 252,
+    "min": 5460.0,
+    "mean": 7261.9047619047615,
+    "max": 9160.0,
+    "stdev": 1068.4759315616475
+   },
+   "hard=True, main in a loop": {
+    "n": 248,
+    "min": 5440.0,
+    "mean": 7244.5161290322585,
+    "max": 9140.0,
+    "stdev": 1071.7301017654477
+   }
+  }
+ },
+ "timer": {
+  "stdout": "ticks 600",
+  "main in time.sleep_ms": {
+   "period_ns": {
+    "n": 299,
+    "min": 996760.0,
+    "mean": 999990.2341137123,
+    "max": 1005180.0,
+    "stdev": 1653.7743226958632
+   },
+   "jitter_ns": 5180.0
+  },
+  "main in a loop": {
+   "period_ns": {
+    "n": 299,
+    "min": 998680.0,
+    "mean": 999991.1705685619,
+    "max": 1003180.0,
+    "stdev": 1650.5927690684382
+   },
+   "jitter_ns": 3180.0
+  }
+ },
+ "uart_tx": {
+  "115200": {
+   "bytes": 4096,
+   "bytes_per_s": 11518.08339092375,
+   "line_bytes_per_s": 11520.0,
+   "efficiency": 0.9998336276843532,
+   "stdout": "queued_us 324311 sent_us 355664"
+  },
+  "1000000": {
+   "bytes": 4096,
+   "bytes_per_s": 99800.3992015968,
+   "line_bytes_per_s": 100000.0,
+   "efficiency": 0.998003992015968,
+   "stdout": "queued_us 37463 sent_us 41085"
+  },
+  "3000000": {
+   "bytes": 4096,
+   "bytes_per_s": 292397.6608187134,
+   "line_bytes_per_s": 300000.0,
+   "efficiency": 0.9746588693957114,
+   "stdout": "queued_us 12814 sent_us 14044"
+  }
+ },
+ "uart_rx": {
+  "115200": {
+   "sent": 2048,
+   "got": 2048,
+   "bad": 0,
+   "bytes_per_s": 11499.545184003953,
+   "line_bytes_per_s": 11520.0
+  },
+  "460800": {
+   "sent": 2048,
+   "got": 1051,
+   "bad": 512,
+   "bytes_per_s": 9683.15536350989,
+   "line_bytes_per_s": 46080.0
+  },
+  "1000000": {
+   "sent": 2048,
+   "got": 635,
+   "bad": 277,
+   "bytes_per_s": 7445.71080155715,
+   "line_bytes_per_s": 100000.0
+  }
+ },
+ "power": {
+  "island_idle": {
+   "saif": "build/meas/island_idle/image.island.saif",
+   "stdout": "idle done",
+   "bits": 117946,
+   "toggles": 566231778,
+   "duration_ns": 16471155.0,
+   "io_clk_cycles": 823557.75,
+   "toggles_per_bit_per_cycle": 0.005829307480856136
+  },
+  "island_active": {
+   "saif": "build/meas/island_active/image.island.saif",
+   "stdout": "active done 10",
+   "bits": 117946,
+   "toggles": 726014004,
+   "duration_ns": 16731655.0,
+   "io_clk_cycles": 836582.75,
+   "toggles_per_bit_per_cycle": 0.007357882964347789
+  }
+ }
+}

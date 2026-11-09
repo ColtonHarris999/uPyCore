@@ -765,6 +765,55 @@ with the island in (the plan's check for this phase), and sv2v
 regeneration of `converted/mpy_soc.v` and `converted/mpy_core.v`
 (`upycore/synth/hammer/README.md`).
 
+## Measurements
+
+`iocore/tools/io_measure.py` runs the programs in `upycore/programs/meas`
+on the simulator with the bench's measurement hooks (`+MEAS_FILE`,
+`+PULSE`, `+MEAS_PC`; Benches and tests) and writes
+[`mpy_io_core_measurements.json`](mpy_io_core_measurements.json). Hart
+at 100 MHz, io_clk at 50 MHz, the tree of commit `f313e32` (phase 6, the
+phase 4 RTL); simulated time, so the numbers are exact for this RTL and
+firmware, not for silicon.
+
+| What | Result |
+| --- | --- |
+| `Pin.toggle()` in a `for` loop | 108,581 changes/s (9.21 µs each; 8.16–11.82 µs) |
+| `Pin.value(v)`, `v` alternating | 94,379 changes/s (10.60 µs each) |
+| `Pin.on()` / `Pin.off()` pairs | 128,508 changes/s (7.78 µs each) |
+| Pin edge to the `Pin.irq` handler's first opcode, soft handler | min 56.4, mean 58.2, max 62.7 µs with the main program in `time.sleep_ms`; 56.1 / 58.1 / 60.1 µs while it spins in a loop |
+| The same, `hard=True` | 41.2 / 43.2 / 66.6 µs sleeping; 40.9 / 42.9 / 45.0 µs spinning |
+| … of which pad edge to `evt_pend` (the I/O core's part) | 5.4 / 7.3 / 9.2 µs in every case |
+| Edges missed | 0 of 1,000 (one rising edge every 200 µs) |
+| 1 kHz `machine.Timer` callback, period at the handler's first opcode | mean 999.990 µs, σ 1.65 µs, worst 5.18 µs off with the main program sleeping; σ 1.65 µs, worst 3.18 µs off while it spins |
+| UART transmit, 4 KB in 256-byte `write()`s | 11,518 B/s at 115200 baud (100 % of the line), 99,800 B/s at 1 Mbaud (99.8 %), 292,398 B/s at 3 Mbaud (97.5 %) |
+| UART receive, 2 KB back to back | all 2,048 bytes at 115200 baud; at 460800 baud 1,051 arrive, at 1 Mbaud 635 (the 256-byte ring overflows) |
+| Island switching activity (SAIF), idle / busy | 0.0058 / 0.0074 toggles per bit per io_clk cycle over 117,946 bits |
+
+Reading the table:
+
+- **Interrupt latency is the hart's.** Of the 58 µs to a soft handler,
+  7 µs is the I/O core: its polled loop seeing the GPIO latch, the event
+  crossing, `evt_pend`. The rest is `_irq_dispatch` in the board I/O
+  firmware (bytecode: reading `EVT`, the state page's pin counts, finding
+  the handler, the schedule queue), 3,600–5,100 hart cycles. A hard
+  handler skips the queue. Sleeping costs nothing extra: `_wfe` wakes on
+  `evt_pend` and the dispatch runs at the loop's next jump.
+- **Receive is limited by the hart, not the UART.** One `_io.uart_rx` of
+  200 bytes takes 3.8 ms (about 5,700 hart cycles per three-byte answer
+  word: each word is a bridge read and a firmware loop in bytecode), so the
+  hart drains about 10 KB/s and the I/O core's 256-byte ring overflows
+  above 115200 baud. Transmit is posted (three bytes a command word) and
+  runs at line rate up to 3 Mbaud.
+- **Idle is not idle.** The I/O core's firmware polls in one loop and
+  never sleeps (`wfi`), so the idle island switches at 79 % of its busy
+  rate. Power itself needs Genus or Joules with the SAIF files
+  (`build/meas/island_{idle,active}/image.island.saif`, scoped to
+  `tb_mpy_soc.u_soc.u_ioc`; `upycore/synth/hammer/README.md`, Power from
+  simulated activity), which this environment does not have. Verilator's
+  SAIF `DURATION` is the whole run while toggles count from
+  `+SAIF_START_US`, so the per-cycle rates above are low by the boot's
+  share (about half here, the same for both).
+
 ## Verification of rewrites
 
 `iocore/tools/proofs/run.sh` proves with Yosys `sat -prove` that
