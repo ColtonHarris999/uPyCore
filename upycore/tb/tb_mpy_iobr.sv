@@ -19,7 +19,7 @@ module tb_mpy_iobr;
     initial forever #(hp / 2.0) clk = ~clk;
     initial begin #3.3; forever #(ip / 2.0) io_clk = ~io_clk; end
 
-    logic        acc, we, stall, evt_pend, ld_push, ld_idle, con_push;
+    logic        acc, we, stall, evt_pend, ld_push, ld_idle, con_push, acc_now;
     logic [9:0]  off;
     logic [31:0] wdata, rdata;
     logic [8:0]  con_data;
@@ -46,7 +46,8 @@ module tb_mpy_iobr;
 
     mpy_iobr dut (
         .clk_i(clk), .rst_n_i(rst_n),
-        .acc_i(acc), .we_i(we), .off_i(off), .wdata_i(wdata), .rdata_o(rdata), .stall_o(stall),
+        .acc_i(acc), .we_i(we), .off_i(off), .wdata_i(wdata), .rdata_o(rdata),
+        .acc_now_i(acc_now), .stall_o(stall),
         .con_push_i(con_push), .con_data_i(con_data), .con_mode_i(2'd1),
         .evt_pend_o(evt_pend),
         .ld_push_i(ld_push), .ld_data_i(ld_data), .ld_idle_o(ld_idle), .run_i(1'b1), .loaded_i(1'b1),
@@ -140,8 +141,12 @@ module tb_mpy_iobr;
 
     // ---- hart side ----
     task automatic access(input bit w, input logic [9:0] o, input logic [31:0] d, output logic [31:0] r);
-        // Wait for a clock without stall, like mpy_soc's skid.
+        // Like mpy_soc: wait for a clock without stall, take the access
+        // (acc_now), and present it registered on the next clock.
         while (stall) begin @(negedge clk); bump(C_STALL); end
+        acc_now = 1;
+        @(negedge clk);
+        acc_now = 0;
         acc = 1; we = w; off = o; wdata = d;
         #0.01 r = rdata;
         @(negedge clk);
@@ -204,8 +209,8 @@ module tb_mpy_iobr;
             logic [31:0] a, b;
             access(0, {5'b10000, 5'd4}, 0, a);
             access(0, {5'b10000, 5'd4}, 0, b);
-            if (!(b >= a && b <= us_cnt && us_cnt - b <= 8)) $display("ticks a=%0d b=%0d cnt=%0d ip=%0f", a, b, us_cnt, ip);
-            check(b >= a && b <= us_cnt && us_cnt - b <= 8, "ticks: monotonic and recent");
+            if (!(b >= a && b <= us_cnt && us_cnt - b <= 12)) $display("ticks a=%0d b=%0d cnt=%0d ip=%0f", a, b, us_cnt, ip);
+            check(b >= a && b <= us_cnt && us_cnt - b <= 12, "ticks: monotonic and recent");
             access(0, {5'b10000, 5'd3}, 0, a);
             check(a <= (us_cnt >> 3) && (us_cnt >> 3) - a <= 1, "ms ticks recent");
         end
@@ -252,7 +257,7 @@ module tb_mpy_iobr;
         if (!$value$plusargs("TRIALS=%d", trials)) trials = 12;
         if (!$value$plusargs("OPS=%d", ops)) ops = 3000;
         void'($urandom(seed));
-        acc = 0; we = 0; off = 0; wdata = 0; con_push = 0; con_data = 0; ld_push = 0; ld_data = 0;
+        acc = 0; we = 0; off = 0; wdata = 0; con_push = 0; acc_now = 0; con_data = 0; ld_push = 0; ld_data = 0;
         for (int i = 0; i < 9; i++) cnt[i] = 0;
         for (int t = 0; t < trials; t++) begin
             // Ratios from 1:3 to 3:1, plus random ones.

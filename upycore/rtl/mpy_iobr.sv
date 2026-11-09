@@ -1,10 +1,11 @@
 // The hart's bridge to the I/O core: the 4 KB window at MPY_MMIO_BASE.
 // Spec: upycore/docs/mpy_io_core.md (Bridge); plan §4.
 //
-// mpy_soc decodes the window beside the simulator page and answers it the
-// same way: an access is taken on a clock with acc_i high (only when stall_o
-// is low), a load's word is rdata_o on that clock and mpy_soc registers it
-// into the simulator page's answer flops, and stores are posted. Offsets
+// mpy_soc decodes the window beside the simulator page and takes an access
+// on a clock with stall_o low (acc_now_i); it registers the access and
+// presents it here on the next clock (acc_i, we_i, off_i, wdata_i). A
+// load's word is rdata_o on that clock, and mpy_soc registers it into the
+// simulator page's answer flops. Offsets
 // outside the implemented registers never reach this block: mpy_soc leaves
 // them to mpy_mem, which answers with a bus fault.
 //
@@ -38,6 +39,7 @@ module mpy_iobr #(
     input  logic [9:0]  off_i,          // word offset in the window
     input  logic [31:0] wdata_i,
     output logic [31:0] rdata_o,
+    input  logic        acc_now_i,      // an access is taken this clock (presented on the next)
     output logic        stall_o,
 
     // Console bytes redirected from the simulator page (bit 8: stderr).
@@ -230,11 +232,15 @@ module mpy_iobr #(
         endcase
     end
 
-    // A FIFO is "busy" when it could not take one more word after this
-    // clock's push; the next access waits a clock for the far side.
+    // stall_o: no local access on the next clock. Always on the clock after
+    // an access is taken (one bridge access in flight at a time), and while
+    // a FIFO might not take one more word: pushes land a clock after the
+    // access is taken, so the room counted is this clock's push and one
+    // more.
     logic stall_n;
-    assign stall_n = (32'(cmd_wl) + 32'(cmd_push) >= 31) || (32'(con_wl) + 32'(con_push_i) >= 63) ||
-                     (32'(dn_wl) + 32'(dn_push) >= 3) || (32'(ld_wl) + 32'(ld_push_i) >= 3);
+    assign stall_n = acc_now_i ||
+                     (32'(cmd_wl) + 32'(cmd_push) >= 30) || (32'(con_wl) + 32'(con_push_i) >= 62) ||
+                     (32'(dn_wl) + 32'(dn_push) >= 2) || (32'(ld_wl) + 32'(ld_push_i) >= 2);
 
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) begin

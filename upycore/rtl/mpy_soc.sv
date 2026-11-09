@@ -388,24 +388,44 @@ module mpy_soc #(
     end
 
     logic        sim_ack, con_valid_r;
-    logic [31:0] sim_rdata, io_rd;
+    logic [31:0] sim_rdata;
     // Console. With the uart or usb strap, SIM_STDOUT and SIM_STDERR stores
     // go to the bridge's CON FIFO (the I/O core sends them on), not to the
-    // con_* port; the store waits while CON has no room (stall), as print
-    // waits on a slow UART. The firmware stores exactly as before, so the
-    // hart's cycles are the same in every mode. The redirect is decoded
-    // beside the simulator page's case and gated at the port.
+    // con_* port; the next local access waits while CON has no room
+    // (io_stall), as print waits on a slow UART. The firmware stores exactly
+    // as before, so the hart's cycles are the same in every mode. The push is
+    // the simulator page's own console flops (con_valid_r, con_err_o,
+    // con_byte_o) a clock later, so no new logic hangs on the skid's nets;
+    // the con_* port is gated instead.
     logic [1:0] con_sel_q, con_mode;
-    logic       con_redir, con_push;
+    logic       con_redir;
     always_ff @(posedge clk_i or negedge por_n) begin
         if (!por_n) begin con_sel_q <= 2'd0; con_mode <= 2'd0; end
         else begin con_sel_q <= console_sel_i; con_mode <= con_sel_q; end
     end
     assign con_redir = con_mode != 2'd0;
     assign con_valid_o = con_valid_r && !con_redir;
-    assign con_push = sim_go && p_we && con_redir &&
-                      (p_addr == ABI_SIM_BASE + 4 * ABI_SIM_STDOUT || p_addr == ABI_SIM_BASE + 4 * ABI_SIM_STDERR);
-    assign io_rd = (p_io && !p_we) ? io_rdata : 32'd0;
+
+    // Bridge accesses. The skid's p_* nets feed only these flops (one load
+    // each); mpy_iobr works on the registered access a clock later, and the
+    // answer goes out through the simulator page's answer flops on the clock
+    // after that. io_stall (mpy_iobr's flop) is high on the clock after a
+    // bridge access, so no other local access is taken while one is in
+    // flight and the acks stay in order (a memory access granted then is
+    // answered later still).
+    logic        io_q_v, io_q_we;
+    logic [9:0]  io_q_off;
+    logic [31:0] io_q_wdata;
+    always_ff @(posedge clk_i or negedge por_n) begin
+        if (!por_n) begin
+            io_q_v <= 1'b0; io_q_we <= 1'b0; io_q_off <= '0; io_q_wdata <= '0;
+        end else begin
+            io_q_v <= io_acc;
+            io_q_we <= p_we;
+            io_q_off <= p_addr[11:2];
+            io_q_wdata <= p_wdata;
+        end
+    end
     logic        sim_halt;
     logic [31:0] sim_halt_val;
 
@@ -418,10 +438,9 @@ module mpy_soc #(
             sim_ack <= 1'b0;
             con_valid_r <= 1'b0;
             if (sim_go) begin
-                sim_ack <= 1'b1;
-                // A bridge load answers with mpy_iobr's word; the simulator
-                // page's offsets never match a bridge address.
-                sim_rdata <= io_rd;
+                // A bridge access is answered on the next clock (below).
+                sim_ack <= !p_io;
+                sim_rdata <= 32'd0;
                 if (p_we) begin
                     case ((p_addr - ABI_SIM_BASE) >> 2)
                         32'(ABI_SIM_STDOUT): begin con_valid_r <= 1'b1; con_err_o <= 1'b0; con_byte_o <= p_wdata[7:0]; end
@@ -432,6 +451,10 @@ module mpy_soc #(
                 end else if (((p_addr - ABI_SIM_BASE) >> 2) == 32'(ABI_SIM_CYCLES)) begin
                     sim_rdata <= core_cycles;
                 end
+            end
+            if (io_q_v) begin
+                sim_ack <= 1'b1;
+                sim_rdata <= io_q_we ? 32'd0 : io_rdata;
             end
         end
     end
@@ -510,9 +533,9 @@ module mpy_soc #(
 
     mpy_iobr u_iobr (
         .clk_i, .rst_n_i(por_n),
-        .acc_i(io_acc), .we_i(p_we), .off_i(p_addr[11:2]), .wdata_i(p_wdata),
-        .rdata_o(io_rdata), .stall_o(io_stall),
-        .con_push_i(con_push), .con_data_i({p_addr == ABI_SIM_BASE + 4 * ABI_SIM_STDERR, p_wdata[7:0]}),
+        .acc_i(io_q_v), .we_i(io_q_we), .off_i(io_q_off), .wdata_i(io_q_wdata),
+        .rdata_o(io_rdata), .acc_now_i(io_acc), .stall_o(io_stall),
+        .con_push_i(con_valid_r && con_redir), .con_data_i({con_err_o, con_byte_o}),
         .con_mode_i(con_mode),
         .evt_pend_o(io_evt_pend),
         .ld_push_i(ioc_we), .ld_data_i(ioc_data), .ld_idle_o(ioc_ld_idle),
