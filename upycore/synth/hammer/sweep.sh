@@ -23,6 +23,7 @@
 # With `par`, place_macros.py places the five macros and sets the die size
 # (DIE is ignored). DESIGN_ARGS="--sram-pin-pitch 7000" makes fakeram's
 # 31 mm x 0.22 mm bank a taller, narrower macro of the same area.
+# PLACE_ARGS passes place_macros.py options, e.g. PLACE_ARGS="--util 0.4".
 #
 # Die size: DIE="w h" in um, default 1500 1500 for the core, 4000 3000 for
 # the chip. DESIGN_ARGS passes extra make_hammer_design.py options, for example
@@ -103,7 +104,7 @@ if [ "$TOP" = mpy_soc ]; then
     syn_steps="make sram && make syn"
     # Place and route: place the macros and size the die from the generated
     # LEFs (place_macros.py) between `make sram` and `make syn`.
-    par_steps="make sram && python3 $here/place_macros.py . && make syn && make par"
+    par_steps="make sram && python3 $here/place_macros.py . ${PLACE_ARGS:-} && make syn && make par"
 else
     syn_prefix=${PREFIX:-upycore_v2}
     par_prefix=${PREFIX:-upycore_par}
