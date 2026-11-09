@@ -555,7 +555,7 @@ module mpy_soc #(
     assign ioc_stall = io_stall;
 
     iocore_top u_ioc (
-        .io_clk_i, .io_rst_n_i(io_por_n), .run_i(ioc_run),
+        .io_clk_i, .io_rst_n_i(io_por_n), .run_i(ioc_run), .con_mode_i(console_sel_i),
         .ld_valid_i(!b_ld_empty), .ld_data_i(b_ld_data), .ld_pop_o(b_ld_pop),
         .cmd_pop_o(b_cmd_pop), .cmd_data_i(b_cmd_data), .cmd_empty_i(b_cmd_empty), .cmd_level_i(b_cmd_level),
         .rsp_push_o(b_rsp_push), .rsp_data_o(b_rsp_data), .rsp_full_i(b_rsp_full),

@@ -9,7 +9,7 @@
 # firmware one of the same name; the last definition is the one linked.
 
 # The bridge window (mpy_iobr), as an INT address.
-_IO_BASE = 0x40000000
+_IO_BASE = const(0x40000000)
 
 
 def _poke32(a, w):
@@ -27,3 +27,9 @@ def mod__io__rd(off):
 def mod__io__wr(off, w):
     _st(_IO_BASE + off, 0, w)
     return None
+
+
+def mod__io__cpu():
+    # time.ticks_cpu: the hart's cycle counter (30 bits), as on a port
+    # whose ticks_cpu is the CPU's own counter.
+    return _ticks()

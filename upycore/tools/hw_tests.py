@@ -56,6 +56,8 @@ sys.path.insert(0, str(ROOT / "upycore" / "tools"))
 import mpy_build as build  # noqa: E402
 
 MANIFEST = ROOT / "upycore" / "programs" / "hw_tests.toml"
+# Plusargs added to every run (--sim-arg), e.g. the clock-ratio sweep's +IO_CLK_NS.
+EXTRA_SIM_ARGS: list[str] = []
 PROGRAMS = ROOT / "upycore" / "programs"
 
 # Addresses inside repr. The hex digits are the only part that may differ.
@@ -120,13 +122,20 @@ class Test:
     # The core must stop with this halt (a name from mpy_abi.HALT, such as
     # BUS for a bus fault) instead of exiting; the .exit golden is ignored.
     halt: str | None = None
+    # Simulator plusargs for this test (board I/O: +CONSOLE=uart, +GPIO_LOOP,
+    # +UART_IN=..., +IO_CLK_NS=...).
+    sim_args: tuple[str, ...] = ()
+    # Golden files named after this path (from upycore/programs, no suffix)
+    # instead of the source: one program run under two straps keeps a
+    # golden per strap.
+    golden_base: str | None = None
 
     @property
     def source(self) -> Path:
         return PROGRAMS / self.file
 
     def golden(self) -> tuple[Path, Path, Path]:
-        src = self.source
+        src = PROGRAMS / (self.golden_base + ".py") if self.golden_base else self.source
         return src.with_suffix(".stdout"), src.with_suffix(".stderr"), src.with_suffix(".exit")
 
 
@@ -161,6 +170,8 @@ def load_manifest(path: Path = MANIFEST) -> list[Test]:
             fields = dict(fields or {})
             if "modules" in fields:
                 fields["modules"] = tuple(fields["modules"])
+            if "sim_args" in fields:
+                fields["sim_args"] = tuple(fields["sim_args"])
             rel = fields.pop("file", f"hw/{area}/{name}.py")
             if area == "compiler":
                 # A small expression is already past 50e6 cycles. The large
@@ -302,7 +313,8 @@ def run_device(t: Test, compiler: str = "mpy-cross") -> Outcome:
     work = (ROOT / "build" / ("hw-mpyc" if compiler == "mpyc" else "hw")) / t.name
     try:
         image = build.build_program(t.source, work, t.source.name, _modules(t), compiler)
-        res = build.run_image(image, max_cycles=t.cycles, timeout=t.timeout)
+        res = build.run_image(image, max_cycles=t.cycles, timeout=t.timeout,
+                              sim_args=[*t.sim_args, *EXTRA_SIM_ARGS])
     except build.BuildError as exc:
         text = str(exc).strip().splitlines()
         return Outcome(t, False, text[-1] if text else "build failed")
@@ -312,6 +324,13 @@ def run_device(t: Test, compiler: str = "mpy-cross") -> Outcome:
         want_out, want_err, want_code = _read_golden(t)
     except FileNotFoundError as exc:
         return Outcome(t, False, str(exc), cycles=res.cycles, halt=res.halt)
+    io_golden = t.golden()[0].with_suffix(".io")
+    if io_golden.exists():
+        got_io = "".join(ln + "\n" for ln in res.log.splitlines() if ln.startswith("MPY_IO "))
+        want_io = io_golden.read_text()
+        if got_io != want_io:
+            return Outcome(t, False, "MPY_IO summary differs\n" + _diff("io", got_io.encode(), want_io.encode()),
+                           cycles=res.cycles, halt=res.halt)
     if t.halt is not None:
         got_code = want_code if res.halt == t.halt else None
         detail = compare_streams(res.stdout, res.stderr, got_code, want_out, want_err, want_code)
@@ -430,6 +449,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--area", action="append", default=[], help="area to run; 'all' for every area")
     ap.add_argument("--jobs", "-j", type=int, default=os.cpu_count() or 2)
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--sim-arg", action="append", default=[],
+                    help="simulator plusarg for every test, e.g. +IO_CLK_NS=10 (repeatable)")
     ap.add_argument("--regen", action="store_true", help="rewrite golden files from the oracle")
     ap.add_argument("--check-goldens", action="store_true", help="fail if the oracle disagrees with the goldens")
     ap.add_argument("--compiler", choices=("mpy-cross", "mpyc"), default="mpy-cross",
@@ -437,6 +458,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--include-disabled", action="store_true",
                     help="boot tests marked disabled (the device run skips them otherwise)")
     args = ap.parse_args(argv)
+    EXTRA_SIM_ARGS.extend(args.sim_arg)
 
     tests = load_manifest()
     if not (args.area or args.names) and not args.list:

@@ -11,11 +11,13 @@ module iocore_top #(
     parameter int DATA_WORDS = 2048,      // 8 KB
     parameter logic [15:0] US_DIV_RESET = 16'd49,
     parameter logic [15:0] BAUD_RESET = 16'd0,
-    parameter int NPINS = 16
+    parameter int NPINS = 16,
+    parameter int IOCLK_HZ = 50_000_000   // SYS FREQ; +IO_CLK_HZ (or the bench's +IO_CLK_NS) overrides it in simulation
 ) (
     input  logic        io_clk_i,
     input  logic        io_rst_n_i,       // power-on reset, synchronized to io_clk_i
     input  logic        run_i,            // release the core (synchronized here)
+    input  logic [1:0]  con_mode_i,       // the console strap (a pin; synchronized here)
 
     input  logic        ld_valid_i,
     input  logic [48:0] ld_data_i,        // {1 data SRAM / 0 code SRAM, word index, word}
@@ -70,6 +72,7 @@ module iocore_top #(
     // Inputs end at flops (every bit is a timing endpoint).
     (* keep *) logic q_io_rst_n_i;
     (* keep *) logic q_run_i;
+    (* keep *) logic [1:0] q_con_mode_i;
     (* keep *) logic q_ld_valid_i;
     (* keep *) logic [48:0] q_ld_data_i;
     (* keep *) logic [31:0] q_cmd_data_i;
@@ -89,6 +92,7 @@ module iocore_top #(
     always_ff @(posedge io_clk_i) begin
         q_io_rst_n_i <= io_rst_n_i;
         q_run_i <= run_i;
+        q_con_mode_i <= con_mode_i;
         q_ld_valid_i <= ld_valid_i;
         q_ld_data_i <= ld_data_i;
         q_cmd_data_i <= cmd_data_i;

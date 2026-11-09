@@ -42,14 +42,15 @@ print("en", m[EVT_EN], "mask", m[EVT_MASK])
 m[EVT_MASK] = 0
 m[EVT_EN] = 0
 
-# A page word written by the I/O core: CH_PAGE index 7, then the value.
-m[CMD] = 0x04000007
+# A page word written by the I/O core: CH_PAGE index 20 (a word the
+# firmware does not use), then the value.
+m[CMD] = 0x04000014
 m[CMD] = 0x12345678
 rsp()
 n = 0
-while m[B + 0x800 + 28] != 0x12345678 and n < 100:
+while m[B + 0x800 + 80] != 0x12345678 and n < 100:
     n += 1
-print("page7", hex(m[B + 0x800 + 28]))
+print("page20", hex(m[B + 0x800 + 80]))
 m[CMD] = 0x0400001F
 m[CMD] = -2
 rsp()

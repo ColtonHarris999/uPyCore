@@ -1,9 +1,9 @@
 # The I/O core
 
-Status: phases 0 and 1 of [`planning/rv_io_core_plan.md`](../../planning/rv_io_core_plan.md)
-(the island, the hart-side bridge, and the boot section). The peripherals
-beyond the UART and timer, events on the hart, the console and USB are
-added by later phases; this page grows with them. Progress and gate results:
+Status: phases 0 to 2 of [`planning/rv_io_core_plan.md`](../../planning/rv_io_core_plan.md)
+(the island, the hart-side bridge, the boot section, polled board I/O and
+the UART console). Events on the hart, the remaining peripherals, the
+REPL and USB are added by later phases; this page grows with them. Progress and gate results:
 [`planning/rv_io_core_progress.md`](../../planning/rv_io_core_progress.md).
 
 Board I/O goes through a small RV32 core, the **I/O core**, that owns every
@@ -27,7 +27,8 @@ independent clocks.
 | Hart side of the bridge, the clock-domain crossing | `upycore/rtl/mpy_iobr.sv`, `upycore/rtl/mpy_async_fifo.sv` |
 | Window decode, island instance, io_clk reset | `upycore/rtl/mpy_soc.sv` |
 | Boot section (`IOCB`) | `upycore/rtl/mpy_boot.sv`, `upycore/tools/mpy_nand.py` |
-| Hart software: board I/O firmware, `machine` | `upycore/firmware/io/`, `upycore/runtime/machine.py` |
+| GPIO | `iocore/rtl/iocore_gpio.sv` |
+| Hart software: board I/O firmware, `machine`, `time` | `upycore/firmware/io/`, `upycore/runtime/machine.py`, `upycore/runtime/time.py` |
 
 ### Core
 
@@ -62,6 +63,7 @@ core takes as an access fault.
 | `0x8000_1000` | 4 KB | Timer |
 | `0x8000_2000` | 4 KB | UART0 |
 | `0x8000_3000` | 4 KB | Bridge to the hart (I/O core side) |
+| `0x8000_4000` | 4 KB | GPIO |
 
 Both SRAMs are one-port macros (`bsg_mem_1rw_sync_mask_write_bit`, which
 the class flow swaps for `fakeram`). While the core is held in reset, the
@@ -75,9 +77,11 @@ stream (phase 1).
 | `0x00` | `ID` | Read-only, `0x494F_4301` ("IOC", version 1) |
 | `0x04` | `DEBUG` | A store's low byte goes to the bench log (`dbg_valid_o`); nothing on the chip |
 | `0x08` | `HALT` | A store ends a standalone bench run with that value (`halt_o`) |
-| `0x0C` | `IRQ_PEND` | Read-only, one bit per source (bit 0 UART0, bit 1 bridge) |
+| `0x0C` | `IRQ_PEND` | Read-only, one bit per source (bit 0 UART0, bit 1 bridge, bit 2 GPIO) |
 | `0x10` | `IRQ_EN` | Sources that drive `mip.MEIP` |
 | `0x14` | `SCRATCH` | Read/write |
+| `0x18` | `FREQ` | Read-only: io_clk in Hz (the `IOCLK_HZ` parameter; the bench's `+IO_CLK_NS` sets it in simulation) |
+| `0x1C` | `CON_MODE` | Read-only: the console strap (`console_sel_i`, through two io_clk flops) |
 
 ### Timer (`0x8000_1000`)
 
@@ -108,6 +112,28 @@ A byte that arrives while RX is full is dropped and sets overrun. The
 receiver finds the start bit's falling edge, checks it half a bit later
 (a high line is a glitch), samples eight bits and the stop bit at bit
 intervals; a low stop bit drops the byte and sets the framing error.
+
+### GPIO (`0x8000_4000`)
+
+Sixteen pins. The pad wrapper gets `gpio_o`, `gpio_oe_o`, `gpio_pu_o` and
+`gpio_pd_o`, and returns `gpio_i`. The input goes through two flops and a
+third register (`IN`), and the edge check compares `IN` with the second
+flop, so an edge is seen on the clock it reaches `IN`. Edge rules are the
+epic branch's `mpy_periph` GPIO.
+
+| Offset | Name | Rule |
+| --- | --- | --- |
+| `0x00` | `OUT` | Output levels |
+| `0x04` | `SET` | A store of 1s sets those `OUT` bits |
+| `0x08` | `CLR` | A store of 1s clears them |
+| `0x0C` | `XOR` | A store of 1s toggles them |
+| `0x10` | `OE` | Output enable per pin; reset 0, every pin an input |
+| `0x14` | `PU` | Pull-up enable per pin, to the pad wrapper |
+| `0x18` | `PD` | Pull-down enable per pin |
+| `0x1C` | `IN` | Read-only, the synchronized pad levels |
+| `0x20` | `EDGE` | Two bits per pin (pin 0 in bits 1:0): `01` rising, `10` falling, `11` both |
+| `0x24` | `STATUS` | One bit per pin whose `EDGE` matched a change; write 1 to clear (an edge on that clock stays) |
+| `0x28` | `IRQEN` | Pins whose `STATUS` bit raises the GPIO interrupt (`IRQ_PEND` bit 2) |
 
 ## Clock domains
 
@@ -189,13 +215,45 @@ and answers synchronous ones in RSP, in order.
 
 | Channel | Name | Payload | Answer |
 | --- | --- | --- | --- |
-| `0x01` | `SYS` | bits 23:16 op: `0x01` PING | PING: the protocol version (1) |
+| `0x01` | `SYS` | bits 23:16 op: `0x01` PING, `0x02` FREQ | PING: the protocol version (2); FREQ: io_clk in Hz |
 | `0x02` | `ECHO` | anything | the same word |
 | `0x03` | `EVT` | bits 15:0 | raises those events (a bridge test) |
 | `0x04` | `PAGE` | bits 4:0 a page word; the next CMD word is its value | the CMD word, after the page word is pushed (a bridge test) |
 | `0x05` | `DNRD` | bits 2:0 a hart word | that word as the I/O core sees it |
+| `0x10` | `PIN_INIT` | bits 4:0 pin, 7:5 mode (0 IN, 1 OUT, 2 OPEN_DRAIN), 9:8 pull (0 none, 1 up, 2 down), bit 10 set the value, bit 11 the value | — |
+| `0x11` | `PIN_WRITE` | bits 4:0 pin, bit 8 the value | — |
+| `0x12` | `PIN_TOGGLE` | bits 4:0 pin | — |
+| `0x20` | `UART_INIT` | bits 3:0 id; the next word is the baud rate | the rate the divider gives |
+| `0x21`–`0x23` | `UART_TX1`–`TX3` | one to three bytes, the first in bits 7:0 | — |
+| `0x28` | `UART_RX` | bits 7:0 the most bytes wanted | the count k, then ceil(k/3) words of three bytes |
+| `0x29` | `UART_DEINIT` | | — |
+| `0x30` | `TIMER_INIT` | bits 1:0 id, bit 2 periodic; the next word is the period in µs | — |
+| `0x31` | `TIMER_DEINIT` | bits 1:0 id | — |
 
-State page word 0 is the version, `0x494F_0001`.
+An open-drain pin drives its pad only while its output is 0: `PIN_INIT`,
+`PIN_WRITE` and `PIN_TOGGLE` keep its `OE` bit the inverse of its `OUT`
+bit.
+
+### State page
+
+Words the I/O core writes (`0x800 + 4*i` in the hart's window):
+
+| Word | Name | Contents |
+| --- | --- | --- |
+| 0 | `VERSION` | `0x494F_0002`: protocol version 2 |
+| 1 | `PIN_IN` | The pin levels (`GPIO IN`), pushed when they change |
+| 3 | `MS` | The island timer's millisecond count (mpy_iobr's tick crossing, not UPD) |
+| 4 | `US` | Its microsecond count (the same) |
+| 5 | `CYCLES` | io_clk cycles, pushed each millisecond |
+| 6 | `UART0` | Bits 15:0 bytes waiting in the RX ring, 27:16 room in the TX ring, bit 31 TX busy (queued or on the wire) |
+| 7 | `SEQ` | CMD words the I/O core has finished |
+| 8–11 | `TIMER0`–`3` | Expirations of each software timer |
+
+`SEQ` orders commands against state-page reads: `machine` counts the CMD
+words it sends, and before a read whose answer depends on earlier
+commands (`Pin.value()`, `UART.any()`, `txdone()`) it waits until `SEQ`
+has caught up (`_fence`). A read with nothing in flight costs one more
+word load.
 
 ## Boot
 
@@ -245,12 +303,71 @@ window.
 
 ## Firmware
 
+`iocore/sw/fw` is the production image: one loop. Each pass runs the
+next command if CMD has one (and then pushes `SEQ`), then `service()`:
+moves UART0's hardware FIFO into a 256-byte RX ring (a full ring drops
+the byte), moves console bytes (below), moves the 256-byte TX ring into
+the UART's hardware FIFO, runs four software timers on the microsecond
+counter, and pushes the state-page words that changed. A command that
+waits (for its next word, or for room in RSP or the TX ring) calls
+`service()` while it waits, so the UART and the console never stall
+behind it. At start the firmware sets the timer's divider from `FREQ`
+and UART0 to 115200 8N1 (the console's rate and `machine.UART`'s
+default), so bytes that arrive before `machine.UART()` are kept. Phase 2
+polls; interrupts and `wfi` come with the events of phase 3. The image is
+1.9 KB of code.
+
 `make -C iocore/sw APP=<dir>` builds `build/iocore/<dir>/code.hex` and
 `data.hex` (one 32-bit word a line). `.vectors` and `.text` go in code
 SRAM; `.rodata` and `.data` in data SRAM at their run addresses, loaded
 by `mpy_boot`, so `crt0.S` copies nothing and only clears `.bss`. The
 link fails past 16 KB code or 8 KB data, or past the plan's budget of
 14 KB code and 7 KB data with a 1 KB stack.
+
+## machine and time
+
+`upycore/runtime/machine.py` and `time.py` are frozen into images that
+import them (with `time` whenever `machine` is). They follow MicroPython
+v1.29.0's signatures:
+
+| API | How |
+| --- | --- |
+| `Pin(id, mode=-1, pull=-1, *, value=None)`, `init`, `value`, `__call__`, `on`, `off`, `high`, `low`, `toggle`, `mode`, `pull` | `PIN_*` commands; `value()` reads `PIN_IN` after `_fence`. Ids 0–15; modes `IN`, `OUT`, `OPEN_DRAIN`; pulls `PULL_UP`, `PULL_DOWN` |
+| `UART(0, baudrate=115200, bits=8, parity=None, stop=1, *, timeout=0, ...)`, `init`, `deinit`, `any`, `read`, `readinto`, `readline`, `write`, `flush`, `txdone` | `UART_*` commands, three bytes a word each way; `any()` and `txdone()` read `UART0`. 8N1 only (anything else is `ValueError`). `read()` with nothing waiting returns `None` |
+| `Timer(id, *, mode, freq, period, callback)`, `init`, `deinit` | `TIMER_*` commands; ids 0–3. Callbacks come with phase 3; the expirations are counted in the page |
+| `mem32` | The bridge window (above) |
+| `freq()` | The hart's clock, 100 MHz (a constant) |
+| `idle()` | Returns at once (phase 3 waits for an event) |
+| `time.ticks_ms`, `ticks_us`, `ticks_cpu`, `ticks_add`, `ticks_diff` | `MS` and `US` from the page, `ticks_cpu` the hart's cycle counter (`_io.cpu()`); period 2^30, `extmod/modtime.c`'s arithmetic and `OverflowError` |
+| `time.sleep`, `sleep_ms`, `sleep_us` | Poll `US` until the time has passed, so a sleep is never shorter than asked (phase 3 idles instead) |
+| `time.time`, `time_ns` | Seconds and nanoseconds since the I/O core started (there is no RTC) |
+
+`machine.Pin`, `UART` and `Timer` raise `OSError(ENODEV)` (19) when the
+I/O core is not running (`IOC_CTRL` bit 0 clear).
+
+## Console
+
+The strap `console_sel_i` (`+CONSOLE=sim|uart|usb` on the bench) picks
+the console. Output: the firmware writes console bytes as always (`_wr`
+and `_we`, posted stores to `SIM_STDOUT` and `SIM_STDERR`), so the hart
+spends the same cycles in every mode. With the `uart` strap `mpy_soc`
+sends those bytes into the bridge's CON FIFO instead of to the `con_*`
+port, and the I/O core moves them into UART0's TX ring; when CON is full
+the next store waits, as `print` waits on a slow UART. stdout and stderr
+share the UART, in order. Output is not cooked (`\n` is sent as is).
+
+Input: the I/O core moves UART0's received bytes into the hart's CON_RX
+(with the `uart` strap; then `machine.UART(0)` sees none). Programs that
+call `input()` or use `sys.stdin`, `sys.stdout` or `sys.stderr` get the
+console firmware (`upycore/firmware/io/console.py`), which adds the three
+streams to `sys` (native modules with `read`, `readline`, `write`,
+`flush`) and replaces `input()`: the prompt, then line editing as in
+`shared/readline/readline.c` (printable bytes echo, Enter is CR, LF or
+one CR LF pair and echoes CR LF, backspace echoes `\b\x1b[K`, Ctrl-C
+raises `KeyboardInterrupt`, Ctrl-D on an empty line `EOFError`, escape
+sequences are dropped). With the `sim` strap there is no input, and
+`input()` raises `EOFError` as at the end of a stream. The REPL is
+phase 4.
 
 ## Benches and tests
 
@@ -276,12 +393,36 @@ boots IOCB sections over SPI (code and data, code only, data only, and a
 count beyond the SRAM, which must fail before any word is written).
 
 `tb_mpy_soc` takes `+IO_CLK_NS`, `+CONSOLE`, `+IOC_LOG` (the I/O core's
-debug bytes) and the UART line model's `+UART_OUT`, `+UART_IN`,
-`+UART_IN_US` and `+UART_BAUD`. The hardware suite's `io` area runs on
-it: `bridge_loopback` (1,000 words through CMD and back through RSP),
-`bridge_regs` (EVT, EVT_SET, the state page both ways, PING),
-`bridge_misaligned` and `bridge_unmapped` (the core must halt with the
-unaligned and the bus fault), and `mem32_align`.
+debug bytes), `+GPIO_LOOP` (pad i and pad i^8 are one net; an undriven
+pad reads its pull-up, else 0), and the UART line model's `+UART_OUT`,
+`+UART_IN` (C escapes), `+UART_IN_US` (after boot) and `+UART_BPS`. A
+board I/O run ends with `MPY_IO` lines: each output pad's changes and the
+intervals between them in ms, and the bytes the line model decoded.
+`hw_tests.py` compares them with a test's `.io` golden; a test's
+`sim_args` and `golden_base` (one program, a golden per strap) are
+manifest fields. With the `uart` strap the line model's bytes are the
+program's stdout, and the bench waits for the line to go quiet after the
+halt.
+
+The hardware suite's `io` area: `bridge_loopback` (1,000 words through
+CMD and back through RSP), `bridge_regs` (EVT, EVT_SET, the state page
+both ways, PING), `bridge_misaligned` and `bridge_unmapped` (the core must
+halt with the unaligned and the bus fault), `mem32_align`, `pin_loop`
+(every Pin method, pulls and open drain through the loopback), `blink`
+(ten toggles 5 ms apart, checked at the pad), `uart_echo` (a line in and
+out at 115200 8N1, checked at the pins), `sleep_accuracy` (each sleep
+from 50 µs to 20 ms lasts at least as long and at most 150 µs more) and
+`ticks` (`ticks_diff` and `ticks_add` across the wrap, their errors, and
+the counters moving). The `console` area runs `con_print` (print, a long
+line, the streams, a traceback) and `con_input` (`input()` with editing,
+`sys.stdin`) on the `sim` strap and on the `uart` strap, where the bytes
+are decoded at the pin. Every board I/O golden is written by hand and
+names the MicroPython source it follows.
+
+The plan's clock-ratio sweep runs the `io` and `console` areas at
+`io_clk` = hart/2 (the default, 20 ns), hart/1 (`--sim-arg
++IO_CLK_NS=10`) and hart×1.5 (`+IO_CLK_NS=6.667`); the outputs match, so
+each golden holds at all three.
 
 ## Verification of rewrites
 

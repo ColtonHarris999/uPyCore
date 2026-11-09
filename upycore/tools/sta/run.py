@@ -99,7 +99,7 @@ def main() -> int:
         return f if "/" in f else f"upycore/rtl/{f}"
     rtl = list(args.rtl or m.TOPS[args.top])
     incs = list(args.inc) if args.rtl else list(m.INCDIRS.get(args.top, [])) + list(args.inc)
-    if "iocore/rtl/iocore_top.sv" in rtl and os.environ.get("STA_ISLAND") != "1":
+    if "iocore/rtl/iocore_top.sv" in rtl and "mpy_soc.sv" in rtl and os.environ.get("STA_ISLAND") != "1":
         # The I/O island runs on its own clock and is timed in its own run
         # (iocore/tools/island_measure.py). Here it is a stub whose pins are
         # flops, as the SRAM macros are, so the hart-domain run sees the

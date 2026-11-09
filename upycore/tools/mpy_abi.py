@@ -541,6 +541,8 @@ SR = {
     "FW0": 12, "FW1": 13, "FW2": 14, "FW3": 15,  # firmware state (_sysget/_sysset)
     "EMERG": 16,        # inline MemoryError object: words 16..20
     "FW4": 24, "FW5": 25, "FW6": 26, "FW7": 27,
+    # 28: the board I/O firmware's state dict (upycore/firmware/io, which
+    # names it itself, so _abi.py and the base firmware do not change).
 }
 EMERG_WORDS = 5
 

@@ -13,6 +13,8 @@
 #define SYS_IRQ_PEND  REG(SYS_BASE + 0x0C)
 #define SYS_IRQ_EN    REG(SYS_BASE + 0x10)
 #define SYS_SCRATCH   REG(SYS_BASE + 0x14)
+#define SYS_FREQ      REG(SYS_BASE + 0x18)   // io_clk in Hz
+#define SYS_CON_MODE  REG(SYS_BASE + 0x1C)   // console strap: 0 sim, 1 UART, 2 USB
 #define IRQ_UART0     (1u << 0)
 
 // Timer
@@ -53,6 +55,22 @@
 #define BR_ST_RSP_FULL (1u << 2)
 #define BR_ST_CONRX_FULL (1u << 3)
 #define IRQ_BRIDGE    (1u << 1)
+#define IRQ_GPIO      (1u << 2)
+
+// GPIO
+#define GPIO_BASE     0x80004000u
+#define GPIO_OUT      REG(GPIO_BASE + 0x00)
+#define GPIO_SET      REG(GPIO_BASE + 0x04)
+#define GPIO_CLR      REG(GPIO_BASE + 0x08)
+#define GPIO_XOR      REG(GPIO_BASE + 0x0C)
+#define GPIO_OE       REG(GPIO_BASE + 0x10)
+#define GPIO_PU       REG(GPIO_BASE + 0x14)
+#define GPIO_PD       REG(GPIO_BASE + 0x18)
+#define GPIO_IN       REG(GPIO_BASE + 0x1C)
+#define GPIO_EDGE     REG(GPIO_BASE + 0x20)
+#define GPIO_STATUS   REG(GPIO_BASE + 0x24)
+#define GPIO_IRQEN    REG(GPIO_BASE + 0x28)
+#define NPINS 16
 
 static inline void csr_set_mie(uint32_t m) { __asm__ volatile("csrs mie, %0" :: "r"(m)); }
 static inline void irq_on(void) { __asm__ volatile("csrsi mstatus, 8"); }

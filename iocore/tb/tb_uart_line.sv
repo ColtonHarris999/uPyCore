@@ -58,8 +58,10 @@ module tb_uart_line #(
                 rx_byte_o = sh;
                 n_rx++;
                 q.push_back(sh);
-                if (fd > 0) begin $fwrite(fd, "%c", sh); $fflush(fd); end
-                else if (fd == 0) $write("%c", sh);
+                // A $fopen descriptor has its top bit set, so test -1 and 0.
+                if (fd == -1) ;
+                else if (fd != 0) begin $fwrite(fd, "%c", sh); $fflush(fd); end
+                else $write("%c", sh);
                 rx_valid_o = ~rx_valid_o;
             end else
                 n_ferr++;

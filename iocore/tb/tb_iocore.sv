@@ -31,7 +31,7 @@ module tb_iocore #(
     logic [7:0]  rx_byte;
 
     iocore_top #(.CORE(CORE), .MUL(MUL), .BAUD_RESET(16'(BAUD))) dut (
-        .io_clk_i(clk), .io_rst_n_i(rst_n), .run_i(run),
+        .io_clk_i(clk), .io_rst_n_i(rst_n), .run_i(run), .con_mode_i(2'd0),
         .ld_valid_i(ld_valid), .ld_data_i(ld_data), .ld_pop_o(ld_pop),
         // No hart: the bridge's FIFOs read empty and never fill.
         .cmd_pop_o(), .cmd_data_i(32'h0), .cmd_empty_i(1'b1), .cmd_level_i(6'h0),

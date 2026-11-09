@@ -24,11 +24,13 @@ module iocore_top #(
     parameter int DATA_WORDS = 2048,      // 8 KB
     parameter logic [15:0] US_DIV_RESET = 16'd49,
     parameter logic [15:0] BAUD_RESET = 16'd0,
-    parameter int NPINS = 16
+    parameter int NPINS = 16,
+    parameter int IOCLK_HZ = 50_000_000   // SYS FREQ; +IO_CLK_HZ (or the bench's +IO_CLK_NS) overrides it in simulation
 ) (
     input  logic        io_clk_i,
     input  logic        io_rst_n_i,       // power-on reset, synchronized to io_clk_i
     input  logic        run_i,            // release the core (synchronized here)
+    input  logic [1:0]  con_mode_i,       // the console strap (a pin; synchronized here)
 
     input  logic        ld_valid_i,
     input  logic [48:0] ld_data_i,        // {1 data SRAM / 0 code SRAM, word index, word}
@@ -198,7 +200,26 @@ module iocore_top #(
 
     // ---- SYS block: id, debug, halt, interrupt controller ----
     localparam logic [7:0] S_ID = 8'h00, S_DEBUG = 8'h04, S_HALT = 8'h08, S_IRQ_PEND = 8'h0C,
-                           S_IRQ_EN = 8'h10, S_SCRATCH = 8'h14;
+                           S_IRQ_EN = 8'h10, S_SCRATCH = 8'h14, S_FREQ = 8'h18, S_CON_MODE = 8'h1C;
+    logic [1:0] cm_s1, cm_s2;
+    always_ff @(posedge io_clk_i or negedge io_rst_n_i) begin
+        if (!io_rst_n_i) begin cm_s1 <= 2'd0; cm_s2 <= 2'd0; end
+        else begin cm_s1 <= con_mode_i; cm_s2 <= cm_s1; end
+    end
+    logic [31:0] freq;
+`ifdef SYNTHESIS
+    assign freq = 32'(IOCLK_HZ);
+`else
+    int unsigned sim_hz;
+    initial begin
+        real ns;
+        if (!$value$plusargs("IO_CLK_HZ=%d", sim_hz)) begin
+            if ($value$plusargs("IO_CLK_NS=%f", ns)) sim_hz = int'(1.0e9 / ns);
+            else sim_hz = IOCLK_HZ;
+        end
+    end
+    assign freq = sim_hz;
+`endif
     localparam int NIRQ = 8;
     logic [NIRQ-1:0] irq_src, irq_en_r;
     logic [31:0]     scratch_r;
@@ -220,6 +241,8 @@ module iocore_top #(
             S_IRQ_PEND: sys_rdata = 32'(irq_src);
             S_IRQ_EN:   sys_rdata = 32'(irq_en_r);
             S_SCRATCH:  sys_rdata = scratch_r;
+            S_FREQ:     sys_rdata = freq;
+            S_CON_MODE: sys_rdata = {30'h0, cm_s2};
             default:    sys_rdata = 32'h0;
         endcase
     end

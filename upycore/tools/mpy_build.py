@@ -56,7 +56,7 @@ FW_ORDER = [
 
 # Board I/O firmware (upycore/firmware/io), appended after FW_ORDER only for
 # images that use board I/O (io_imports). Its own order, by file name.
-IO_FW_ORDER = ["io.py"]
+IO_FW_ORDER = ["io.py", "console.py"]
 IO_FW_SRC = FW_SRC / "io"
 # The I/O core's firmware (make -C iocore/sw), loaded from the boot stream's
 # IOCB section for those images.
@@ -324,16 +324,24 @@ def uses_compiler(sources: list[Path]) -> bool:
 # Standard-library modules written in Python (upycore/runtime). Each is frozen
 # only into programs that import it, so other images stay byte-identical.
 # A module's own imports of these are listed here too.
-RUNTIME_MODULES = {"math": (), "cmath": ("math",), "random": (), "io": (), "machine": ()}
+RUNTIME_MODULES = {"math": (), "cmath": ("math",), "random": (), "io": (), "machine": ("time",),
+                   "time": ()}
 
 # Imports that mean a program uses board I/O: it gets the board I/O firmware
 # (IO_FW_ORDER) and the I/O core's boot section. _io is the firmware's own
 # native module (upycore/firmware/io/io.py).
-IO_MODULES = {"machine", "_io"}
+IO_MODULES = {"machine", "time", "_io"}
+
+
+# Console input or the sys streams also need the board I/O firmware
+# (upycore/firmware/io/console.py): a call of input(), or sys.stdin,
+# sys.stdout or sys.stderr.
+_CONSOLE_ATTRS = {"stdin", "stdout", "stderr"}
 
 
 def io_imports(sources: list[Path]) -> list[str]:
-    """The board I/O modules any source imports (empty: no board I/O)."""
+    """The board I/O features any source uses (empty: no board I/O): the
+    I/O modules it imports, and "console" for input() or a sys stream."""
 
     found: set[str] = set()
     for p in sources:
@@ -342,10 +350,19 @@ def io_imports(sources: list[Path]) -> list[str]:
         except (SyntaxError, ValueError):
             continue
         for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "input":
+                found.add("console")
+                continue
+            if (isinstance(node, ast.Attribute) and node.attr in _CONSOLE_ATTRS
+                    and isinstance(node.value, ast.Name) and node.value.id == "sys"):
+                found.add("console")
+                continue
             if isinstance(node, ast.Import):
                 names = [a.name for a in node.names]
             elif isinstance(node, ast.ImportFrom) and not node.level and node.module:
                 names = [node.module]
+                if node.module == "sys" and any(a.name in _CONSOLE_ATTRS for a in node.names):
+                    found.add("console")
             else:
                 continue
             found.update(n.split(".")[0] for n in names if n.split(".")[0] in IO_MODULES)

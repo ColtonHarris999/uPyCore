@@ -48,15 +48,24 @@ def split_verilog(files: list[str]) -> tuple[list[str], list[str]]:
     return v, [f for f in files if f not in v]
 
 
+# Tops that are not the island: the hart-side bridge (its FIFOs are the
+# clock-domain crossing, counted in the I/O work's area budget).
+OTHER_TOPS = {"mpy_iobr": (["upycore/rtl/mpy_async_fifo.sv", "upycore/rtl/mpy_iobr.sv"], [])}
+
+
+def sources(core: str, top: str) -> tuple[list[str], list[str]]:
+    return OTHER_TOPS[top] if top in OTHER_TOPS else F.island(core)
+
+
 def area(core: str, mul: int, lib: Path, top: str, out: Path, params: list[str]) -> dict:
-    files, inc = F.island(core)
+    files, inc = sources(core, top)
     files = [f for f in files if not f.endswith("bsg_mem_1rw_sync_mask_write_bit.sv")]
 
     rel = os.path.relpath(out, ROOT)
     (out / "bb.sv").write_text(BLACKBOX)
     shutil.copy(lib, out / "tt.lib")
     incs = " ".join(f"-I {d}" for d in ["upycore/rtl", *inc])
-    g = " ".join(f"-G {p}" for p in [f"CORE={F_CORE[core]}", f"MUL={mul}", *params])
+    g = " ".join(f"-G {p}" for p in ([] if top in OTHER_TOPS else [f"CORE={F_CORE[core]}", f"MUL={mul}"]) + params)
     ys = [
         f"read_slang -j 1 --single-unit --top {top} -DSYNTHESIS {incs} {g} {rel}/bb.sv {' '.join(files)}",
         f"hierarchy -check -top {top}",
@@ -86,12 +95,13 @@ F_CORE = {"cve2": 0, "hazard3": 1}
 
 
 def timing(core: str, mul: int, lib: Path, top: str, out: Path, params: list[str]) -> dict:
-    files, inc = F.island(core)
+    files, inc = sources(core, top)
     # The clock gate is a clock-tree cell, not a data path (see the stand-in).
     files = [("iocore/rtl/sta/cve2_clock_gate.sv" if f.endswith("cve2_clock_gate.sv") else f) for f in files]
     cmd = [sys.executable, str(ROOT / "upycore/tools/sta/run.py"), f"{top}_{core}_m{mul}",
            "--module", top, "--lib", str(lib), "--out", str(out / "sta"), "--groups", "60",
-           "--rtl", *files, "--param", f"CORE={F_CORE[core]}", "--param", f"MUL={mul}"]
+           "--rtl", *files] + ([] if top in OTHER_TOPS else
+                                ["--param", f"CORE={F_CORE[core]}", "--param", f"MUL={mul}"])
     for p in params:
         cmd += ["--param", p]
     for d in inc:

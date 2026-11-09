@@ -14,9 +14,18 @@
 //   +CONSOLE=sim|uart|usb                   the console strap (default sim)
 //   +IOC_LOG=<path>                         the I/O core's SYS DEBUG bytes
 //   +UART_OUT=<path>                        bytes the UART0 line model decodes
-//   +UART_IN=<string> +UART_IN_US=<n>       bytes the line model sends, n µs after reset
-//   +UART_BAUD=<n>                          io_clk cycles per bit of the line model (434)
+//   +UART_IN=<string> +UART_IN_US=<n>       bytes the line model sends, n µs after boot
+//                                           (\n, \r, \t, \\ and \xHH are escapes)
+//   +UART_BPS=<n>                           the line model's baud rate (default 115200)
 //   +GPIO_LOOP=1                            wire pad i to pad i^8 (pins 0-7 to 8-15)
+//
+// Board I/O runs end with summary lines before the last line (hw_tests.py
+// compares them with a test's .io golden): `MPY_IO gpio<i> edges=<n>
+// ms=<intervals>` for each output pad that changed (intervals between
+// changes, rounded to the millisecond), and `MPY_IO uart="<bytes>"` for
+// the bytes the UART line model decoded (unless they were the console).
+// With the uart console strap, the line model's bytes are the program's
+// stdout (+STDOUT); after the halt the bench waits for the UART to go quiet.
 //
 // The last line is `MPY_BOOT_ERROR`, `MPY_HALT code=<n> value=<hex> cycles=<n> ops=<n> gc=<n>`
 // or `MPY_TIMEOUT cycles=<n> ...` (upycore/tools/mpy_build.py parses it).
@@ -43,6 +52,7 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
     initial begin
         real r;
         if ($value$plusargs("IO_CLK_NS=%f", r)) io_clk_ns = r;
+        // The I/O core reads its clock from SYS FREQ (iocore_top: +IO_CLK_HZ).
         // Start a fraction of a period off the hart's clock.
         #(io_clk_ns * 0.37);
         forever #(io_clk_ns / 2.0) io_clk = ~io_clk;
@@ -89,6 +99,65 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
         .ioc_dbg_valid_o(ioc_dbg_valid), .ioc_dbg_byte_o(ioc_dbg_byte)
     );
 
+    // GPIO trace: the times each driven pad changed.
+    realtime gpio_t [16][$];
+    logic [15:0] gpio_prev = 16'h0;
+    always @(gpio_out or gpio_oe) begin
+        for (int i = 0; i < 16; i++) begin
+            logic v = gpio_oe[i] ? gpio_out[i] : 1'b0;
+            if (v != gpio_prev[i] && rst_n && boot_done) gpio_t[i].push_back($realtime);
+            gpio_prev[i] = v;
+        end
+    end
+    task automatic io_summary();
+        string line, x;
+        for (int i = 0; i < 16; i++) begin
+            if (gpio_t[i].size() == 0) continue;
+            line = $sformatf("MPY_IO gpio%0d edges=%0d ms=", i, gpio_t[i].size());
+            for (int k = 1; k < gpio_t[i].size(); k++) begin
+                // A real-to-int cast rounds to the nearest.
+                x = $sformatf("%0d", longint'((gpio_t[i][k] - gpio_t[i][k-1]) / 1.0e6));
+                line = {line, (k > 1) ? "," : "", x};
+            end
+            $display("%s", line);
+        end
+        if (console_sel != 2'd1 && u_term.q.size() > 0) begin
+            line = "MPY_IO uart=\"";
+            foreach (u_term.q[k]) begin
+                byte c = u_term.q[k];
+                if (c == "\n") line = {line, "\\n"};
+                else if (c == "\r") line = {line, "\\r"};
+                else if (c == "\"" || c == "\\") line = {line, "\\", string'(c)};
+                else if (c >= 32 && c < 127) line = {line, string'(c)};
+                else line = {line, $sformatf("\\x%02x", c)};
+            end
+            $display("%s\"", line);
+        end
+    endtask
+
+    // A plusarg string with C-style escapes, as bytes.
+    function automatic void unescape(input string s, ref byte q[$]);
+        int i = 0;
+        while (i < s.len()) begin
+            if (s[i] == "\\" && i + 1 < s.len()) begin
+                byte c = s[i + 1];
+                i += 2;
+                if (c == "n") q.push_back(8'h0A);
+                else if (c == "r") q.push_back(8'h0D);
+                else if (c == "t") q.push_back(8'h09);
+                else if (c == "x" && i + 1 < s.len()) begin
+                    int v;
+                    void'($sscanf(s.substr(i, i + 1), "%h", v));
+                    q.push_back(byte'(v));
+                    i += 2;
+                end else q.push_back(c);
+            end else begin
+                q.push_back(s[i]);
+                i++;
+            end
+        end
+    endfunction
+
     int fd_ioc = 0;
     always @(posedge io_clk) if (ioc_dbg_valid && fd_ioc != 0) begin
         $fwrite(fd_ioc, "%c", ioc_dbg_byte);
@@ -98,14 +167,17 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
         string path, s;
         int baud, at_us;
         if ($value$plusargs("IOC_LOG=%s", path)) fd_ioc = $fopen(path, "wb");
-        if (!$value$plusargs("UART_BAUD=%d", baud)) baud = 434;
-        u_term.set_bit_ns(io_clk_ns * baud);
+        if (!$value$plusargs("UART_BPS=%d", baud)) baud = 115200;
+        u_term.set_bit_ns(1.0e9 / baud);
         if ($value$plusargs("UART_OUT=%s", path)) u_term.fd = $fopen(path, "wb");
-        else u_term.fd = -1;
+        else if (!$test$plusargs("CONSOLE=uart")) u_term.fd = -1;
         if ($value$plusargs("UART_IN=%s", s)) begin
+            byte q[$];
             if (!$value$plusargs("UART_IN_US=%d", at_us)) at_us = 100;
+            unescape(s, q);
+            wait (boot_done);
             #(at_us * 1us);
-            for (int i = 0; i < s.len(); i++) u_term.send(s[i]);
+            foreach (q[i]) u_term.send(q[i]);
         end
     end
 
@@ -124,6 +196,9 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
         fd_out = 0; fd_err = 0;
         if ($value$plusargs("STDOUT=%s", path)) fd_out = $fopen(path, "wb");
         if ($value$plusargs("STDERR=%s", path)) fd_err = $fopen(path, "wb");
+        // The UART console: the line model's bytes are the program's stdout
+        // (set here, where fd_out is opened).
+        if ($value$plusargs("CONSOLE=%s", path) && path == "uart") u_term.fd = (fd_out != 0) ? fd_out : 0;
         if (!$value$plusargs("MAX_CYCLES=%d", max_cycles)) max_cycles = 50_000_000;
         do_trace = $value$plusargs("TRACE=%d", t) && t != 0;
 `ifdef MPY_SAIF
@@ -165,6 +240,18 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
         end
         // let the last console byte land
         repeat (4) @(posedge clk);
+        // A UART console drains after the halt: wait until CON is empty and
+        // the line has been idle for 2 ms (at most 200 ms).
+        if (console_sel == 2'd1 && halted) begin
+            realtime quiet;
+            quiet = $realtime;
+            for (int k = 0; k < 200000; k++) begin
+                #(1us);
+                if (uart0_txd == 1'b0 || !u_soc.u_iobr.u_con.r_empty) quiet = $realtime;
+                if ($realtime - quiet > 2.0e6) break;
+            end
+        end
+        io_summary();
         if (fd_out != 0) $fclose(fd_out);
         if (fd_err != 0) $fclose(fd_err);
         if (boot_err)
