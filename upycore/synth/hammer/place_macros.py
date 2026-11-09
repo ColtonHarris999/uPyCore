@@ -16,7 +16,8 @@ wider than tall (the 31 mm x 0.22 mm d32768_w36 at the default pin pitch)
 the four banks are stacked in one column with the logic beside their pin
 edge. Otherwise two columns of two face each other across a logic channel,
 the left column mirrored so both pin edges face the channel. The logic
-area gets --logic-area / --util of room.
+area gets --logic-area / --util of room (default 40% full), 100 um from the die edge
+and 60 um between macros.
 
     python3 ~/upycore/upycore/synth/hammer/place_macros.py [design_folder]
 
@@ -121,9 +122,9 @@ def main() -> int:
     ap.add_argument("folder", nargs="?", default=".", type=Path, help="mpy_soc design folder")
     ap.add_argument("--logic-area", type=float, default=2.0e6,
                     help="standard-cell area in um^2 (mpy_soc synthesis: about 1.9e6 without macros)")
-    ap.add_argument("--util", type=float, default=0.5, help="target utilization of the logic area")
-    ap.add_argument("--margin", type=float, default=40.0, help="die edge to macro, um")
-    ap.add_argument("--spacing", type=float, default=30.0, help="between macros, um")
+    ap.add_argument("--util", type=float, default=0.4, help="target utilization of the logic area")
+    ap.add_argument("--margin", type=float, default=100.0, help="die edge to macro, um")
+    ap.add_argument("--spacing", type=float, default=60.0, help="between macros, um")
     ap.add_argument("--dry-run", action="store_true", help="print, do not write the config")
     args = ap.parse_args()
     if yaml is None:
