@@ -181,6 +181,12 @@ def main() -> int:
     ap.add_argument("--die", nargs=2, type=float, metavar=("W", "H"),
                     help="die width and height in um (the TOP placement constraint); four "
                          "SRAM macros need far more than a logic-only example")
+    ap.add_argument("--syn-margin", type=float, default=0.0, metavar="NS",
+                    help="extra clock uncertainty in synthesis only: Genus targets a clock this "
+                         "much faster, leaving slack for routed wires (try 10-15%% of the period)")
+    ap.add_argument("--par-effort", choices=["express", "standard", "extreme"],
+                    help="Innovus design_flow_effort (Hammer default standard); extreme "
+                         "optimizes timing harder and runs longer")
     ap.add_argument("--sram-pin-pitch", type=int, metavar="NM",
                     help="fakeram pin pitch in nm (class default 700). fakeram makes a macro "
                          "just tall enough for its pins and as wide as its area needs, so a "
@@ -291,6 +297,8 @@ def main() -> int:
         # `make sram` generates them and the hook swaps every matching
         # instance (docs/mpy_boot.md).
         _set(doc, "vlsi.inputs.sram_parameters", [dict(m) for m in macros])
+    if args.par_effort:
+        _set(doc, "par.innovus.design_flow_effort", args.par_effort)
     if args.sram_pin_pitch:
         if not srams:
             sys.exit("--sram-pin-pitch is only for tops with SRAM macros (mpy_soc)")
@@ -333,6 +341,15 @@ def main() -> int:
                                           "\n# Input-to-output feedthroughs are timed in the system.\n"
                                           "set_false_path -from $data_in -to [all_outputs]\n"
                                           if args.no_feedthrough else "")))
+    if args.syn_margin:
+        # Genus and Innovus both read this file; Innovus reads it after the
+        # SDC Genus wrote, so the plain uncertainty above wins there.
+        with sdc.open("a") as f:
+            f.write("\n# Synthesis margin (--syn-margin): Genus alone sees a tighter clock, so\n"
+                    "# the netlist keeps slack for routed wires. Innovus gets the plain value.\n"
+                    "if {[string match -nocase *genus* [file tail [info nameofexecutable]]]} {\n"
+                    f"    set_clock_uncertainty {float(args.uncertainty) + args.syn_margin:g} [all_clocks]\n"
+                    "}\n")
     if "constraints.tcl" not in cfg.read_text() and not any(
             "constraints.tcl" in f.read_text() for f in cfg_dir.glob("*.yml")):
         warnings.append("no yml file names constraints.tcl; find how the example loads it")

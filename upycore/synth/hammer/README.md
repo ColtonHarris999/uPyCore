@@ -358,3 +358,9 @@ are stacked in one column with the logic beside their pins, on a die about
 makes the bank about 3 x 2 mm; place_macros.py then puts two columns of two
 facing a logic channel. `python3 place_macros.py <folder> --dry-run` prints
 the layout without writing it.
+
+Two options for closing timing after routing (any top, via DESIGN_ARGS):
+`--syn-margin 1.5` adds 1.5 ns of clock uncertainty in Genus only, so the
+netlist keeps slack for the wires (Innovus re-reads constraints.tcl and gets
+the plain 0.1 ns; synthesis slack in `status` includes the margin), and
+`--par-effort extreme` sets Hammer's `par.innovus.design_flow_effort`.
