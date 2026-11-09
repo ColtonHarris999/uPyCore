@@ -396,9 +396,9 @@ any other buffer it returns -1 before sending anything, and
 subclass, say). `readinto` asks for at most 255 bytes a command and
 stops after a command that found fewer waiting than it asked for, so it
 does not read `UART0` first and ends once the ring is drained. Phase 6
-built the bytes with `bytearray.append`, three a word (about 1,700 hart
+built the bytes with `bytearray.append`, three a word (about 1,900 hart
 cycles a byte), and `readinto` then stored them one by one into the
-view (about 3,800 a byte); Measurements has the numbers now.
+view (about 3,800 a byte); Measurements has the numbers.
 
 ## Firmware
 
@@ -871,7 +871,12 @@ on the simulator with the bench's measurement hooks (`+MEAS_FILE`,
 [`mpy_io_core_measurements.json`](mpy_io_core_measurements.json). Hart
 at 100 MHz, io_clk at 50 MHz, the tree of commit `f313e32` (phase 6, the
 phase 4 RTL); simulated time, so the numbers are exact for this RTL and
-firmware, not for silicon.
+firmware, not for silicon. UART receive is from a later run, after the
+receive path was rewritten (Hart software, UART receive), on Verilator
+5.020. That run moved the other rows only within the simulator's own
+spread: the phase 6 tree on 5.020 gives the same timer numbers as the
+new tree (σ about 2.0 µs instead of 1.65), and the GPIO rates and the
+latency means stay within 0.2 %.
 
 | What | Result |
 | --- | --- |
@@ -884,7 +889,7 @@ firmware, not for silicon.
 | Edges missed | 0 of 1,000 (one rising edge every 200 µs) |
 | 1 kHz `machine.Timer` callback, period at the handler's first opcode | mean 999.990 µs, σ 1.65 µs, worst 5.18 µs off with the main program sleeping; σ 1.65 µs, worst 3.18 µs off while it spins |
 | UART transmit, 4 KB in 256-byte `write()`s | 11,518 B/s at 115200 baud (100 % of the line), 99,800 B/s at 1 Mbaud (99.8 %), 292,398 B/s at 3 Mbaud (97.5 %) |
-| UART receive, 2 KB back to back | all 2,048 bytes at 115200 baud; at 460800 baud 1,051 arrive, at 1 Mbaud 635 (the 256-byte ring overflows) |
+| UART receive, 2 KB back to back, `readinto` a memoryview slice | all 2,048 bytes at 115200, 460800, 1 M and 3 Mbaud: 11,521, 46,143, 100,279 and 298,021 B/s (100 %, 100 %, 100 %, 99.3 % of the line; a rate a little over 100 % is the first byte's timing). Phase 6's path lost bytes from 460800 baud (1,051 of 2,048 arrived; 635 at 1 Mbaud) |
 | Island switching activity (SAIF), idle / busy | 0.0058 / 0.0074 toggles per bit per io_clk cycle over 117,946 bits |
 
 Reading the table:
@@ -896,12 +901,22 @@ Reading the table:
   the handler, the schedule queue), 3,600–5,100 hart cycles. A hard
   handler skips the queue. Sleeping costs nothing extra: `_wfe` wakes on
   `evt_pend` and the dispatch runs at the loop's next jump.
-- **Receive is limited by the hart, not the UART.** One `_io.uart_rx` of
-  200 bytes takes 3.8 ms (about 5,700 hart cycles per three-byte answer
-  word: each word is a bridge read and a firmware loop in bytecode), so the
-  hart drains about 10 KB/s and the I/O core's 256-byte ring overflows
-  above 115200 baud. Transmit is posted (three bytes a command word) and
-  runs at line rate up to 3 Mbaud.
+- **Receive now keeps up with the line to 3 Mbaud.** Phase 6's limit
+  was the hart firmware, not the bridge or the I/O core. With `ticks_cpu`
+  probes (hart cycles, 460800 baud, a full ring): one `_io.uart_rx(200)`
+  took 379,926 cycles, of which 344,369 were the 200
+  `bytearray.append` calls; a bridge word load from Python is about 400
+  cycles, and a whole `_io.req` round trip 1,295. `readinto` then stored
+  the bytes one by one into the memoryview, 759,142 cycles for 200.
+  Together, about 11.5 ms per 200 bytes, so the hart drained about
+  10 KB/s and the 256-byte ring overflowed above 115200 baud. Now
+  `_io.uart_rx(200)` takes 15,272 cycles and `readinto` of 200 bytes into
+  a memoryview slice 25,783 (about 776 KB/s): each answer word is about
+  250 cycles of firmware loop (an RSP load and a store), and the I/O core
+  fills RSP at about 170 hart cycles a word, so the two sides are now
+  about even; a call's fixed cost (the command, the count, the
+  allocation) is about 2,500. Transmit is posted (three bytes a command
+  word) and runs at line rate up to 3 Mbaud.
 - **Idle is not idle.** The I/O core's firmware polls in one loop and
   never sleeps (`wfi`), so the idle island switches at 79 % of its busy
   rate. Power itself needs Genus or Joules with the SAIF files
