@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from binascii import hexlify
 from dataclasses import dataclass, field
+from decimal import Decimal
 
 from mpy_catalog import Catalog
 from mpy_prelude import Prelude, decode_prelude
@@ -131,7 +132,7 @@ class ComplexConst(complex):
     text: str
 
 
-def read_obj(reader: Reader, catalog: Catalog, numeric: bool = False) -> object:
+def read_obj(reader: Reader, catalog: Catalog, numeric: bool = False, *, bigint: bool = False) -> object:
     """``numeric`` accepts float and complex consts (the v2 linker does; phase 1 does not)."""
 
     kind = reader.read_byte()
@@ -148,7 +149,7 @@ def read_obj(reader: Reader, catalog: Catalog, numeric: bool = False) -> object:
         return Ellipsis
     if kind == kinds["tuple"]["id"]:
         count = reader.read_uint()
-        return tuple(read_obj(reader, catalog, numeric) for _ in range(count))
+        return tuple(read_obj(reader, catalog, numeric, bigint=bigint) for _ in range(count))
 
     length = reader.read_uint()
     if length == 0 and kind == kinds["bytes"]["id"]:
@@ -161,8 +162,10 @@ def read_obj(reader: Reader, catalog: Catalog, numeric: bool = False) -> object:
             return str(payload, "utf-8")
         return payload
     if kind == kinds["int"]["id"]:
-        value = int(str(payload, "ascii"), 10)
-        if not _int_fits(catalog, value):
+        digits = str(payload, "ascii")
+        # Keep large MPZ constants independent of the host's decimal digit cap.
+        value = int(Decimal(digits)) if bigint and len(digits) > 4096 else int(digits, 10)
+        if not bigint and not _int_fits(catalog, value):
             raise MpyError(f"rejected integer literal {value} outside signed 64-bit")
         return value
     if kind == kinds["float"]["id"]:
@@ -205,7 +208,7 @@ def read_raw_code(reader: Reader, catalog: Catalog, arch: int, arch_name: str) -
     return RawCode(kind=kind, fun_data=fun_data, prelude=prelude, children=children)
 
 
-def read_mpy(data: bytes, filename: str, catalog: Catalog, numeric: bool = False) -> MpyModule:
+def read_mpy(data: bytes, filename: str, catalog: Catalog, numeric: bool = False, *, bigint: bool = False) -> MpyModule:
     """Parse one bytecode ``.mpy``. A non-none architecture is a link error."""
 
     reader = Reader(data)
@@ -228,7 +231,7 @@ def read_mpy(data: bytes, filename: str, catalog: Catalog, numeric: bool = False
     qstr_count = reader.read_uint()
     obj_count = reader.read_uint()
     qstrs = [read_qstr(reader, catalog) for _ in range(qstr_count)]
-    objs = [read_obj(reader, catalog, numeric) for _ in range(obj_count)]
+    objs = [read_obj(reader, catalog, numeric, bigint=bigint) for _ in range(obj_count)]
     raw = read_raw_code(reader, catalog, arch, arch_name)
     if arch != 0:
         raise MpyError(f"rejected architecture {arch_name}")

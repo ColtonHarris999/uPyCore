@@ -1,7 +1,11 @@
 // uPyCore unix oracle. Included from ports/unix/mpconfigport.h before the
 // port's own defaults. Settings match planning/old/micropython_pivot_plan.md §3.2.
 
+#ifdef UPYCORE_ORACLE_MPZ
+#define MICROPY_LONGINT_IMPL           (MICROPY_LONGINT_IMPL_MPZ)
+#else
 #define MICROPY_LONGINT_IMPL           (MICROPY_LONGINT_IMPL_LONGLONG)
+#endif
 #define MICROPY_FLOAT_IMPL             (MICROPY_FLOAT_IMPL_FLOAT)
 #define MICROPY_OBJ_REPR               (MICROPY_OBJ_REPR_A)
 #define MICROPY_CONFIG_ROM_LEVEL       (MICROPY_CONFIG_ROM_LEVEL_EXTRA_FEATURES)

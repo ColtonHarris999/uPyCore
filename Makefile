@@ -31,7 +31,7 @@ ORACLE := build/oracle/src/ports/unix/build-upycore/micropython
 HW_AREAS := smoke alu control calls containers strings exceptions objects \
 	builtins modules integ variables memory gc generators compiler
 
-.PHONY: test sim fw run oracle oracle-header oracle-variant oracle-smoke mpy-cross \
+.PHONY: test sim fw run oracle oracle-header oracle-variant oracle-mpz oracle-smoke mpy-cross \
 	docker-build docker-test test-hw test-host test-unit test-compiler regen-goldens check-goldens \
 	synth synth-gates dc-src clean
 
@@ -102,6 +102,9 @@ check-goldens:
 
 oracle-header:
 	variants/upycore/build.sh header
+
+oracle-mpz:
+	variants/upycore/build.sh mpz
 
 oracle-variant:
 	variants/upycore/build.sh variant

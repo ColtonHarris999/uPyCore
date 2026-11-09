@@ -312,6 +312,27 @@ module mpy_core
         S_BF_VA2,
         S_BIN,
         S_BIN_FB,
+        S_BI_TRY,
+        S_BI_L_KIND,
+        S_BI_L_COUNT,
+        S_BI_R_KIND,
+        S_BI_R_COUNT,
+        S_BI_SELECT,
+        S_BI_CMP_L,
+        S_BI_CMP_R,
+        S_BI_CHOOSE,
+        S_BI_ALLOC,
+        S_BI_CARRY,
+        S_BI_FINISH,
+        S_BI_TYPE,
+        S_BI_DIV_L2,
+        S_BI_DIV_L1,
+        S_BI_DIV_L0,
+        S_BI_DIV_R1,
+        S_BI_DIV_R0,
+        S_BI_DIV_GO,
+        S_BI_DIV_Q,
+        S_BI_DIV_CHECK,
         S_BL_A,
         S_BL_L,
         S_BM_A,
@@ -327,6 +348,7 @@ module mpy_core
         S_BOOT2B,
         S_BOOT3,
         S_BOOT4,
+        S_BOOT_FLAGS,
         S_BOOT5,
         S_BOOT6,
         S_BOOT7,
@@ -900,6 +922,19 @@ module mpy_core
         S_NAT_WC3,
         S_NAT_WC4,
         S_NAT_WC5,
+        S_LIMB_A_PTR,
+        S_LIMB_A_LEN,
+        S_LIMB_B_PTR,
+        S_LIMB_B_LEN,
+        S_LIMB_FACTOR,
+        S_LIMB_NEXT,
+        S_LIMB_A,
+        S_LIMB_MUL,
+        S_LIMB_B_REQ,
+        S_LIMB_B,
+        S_LIMB_WRITE,
+        S_LIMB_NEW,
+        S_LIMB_NEW_TYPE,
         S_NAT_BC0,
         S_NAT_LK,
         S_NAT_DG,
@@ -1071,6 +1106,7 @@ module mpy_core
 
     // image constants
     logic [31:0] h_qdesc, h_builtins, h_hooks, h_msgs, h_chars, h_empty;
+    logic        h_bigint;
     // Image qstr count, plus a RAM descriptor table for ids compiled code invents.
     logic [31:0] h_nq, h_qext, h_qextn, qid;
     state_e      qd_nxt;
@@ -1211,6 +1247,21 @@ module mpy_core
 
     // scratch
     logic [31:0] x0, x1, x2, x3, x4;
+    logic [31:0] limb_factor, limb_carry, limb_offset;
+    logic [63:0] limb_product, limb_sum;
+    assign limb_sum = limb_product + sx64(limb_offset);
+
+    // Bytecode fast path over canonical BIGINT objects. The native MAC
+    // and this path share the limb sequencer and arithmetic datapath.
+    logic bi_inline, bi_left_neg, bi_right_neg, bi_swap, bi_neg, bi_sub;
+    logic [5:0] bi_op;
+    logic [17:0] bi_an, bi_bn, bi_i, bi_used;
+    logic [29:0] bi_top;
+    logic bi_low_nonzero;
+    logic [31:0] bi_cmp_l, bi_q;
+    logic [63:0] bi_prefix;
+    logic [31:0] bi_scalar;
+    assign bi_scalar = (tg(t[0]) == ABI_TAG_OBJECT) ? t[1][31:0] : t[0][31:0];
     logic [7:0]  i0, i1, i2;
     logic [6:0]  s0, s1;
     logic        b0, b1;
@@ -2125,7 +2176,8 @@ module mpy_core
             end
             S_BOOT2B: begin h_nq <= md; rd(4 * ABI_HDR_BUILTINS, S_BOOT3); end
             S_BOOT3: begin h_builtins <= md; rd(4 * ABI_HDR_HOOKS, S_BOOT4); end
-            S_BOOT4: begin h_hooks <= md; rd(4 * ABI_HDR_MSGS, S_BOOT5); end
+            S_BOOT4: begin h_hooks <= md; rd(4 * ABI_HDR_FLAGS, S_BOOT_FLAGS); end
+            S_BOOT_FLAGS: begin h_bigint <= (md & ABI_IMAGE_FLAG_BIGINT) != 0; rd(4 * ABI_HDR_MSGS, S_BOOT5); end
             S_BOOT5: begin h_msgs <= md; rd(4 * ABI_HDR_CHARS, S_BOOT6); end
             S_BOOT6: begin h_chars <= md; rd(4 * ABI_HDR_EMPTY_TUPLE, S_BOOT7); end
             S_BOOT7: begin h_empty <= md; rd(TT + 4 * ABI_T_FUNCTION, S_BOOT8); end
@@ -4212,12 +4264,170 @@ module mpy_core
                         st <= S_NUM_GO;
                     end else st <= S_NUM;
                 end else if (v0 == ABI_BINOP_EQUAL || v0 == ABI_BINOP_NOT_EQUAL) st <= S_EQ;
+                else if (h_bigint && (tg(rf[`SX(6'(sp - 7'd2))]) == ABI_TAG_OBJECT ||
+                                      tg(rf[`SX(6'(sp - 7'd1))]) == ABI_TAG_OBJECT)) st <= S_BI_TRY;
                 else st <= S_BIN_FB;
+            end
+            S_BI_TRY: begin
+                v0 = 32'(n_o);
+                if (v0 >= ABI_BINOP_INPLACE_OR && v0 < ABI_BINOP_OR) v0 = v0 + 32'd13;
+                if (h_bigint && !n_un &&
+                    ((v0 == ABI_BINOP_MULTIPLY &&
+                      ((tg(t[0]) == ABI_TAG_OBJECT && tg(t[1]) == ABI_TAG_INT) ||
+                       (tg(t[1]) == ABI_TAG_OBJECT && tg(t[0]) == ABI_TAG_INT))) ||
+                     ((v0 == ABI_BINOP_ADD || v0 == ABI_BINOP_SUBTRACT || v0 == ABI_BINOP_FLOOR_DIVIDE) &&
+                       tg(t[0]) == ABI_TAG_OBJECT && tg(t[1]) == ABI_TAG_OBJECT) ||
+                     (v0 == ABI_BINOP_ADD &&
+                      ((tg(t[0]) == ABI_TAG_OBJECT && t[1] == vint(32'd0)) ||
+                       (tg(t[1]) == ABI_TAG_OBJECT && t[0] == vint(32'd0)))))) begin
+                    bi_op <= 6'(v0); bi_an <= 18'd0; bi_bn <= 18'd0;
+                    bi_left_neg <= 1'b0; bi_right_neg <= 1'b0;
+                    if (tg(t[0]) == ABI_TAG_OBJECT) rd(adr(t[0]), S_BI_L_KIND);
+                    else rd(adr(t[1]), S_BI_R_KIND);
+                end else st <= S_BIN_FB;
             end
             S_BIN_FB: begin
                 sp <= sp - 7'd2;
                 hook(ABI_HOOK_BINOP, ABI_RK_PUSH, 8'd3, vint(32'(n_o)), t[0], t[1], VNULL);
             end
+            S_BI_L_KIND: if (md == ABI_OB_BIGINT) rd(aoff(adr(t[0]), 8), S_BI_L_COUNT);
+                         else st <= S_BIN_FB;
+            S_BI_L_COUNT: begin
+                bi_an <= md[31] ? -md[17:0] : md[17:0];
+                bi_left_neg <= md[31];
+                if (tg(t[1]) == ABI_TAG_OBJECT) rd(adr(t[1]), S_BI_R_KIND);
+                else st <= S_BI_SELECT;
+            end
+            S_BI_R_KIND: if (md == ABI_OB_BIGINT) rd(aoff(adr(t[1]), 8), S_BI_R_COUNT);
+                         else st <= S_BIN_FB;
+            S_BI_R_COUNT: begin
+                bi_bn <= md[31] ? -md[17:0] : md[17:0];
+                bi_right_neg <= md[31] ^ (bi_op == ALU_SUB);
+                st <= S_BI_SELECT;
+            end
+            S_BI_SELECT: begin
+                bi_swap <= 1'b0;
+                bi_sub <= bi_left_neg ^ bi_right_neg;
+                bi_neg <= bi_left_neg;
+                if (bi_op == ALU_MUL) begin
+                    if ($signed(bi_scalar) < -32'sd1073741823 || $signed(bi_scalar) > 32'sd1073741823)
+                        st <= S_BIN_FB;
+                    else if (bi_scalar == 32'd0) begin t[2] <= vint(32'd0); st <= S_NUM_PUT; end
+                    else if (bi_scalar == 32'd1) begin t[2] <= bi_an != 0 ? t[0] : t[1]; st <= S_NUM_PUT; end
+                    else begin
+                        limb_factor <= bi_scalar[31] ? -bi_scalar : bi_scalar;
+                        bi_neg <= bi_left_neg ^ bi_right_neg ^ bi_scalar[31];
+                        alloc(32'(bi_an | bi_bn) + 32'd4, S_BI_ALLOC);
+                    end
+                end else if (bi_op == ALU_FLOOR) begin
+                    if (bi_left_neg != bi_right_neg || bi_bn < 18'd2 || bi_an > bi_bn + 18'd1)
+                        st <= S_BIN_FB;
+                    else if (bi_an < bi_bn) begin t[2] <= vint(32'd0); st <= S_NUM_PUT; end
+                    else if (bi_an != bi_bn) rd(adr(t[0]) + 32'd8 + (32'(bi_an) << 2), S_BI_DIV_L2);
+                    else begin
+                        bi_prefix <= 64'd0;
+                        rd(adr(t[0]) + 32'd8 + (32'(bi_bn) << 2), S_BI_DIV_L1);
+                    end
+                end else if (bi_an == 0 || bi_bn == 0) begin
+                    // Admission only allows a scalar zero for addition.
+                    t[2] <= bi_an != 0 ? t[0] : t[1]; st <= S_NUM_PUT;
+                end else if (bi_left_neg == bi_right_neg) st <= S_BI_CHOOSE;
+                else if (bi_an != bi_bn) begin bi_swap <= bi_an < bi_bn; st <= S_BI_CHOOSE; end
+                else begin
+                    bi_i <= bi_an;
+                    rd(adr(t[0]) + 32'd8 + (32'(bi_an) << 2), S_BI_CMP_L);
+                end
+            end
+            S_BI_CMP_L: begin
+                bi_cmp_l <= md; rd(adr(t[1]) + 32'd8 + (32'(bi_i) << 2), S_BI_CMP_R);
+            end
+            S_BI_CMP_R: if (md != bi_cmp_l) begin bi_swap <= bi_cmp_l < md; st <= S_BI_CHOOSE; end
+                        else if (bi_i == 18'd1) begin t[2] <= vint(32'd0); st <= S_NUM_PUT; end
+                        else begin
+                            bi_i <= bi_i - 18'd1;
+                            rd(adr(t[0]) + 32'd4 + (32'(bi_i) << 2), S_BI_CMP_L);
+                        end
+            S_BI_CHOOSE: begin
+                bi_neg <= bi_swap ? bi_right_neg : bi_left_neg;
+                limb_factor <= bi_sub ? 32'hffffffff : 32'd1;
+                alloc(32'(bi_an > bi_bn ? bi_an : bi_bn) + 32'd4, S_BI_ALLOC);
+            end
+            S_BI_ALLOC: begin
+                // Set stream cursors after allocation, which may spill for GC.
+                x0 <= al_a + 32'd12;
+                if (bi_op == ALU_MUL) begin
+                    x1 <= adr(bi_an != 0 ? t[0] : t[1]) + 32'd12;
+                    x3 <= adr(bi_an != 0 ? t[0] : t[1]) + 32'd12 + (32'(bi_an | bi_bn) << 2);
+                    x2 <= 32'd0; x4 <= 32'd0;
+                end else if (bi_sub && !bi_swap) begin
+                    x1 <= adr(t[1]) + 32'd12; x3 <= adr(t[1]) + 32'd12 + (32'(bi_bn) << 2);
+                    x2 <= adr(t[0]) + 32'd12; x4 <= adr(t[0]) + 32'd12 + (32'(bi_an) << 2);
+                end else begin
+                    x1 <= adr(t[0]) + 32'd12; x3 <= adr(t[0]) + 32'd12 + (32'(bi_an) << 2);
+                    x2 <= adr(t[1]) + 32'd12; x4 <= adr(t[1]) + 32'd12 + (32'(bi_bn) << 2);
+                end
+                bi_inline <= 1'b1;
+                bi_i <= 18'd0; bi_used <= 18'd0; bi_top <= 30'd0; bi_low_nonzero <= 1'b0;
+                limb_carry <= 32'd0;
+                st <= S_LIMB_NEXT;
+            end
+            S_BI_CARRY: if (limb_carry == 32'd0) st <= S_BI_FINISH;
+                        else begin
+                            bi_used <= bi_i + 18'd1; bi_top <= limb_carry[29:0];
+                            wr(x0, vint(limb_carry), S_BI_FINISH);
+                        end
+            S_BI_FINISH: if (bi_used == 0) begin t[2] <= vint(32'd0); st <= S_NUM_PUT; end
+                         else if (bi_used < 18'd3 || (bi_used == 18'd3 &&
+                                  (bi_top < 30'd8 || (bi_neg && bi_top == 30'd8 && !bi_low_nonzero))))
+                             st <= S_BIN_FB;
+                         else rd(TT + 4 * ABI_T_INT, S_BI_TYPE);
+            S_BI_TYPE: begin
+                t[2] <= vobj(al_a);
+                wb_v[0] <= vint(ABI_OB_BIGINT);
+                wb_v[1] <= mv;
+                wb_v[2] <= vint(bi_neg ? -32'(bi_used) : 32'(bi_used));
+                wblock(al_a, 4'd3, S_NUM_PUT);
+            end
+
+            // For H = the retained high limbs and R = the discarded power
+            // of the radix, A-q*B >= (Ha-q*Hb-q)*R. The prefix division
+            // already bounds A-q*B < B; the check below proves it is >= 0.
+            S_BI_DIV_L2: if (md > 32'd7) st <= S_BIN_FB;
+                         else begin
+                             bi_prefix <= {1'b0, md[2:0], 60'd0};
+                             rd(adr(t[0]) + 32'd8 + (32'(bi_bn) << 2), S_BI_DIV_L1);
+                         end
+            S_BI_DIV_L1: begin
+                bi_prefix[59:30] <= md[29:0];
+                rd(m_addr - 32'd4, S_BI_DIV_L0);
+            end
+            S_BI_DIV_L0: begin
+                bi_prefix[29:0] <= md[29:0];
+                rd(adr(t[1]) + 32'd8 + (32'(bi_bn) << 2), S_BI_DIV_R1);
+            end
+            S_BI_DIV_R1: begin
+                nb[63:30] <= {4'd0, md[29:0]};
+                rd(m_addr - 32'd4, S_BI_DIV_R0);
+            end
+            S_BI_DIV_R0: begin nb[29:0] <= md[29:0]; st <= S_BI_DIV_GO; end
+            S_BI_DIV_GO: begin
+                na <= bi_prefix; na_f <= 1'b0; nb_f <= 1'b0; n_small <= 1'b0;
+                alu_op <= ALU_FLOOR; alu_start <= 1'b1; st <= S_BI_DIV_Q;
+            end
+            S_BI_DIV_Q: if (alu_done) begin
+                if (alu_err != AE_NONE || alu_res[63:31] != 0) st <= S_BIN_FB;
+                else if (alu_res == 0) begin t[2] <= vint(32'd0); st <= S_NUM_PUT; end
+                else begin
+                    bi_q <= alu_res[31:0]; na <= alu_res;
+                    alu_op <= ALU_MUL; alu_start <= 1'b1; st <= S_BI_DIV_CHECK;
+                end
+            end
+            S_BI_DIV_CHECK: if (alu_done) begin
+                if (alu_err == AE_NONE && bi_prefix - alu_res >= 64'(bi_q)) begin
+                    t[2] <= vint(bi_q); st <= S_NUM_PUT;
+                end else st <= S_BIN_FB;
+            end
+
             S_EQ: begin
                 vb = (32'(n_o) == ABI_BINOP_NOT_EQUAL);
                 if (t[0] == t[1] && tg(t[0]) != ABI_TAG_OBJECT && tg(t[0]) != ABI_TAG_COMPLEX) begin
@@ -4294,8 +4504,14 @@ module mpy_core
             end
             S_NUM_BL: begin nb[31:0] <= md; rd(aoff(adr(t[1]), 4), S_NUM_BH); end
             S_NUM_BH: begin nb[63:32] <= md; st <= S_NUM_GO; end
-            S_NUM_GO: begin
-                n_small <= !na_f && !nb_f && fits31(na) && fits31(nb);
+            S_NUM_GO: if (h_bigint && !n_un &&
+                          (tg(t[0]) == ABI_TAG_INT64 || tg(t[1]) == ABI_TAG_INT64) &&
+                          (na_f || nb_f || alu_op == ALU_TDIV || (alu_op == ALU_POW && nb[63]))) begin
+                // MPZ converts in 16-bit digits, which can round differently
+                // from the ALU's direct signed-64 to binary32 conversion.
+                st <= S_BIN_FB;
+            end else begin
+                n_small <= !na_f && !nb_f && (h_bigint || (fits31(na) && fits31(nb)));
                 alu_start <= 1'b1;
                 if (cfg_aalu && aalu_safe(alu_op, n_un, na_f, nb_f, na, nb)) begin
                     aalu_pend <= 1'b1; aalu_slot <= `SX(6'(sp - 7'd2));
@@ -4311,7 +4527,11 @@ module mpy_core
                         else alloc(32'd2, S_NUM_BOX);
                     end
                     AE_ZERO_DIV: raise_msg(ABI_MSG_DIV_ZERO);
-                    AE_OVERFLOW: raise_msg(ABI_MSG_OVERFLOW);
+                    AE_OVERFLOW: if (h_bigint && !na_f && !nb_f) begin
+                        sp <= sp - (n_un ? 7'd1 : 7'd2);
+                        hook(ABI_HOOK_INT_OVERFLOW, ABI_RK_PUSH, 8'd3,
+                             vint(32'(n_o)), t[0], n_un ? VNULL : t[1], VNULL);
+                    end else raise_msg(ABI_MSG_OVERFLOW);
                     AE_NEG_SHIFT: raise_msg(ABI_MSG_NEG_SHIFT);
                     default: if (n_un) begin
                                  sp <= sp - 7'd1;
@@ -4463,6 +4683,15 @@ module mpy_core
                     ABI_N_CALLNS: if (tg(mv) == ABI_TAG_INT) rd(ab_ptr(ab_lo + 8'd1), S_NAT_CNS);
                         else wr(ab_ptr(8'd0), mv, S_NAT_CALL);
                     ABI_N_WCOPY: rd(ab_ptr(ab_lo + 8'd1), S_NAT_WC1);
+                    ABI_N_LIMB_MAC: if (v0 != 32'd6) st <= S_NAT_FB;
+                        else begin
+                            x0 <= padr(mv) + 32'd12;
+                            rd(ab_ptr(ab_lo + 8'd1), S_LIMB_A_PTR);
+                        end
+                    ABI_N_LIMB_NEW: if (v0 != 32'd1) st <= S_NAT_FB;
+                        else if (tg(mv) != ABI_TAG_INT || v1 > ABI_GC_POOL_BYTES / 4 - 3)
+                            raise_msg(ABI_MSG_MEMORY);
+                        else alloc(v1 + 32'd3, S_LIMB_NEW);
                     ABI_N_BCOPY: rd(ab_ptr(ab_lo + 8'd2), S_NAT_BC0);
                     ABI_N_STRNEW: if (!intlike(mv) || v1[31] || v1 > ABI_GC_POOL_BYTES - 32'd12)
                                       alloc(ABI_GC_POOL_BYTES / 4 + 32'd1, S_N_STRNEW);
@@ -4645,6 +4874,57 @@ module mpy_core
             S_NAT_CALL2: begin
                 cl_loc <= mv; ab_lo <= 8'd32; ab_pe <= 8'd32; st <= S_CALL;
             end
+            // Packed 30-bit limbs, least significant first. The firmware
+            // supplies bounds and owns allocation and sign normalization.
+            // Exact aliasing is safe because both reads precede the write.
+            S_LIMB_A_PTR: begin x1 <= padr(mv) + 32'd12; rd(ab_ptr(ab_lo + 8'd2), S_LIMB_A_LEN); end
+            S_LIMB_A_LEN: begin x3 <= x1 + (md << 2); rd(ab_ptr(ab_lo + 8'd3), S_LIMB_B_PTR); end
+            S_LIMB_B_PTR: begin x2 <= padr(mv) + 32'd12; rd(ab_ptr(ab_lo + 8'd4), S_LIMB_B_LEN); end
+            S_LIMB_B_LEN: begin x4 <= x2 + (md << 2); rd(ab_ptr(ab_lo + 8'd5), S_LIMB_FACTOR); end
+            S_LIMB_FACTOR: begin bi_inline <= 1'b0; limb_factor <= md; limb_carry <= 32'd0; st <= S_LIMB_NEXT; end
+            S_LIMB_NEXT: if (x1 == x3 && x2 == x4) begin
+                             if (bi_inline) st <= S_BI_CARRY;
+                             else deliver(vint(limb_carry), crk);
+                         end
+                         else if (x1 == x3) begin limb_product <= 64'd0; st <= S_LIMB_B_REQ; end
+                         else rd(x1, S_LIMB_A);
+            S_LIMB_A: begin
+                x1 <= x1 + 32'd4;
+                if (limb_factor == 32'd1 || limb_factor == 32'hffffffff) begin
+                    limb_product <= limb_factor[31] ? -{34'd0, md[29:0]} : {34'd0, md[29:0]};
+                    st <= S_LIMB_B_REQ;
+                end else begin
+                    na <= {34'd0, md[29:0]}; nb <= sx64(limb_factor);
+                    na_f <= 1'b0; nb_f <= 1'b0; n_small <= 1'b0;
+                    alu_op <= ALU_MUL; alu_start <= 1'b1; st <= S_LIMB_MUL;
+                end
+            end
+            S_LIMB_MUL: if (alu_done) begin limb_product <= alu_res; st <= S_LIMB_B_REQ; end
+            S_LIMB_B_REQ: if (x2 == x4) begin limb_offset <= limb_carry; st <= S_LIMB_WRITE; end
+                          else rd(x2, S_LIMB_B);
+            S_LIMB_B: begin limb_offset <= limb_carry + {2'd0, md[29:0]}; x2 <= x2 + 32'd4; st <= S_LIMB_WRITE; end
+            S_LIMB_WRITE: begin
+                if (bi_inline) begin
+                    bi_i <= bi_i + 18'd1;
+                    if (limb_sum[29:0] != 0) begin
+                        bi_used <= bi_i + 18'd1;
+                        bi_top <= limb_sum[29:0];
+                        if (bi_i < 18'd2) bi_low_nonzero <= 1'b1;
+                    end
+                end
+                limb_carry <= limb_sum[61:30];
+                wr(x0, vint({2'd0, limb_sum[29:0]}), S_LIMB_NEXT);
+                x0 <= x0 + 32'd4;
+            end
+            S_LIMB_NEW: rd(TT + 4 * ABI_T_INT, S_LIMB_NEW_TYPE);
+            S_LIMB_NEW_TYPE: begin
+                t[0] <= {ABI_TAG_OBJECT, al_a};
+                wb_v[0] <= vint(ABI_OB_BIGINT);
+                wb_v[1] <= mv;
+                wb_v[2] <= vint(32'd0);
+                wblock(al_a, 4'd3, S_N_STRNEW2);
+            end
+
             S_NAT_WC1: begin x1 <= mv[31:0]; rd(ab_ptr(ab_lo + 8'd2), S_NAT_WC2); end
             S_NAT_WC2: begin ab_s[0] <= mv; rd(ab_ptr(ab_lo + 8'd3), S_NAT_WC3); end
             S_NAT_WC3: begin x2 <= mv[31:0]; rd(ab_ptr(ab_lo + 8'd4), S_NAT_WC4); end
@@ -4694,7 +4974,7 @@ module mpy_core
                 else if (nid == ABI_N_NEW_INT && is_bool(mv)) deliver(vint({31'd0, mv == VTRUE}), crk);
                 else if (nid == ABI_N_NEW_FLOAT && (tg(mv) == ABI_TAG_INT || is_bool(mv))) begin
                     alu_op <= ALU_ADD; alu_start <= 1'b1; st <= S_N_ABS_W;
-                end else if (nid == ABI_N_NEW_FLOAT && tg(mv) == ABI_TAG_INT64) begin
+                end else if (nid == ABI_N_NEW_FLOAT && tg(mv) == ABI_TAG_INT64 && !h_bigint) begin
                     alu_op <= ALU_ADD; rd(adr(mv), S_N_NEW_L);
                 end else if (nid == ABI_N_NEW_INT && tg(mv) == ABI_TAG_FLOAT) begin
                     nb_f <= 1'b0; alu_op <= ALU_F2I; alu_start <= 1'b1; st <= S_N_ABS_W;
@@ -5353,7 +5633,7 @@ module mpy_core
             S_HASH_W16: begin hh <= {16'd0, md[15:0]}; ret(); end
             S_HASH_I64: begin hh <= sx31(md); ret(); end
             S_HASH_OBJ: begin
-                if (md == ABI_OB_INSTANCE || md == ABI_OB_EXCEPTION) hok <= 1'b0;
+                if (md == ABI_OB_INSTANCE || md == ABI_OB_EXCEPTION || md == ABI_OB_BIGINT) hok <= 1'b0;
                 else hh <= {1'b0, hk[31:1]};
                 ret();
             end

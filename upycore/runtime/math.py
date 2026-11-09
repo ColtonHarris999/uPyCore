@@ -14,8 +14,6 @@
 # argument, or an infinity from a finite one, is ValueError("math domain
 # error").
 #
-# Not implemented yet: acos asin atan atan2 acosh asinh atanh cosh sinh tanh
-# expm1 erf erfc gamma lgamma fmod.
 
 
 def _mkp2():
@@ -474,7 +472,7 @@ def log(x, base=None):
     x = _f(x)
     if x <= 0.0:
         _err()
-    l = _log(x)
+    l = x if x != x else _log(x)
     if base is None:
         return l
     base = _f(base)
@@ -640,11 +638,13 @@ def modf(x):
     return (copysign(x - i, x), i)
 
 
-def isclose(a, b, rel_tol=1e-9, abs_tol=0):
+def isclose(a, b, *, rel_tol=1e-9, abs_tol=0):
     a = _f(a)
     b = _f(b)
     rel_tol = _f(rel_tol)
     abs_tol = _f(abs_tol)
+    if rel_tol < 0.0 or abs_tol < 0.0:
+        _err()
     if a == b:
         return True
     d = abs(a - b)
@@ -667,3 +667,342 @@ def factorial(x):
 
 def _intarg(x):
     raise TypeError("can't convert " + type(x).__name__ + " to int")
+
+
+def _atan(x):
+    # Reduce to |x| <= tan(pi/8), then evaluate the odd Taylor polynomial.
+    if x != x:
+        return x
+    a = abs(x)
+    offset = 0.0
+    if a > 2.414213562373095:
+        a = -1.0 / a
+        offset = 1.5707963267948966
+    elif a > 0.414213562373095:
+        a = (a - 1.0) / (a + 1.0)
+        offset = 0.7853981633974483
+    if abs(a) < 0.000244140625 and offset == 0.0:
+        return x
+    z = a * a
+    p = -0.05263157894736842
+    for c in (0.058823529411764705, -0.06666666666666667, 0.07692307692307693,
+              -0.09090909090909091, 0.1111111111111111, -0.14285714285714285,
+              0.2, -0.3333333333333333):
+        p = c + z * p
+    r = offset + (a + a * z * p)
+    return -r if x < 0.0 else r
+
+
+def atan(x):
+    return _atan(_f(x))
+
+
+def _atan2(y, x):
+    if x != x or y != y:
+        return x + y
+    negative_x = f32bits(x) & 0x80000000
+    ax, ay = abs(x), abs(y)
+    if ay == 0.0 or ax == inf:
+        if ax == inf and ay == inf:
+            angle = 0.7853981633974483
+        else:
+            angle = 0.0
+    elif ax == 0.0 or ay == inf:
+        angle = 1.5707963267948966
+    elif ay > ax:
+        angle = 1.5707963267948966 - _atan(ax / ay)
+    else:
+        angle = _atan(ay / ax)
+    if negative_x:
+        angle = pi - angle
+    return -angle if f32bits(y) & 0x80000000 else angle
+
+
+def atan2(y, x):
+    return _atan2(_f(y), _f(x))
+
+
+def asin(x):
+    x = _f(x)
+    if abs(x) > 1.0:
+        _err()
+    return _atan2(x, sqrt((1.0 - x) * (1.0 + x)))
+
+
+def acos(x):
+    x = _f(x)
+    if abs(x) > 1.0:
+        _err()
+    return _atan2(sqrt((1.0 - x) * (1.0 + x)), x)
+
+
+def _log1p(x):
+    u = 1.0 + x
+    # Correct for rounding in the addition, including when u rounds to 1.
+    return _log(u) + (x - (u - 1.0)) / u
+
+
+def _expm1(x):
+    if abs(x) <= 0.5:
+        # Degree nine is sufficient for binary32 on this interval.
+        p = 0.0000027557319223985893
+        for c in (0.0000248015873015873, 0.0001984126984126984,
+                  0.001388888888888889, 0.008333333333333333,
+                  0.041666666666666664, 0.16666666666666666, 0.5):
+            p = c + x * p
+        return x * (1.0 + x * p)
+    return _exp(x) - 1.0
+
+
+def expm1(x):
+    x = _f(x)
+    r = _expm1(x)
+    if r == inf and x != inf:
+        _err()
+    return r
+
+
+def _sinh(x):
+    a = abs(x)
+    if a < 1.0:
+        t = _expm1(a)
+        r = 0.5 * (t + t / (1.0 + t))
+    elif a < 10.0:
+        t = _exp(a)
+        r = 0.5 * (t - 1.0 / t)
+    else:
+        # Halve before squaring so values up to log(2 * FLT_MAX) fit.
+        t = _exp(a * 0.5)
+        r = (0.5 * t) * t
+    return -r if f32bits(x) & 0x80000000 else r
+
+
+def _cosh(x):
+    a = abs(x)
+    if a < 10.0:
+        t = _exp(a)
+        return 0.5 * (t + 1.0 / t)
+    t = _exp(a * 0.5)
+    return (0.5 * t) * t
+
+
+def sinh(x):
+    x = _f(x)
+    r = _sinh(x)
+    if abs(r) == inf and abs(x) != inf:
+        _err()
+    return r
+
+
+def cosh(x):
+    x = _f(x)
+    r = _cosh(x)
+    if r == inf and abs(x) != inf:
+        _err()
+    return r
+
+
+def tanh(x):
+    x = _f(x)
+    a = abs(x)
+    if a >= 10.0:
+        r = 1.0
+    else:
+        t = _expm1(2.0 * a)
+        r = t / (2.0 + t)
+    return -r if f32bits(x) & 0x80000000 else r
+
+
+def asinh(x):
+    x = _f(x)
+    a = abs(x)
+    if a >= 4096.0:
+        r = _log(a) + 0.6931471805599453
+    elif a >= 2.0:
+        r = _log(a + sqrt(a * a + 1.0))
+    else:
+        r = _log1p(a + a * a / (1.0 + sqrt(1.0 + a * a)))
+    return -r if f32bits(x) & 0x80000000 else r
+
+
+def acosh(x):
+    x = _f(x)
+    if x < 1.0:
+        _err()
+    if x >= 4096.0:
+        return _log(x) + 0.6931471805599453
+    t = x - 1.0
+    return _log1p(t + sqrt(t * (x + 1.0)))
+
+
+def atanh(x):
+    x = _f(x)
+    a = abs(x)
+    if a >= 1.0:
+        _err()
+    r = 0.5 * _log1p(2.0 * a / (1.0 - a))
+    return -r if f32bits(x) & 0x80000000 else r
+
+
+def fmod(x, y):
+    x, y = _f(x), _f(y)
+    if x != x or y != y:
+        return x + y
+    ax, ay = abs(x), abs(y)
+    if ay == 0.0 or ax == inf:
+        _err()
+    if ax < ay:
+        return x
+    # Integer significand remainder avoids rounding x/y and works even
+    # when the quotient overflows. Shift at most 31 bits per step.
+    a, ae = frexp(ax)
+    b, be = frexp(ay)
+    am = int(a * 16777216.0)
+    bm = int(b * 16777216.0)
+    rem = am % bm
+    shift = ae - be
+    while shift and rem:
+        step = min(shift, 31)
+        rem = (rem << step) % bm
+        shift -= step
+    r = _scalbn(float(rem), be - 24)
+    return -r if f32bits(x) & 0x80000000 else r
+
+
+def _erf_small(x):
+    # Integrated Taylor series of exp(-t*t), for 0 <= x <= 1.25.
+    z = -x * x
+    term = 1.0
+    total = term
+    for n in range(1, 16):
+        term *= z / n
+        total += term / (2 * n + 1)
+    return (1.1283791670955126 * x) * total
+
+
+def _erfc_large(x):
+    # Upper incomplete gamma continued fraction with a = 1/2. Evaluate
+    # backwards for x >= 1.25, where the denominators stay positive.
+    if x >= 10.0625:
+        return 0.0
+    z = x * x
+    frac = 0.0
+    for n in range(24, 0, -1):
+        frac = n * (0.5 - n) / (z + 2 * n + 0.5 + frac)
+    # Separate the rounding error of x*x before exponentiation.
+    hi = _fromb(f32bits(x) & 0xfffff000)
+    tail = (hi - x) * (hi + x)
+    return _exp(-hi * hi) * (_exp(tail) * (x * 0.5641895835477563 / (z + 0.5 + frac)))
+
+
+def erf(x):
+    x = _f(x)
+    a = abs(x)
+    if a <= 1.25:
+        r = _erf_small(a)
+    else:
+        r = 1.0 - _erfc_large(a)
+    return -r if f32bits(x) & 0x80000000 else r
+
+
+def erfc(x):
+    x = _f(x)
+    a = abs(x)
+    if a <= 1.25:
+        return 1.0 - _erf_small(x)
+    r = _erfc_large(a)
+    return 2.0 - r if x < 0.0 else r
+
+
+def _lgamma_positive(x):
+    # Shift to [1.5, 2.5] for the Taylor series of log(Gamma(2+t)).
+    # The wider-argument branch uses Stirling with three corrections.
+    if x >= 8.0:
+        inv = 1.0 / x
+        z = inv * inv
+        lx = _log(x)
+        r = x * (lx - 1.0) - 0.5 * lx + 0.9189385332046727
+        return r + inv * (0.08333333333333333 + z * (-0.002777777777777778 + z * 0.0007936507936507937))
+    if x < 1.5:
+        # Keep the root at x=1 exact and avoid log(x) cancellation near it.
+        if 0.75 <= x <= 1.25:
+            t = x - 1.0
+            p = 0.1000994575127818
+            for c in (-0.11133426586956469, 0.12550966952474304,
+                      -0.14404989676884612, 0.1695571769974082,
+                      -0.20738555102867398, 0.27058080842778455,
+                      -0.40068563438653143, 0.8224670334241132):
+                p = c + t * p
+            return t * (-0.5772156649015329 + t * p)
+        return _lgamma_positive(x + 1.0) - _log(x)
+    if x > 2.5:
+        y = x - 1.0
+        return _lgamma_positive(y) + _log(y)
+    t = x - 2.0
+    p = 4.374866789907487e-06
+    for c in (
+        -9.439488275268395e-06,
+        2.0507212775670694e-05,
+        -4.492623673813314e-05,
+        9.945751278180853e-05,
+        -0.00022315475845357936,
+        0.0005096695247430425,
+        -0.001192753911703261,
+        0.0028905103307415234,
+        -0.00738555102867398,
+        0.020580808427701228,
+        -0.06735229938669808,
+        0.3224670334241132,
+    ):
+        p = c + t * p
+    return t * (0.42278433509846713 + t * p)
+
+
+def _lgamma_sign(x):
+    if x > 0.0:
+        return _lgamma_positive(x), 1
+    if x <= -8388608.0:
+        _err()
+    n = int(x)
+    t = x - n
+    if t == 0.0:
+        _err()
+    # Reflection formula with sin(pi*x) reduced before multiplication.
+    if t < -0.5:
+        t = -1.0 - t
+    s = sin(pi * t)
+    r = 1.1447298858494002 - _log(-s) - _lgamma_positive(1.0 - x)
+    return r, 1 if n & 1 else -1
+
+
+def lgamma(x):
+    x = _f(x)
+    if x != x:
+        return x
+    if abs(x) == inf:
+        return inf
+    r, _ = _lgamma_sign(x)
+    if r == inf:
+        _err()
+    return r
+
+
+def gamma(x):
+    x = _f(x)
+    if x != x or x == inf:
+        return x
+    if abs(x) < 0.000000059604644775390625:
+        if x == 0.0:
+            _err()
+        r = 1.0 / x
+    elif 1.0 <= x <= 13.0 and x == int(x):
+        # Small integer factorials give the correctly rounded result.
+        r = float(factorial(int(x) - 1))
+    else:
+        logabs, sign = _lgamma_sign(x)
+        r = _exp(logabs)
+        if sign < 0:
+            r = -r
+    if abs(r) == inf:
+        _err()
+    return r

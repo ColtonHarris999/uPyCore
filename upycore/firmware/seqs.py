@@ -362,6 +362,10 @@ def _range_slice(r, sl):
 
 
 def _new__range_fb(*args):
+    if _BIGINT_ENABLED:
+        for arg in args:
+            if _iswide(arg) or _tag(arg) == TAG_INT64:
+                _wide_i32(arg)
     raise TypeError("unsupported argument type for range")
 
 

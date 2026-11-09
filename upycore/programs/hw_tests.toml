@@ -332,6 +332,7 @@ method_getattr = { file = "hw/builtins/method_getattr.py" }
 sysmod = { file = "hw/builtins/sysmod.py" }
 gcmod = { file = "hw/builtins/gcmod.py", cycles = 40_000_000 }
 arraymod = { file = "hw/builtins/arraymod.py" }
+array_formats = { file = "hw/builtins/array_formats.py" }
 
 helper_containers = { file = "hw/builtins/helper_containers.py" }
 fw_range_zero_step = { file = "hw/builtins/fw_range_zero_step.py" }
@@ -349,6 +350,7 @@ builtin_ord_type_trap = { file = "hw/builtins/builtin_ord_type_trap.py" }
 builtin_chr_range_trap = { file = "hw/builtins/builtin_chr_range_trap.py" }
 builtin_chr_surrogate_trap = { file = "hw/builtins/builtin_chr_surrogate_trap.py" }
 builtin_int_type_trap = { file = "hw/builtins/builtin_int_type_trap.py" }
+bigint = { bigint = true }
 builtin_max_float = { file = "hw/builtins/builtin_max_float.py" }
 builtin_str_type_trap = { file = "hw/builtins/builtin_str_type_trap.py" }
 firmware_iterators = { file = "hw/builtins/firmware_iterators.py" }
@@ -386,6 +388,8 @@ import_usys = { file = "hw/modules/import_usys.py" }
 builtins_override_import = { file = "hw/modules/builtins_override_import.py" }
 math_funcs = { file = "hw/modules/math_funcs.py", cycles = 60_000_000 }
 cmath_random = { file = "hw/modules/cmath_random.py" }
+math_extended = { file = "hw/modules/math_extended.py" }
+cmath_extended = { file = "hw/modules/cmath_extended.py" }
 io_stringio = { file = "hw/modules/io_stringio.py" }
 import_from_hook = { file = "hw/modules/import_from_hook.py", modules = ["pkg_hook=hw/modules/pkg_hook/__init__.py", "pkg_hook.sub=hw/modules/pkg_hook/sub.py"], oracle = false }
 

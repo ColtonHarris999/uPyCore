@@ -41,6 +41,7 @@ FW_SRC = ROOT / "upycore" / "firmware"
 ORACLE_SRC = ROOT / "build" / "oracle" / "src"
 MPY_CROSS = Path(os.environ.get("MPY_CROSS", ORACLE_SRC / "mpy-cross" / "build" / "mpy-cross"))
 ORACLE = Path(os.environ.get("MPY_ORACLE", ORACLE_SRC / "ports" / "unix" / "build-upycore" / "micropython"))
+MPZ_ORACLE = Path(os.environ.get("MPY_MPZ_ORACLE", ORACLE_SRC / "ports" / "unix" / "build-upycore-mpz" / "micropython"))
 SIM_DIR = ROOT / "build" / "mpy_soc"
 SIM = SIM_DIR / "obj" / "Vtb_mpy_soc"
 MPY_CROSS_FLAGS = ["-msmall-int-bits=31", "-O0"]
@@ -154,7 +155,7 @@ def compile_user(src: Path, out: Path, source_name: str, compiler: str = "mpy-cr
 _FW_IMPORT = re.compile(r"^\s*from\s+(\.?_abi|micropython)\s+import\s+")
 
 
-def firmware_source() -> str:
+def firmware_source(*, bigint: bool = False) -> str:
     parts = []
     for i, name in enumerate(FW_ORDER):
         path = FW_SRC / name
@@ -165,16 +166,20 @@ def firmware_source() -> str:
             lines = [ln for ln in lines if not _FW_IMPORT.match(ln)]
         parts.append(f"# ---- {name} ----")
         parts.extend(lines)
+        if i == 0:
+            parts.append(f"_BIGINT_ENABLED = const({int(bigint)})")
+    if bigint:
+        parts.append((FW_SRC / "bigint.py").read_text())
     return "\n".join(parts) + "\n"
 
 
-def build_firmware(out_dir: Path = BUILD / "fw") -> Path:
+def build_firmware(out_dir: Path = BUILD / "fw", *, bigint: bool = False) -> Path:
     """Join and compile the firmware; returns the .mpy path."""
 
     out_dir.mkdir(parents=True, exist_ok=True)
     src = out_dir / "fw.py"
     mpy = out_dir / "fw.mpy"
-    text = firmware_source()
+    text = firmware_source(bigint=bigint)
     if not src.exists() or src.read_text() != text:
         src.write_text(text)
     if _newer(mpy, [src, MPY_CROSS]):
@@ -349,7 +354,7 @@ def frozen_runtime_specs(compiler: bool = True, runtime: list[str] | tuple = ())
 
 def build_program(src: Path, work: Path, source_name: str | None = None,
                   modules: dict[str, Path] | None = None,
-                  compiler: str = "mpy-cross") -> Path:
+                  compiler: str = "mpy-cross", *, bigint: bool = False) -> Path:
     """Compile and link one program (plus frozen modules); returns the image prefix.
 
     ``compiler`` selects the user-program compiler. The firmware is always
@@ -357,7 +362,7 @@ def build_program(src: Path, work: Path, source_name: str | None = None,
     """
 
     work.mkdir(parents=True, exist_ok=True)
-    fw = build_firmware()
+    fw = build_firmware(BUILD / "fw-bigint", bigint=True) if bigint else build_firmware()
     name = source_name or src.name
     main_mpy = work / "main.mpy"
     compile_user(src, main_mpy, name, compiler)
@@ -389,6 +394,7 @@ def main(argv: list[str] | None = None) -> int:
     rp.add_argument("src", type=Path)
     rp.add_argument("--max-cycles", type=int, default=50_000_000)
     rp.add_argument("--trace", action="store_true")
+    rp.add_argument("--bigint", action="store_true", help="enable the experimental wide-integer firmware")
     rp.add_argument("-v", "--verbose", action="store_true", help="print the halt line")
     rp.add_argument("--work", type=Path, default=None)
     rp.add_argument("--sim-arg", action="append", default=[],
@@ -412,7 +418,7 @@ def main(argv: list[str] | None = None) -> int:
             return rc
         build_sim()
         work = args.work or BUILD / "run" / args.src.stem
-        image = build_program(args.src.resolve(), work)
+        image = build_program(args.src.resolve(), work, bigint=args.bigint)
         res = run_image(image, args.max_cycles, args.trace, sim_args=args.sim_arg, nand=args.nand)
     except BuildError as exc:
         print(exc, file=sys.stderr)

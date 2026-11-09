@@ -247,6 +247,7 @@ class ModuleInfo:
 
 class Image:
     def __init__(self) -> None:
+        self.bigint = False
         self.words: list[int] = [0] * (abi.IMAGE_DATA_BASE // 4)
         self.tags: dict[int, int] = {}
         self.qstrs: list[str] = list(abi.core_qstr_order())
@@ -392,7 +393,18 @@ def encode_const(img: Image, value: object) -> tuple[int, int]:
         if -(1 << 31) <= value < (1 << 31):
             return (T["INT"], value & 0xFFFFFFFF)
         if not -(1 << 63) <= value < (1 << 63):
-            raise LinkError(f"integer const {value} outside signed 64-bit")
+            if not img.bigint:
+                raise LinkError(f"integer const {value} outside signed 64-bit")
+            magnitude = abs(value)
+            limbs = []
+            while magnitude:
+                limbs.append((T["INT"], magnitude & ((1 << 30) - 1)))
+                magnitude >>= 30
+            count = -len(limbs) if value < 0 else len(limbs)
+            return (T["OBJECT"], img.emit_words([
+                (T["INT"], abi.OB["BIGINT"]), type_val(img, "int"),
+                (T["INT"], count & 0xffffffff), *limbs,
+            ]))
         u = value & ((1 << 64) - 1)
         return emit_box(img, "INT64", u & 0xFFFFFFFF, u >> 32)
     if isinstance(value, FloatConst):
@@ -578,17 +590,17 @@ def link(main: Path, modules: list[tuple[str, Path, bool]], fw: Path, out: Path,
 
     def load(path: Path, name: str, firmware: bool = False, package: bool = False) -> ModuleInfo:
         data = path.read_bytes()
-        mpy = read_mpy(data, str(path), catalog, numeric=True)
+        mpy = read_mpy(data, str(path), catalog, numeric=True, bigint=img.bigint)
         return ModuleInfo(name=name, mpy=mpy, source_file=mpy.qstrs[0], firmware=firmware, package=package)
 
     try:
         fw_mod = load(fw, "_fw", firmware=True)
+        fw_names = eval_firmware_body(fw_mod, catalog)
+        img.bigint = "_int_overflow" in fw_names
         main_mod = load(main, main_name)
         user_mods = [load(p, name, package=pkg) for name, p, pkg in modules]
     except MpyError as exc:
         raise LinkError(str(exc)) from exc
-
-    fw_names = eval_firmware_body(fw_mod, catalog)
 
     # Fixed singletons first so consts can refer to them.
     img.symbols["empty_tuple"] = img.emit_words([(T["INT"], 0)])
@@ -665,6 +677,8 @@ def link(main: Path, modules: list[tuple[str, Path, bool]], fw: Path, out: Path,
 
     natives: dict[str, tuple[int, int]] = {}
     for nname in abi.NATIVES:
+        if not img.bigint and nname in ("_limb_mac", "_limb_new"):
+            continue
         fb = NULL
         short = nname.split(".")[-1]
         fb_name = "_" + nname.replace(".", "__") + "_fb" if "." in nname else "_" + short.lstrip("_") + "_fb"
@@ -811,6 +825,7 @@ def link(main: Path, modules: list[tuple[str, Path, bool]], fw: Path, out: Path,
     img.set(4 * hdr["FW_MODULE"], fw_mod.md_addr)
     img.set(4 * hdr["POOL_BYTES"], heap_capacity)
     img.set(4 * hdr["IMAGE_BYTES"], img.here())
+    img.set(4 * hdr["FLAGS"], abi.IMAGE_FLAG_BIGINT if img.bigint else 0)
 
     out.parent.mkdir(parents=True, exist_ok=True)
     nwords = len(img.words)

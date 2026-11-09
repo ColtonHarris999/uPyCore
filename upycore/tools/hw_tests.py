@@ -117,6 +117,7 @@ class Test:
     disabled: str | None = None
     # False: mpy-cross still boots it. ``--compiler mpyc`` skips it.
     mpyc: bool = True
+    bigint: bool = False
 
     @property
     def source(self) -> Path:
@@ -243,11 +244,13 @@ def _oracle_preexec() -> None:
 
 
 def run_oracle(t: Test) -> tuple[bytes, bytes, int]:
-    if not oracle_ready():
+    oracle = build.MPZ_ORACLE if t.bigint else build.ORACLE
+    ready = oracle.is_file() and os.access(oracle, os.X_OK) if t.bigint else oracle_ready()
+    if not ready:
         raise SystemExit(
-            f"hw_tests: oracle not built at {build.ORACLE} (make oracle)"
+            f"hw_tests: oracle not built at {oracle} (make {'oracle-mpz' if t.bigint else 'oracle'})"
         )
-    cmd = [str(build.ORACLE)]
+    cmd = [str(oracle)]
     if t.heapsize is not None:
         cmd += ["-X", f"heapsize={t.heapsize}"]
     cmd.append(t.source.name)
@@ -298,7 +301,7 @@ def run_device(t: Test, compiler: str = "mpy-cross") -> Outcome:
         return Outcome(t, False, f"missing {t.source}")
     work = (ROOT / "build" / ("hw-mpyc" if compiler == "mpyc" else "hw")) / t.name
     try:
-        image = build.build_program(t.source, work, t.source.name, _modules(t), compiler)
+        image = build.build_program(t.source, work, t.source.name, _modules(t), compiler, bigint=t.bigint)
         res = build.run_image(image, max_cycles=t.cycles, timeout=t.timeout)
     except build.BuildError as exc:
         text = str(exc).strip().splitlines()
