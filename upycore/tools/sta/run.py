@@ -81,9 +81,9 @@ def main() -> int:
     ap.add_argument("--param", action="append", default=[], help="top parameter NAME=VALUE (slang -G)")
     ap.add_argument("--module", help="the top module when it differs from the top name")
     ap.add_argument("--techmap-async", action="store_true",
-                    help="drop $print cells (initial $display) and $scopeinfo cells, and techmap "
-                         "once more after async2sync (word-level cells it leaves); for the I/O "
-                         "island with no2usb; off for the gated tops")
+                    help="drop $print cells (initial $display) and techmap once more after "
+                         "async2sync (word-level cells it leaves); for the I/O island with "
+                         "no2usb; off for the gated tops")
     args = ap.parse_args()
     if args.compare:
         compare(*args.compare)
@@ -121,7 +121,9 @@ def main() -> int:
         f"hierarchy -check -top {module}",
         *(["delete t:$print", "opt_clean"] if args.techmap_async else []),
         f"synth -flatten -noshare -noabc -top {module}",
-        *(["delete t:$scopeinfo"] if args.techmap_async else []),
+        # Flatten's scope annotations carry no logic; one survives for a
+        # module with unconnected inout ports (the island stub's USB pads).
+        "delete t:$scopeinfo",
         f"techmap -map {rel}/noarst.v",
         "async2sync",
         *(["techmap"] if args.techmap_async else []),
