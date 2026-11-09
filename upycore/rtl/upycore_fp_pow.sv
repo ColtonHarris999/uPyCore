@@ -252,17 +252,42 @@ module upycore_fp_pow #(
 
     assign p_sh      = 14'(ey_r) - 14'sd52 + 14'(el_r) + 14'(FP);
     assign t_amt     = -p_sh;
-    assign q_shifted = (p_sh >= 14'sd0) ? q_prod :
-                       ((t_amt >= 14'(QW)) ? '0 : (q_prod >> t_amt[7:0]));
-    assign p_huge    = (p_sh >= 14'sd0) ? (q_prod != '0) : (q_shifted[QW-1:PW-1] != '0);
+    // The shift amount and its two tests are registered every cycle. ey_r
+    // and el_r are fixed from S_LNORM on and S_MUL lasts several cycles, so
+    // in S_PSH the flops hold this product's values; the shifter then starts
+    // from flops instead of after the exponent sum (1 ps of slack at 12 ns).
+    logic        sh_pos_r, t_big_r;
+    logic [7:0]  t_amt_r;
+    always_ff @(posedge clk_i or negedge rst_n_i) begin
+        if (!rst_n_i) begin
+            sh_pos_r <= 1'b0; t_big_r <= 1'b0; t_amt_r <= '0;
+        end else begin
+            sh_pos_r <= p_sh >= 14'sd0;
+            t_big_r  <= t_amt >= 14'(QW);
+            t_amt_r  <= t_amt[7:0];
+        end
+    end
+    assign q_shifted = sh_pos_r ? q_prod : (t_big_r ? '0 : (q_prod >> t_amt_r));
+    assign p_huge    = sh_pos_r ? (q_prod != '0) : (q_shifted[QW-1:PW-1] != '0);
     assign pfix_s    = psign_r ? -$signed({1'b0, pfix_r}) : $signed({1'b0, pfix_r});
 
     // ------------------------------------------------------------------
     // Pack: Z * 2^I rounded to nearest even
     // ------------------------------------------------------------------
+    // The biased exponent is registered on its own every cycle: I is fixed
+    // from S_PSPLIT on and S_EXP runs at least one cycle before S_PACK, so
+    // pexp_r is current there (a huge P skips S_EXP but does not use
+    // pack_res). The bias add in front of the subnormal shift and rounding
+    // missed 10 ns by 69 ps.
+    logic signed [13:0] pexp_r;
+    always_ff @(posedge clk_i or negedge rst_n_i) begin
+        if (!rst_n_i) pexp_r <= '0;
+        else          pexp_r <= $signed({i_int_r[12], i_int_r}) + 14'sd1023;
+    end
+
     logic [63:0] pack_res;
     assign pack_res = upycore_f64_pack_round(
-        1'b0, $signed({i_int_r[12], i_int_r}) + 14'sd1023,
+        1'b0, pexp_r,
         z_r[FW:FW-52], z_r[FW-53], z_r[FW-54], |z_r[FW-55:0]);
 
     // ------------------------------------------------------------------

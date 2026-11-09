@@ -50,8 +50,8 @@ module upycore_div #(
 
     // ---- C1: step count and alignment ----
     logic [6:0]  lz_a, lz_b;
-    logic [7:0]  bits_a, bits_b;          // 64 - clz
-    logic signed [8:0] n_q;               // quotient bits needed
+    logic [7:0]  n_q1;                    // quotient bits needed + 1
+    logic        n_q_pos;                 // at least one quotient bit
     logic [7:0]  n_pad;                   // rounded up to a multiple of RL
     logic [63:0] rem_init;
     logic [63:0] bits;
@@ -59,21 +59,23 @@ module upycore_div #(
 
     assign lz_a   = upycore_clz64(a_mag_r);
     assign lz_b   = upycore_clz64(b_mag_r);
-    assign bits_a = 8'd64 - 8'(lz_a);
-    assign bits_b = 8'd64 - 8'(lz_b);
-    assign n_q    = $signed(9'(bits_a)) - $signed(9'(bits_b)) + 9'sd1;
+    // bits(|a|) - bits(|b|) + 1 == lz_b - lz_a + 1: one subtract instead of
+    // three in series after the clz (10 ns missed by 38 ps into n_pad_r).
+    // The sign test is a compare beside the subtract, not after it.
+    assign n_q_pos = lz_a <= lz_b;
+    assign n_q1    = 8'(lz_b) - 8'(lz_a) + 8'd2;
 
     // The two leading-zero counts and the digit count take D_PREP and land
     // in n_pad_r; D_ALIGN shifts by the flop and starts the core. Doing
     // both in one cycle put two clz64s and two 64-bit shifts in series.
     logic [7:0] n_pad_r;
     always_comb begin
-        if (n_q <= 9'sd0) begin
+        if (!n_q_pos) begin
             n_pad = 8'd0;
         end else if (RL == 2) begin
-            n_pad = (n_q[7:0] + 8'd1) & 8'hFE;
+            n_pad = n_q1 & 8'hFE;
         end else begin
-            n_pad = n_q[7:0];
+            n_pad = 8'(lz_b) - 8'(lz_a) + 8'd1;
         end
         // |a| >> n_pad is below |b| by construction; the n_pad low bits are
         // brought down one radix digit at a time.
