@@ -20,6 +20,9 @@
 # first, with the core from converted/mpy_core.v. SOC_RTL=converted takes the
 # whole chip from converted/mpy_soc.v instead. status then also counts the
 # macros in each netlist (want 5: 4 x d32768_w36, 1 x d600_w64).
+# With `par`, place_macros.py places the five macros and sets the die size
+# (DIE is ignored). DESIGN_ARGS="--sram-pin-pitch 7000" makes fakeram's
+# 31 mm x 0.22 mm bank a taller, narrower macro of the same area.
 #
 # Die size: DIE="w h" in um, default 1500 1500 for the core, 4000 3000 for
 # the chip. DESIGN_ARGS passes extra make_hammer_design.py options, for example
@@ -98,11 +101,15 @@ if [ "$TOP" = mpy_soc ]; then
     fi
     src+=(--die ${DIE:-4000 3000})
     syn_steps="make sram && make syn"
+    # Place and route: place the macros and size the die from the generated
+    # LEFs (place_macros.py) between `make sram` and `make syn`.
+    par_steps="make sram && python3 $here/place_macros.py . && make syn && make par"
 else
     syn_prefix=${PREFIX:-upycore_v2}
     par_prefix=${PREFIX:-upycore_par}
     src=(--rtl "$here/converted/$TOP.v" --die ${DIE:-1500 1500})
     syn_steps="make syn"
+    par_steps="make syn && make par"
 fi
 
 case "$1" in
@@ -117,7 +124,7 @@ start)
 par)
     check_fresh "$@"
     shift
-    launch "$par_prefix" "$syn_steps && make par" "$@"
+    launch "$par_prefix" "$par_steps" "$@"
     echo "place and route takes much longer than synthesis; check with: $0 par-status"
     ;;
 status)

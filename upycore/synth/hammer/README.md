@@ -344,4 +344,17 @@ each `upycore_soc_p<period>` folder (`upycore_socpar_p<period>` with `par`) gets
 background job runs `make sram` and then `make syn`. `DIE="w h"` sets the
 die (default 4000 x 3000 um) and `SOC_RTL=converted` takes the chip from
 `converted/mpy_soc.v`. `TOP=mpy_soc sweep.sh status` adds the macro count
-of each netlist (it must be 4) and the macro footprint from its LEF.
+of each netlist (it must be 5: four banks and the GC table) and the macro
+footprints from their LEFs.
+
+`TOP=mpy_soc sweep.sh par 15` places and routes the whole chip. Between
+`make sram` and `make syn` it runs `place_macros.py`, which reads the LEFs,
+places the five macros as `hardmacro` constraints and sets the die (DIE is
+ignored). fakeram makes each macro just tall enough for its pins and as wide
+as its area needs, so the 32K-word bank comes out 31 mm x 0.22 mm: the four
+are stacked in one column with the logic beside their pins, on a die about
+35 x 1 mm. `DESIGN_ARGS="--sram-pin-pitch 7000"` spaces the pins 10x wider
+(only the placeholder's shape changes, not its area or timing model), which
+makes the bank about 3 x 2 mm; place_macros.py then puts two columns of two
+facing a logic channel. `python3 place_macros.py <folder> --dry-run` prints
+the layout without writing it.

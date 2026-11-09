@@ -181,6 +181,11 @@ def main() -> int:
     ap.add_argument("--die", nargs=2, type=float, metavar=("W", "H"),
                     help="die width and height in um (the TOP placement constraint); four "
                          "SRAM macros need far more than a logic-only example")
+    ap.add_argument("--sram-pin-pitch", type=int, metavar="NM",
+                    help="fakeram pin pitch in nm (class default 700). fakeram makes a macro "
+                         "just tall enough for its pins and as wide as its area needs, so a "
+                         "larger pitch gives a taller, narrower macro of the same area "
+                         "(7000 turns the 31 mm x 0.22 mm d32768_w36 into roughly 3 x 2 mm)")
     ap.add_argument("--force", action="store_true", help="replace dest if it exists")
     args = ap.parse_args()
 
@@ -286,6 +291,10 @@ def main() -> int:
         # `make sram` generates them and the hook swaps every matching
         # instance (docs/mpy_boot.md).
         _set(doc, "vlsi.inputs.sram_parameters", [dict(m) for m in macros])
+    if args.sram_pin_pitch:
+        if not srams:
+            sys.exit("--sram-pin-pitch is only for tops with SRAM macros (mpy_soc)")
+        _set(doc, "sram_generator.fakeram.pinPitch_nm", args.sram_pin_pitch)
     if args.die:
         pcs = _get(doc, "vlsi.inputs.placement_constraints")
         tops = [c for c in pcs or [] if isinstance(c, dict) and c.get("type") == "toplevel"]
