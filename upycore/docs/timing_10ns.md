@@ -129,6 +129,49 @@ The SoC reset is now a 2-flop synchronizer (`por_n`): the class
 constraints false-path only the `rst_n_i` port, so the reset tree from
 those flops is timed (recovery/removal) in the SoC run.
 
+### After the November 8 Genus run (`c788c64`)
+
+Genus 21.12 synthesis of `mpy_soc` at `c788c64` (ss_100C_1v60, global
+interconnect estimate, `fakeram_d32768_w36` and `fakeram_d600_w64`) met 12,
+13 and 15 ns and failed 10 ns: worst slack −192 ps, TNS −3.78 ns, 64
+violating paths. These are synthesis reports, not post-route. The 10 ns
+report lists the worst 50; the 12 and 13 ns reports name the paths that
+only just met there, and those were fixed too.
+
+| Path (10 ns slack, or the run that showed it) | Cause in the netlist | Change | Cycle cost |
+| --- | --- | --- | --- |
+| `sA[5]` → `m_addr` (−192), `m_addr` → `m_addr` (−128); `hk`, `tr_v` → `m_addr` (+27, +34 ps at 13 ns) | Genus shared the case's mutually exclusive `base + constant` address adds into one 30-bit ripple incrementer behind an operand mux, then the `m_addr` select | the 130 `base + K` call sites (K < 64) use `aoff()`: a 6-bit add, and bits [31:6] take `b + 1` (an AND prefix, not an adder) when it carries. SAT-proven equal to `b + k` for all 2^38 inputs | 0 |
+| `arg` → `m_addr` (−169), `op` → `m_addr` (−114) | a shared carry-save adder with muxed operands (`qbase`/`cbase`/`md` + `4*arg`) | those sums, the burst addresses (`c_rc`, `fl_base`, `stack_base`, `ab_q`, scratch + `bl_n`) and the `+4` ones are continuous assigns outside the case, one adder each | 0 |
+| FPU `state_r` → `u_sig_mul.acc_r` / `product_r` (−118, about 40 paths) | the FPU's operand select (pow or mul) in series with the multiply-accumulate on the accept cycle | `upycore_umul_seq` registers its operands on accept and steps only from flops; its data registers load on `busy_r` alone, so `start_i` reaches only `busy_r` and `done_r` | +1 cycle per significand multiply (float `*` and float `**`) |
+| `u_boot.nwords` → `boot_err_o` (−178) | the pool-layout arithmetic into an output with half the period as output delay | `layout_error` registered; the collector's reset release waits for `layout_chk` | +1 cycle once, at boot |
+| `u_pow.i_int_r` → `result_r` (−69) | bias add before the subnormal shift and rounding | `pexp_r` registered every cycle (I is fixed from S_PSPLIT, S_EXP runs at least one cycle) | 0 |
+| `u_pow.ey_r` → `pfix_r` (+1 ps at 12 ns) | exponent sum before the 128-bit shift | shift amount and its two tests registered every cycle (fixed from S_LNORM; S_MUL lasts several cycles) | 0 |
+| `u_div.a_mag_r` → `n_pad_r` (−38) | three subtracts after the two clz | step count is `lz_b − lz_a + 1`; the sign test is a compare beside it | 0 |
+| `ss_start` → `ss_count` (+32 ps at 13 ns) | signed compare, then a (shared) subtract | one 33-bit subtract per direction; `d > 0` is the sign bit and `start != stop`. SAT-proven equal | 0 |
+
+`sp` → `st` (+19 ps at 13 ns) is random control logic with no arithmetic
+to remove, and it is not in the 10 ns top 50; it was left as is.
+
+The open estimate flow (`upycore/tools/sta`, unmapped and deterministic,
+sky130 typical corner; not Genus ns) on `mpy_core`, same flow on both RTLs:
+
+| Register group | `c788c64` | Now |
+| --- | ---: | ---: |
+| `u_sig_mul.acc_r`, `sm_product` | 13.19 | 8.49 |
+| `u_div.n_pad_r` | 10.47 | 8.91 |
+| `u_pow.pfix_r` | 6.51 | < 5.9 |
+| `m_addr` | 11.95 | 11.94 |
+
+No group got slower by more than 0.1. That flow synthesizes with
+`-noshare`, so it cannot show the shared adders Genus built; the
+`m_addr` fix has to be judged by the next Genus run.
+
+Cycle cost on the same images (`clock_bench.py`, `c788c64` against now):
+`float_mul` loop +1.79 %, project `float` +2.73 %; every other workload
+(AES, Fannkuch, pystone, the integer, conversion, add and division loops,
+and the other project programs) is unchanged to the cycle. At 10 ns
+against the 12 ns that met, that is 0.83–0.86× the execution time.
+
 ## Cycle cost
 
 Same images on the baseline and the new simulator (`upycore/tools/clock_bench.py`):
