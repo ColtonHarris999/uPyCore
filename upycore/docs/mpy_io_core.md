@@ -264,7 +264,7 @@ and answers synchronous ones in RSP, in order.
 
 | Channel | Name | Payload | Answer |
 | --- | --- | --- | --- |
-| `0x01` | `SYS` | bits 23:16 op: `0x01` PING, `0x02` FREQ, `0x03` UID, `0x04` RESET (bit 0: also stop the watchdog) | PING: the protocol version (5); FREQ: io_clk in Hz; UID: two words, high first; RESET: 0, once the peripherals are back to their reset state |
+| `0x01` | `SYS` | bits 23:16 op: `0x01` PING, `0x02` FREQ, `0x03` UID, `0x04` RESET (bit 0: also stop the watchdog) | PING: the protocol version (6); FREQ: io_clk in Hz; UID: two words, high first; RESET: 0, once the peripherals are back to their reset state |
 | `0x02` | `ECHO` | anything | the same word |
 | `0x03` | `EVT` | bits 15:0 | raises those events (a bridge test) |
 | `0x04` | `PAGE` | bits 4:0 a page word; the next CMD word is its value | the CMD word, after the page word is pushed (a bridge test) |
@@ -276,7 +276,7 @@ and answers synchronous ones in RSP, in order.
 | `0x13` | `PIN_IRQ` | bits 4:0 pin, 9:8 edges (1 rising, 2 falling, 3 both, 0 off) | — |
 | `0x20` | `UART_INIT` | bits 3:0 id; the next word is the baud rate | the rate the divider gives |
 | `0x21`–`0x23` | `UART_TX1`–`TX3` | one to three bytes, the first in bits 7:0 | — |
-| `0x28` | `UART_RX` | bits 7:0 the most bytes wanted | the count k, then ceil(k/3) words of three bytes |
+| `0x28` | `UART_RX` | bits 7:0 the most bytes wanted | the count k, then ceil(k/4) words of four bytes, the first in bits 7:0; the last word's unused bytes are 0 |
 | `0x29` | `UART_DEINIT` | | — |
 | `0x2A` | `UART_IRQ` | bits 15:0 the triggers (`0x20` TXIDLE, `0x40` RXIDLE, rp2's values) | — |
 | `0x30` | `TIMER_INIT` | bits 1:0 id, bit 2 periodic, bit 3 raise `TIMER` on each expiration; the next word is the period in µs | — |
@@ -309,7 +309,7 @@ Words the I/O core writes (`0x800 + 4*i` in the hart's window):
 
 | Word | Name | Contents |
 | --- | --- | --- |
-| 0 | `VERSION` | `0x494F_0003`: protocol version 3 |
+| 0 | `VERSION` | `0x494F_0006`: protocol version 6 |
 | 1 | `PIN_IN` | The pin levels (`GPIO IN`), pushed when they change |
 | 2 | `PIN_FLAGS` | Two bits per pin: the edges seen since its `PIN_IRQ` (1 rising, 2 falling) |
 | 3 | `MS` | The island timer's millisecond count (mpy_iobr's tick crossing, not UPD) |
@@ -382,6 +382,24 @@ bridge window only; like `extmod/machine_mem.c` it raises `ValueError`
 for an address not aligned to 4 bytes, and here also for one outside the
 window.
 
+UART receive (`irq.py`). `_io.uart_rx(n)` sends `UART_RX`, takes the
+count k, allocates the bytes object (`_strnew`, whose data is
+word-aligned and ceil(k/4) words long) and stores each RSP word straight
+into its data with `_st`: one RSP load and one store a word, and one
+`STATUS` load per batch of words rather than per word (its RSP level
+never counts more words than RSP holds, and only this command's answer
+is in RSP). `_io.uart_rx_into(buf, off, n)` does the same into a fresh
+bytes object and copies it into a bytearray, or a writable memoryview of
+one, with `_bcopy` (the copy engine), clipped to the buffer's end; for
+any other buffer it returns -1 before sending anything, and
+`UART.readinto` falls back to a byte-at-a-time copy (a bytearray
+subclass, say). `readinto` asks for at most 255 bytes a command and
+stops after a command that found fewer waiting than it asked for, so it
+does not read `UART0` first and ends once the ring is drained. Phase 6
+built the bytes with `bytearray.append`, three a word (about 1,700 hart
+cycles a byte), and `readinto` then stored them one by one into the
+view (about 3,800 a byte); Measurements has the numbers now.
+
 ## Firmware
 
 `iocore/sw/fw` is the production image: one loop. Each pass runs the
@@ -419,7 +437,7 @@ v1.29.0's signatures:
 | API | How |
 | --- | --- |
 | `Pin(id, mode=-1, pull=-1, *, value=None)`, `init`, `value`, `__call__`, `on`, `off`, `high`, `low`, `toggle`, `mode`, `pull` | `PIN_*` commands; `value()` reads `PIN_IN` after `_fence`. Ids 0–15; modes `IN`, `OUT`, `OPEN_DRAIN`; pulls `PULL_UP`, `PULL_DOWN` |
-| `UART(0, baudrate=115200, bits=8, parity=None, stop=1, *, timeout=0, ...)`, `init`, `deinit`, `any`, `read`, `readinto`, `readline`, `write`, `flush`, `txdone` | `UART_*` commands, three bytes a word each way; `any()` and `txdone()` read `UART0`. 8N1 only (anything else is `ValueError`). `read()` with nothing waiting returns `None` |
+| `UART(0, baudrate=115200, bits=8, parity=None, stop=1, *, timeout=0, ...)`, `init`, `deinit`, `any`, `read`, `readinto`, `readline`, `write`, `flush`, `txdone` | `UART_*` commands, three bytes a CMD word out, four an RSP word in (Hart software, UART receive); `any()` and `txdone()` read `UART0`. 8N1 only (anything else is `ValueError`). `read()` and `readinto()` with nothing waiting return `None`; `readinto` takes at most `len(buf)` bytes, as `mp_stream_readinto` does |
 | `Timer(id, *, mode, freq, period, callback, hard=True)`, `init`, `deinit` | `TIMER_*` commands; ids 0–3; the callback gets the Timer (Events on the hart) |
 | `Pin.irq(handler=None, trigger=IRQ_FALLING\|IRQ_RISING, hard=False)` | `PIN_IRQ`; returns the irq object (`flags()`, `trigger()`); `irq(None)` disarms |
 | `UART.irq(handler, trigger, hard=False)` | `UART_IRQ`; `IRQ_RXIDLE` (64) and `IRQ_TXIDLE` (32), rp2's values |
@@ -768,7 +786,11 @@ both ways, PING), `bridge_misaligned` and `bridge_unmapped` (the core must
 halt with the unaligned and the bus fault), `mem32_align`, `pin_loop`
 (every Pin method, pulls and open drain through the loopback), `blink`
 (ten toggles 5 ms apart, checked at the pad), `uart_echo` (a line in and
-out at 115200 8N1, checked at the pins), `sleep_accuracy` (each sleep
+out at 115200 8N1, checked at the pins), `uart_rx` (the UART's TX routed
+to pad 0 and RX to pad 8 through the loopback: every byte value at
+1 Mbaud, `read` of 1 to 5 bytes for every partial answer word, `readinto`
+into a bytearray, a memoryview slice, a bytearray subclass, with `nbytes`
+and past the buffer's end, and 256 bytes in two commands), `sleep_accuracy` (each sleep
 from 50 µs to 20 ms lasts at least as long and at most 150 µs more) and
 `ticks` (`ticks_diff` and `ticks_add` across the wrap, their errors, and
 the counters moving). The `console` area runs `con_print` (print, a long
