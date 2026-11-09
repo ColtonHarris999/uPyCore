@@ -102,20 +102,25 @@ def _newer(target: Path, sources: list[Path]) -> bool:
     return any(s.stat().st_mtime > t for s in sources)
 
 
-def build_sim(force: bool = False, quiet: bool = True) -> Path:
-    """Verilate tb_mpy_soc when any RTL source is newer than the binary."""
+def build_sim(force: bool = False, quiet: bool = True, saif: bool = False) -> Path:
+    """Verilate tb_mpy_soc when any RTL source is newer than the binary.
+    ``saif`` builds the switching-activity variant (--trace-saif -DMPY_SAIF)
+    in build/mpy_soc_saif instead."""
 
+    sim_dir = BUILD.parent / "mpy_soc_saif" if saif else SIM_DIR
+    sim = sim_dir / "obj" / SIM.name
     sources = [ROOT / p for p in ISLAND_RTL + RTL + RTL_INCLUDES]
-    if not force and not _newer(SIM, sources):
-        return SIM
-    (SIM_DIR / "obj").mkdir(parents=True, exist_ok=True)
+    if not force and not _newer(sim, sources):
+        return sim
+    (sim_dir / "obj").mkdir(parents=True, exist_ok=True)
     cmd = [
         os.environ.get("VERILATOR", "verilator"), "-sv", "--binary", "--timing",
         "--timescale", "1ns/1ps", "-O3", "--x-assign", "fast", "--x-initial", "fast",
         f"+incdir+{ROOT / 'upycore' / 'rtl'}", "-y", str(ROOT / "upycore" / "rtl"),
         *[f"+incdir+{ROOT / d}" for d in ISLAND_INCDIRS],
         "--top-module", "tb_mpy_soc",
-        "--Mdir", str(SIM_DIR / "obj"), "-Wno-fatal", "-Wno-WIDTH", "-Wno-UNUSED",
+        *(["--trace-saif", "-DMPY_SAIF"] if saif else []),
+        "--Mdir", str(sim_dir / "obj"), "-Wno-fatal", "-Wno-WIDTH", "-Wno-UNUSED",
         "-Wno-CASEINCOMPLETE", "-Wno-BLKSEQ", "-Wno-TIMESCALEMOD", "-Wno-lint", "-Wno-style",
         "-Wno-MULTIDRIVEN", "-Wno-UNOPTFLAT", "-j", str(os.cpu_count() or 4),
     ] + [str(s) for s in sources if s.suffix in (".sv", ".v")]
@@ -123,8 +128,8 @@ def build_sim(force: bool = False, quiet: bool = True) -> Path:
     if r.returncode != 0:
         raise BuildError("verilator failed:\n" + r.stdout[-4000:] + r.stderr[-4000:])
     if not quiet:
-        print(f"built {SIM.relative_to(ROOT)}")
-    return SIM
+        print(f"built {sim.relative_to(ROOT)}")
+    return sim
 
 
 def mpy_cross(src: Path, out: Path, source_name: str) -> None:

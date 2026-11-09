@@ -29,6 +29,16 @@
 //                                           11 MOSI, 12 MISO, 13 CS
 //   +I2C_TARGET=1                           a 24C02-style I2C target at 0x50 (tb_i2c_target) on
 //                                           pads 14 SCL, 15 SDA, with the bus pull-ups
+//   +MEAS_FILE=<path>                       measurement events, one a line, times in ps
+//                                           (iocore/tools/io_measure.py): "pad <i> <t> <v>" for
+//                                           each change of a driven pad, "edge <t>" for each
+//                                           rising edge +PULSE drives, "hit <t>" each time the
+//                                           core runs the opcode at +MEAS_PC=<hex>, "rx <t>" for
+//                                           each byte the UART line model decodes, "evt <t>" each
+//                                           time the bridge raises evt_pend to the core
+//   +PULSE=<pin>,<start us>,<period us>,<n> the bench drives pad <pin>: n periods, high for the
+//                                           first half of each, from <start> µs after boot
+//   +UART_IN_PATTERN=<n>                    with +UART_IN_US: n bytes 'a'..'z' repeating, back to back
 //
 // Board I/O runs end with summary lines before the last line (hw_tests.py
 // compares them with a test's .io golden): `MPY_IO gpio<i> edges=<n>
@@ -90,10 +100,14 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
                           .mosi(gpio_in[11]), .miso(spi_miso));
     tb_i2c_target u_i2c (.clk(clk), .scl(gpio_in[14]), .sda(gpio_in[15]),
                          .scl_low(i2c_scl_low), .sda_low(i2c_sda_low));
+    // +PULSE: the bench drives one pad.
+    int  pulse_pin = -1;
+    logic pulse_level = 1'b0;
     always_comb begin
         for (int i = 0; i < 16; i++) begin
             int j = i ^ 8;
             if (gpio_oe[i]) gpio_in[i] = gpio_out[i];
+            else if (i == pulse_pin) gpio_in[i] = pulse_level;
             else if (gpio_loop && gpio_oe[j]) gpio_in[i] = gpio_out[j];
             else if (spi_on && i == 12 && !gpio_in[13]) gpio_in[i] = spi_miso;
             else if (i2c_on && i == 14) gpio_in[i] = !i2c_scl_low;
@@ -128,13 +142,45 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
         .ioc_dbg_valid_o(ioc_dbg_valid), .ioc_dbg_byte_o(ioc_dbg_byte)
     );
 
+    // Measurement events (+MEAS_FILE).
+    int fd_meas = 0;
+    logic [31:0] meas_pc = 32'hFFFF_FFFF;
+    initial begin
+        string path, arg;
+        int pin, start_us, period_us, count;
+        if ($value$plusargs("MEAS_FILE=%s", path)) fd_meas = $fopen(path, "w");
+        if (!$value$plusargs("MEAS_PC=%h", meas_pc)) meas_pc = 32'hFFFF_FFFF;
+        if ($value$plusargs("PULSE=%s", arg)) begin
+            void'($sscanf(arg, "%d,%d,%d,%d", pin, start_us, period_us, count));
+            pulse_pin = pin;
+            wait (boot_done);
+            #(start_us * 1us);
+            for (int k = 0; k < count; k++) begin
+                pulse_level = 1'b1;
+                if (fd_meas != 0) $fwrite(fd_meas, "edge %0d\n", longint'($realtime * 1000.0));
+                #(period_us * 0.5us);
+                pulse_level = 1'b0;
+                #(period_us * 0.5us);
+            end
+        end
+    end
+    always @(posedge clk) if (fd_meas != 0 && trace && trace_pc == meas_pc)
+        $fwrite(fd_meas, "hit %0d\n", longint'($realtime * 1000.0));
+    always @(term_rx_valid) if (fd_meas != 0 && rst_n)
+        $fwrite(fd_meas, "rx %0d\n", longint'($realtime * 1000.0));
+    always @(posedge u_soc.io_evt_pend) if (fd_meas != 0)
+        $fwrite(fd_meas, "evt %0d\n", longint'($realtime * 1000.0));
+
     // GPIO trace: the times each driven pad changed.
     realtime gpio_t [16][$];
     logic [15:0] gpio_prev = 16'h0;
     always @(gpio_out or gpio_oe) begin
         for (int i = 0; i < 16; i++) begin
             logic v = gpio_oe[i] ? gpio_out[i] : 1'b0;
-            if (v != gpio_prev[i] && rst_n && boot_done) gpio_t[i].push_back($realtime);
+            if (v != gpio_prev[i] && rst_n && boot_done) begin
+                gpio_t[i].push_back($realtime);
+                if (fd_meas != 0) $fwrite(fd_meas, "pad %0d %0d %0d\n", i, longint'($realtime * 1000.0), v);
+            end
             gpio_prev[i] = v;
         end
     end
@@ -200,10 +246,13 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
         u_term.set_bit_ns(1.0e9 / baud);
         if ($value$plusargs("UART_OUT=%s", path)) u_term.fd = $fopen(path, "wb");
         else if (!$test$plusargs("CONSOLE=uart")) u_term.fd = -1;
-        if ($value$plusargs("UART_IN=%s", s)) begin
+        if ($value$plusargs("UART_IN=%s", s) || $test$plusargs("UART_IN_PATTERN=")) begin
             byte q[$];
+            int npat;
             if (!$value$plusargs("UART_IN_US=%d", at_us)) at_us = 100;
-            unescape(s, q);
+            if ($value$plusargs("UART_IN_PATTERN=%d", npat))
+                for (int k = 0; k < npat; k++) q.push_back(byte'(8'h61 + k % 26));
+            else unescape(s, q);
             wait (boot_done);
             #(at_us * 1us);
             foreach (q[i]) u_term.send(q[i]);
@@ -315,6 +364,19 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
             $dumpfile(path);
             $dumpvars(0, u_soc.u_core);
         end
+        // The I/O island instead (iocore/tools/io_measure.py power):
+        // +SAIF_ISLAND=<path>, counting from +SAIF_START_US µs after boot.
+        else if ($value$plusargs("SAIF_ISLAND=%s", path)) begin
+            int start_us;
+            if (!$value$plusargs("SAIF_START_US=%d", start_us)) start_us = 0;
+            fork begin
+                wait (boot_done);
+                #(start_us * 1us);
+                $dumpfile(path);
+                $dumpvars(0, u_soc.u_ioc);
+                if (fd_meas != 0) $fwrite(fd_meas, "saif %0d\n", longint'($realtime * 1000.0));
+            end join_none
+        end
 `endif
         repeat (3) @(posedge clk);
         rst_n = 1'b1;
@@ -360,6 +422,7 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
         end
         io_summary();
         if (fd_out != 0) $fclose(fd_out);
+        if (fd_meas != 0) $fclose(fd_meas);
         if (fd_err != 0) $fclose(fd_err);
         if (script_on && !script_done)
             $display("MPY_SESSION_STUCK step=%0d", script_step);
