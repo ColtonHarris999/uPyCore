@@ -159,6 +159,14 @@ logic is unchanged; each file's header gives the rules. Register words
 | ADC | `0x00` CTRL (bit 8 starts, 3:0 channel), `0x04` DATA (12-bit code, left-aligned, valid bit), `0x08` STATUS; the converter is outside the island (`adc_start_o`, `adc_chan_o`, `adc_done_i`, `adc_code_i`; a model in the bench) |
 | Pin mux | `0x00`, `0x04` four bits per pad (pads 0–7, 8–15): 0 GPIO, 1–4 PWM, 5 SCK, 6 MOSI, 7 MISO, 8 SCL, 9 SDA, 10 UART TX, 11 UART RX. I2C pads are open drain |
 
+`iocore_top` puts every access to these six blocks through a register
+stage: the block sees the access a clock after the core's request, from
+flops, and answers a clock after that (the core waits for `rvalid`), and
+no data access is granted while one is in the stage, so a load never
+reads a register older than an earlier store. Their write logic (the I2C
+controller's command start, the watchdog's kick and count) from the
+core's address was the island's longest path.
+
 Two changes from the epic branch's watchdog. A KICK of the key
 `0x6B1D_F00D` reloads it as before; the tick that runs it out pulses its
 reset and also **stops** it, as a chip's watchdog reset clears its
@@ -718,6 +726,44 @@ The plan's clock-ratio sweep runs the `io`, `irq` and `console` areas at
 `io_clk` = hart/2 (the default, 20 ns), hart/1 (`--sim-arg
 +IO_CLK_NS=10`) and hart×1.5 (`+IO_CLK_NS=6.667`); the outputs match, so
 each golden holds at all three.
+
+## Synthesis
+
+`upycore/synth/hammer/make_hammer_design.py --top mpy_soc` builds the
+class flow's design folder with the island in (the generated
+SystemVerilog unit, `upycore/tools/mpy_dc_unit.py`, now takes the
+island's files and CVE2's includes):
+
+- **Two clocks.** `constraints.tcl` adds `io_clk` on `io_clk_i`
+  (`--io-period`, 20 ns by default), asynchronous to `core_clk`. Every
+  path between the domains ends in a two-flop synchronizer or is a
+  dual-clock FIFO's memory read only after the gray-coded write pointer
+  has crossed; each is bounded by `set_max_delay` to the faster clock's
+  period rather than cut, so a gray pointer's bits arrive within one
+  period of each other. The island's synchronous pads (the GPIO pads,
+  which the pin mux routes into the SPI and I2C controllers, the ADC
+  interface, UART TX, the debug byte) are timed against `io_clk`; the
+  UART RX pin and the console strap, synchronized before any logic, are
+  not timed.
+- **SRAM macros.** The island's code and data SRAMs are the same
+  `bsg_mem_1rw_sync_mask_write_bit` wrapper as the chip's, so the class
+  hook swaps them for `fakeram_d4096_w32` and `fakeram_d2048_w32`
+  (`vlsi.inputs.sram_parameters` lists all seven shapes).
+- **Clock gate.** CVE2's behavioral clock gate (a latch and an AND) is
+  `sky130_fd_sc_hd__dlclkp_1` in the generated unit
+  (`iocore/rtl/asic/cve2_clock_gate.sv`), so Genus maps no latch and
+  `check_syn.py`'s latch check stays clean.
+- **Island timing.** In the open flow (unmapped STA, the numbers compare
+  designs; they are not Genus ns) the island's worst path is 18.93 ns,
+  from CVE2's instruction register through the store address into the
+  UART's counters: about 53 MHz against the 50 MHz `io_clk`. Phase 4's
+  blocks first pushed it to 21.8 ns through their write logic; their
+  accesses now go through a register stage (Island, PWM to pin mux).
+
+Not done here, for want of the tools: a Genus run of `mpy_soc` at 10 ns
+with the island in (the plan's check for this phase), and sv2v
+regeneration of `converted/mpy_soc.v` and `converted/mpy_core.v`
+(`upycore/synth/hammer/README.md`).
 
 ## Verification of rewrites
 

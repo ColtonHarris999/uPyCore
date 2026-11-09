@@ -46,7 +46,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1] / "tools"))
 from mpy_dc_unit import write_unit  # noqa: E402
-from mpy_synth import CORE_FILES, GC_SRAM_MACRO, SRAM_BLOCKS, SRAM_MACRO, SRAM_MODEL, TOPS  # noqa: E402
+from mpy_synth import (CORE_FILES, GC_SRAM_MACRO, IOCORE_CODE_SRAM_MACRO, IOCORE_DATA_SRAM_MACRO,  # noqa: E402
+                       SRAM_BLOCKS, SRAM_MACRO, SRAM_MODEL, TOPS)
 
 # BaseJump STL sources for the SRAM wrapper, in the class src.yml style.
 # The fakeram hook swaps each 32768 x 36 bsg_mem_1rw_sync_mask_write_bit
@@ -80,15 +81,54 @@ create_clock -period $core_clk_period -name core_clk [get_ports {clock}]
 # uPyCore's outputs all come from flops. If the worst path in the timing
 # report runs from an input straight to an output, lower io_frac (and use
 # the same value for every core you compare).
-set data_in [remove_from_collection [all_inputs] [get_ports {{{clock} {reset}{also_ports}}}]]
+set data_in [remove_from_collection [all_inputs] [get_ports {{{clock} {reset}{also_ports}{io_in_ports}}}]]
+set data_out {data_out}
 set_input_delay  -max [expr {{$io_frac * $core_clk_period}}] -clock core_clk $data_in
 set_input_delay  -min 0 -clock core_clk $data_in
-set_output_delay -max [expr {{$io_frac * $core_clk_period}}] -clock core_clk [all_outputs]
-set_output_delay -min 0 -clock core_clk [all_outputs]
+set_output_delay -max [expr {{$io_frac * $core_clk_period}}] -clock core_clk $data_out
+set_output_delay -min 0 -clock core_clk $data_out
 
 # {reset} is an asynchronous reset: keep it out of the timing paths.
 set_false_path -from [get_ports {reset}]
-{tie_low}{feedthrough}"""
+{io_domain}{tie_low}{feedthrough}"""
+
+# mpy_soc's second clock: the I/O island (upycore/docs/mpy_io_core.md,
+# Clock domains). Its pads are timed against io_clk (the pin mux takes the
+# GPIO pads straight into the SPI and I2C controllers); the pins that go
+# through two-flop synchronizers first are not timed.
+IO_IN_PORTS = "adc_done_i adc_code_i* gpio_i*"
+IO_OUT_PORTS = ("uart0_txd_o gpio_o* gpio_oe_o* gpio_pu_o* gpio_pd_o* adc_start_o adc_chan_o* "
+                "ioc_dbg_valid_o ioc_dbg_byte_o*")
+IO_ASYNC_PORTS = "uart0_rxd_i console_sel_i*"
+IO_DOMAIN = """
+# The I/O island's clock, asynchronous to core_clk.
+set io_clk_period {io_period}
+create_clock -period $io_clk_period -name io_clk [get_ports {io_clock}]
+set_clock_uncertainty {uncertainty} [get_clocks io_clk]
+
+# Every path between core_clk and io_clk ends in a two-flop synchronizer or
+# is a dual-clock FIFO's memory, read only after the gray-coded write
+# pointer has crossed (mpy_async_fifo). Bounding them to the faster clock's
+# period, instead of cutting them, keeps a gray pointer's bits within one
+# period of each other at the synchronizer.
+set cdc_max [expr {{min($core_clk_period, $io_clk_period)}}]
+set_max_delay $cdc_max -from [get_clocks core_clk] -to [get_clocks io_clk]
+set_max_delay $cdc_max -from [get_clocks io_clk] -to [get_clocks core_clk]
+
+# The island's synchronous pads (the ADC interface, the GPIO pads, which
+# the pin mux routes to the SPI and I2C controllers, the UART TX, the debug
+# byte) are timed against io_clk.
+set io_in  [get_ports {{{io_in}}}]
+set io_out [get_ports {{{io_out}}}]
+set_input_delay  -max [expr {{$io_frac * $io_clk_period}}] -clock io_clk $io_in
+set_input_delay  -min 0 -clock io_clk $io_in
+set_output_delay -max [expr {{$io_frac * $io_clk_period}}] -clock io_clk $io_out
+set_output_delay -min 0 -clock io_clk $io_out
+
+# The UART RX line and the console strap are asynchronous: each goes
+# through two flops before any logic.
+set_false_path -from [get_ports {{{io_async}}}]
+"""
 
 
 def _get(doc: dict, dotted: str):
@@ -164,6 +204,10 @@ def main() -> int:
                     help="use this single RTL file instead of generating one (e.g. Hazard3)")
     ap.add_argument("--clock", default="clk_i", help="clock port (default clk_i)")
     ap.add_argument("--reset", default="rst_n_i", help="async reset port (default rst_n_i)")
+    ap.add_argument("--io-clock", default=None,
+                    help="the I/O island's clock port, asynchronous to the core clock "
+                         "(default io_clk_i for mpy_soc, none otherwise)")
+    ap.add_argument("--io-period", default="20", help="io_clk period in ns (default 20 = 50 MHz)")
     ap.add_argument("--also-clock", action="append", default=[],
                     help="another clock port at the same period (Hazard3: clk_always_on)")
     ap.add_argument("--sv2v", type=Path, metavar="SV2V",
@@ -234,6 +278,10 @@ def main() -> int:
         macros.append(SRAM_MACRO)
     if srams and "mpy_gc.sv" in TOPS[args.top]:
         macros.append(GC_SRAM_MACRO)
+    island = args.top in TOPS and "iocore/rtl/iocore_top.sv" in TOPS[args.top]
+    if srams and island:
+        macros += [IOCORE_CODE_SRAM_MACRO, IOCORE_DATA_SRAM_MACRO]
+    io_clock = args.io_clock or ("io_clk_i" if island else None)
     extra_v: list[Path] = []
     if args.core_v:
         if args.rtl or args.top not in TOPS or not set(CORE_FILES) < set(TOPS[args.top]):
@@ -309,7 +357,17 @@ def main() -> int:
     else:
         warnings.append("example had no cfg/constraints.tcl; wrote one, check that "
                         "cfg.yml lists it the way the class examples do")
+    io_domain = ""
+    if io_clock:
+        io_domain = IO_DOMAIN.format(io_period=args.io_period, io_clock=io_clock,
+                                     uncertainty=args.uncertainty, io_in=IO_IN_PORTS,
+                                     io_out=IO_OUT_PORTS, io_async=IO_ASYNC_PORTS)
     sdc.write_text(CONSTRAINTS.format(top=args.top, period=args.period, io_frac=args.io_frac,
+                                      io_domain=io_domain,
+                                      io_in_ports=(f" {io_clock} {IO_IN_PORTS} {IO_ASYNC_PORTS}"
+                                                   if io_clock else ""),
+                                      data_out=(f"[remove_from_collection [all_outputs] [get_ports {{{IO_OUT_PORTS}}}]]"
+                                                if io_clock else "[all_outputs]"),
                                       uncertainty=args.uncertainty, clock=args.clock,
                                       reset=args.reset,
                                       also_clocks="".join(
@@ -368,6 +426,8 @@ def main() -> int:
     print(f"  top        {args.top}")
     print(f"  RTL        {unit.relative_to(dest)} ({sum(1 for _ in unit.open())} lines)")
     print(f"  clock      {args.clock} @ {args.period} ns (cfg/constraints.tcl)")
+    if io_clock:
+        print(f"  clock      {io_clock} @ {args.io_period} ns, asynchronous (io_clk)")
     for f in files:
         print(f"  input file {f}")
     if srams:

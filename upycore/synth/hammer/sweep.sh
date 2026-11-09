@@ -9,12 +9,14 @@
 # ~/ee477/ee477-designs-module1/upycore_v2_p12 ...). Each run takes one Genus
 # license and several cores, so start three or four at a time.
 #
-# The whole chip with its four SRAM macros: TOP=mpy_soc sweep.sh start 20 15
+# The whole chip with its seven SRAM macros (four image/data blocks, the GC
+# table, the I/O island's code and data): TOP=mpy_soc sweep.sh start 20 15
 # runs `make sram` and then `make syn` in each folder (upycore_soc_p20 ...),
 # with the core from converted/mpy_core.v and the die DIE="w h" in um
 # (default 4000 3000). SOC_RTL=converted takes the whole chip from
 # converted/mpy_soc.v instead, for when Genus rejects the generated
-# SystemVerilog. status then also counts the macros in each netlist (want 4).
+# SystemVerilog. status then also counts the macros in each netlist (want 7).
+# io_clk (the I/O island) is 20 ns in every folder; IO_PERIOD=<ns> changes it.
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../../.." && pwd)
@@ -45,7 +47,7 @@ start)
     for p in "$@"; do
         d=$DESIGNS/${PREFIX}_p$p
         python3 "$here/make_hammer_design.py" "$TEMPLATE" "$d" --top "$TOP" \
-            --period "$p" "${src[@]}" --force > /dev/null
+            --period "$p" --io-period "${IO_PERIOD:-20}" "${src[@]}" --force > /dev/null
         (cd "$d" && { nohup bash -c "$steps" > syn.out 2>&1 & echo $! > syn.pid; })
         echo "started $steps at $p ns in $d (log: $d/syn.out)"
     done
@@ -66,7 +68,7 @@ status)
         fi
         slack=- path=- minp=- area=- macros=-
         net=$(ls "$d"/build/syn-rundir/*.mapped.v 2>/dev/null | head -1)
-        [ "$TOP" = mpy_soc ] && [ -n "$net" ] && macros=$(grep -c fakeram_d32768_w36 "$net")
+        [ "$TOP" = mpy_soc ] && [ -n "$net" ] && macros=$(grep -c "^ *fakeram_d" "$net")
         if [ "$state" = done ] && [ -f "$rpt" ]; then
             slack=$(awk '/Slack:=/{print $2/1000; exit}' "$rpt")
             path=$(awk '/Data Path:-/{print $3/1000; exit}' "$rpt")

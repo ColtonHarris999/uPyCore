@@ -167,10 +167,21 @@ clock at the same period so its flops are timed.
   Boot selects the active subset after subtracting the image from shared
   SRAM.
 - `mpy_soc`: the whole chip, with the four 128 KiB SRAM blocks as
-  `fakeram_d32768_w36` macros, the GC table as a `fakeram_d600_w64` macro
-  and the SPI NAND boot loader. The script
-  sets up the SRAM macros; run `make sram` before `make syn`, and add the
-  macro placements. See
+  `fakeram_d32768_w36` macros, the GC table as a `fakeram_d600_w64` macro,
+  the SPI NAND boot loader, and the I/O island
+  ([`../../docs/mpy_io_core.md`](../../docs/mpy_io_core.md)) with its
+  16 KB code and 8 KB data SRAMs as `fakeram_d4096_w32` and
+  `fakeram_d2048_w32` macros (seven macros in all). The script sets up the
+  SRAM macros; run `make sram` before `make syn`, and add the macro
+  placements. The island runs on its own clock: `constraints.tcl` gets
+  `io_clk` on `io_clk_i` (`--io-period`, default 20 ns), asynchronous to
+  `core_clk`, every path between the two bounded by `set_max_delay` to
+  the faster period (each ends in a two-flop synchronizer or is a
+  dual-clock FIFO's memory behind a gray pointer), the island's pads
+  timed against `io_clk`, and the UART RX pin and the console strap,
+  which are synchronized first, not timed. CVE2's clock gate is the
+  `sky130_fd_sc_hd__dlclkp_1` cell in the generated file
+  (`iocore/rtl/asic/cve2_clock_gate.sv`), so Genus maps no latch. See
   [`../../docs/mpy_boot.md`](../../docs/mpy_boot.md#ee-477-hammer-flow).
   If Genus rejects the SystemVerilog that `--core-v` writes for the
   rest of the chip, use the whole chip converted instead:
@@ -194,7 +205,13 @@ python3 upycore/synth/hammer/make_hammer_design.py \
 ```
 
 After an RTL change, regenerate the files with `convert_rtl.sh` on a
-machine where sv2v runs, and commit them. Where sv2v runs on the lab
+machine where sv2v runs, and commit them. **Stale now:** the board I/O
+work changed `mpy_core` (the soft-point check, the `_wfe` native, the heap
+lock) and added the I/O island to `mpy_soc`, and sv2v could not be run
+where that was done, so `converted/mpy_core.v` and `converted/mpy_soc.v`
+were not regenerated (`mpy_alu.v` and `mpy_decode.v` are current). Run
+`convert_rtl.sh` (which now covers the island through `mpy_soc`) before
+using `--rtl` or `--core-v` with them. Where sv2v runs on the lab
 machine itself, `--sv2v <binary>` converts while building the folder.
 The converted files also read cleanly in Yosys's own Verilog parser.
 
@@ -270,4 +287,4 @@ each `upycore_soc_p<period>` folder gets the four SRAM macros, and the
 background job runs `make sram` and then `make syn`. `DIE="w h"` sets the
 die (default 4000 x 3000 um) and `SOC_RTL=converted` takes the chip from
 `converted/mpy_soc.v`. `TOP=mpy_soc sweep.sh status` adds the macro count
-of each netlist (it must be 4) and the macro footprint from its LEF.
+of each netlist (it must be 7) and the macro footprint from its LEF.
