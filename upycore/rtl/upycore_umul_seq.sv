@@ -76,28 +76,31 @@ module upycore_umul_seq #(
             product_r <= '0;
         end else begin
             done_r <= 1'b0;
-            if (accept) begin
-                busy_r <= 1'b1;
-                cnt_r  <= '0;
-                a_r    <= op_a_i;
-                b_r    <= BWP'(op_b_i);
-                acc_r  <= '0;
-            end else if (busy_r) begin
+            // Only busy_r and done_r follow start_i. The data registers load
+            // while idle and step while busy, so the requester's start (a
+            // late, high-fanout decode) never reaches their enables. An
+            // aborted operation's values are never used: the next accept
+            // reloads every one of them, and product_o is only read with
+            // done_o.
+            if (!busy_r) begin
+                a_r   <= op_a_i;
+                b_r   <= BWP'(op_b_i);
+                acc_r <= '0;
+                cnt_r <= '0;
+                if (accept) busy_r <= 1'b1;
+            end else begin
+                b_r   <= b_r >> STEP;
+                acc_r <= sum;
+                lo_r  <= lo_next;
+                cnt_r <= cnt_r + 1'b1;
+                // {high part, low chunks}; b was zero-padded to BWP bits so
+                // the true product is the low AW+BW bits.
+                if (last_step) product_r <= (AW+BW)'({sum[ACC_W-1:STEP], lo_next});
                 if (!start_i) begin
                     busy_r <= 1'b0;                 // requester withdrew
-                end else begin
-                    b_r   <= b_r >> STEP;
-                    acc_r <= sum;
-                    lo_r  <= lo_next;
-                    if (last_step) begin
-                        busy_r <= 1'b0;
-                        done_r <= 1'b1;
-                        // {high part, low chunks}; b was zero-padded to
-                        // BWP bits so the true product is the low AW+BW bits.
-                        product_r <= (AW+BW)'({sum[ACC_W-1:STEP], lo_next});
-                    end else begin
-                        cnt_r <= cnt_r + 1'b1;
-                    end
+                end else if (last_step) begin
+                    busy_r <= 1'b0;
+                    done_r <= 1'b1;
                 end
             end
         end

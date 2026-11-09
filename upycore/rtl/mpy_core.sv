@@ -1932,8 +1932,12 @@ module mpy_core
     logic [31:0]        ss_count_d;
     assign ss_d_bw    = $signed({ss_start[31], ss_start}) - $signed({ss_stop[31], ss_stop});
     assign ss_d_fw    = $signed({ss_stop[31], ss_stop}) - $signed({ss_start[31], ss_start});
-    assign ss_count_d = ss_reverse ? ((ss_d_bw > 0) ? ss_d_bw[31:0] : 32'd0)
-                                   : ((ss_d_fw > 0) ? ss_d_fw[31:0] : 32'd0);
+    // d > 0 is a clear sign bit and start != stop; the compare runs beside
+    // the subtract instead of after its carry.
+    logic ss_ne;
+    assign ss_ne      = ss_start != ss_stop;
+    assign ss_count_d = ss_reverse ? ((!ss_d_bw[32] && ss_ne) ? ss_d_bw[31:0] : 32'd0)
+                                   : ((!ss_d_fw[32] && ss_ne) ? ss_d_fw[31:0] : 32'd0);
 
     // ------------------------------------------------------------------
     // Main sequencer
