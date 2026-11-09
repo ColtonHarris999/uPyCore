@@ -1,0 +1,5 @@
+hello from the I/O core
+id 494f4301
+timer ok
+irq ok
+<A><B>

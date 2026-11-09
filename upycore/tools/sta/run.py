@@ -76,6 +76,10 @@ def main() -> int:
     ap.add_argument("--out", type=Path, help="output folder inside the repository (default build/sta/<top>)")
     ap.add_argument("--groups", type=int, default=60, help="register groups to list")
     ap.add_argument("--compare", nargs=2, type=Path, metavar=("BASE", "NEW"))
+    ap.add_argument("--rtl", nargs="+", help="files (from the repository root) instead of mpy_synth.TOPS[top]")
+    ap.add_argument("--inc", action="append", default=[], help="extra include directory")
+    ap.add_argument("--param", action="append", default=[], help="top parameter NAME=VALUE (slang -G)")
+    ap.add_argument("--module", help="the top module when it differs from the top name")
     args = ap.parse_args()
     if args.compare:
         compare(*args.compare)
@@ -89,12 +93,19 @@ def main() -> int:
     for f in ("sram_stub.sv", "ffbox.v", "ffmap.v", "noarst.v", "map.abc"):
         shutil.copy(HERE / f, out / f)
     shutil.copy(args.lib, out / "tt.lib")
-    files = " ".join((f"{rel}/sram_stub.sv" if f == m.SRAM_MODEL else f"upycore/rtl/{f}") for f in m.TOPS[args.top])
+    def src(f: str) -> str:
+        if Path(f).name == m.SRAM_MODEL:
+            return f"{rel}/sram_stub.sv"
+        return f if "/" in f else f"upycore/rtl/{f}"
+    files = " ".join(src(f) for f in (args.rtl or m.TOPS[args.top]))
+    module = args.module or args.top
+    inc = " ".join(f"-I {d}" for d in ["upycore/rtl", *args.inc])
+    params = " ".join(f"-G {p}" for p in args.param)
     lines = [
-        f"read_slang -j 1 --single-unit --top {args.top} -DSYNTHESIS -I upycore/rtl {files}",
+        f"read_slang -j 1 --single-unit --top {module} -DSYNTHESIS {inc} {params} {files}",
         f"read_verilog -lib {rel}/ffbox.v",
-        f"hierarchy -check -top {args.top}",
-        f"synth -flatten -noshare -noabc -top {args.top}",
+        f"hierarchy -check -top {module}",
+        f"synth -flatten -noshare -noabc -top {module}",
         f"techmap -map {rel}/noarst.v",
         "async2sync",
         "dffunmap",
