@@ -126,8 +126,10 @@ module mpy_soc #(
     assign physical_pool = MPY_MEM_BYTES - (image_words << 2) -
                            (ABI_GC_POOL_BASE - MPY_SRAM_BASE);
     assign active_pool = (requested_pool == 0) ? physical_pool : requested_pool;
-    assign layout_error = boot_done && (requested_pool > physical_pool ||
-                                      active_pool < 16 || active_pool[3:0] != 0);
+    // The layout check is registered (layout_error, layout_chk below):
+    // boot_err_o is a chip output with half the period as output delay,
+    // and the pool arithmetic in front of it missed 10 ns by 178 ps.
+    logic layout_chk;
     logic boot_error;
     assign boot_err_o = boot_error || layout_error;
     logic        sys_rst_n;
@@ -149,6 +151,20 @@ module mpy_soc #(
     end
     assign por_n = por_q[1];
 
+    // image_words and requested_pool hold once boot_done rises, so the
+    // check taken the cycle after is final; the collector (and so the core)
+    // starts only once it has been taken.
+    always_ff @(posedge clk_i or negedge por_n) begin
+        if (!por_n) begin
+            layout_error <= 1'b0;
+            layout_chk   <= 1'b0;
+        end else if (boot_done) begin
+            layout_error <= requested_pool > physical_pool ||
+                            active_pool < 16 || active_pool[3:0] != 0;
+            layout_chk   <= 1'b1;
+        end
+    end
+
     always_ff @(posedge clk_i or negedge por_n) begin
         if (!por_n) begin
             boot_rst_n <= 1'b0;
@@ -156,7 +172,7 @@ module mpy_soc #(
             sys_rst_n  <= 1'b0;
         end else begin
             if (mem_ready) boot_rst_n <= 1'b1;
-            if (boot_done && !boot_err_o) gc_rst_n <= 1'b1;
+            if (boot_done && layout_chk && !boot_err_o) gc_rst_n <= 1'b1;
             if (mem_ready && boot_done && !boot_err_o && gc_rst_n && !g_busy) sys_rst_n <= 1'b1;
         end
     end

@@ -8,12 +8,13 @@
 // multiply-accumulate:
 //
 //   C0            unpack, normalize subnormal significands  -> stage 1 regs
-//   C1 .. C(N)    N = ceil(53/STEP) product steps (4 at STEP = 14)
-//   C(N+1)        product registered by the multiplier core;
+//   C1            the multiplier core registers its operands
+//   C2 .. C(N+1)  N = ceil(53/STEP) product steps (4 at STEP = 14)
+//   C(N+2)        product registered by the multiplier core;
 //                 normalize by one bit, round, pack          -> result reg
-//   C(N+2)        done_o, result_o from the register
+//   C(N+3)        done_o, result_o from the register
 //
-// done_o is asserted in C(N+2): the 7th cycle counting the accept cycle as
+// done_o is asserted in C(N+3): the 8th cycle counting the accept cycle as
 // the first, at the default STEP.
 // Handshake as in upycore_umul_seq.sv (level start_i, one-cycle done_o,
 // withdrawing start_i aborts).
