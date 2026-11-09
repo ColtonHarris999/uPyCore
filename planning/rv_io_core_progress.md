@@ -112,3 +112,72 @@ Deviations from the plan:
   Verilog frontend and the same parameters, the core alone is 69,769 µm²
   and 1,137 flops, which agrees with slang's 72,189 µm² once the two AHB
   adapters are counted, so the slang netlist was used for both cores.
+
+## Phase 1: bridge, clock-domain crossing, boot section
+
+Commits `eb9eae7` (the bridge), then `dd77fb0`, `cc215c6` and `beb45e4`
+(the G3 fixes below); the gates ran on `beb45e4`.
+
+Built:
+
+- `upycore/rtl/mpy_iobr.sv`, the hart side of the bridge: CMD (32 words),
+  RSP (16), CON, CON_RX, EVT, UPD (state page words), DN (hart page
+  words) and LD (the boot section) as dual-clock FIFOs
+  (`mpy_async_fifo.sv`, gray pointers, ported from the epic branch); EVT,
+  EVT_EN, EVT_SET, EVT_MASK and the `evt_pend` flop; the state page copy
+  (32 I/O core words, 8 hart words) in flops; the island timer's µs and
+  ms counts crossing as gray code. A store that would overflow a FIFO
+  waits in the core-port skid (`stall_o`, a flop); nothing is dropped.
+- `mpy_soc.sv`: the window's decode beside the simulator page on the
+  skid, a registered copy of the access, answers through the simulator
+  page's answer flops; every other window address goes to `mpy_mem`,
+  which answers with its fault (unchanged). The simulator page's decode
+  is a direct compare on the upper address bits, proven equal to the
+  `mpy_region_of()` test it replaces with Yosys `sat`
+  (`iocore/tools/proofs/run.sh`).
+- `iocore/rtl/iocore_bridge.sv` (the I/O core side at `0x8000_3000`) and
+  `iocore_gpio.sv` (16 pins, edge latches). GPIO was planned for phase 2;
+  it landed with the island's bus decode.
+- `mpy_boot.sv`: an optional IOCB section after the image, written into
+  the island's SRAMs through LD; the I/O core leaves reset once LD has
+  drained. `mpy_nand.py --iocore` appends it; the simulation stream takes
+  `+IOC_CODE`/`+IOC_DATA` or ends with one 0 word.
+- The board I/O firmware overlay (`upycore/firmware/io/io.py`: the `_io`
+  native module over `_peek32` and `_st`; `_poke32` is a firmware
+  function, not a core native) and a frozen `machine` with `mem32`; both
+  only in images that import `machine`, `time` or `_io`.
+- Benches: `tb_mpy_iobr` (randomized traffic through every FIFO at clock
+  ratios from 1:3 to 3:1, 12 trials, 39,891 checks), `tb_mpy_boot` IOCB
+  trials. Tests: the `io` area's `bridge_loopback` (1,000 words),
+  `bridge_regs`, `bridge_misaligned` and `bridge_unmapped` (faults),
+  `mem32_align`.
+
+G3 needed three rounds. The first tree had 66 `mpy_soc` groups 0.27 ns
+slower: every one started at `c_pend` and ran through the skid's
+`p_addr` mux into `mpy_mem`'s arbitration, which the bridge's decodes
+loaded. Registering the bridge's inputs (one flop load per skid net)
+fixed those. Comparing every register group, not only the top 400,
+then showed `sim_rdata`, `boot_done`, `boot_error` and `gc_rst_n`
+slower: STATUS became flops a clock old, `done_o` no longer waits for
+LD, the section's count checks went to their own state (`C_IERR`, which
+reaches `C_ERR` a clock later), and the bridge's read mux became a flat
+AND-OR of three parts.
+
+| Gate | Result |
+| --- | --- |
+| G1 | PASS: 23 of 23 workloads at +0.000 % |
+| G2 | PASS: 510 of 510 pass; 505 with the baseline's cycles, 0 moved, 5 new (`io`) |
+| G3 | PASS: `mpy_core` 578 of 578 groups matched, none slower by > 0.1 (worst 27.389 → 27.389 ns); `mpy_soc` 1,104 of 1,105 matched, none slower by > 0.1. The unmatched group, `u_ca.bulk_engine.hvalid` (5.060 → 5.316), is inside the unchanged collection accelerator: the path is the same up to the bulk engine's FSM, which Yosys encodes differently in the larger netlist; `gates.py` lists it as flow noise |
+| G4 | PASS: 505 identical, 0 differ, 5 not in both trees (the new `io` tests) |
+| G5 | PASS: island 135,955 µm² + `mpy_iobr` 177,550 µm² = 313,505 of 450,000 (SRAM unchanged, 24 KB) |
+
+Unit benches: 31 of 31 (adds `mpy_iobr`).
+
+Deviations from the plan:
+
+- The tick words cross as hardware gray code, not as page words the
+  firmware writes, so `ticks_ms`/`ticks_us` are exact and never stale.
+- The state page is flops on the hart side (32 + 8 words), not a shared
+  RAM: a dual-port RAM across the two clocks would be a custom macro.
+- The console redirect (CON) went into phase 1's bridge so the FIFO set
+  was built and tested once.

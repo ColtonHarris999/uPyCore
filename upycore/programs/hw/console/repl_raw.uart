@@ -1,0 +1,33 @@
+# A raw REPL session as mpremote runs one (tools/mpremote/mpremote/
+# transport_serial.py in MicroPython v1.29.0: enter_raw_repl with a soft
+# reset, then exec through raw-paste mode, then plain raw mode), against
+# shared/runtime/pyexec.c pyexec_raw_repl and do_reader_stdin.
+expect >>>\x20
+# enter_raw_repl(soft_reset=True)
+send \r\x03\x03
+send \r\x01
+expect raw REPL; CTRL-B to exit\r\n>
+send \x04
+expect soft reboot\r\n
+expect raw REPL; CTRL-B to exit\r\n
+expect >
+# exec_raw_no_follow: raw-paste mode; the window is 128 bytes (\x80\x00),
+# then \x01 grants a second one
+send \x05A\x01
+expect R\x01\x80\x00\x01
+send x = 6 * 7\nprint('hello', x)\n\x04
+expect \x04
+# follow: the output to \x04, the error output to \x04, then the prompt
+expect \x04
+expect \x04>
+# plain raw mode: OK, then an exception on the second stream
+send 1 // 0\x04
+expect OK
+expect \x04
+expect \x04>
+# the namespace survives between commands
+send print(x + 1)\x04
+expect \x04>
+# exit_raw_repl
+send \r\x02
+expect >>>\x20

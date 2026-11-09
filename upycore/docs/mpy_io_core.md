@@ -1,9 +1,9 @@
 # The I/O core
 
-Status: phases 0 to 3 of [`planning/rv_io_core_plan.md`](../../planning/rv_io_core_plan.md)
+Status: phases 0 to 4 of [`planning/rv_io_core_plan.md`](../../planning/rv_io_core_plan.md)
 (the island, the hart-side bridge, the boot section, polled board I/O, the
-UART console, and events on the hart). The remaining peripherals, the
-REPL and USB are added by later phases; this page grows with them. Progress and gate results:
+UART console, events on the hart, the remaining peripherals, system reset
+and the REPL). USB is added by a later phase; this page grows with it. Progress and gate results:
 [`planning/rv_io_core_progress.md`](../../planning/rv_io_core_progress.md).
 
 Board I/O goes through a small RV32 core, the **I/O core**, that owns every
@@ -64,6 +64,12 @@ core takes as an access fault.
 | `0x8000_2000` | 4 KB | UART0 |
 | `0x8000_3000` | 4 KB | Bridge to the hart (I/O core side) |
 | `0x8000_4000` | 4 KB | GPIO |
+| `0x8000_5000` | 4 KB | PWM (`iocore_pwm`) |
+| `0x8000_6000` | 4 KB | SPI controller (`iocore_spi`) |
+| `0x8000_7000` | 4 KB | I2C controller (`iocore_i2c`) |
+| `0x8000_8000` | 4 KB | Watchdog (`iocore_wdt`) |
+| `0x8000_9000` | 4 KB | ADC interface (`iocore_adc`) |
+| `0x8000_A000` | 4 KB | Pin mux (`iocore_pinmux`) |
 
 Both SRAMs are one-port macros (`bsg_mem_1rw_sync_mask_write_bit`, which
 the class flow swaps for `fakeram`). While the core is held in reset, the
@@ -135,6 +141,34 @@ epic branch's `mpy_periph` GPIO.
 | `0x24` | `STATUS` | One bit per pin whose `EDGE` matched a change; write 1 to clear (an edge on that clock stays) |
 | `0x28` | `IRQEN` | Pins whose `STATUS` bit raises the GPIO interrupt (`IRQ_PEND` bit 2) |
 
+### PWM, SPI, I2C, watchdog, ADC, pin mux (`0x8000_5000`–`0x8000_A000`)
+
+These six blocks are the epic branch's `mpy_pwm`, `mpy_spi`, `mpy_i2c`,
+`mpy_wdt`, `mpy_adc` and `mpy_pinmux`, renamed `iocore_*` and moved onto
+the I/O core's bus. `iocore_top` feeds each one its old MMIO offset (the
+4 KB region's low byte under the old high nibble), so their register
+logic is unchanged; each file's header gives the rules. Register words
+(`iocore/sw/common/iocore.h`):
+
+| Block | Registers (offset from the region base) |
+| --- | --- |
+| PWM | `0x00` PRESC, `0x04` TOP, `0x08` EN (4 channels), `0x0C` COUNT, `0x10`+4c DUTY. One counter for the four channels; TOP, DUTY and EN load at the wrap |
+| SPI | `0x00` CTRL (bit 0 on, 1 CPOL, 2 CPHA, 23:8 the half-period divider), `0x04` DATA (TX FIFO / RX FIFO), `0x08` STATUS. Mode 0–3, 8-bit frames, MSB first; chip select is a GPIO |
+| I2C | `0x00` DIV (quarter bit), `0x04` CMD (START, STOP, WRITE, READ with ACK/NACK), `0x08` STATUS, `0x0C` TIMEOUT (clock stretch limit), `0x10` CTRL |
+| Watchdog | `0x00` LOAD, `0x04` CTRL (bit 0 starts), `0x08` KICK, `0x0C` COUNT; counts the timer's millisecond tick |
+| ADC | `0x00` CTRL (bit 8 starts, 3:0 channel), `0x04` DATA (12-bit code, left-aligned, valid bit), `0x08` STATUS; the converter is outside the island (`adc_start_o`, `adc_chan_o`, `adc_done_i`, `adc_code_i`; a model in the bench) |
+| Pin mux | `0x00`, `0x04` four bits per pad (pads 0–7, 8–15): 0 GPIO, 1–4 PWM, 5 SCK, 6 MOSI, 7 MISO, 8 SCL, 9 SDA, 10 UART TX, 11 UART RX. I2C pads are open drain |
+
+Two changes from the epic branch's watchdog. A KICK of the key
+`0x6B1D_F00D` reloads it as before; the tick that runs it out pulses its
+reset and also **stops** it, as a chip's watchdog reset clears its
+watchdog (the island is not reset with the hart, so an expired watchdog
+that kept running would reset the hart every tick). A KICK of the stop
+key `0x5709_DEAD` stops it; the firmware sends it only for
+`machine.reset()`, and the hart has no other path to it. An expiry
+toggles `wdt_toggle_o`, which the bridge synchronizes into a system reset
+(Reset).
+
 ## Clock domains
 
 The hart runs on `clk_i`; the island on `io_clk_i`, an independent clock
@@ -183,6 +217,9 @@ root.
 | `0x020` | `CON_RX` | A load pops one console input byte: bit 31 valid, bits 7:0 the byte |
 | `0x024` | `CON_MODE` | Read-only: the console strap (`console_sel_i`: 0 `sim`, 1 `uart`, 2 `usb`) |
 | `0x028` | `CMD_SENT` | Read-only: CMD words pushed since power-on (the I/O core's `SEQ` page word counts the ones it has finished) |
+| `0x02C` | `RESET_CAUSE` | Read-only: why the hart domain last reset, `machine`'s numbers: 1 power on, 2 `machine.reset`, 3 the watchdog, 5 `machine.soft_reset` |
+| `0x030` | `SYS_RESET` | A store of `0x0B007ED0 \| kind` (the key in bits 31:4) resets the hart domain: kind 0 hard, 1 soft. Other values are ignored |
+| `0x034` | `KEEP` | A word that survives a system reset (the REPL keeps its mode here); 0 at power on |
 | `0x800`–`0x87C` | State page, I/O core words | 32 words the I/O core writes and the hart reads (stores are ignored) |
 | `0xC00`–`0xC1C` | State page, hart words | 8 words the hart writes (and reads back) and the I/O core reads |
 
@@ -216,7 +253,7 @@ and answers synchronous ones in RSP, in order.
 
 | Channel | Name | Payload | Answer |
 | --- | --- | --- | --- |
-| `0x01` | `SYS` | bits 23:16 op: `0x01` PING, `0x02` FREQ | PING: the protocol version (2); FREQ: io_clk in Hz |
+| `0x01` | `SYS` | bits 23:16 op: `0x01` PING, `0x02` FREQ, `0x03` UID, `0x04` RESET (bit 0: also stop the watchdog) | PING: the protocol version (5); FREQ: io_clk in Hz; UID: two words, high first; RESET: 0, once the peripherals are back to their reset state |
 | `0x02` | `ECHO` | anything | the same word |
 | `0x03` | `EVT` | bits 15:0 | raises those events (a bridge test) |
 | `0x04` | `PAGE` | bits 4:0 a page word; the next CMD word is its value | the CMD word, after the page word is pushed (a bridge test) |
@@ -233,6 +270,23 @@ and answers synchronous ones in RSP, in order.
 | `0x2A` | `UART_IRQ` | bits 15:0 the triggers (`0x20` TXIDLE, `0x40` RXIDLE, rp2's values) | — |
 | `0x30` | `TIMER_INIT` | bits 1:0 id, bit 2 periodic, bit 3 raise `TIMER` on each expiration; the next word is the period in µs | — |
 | `0x31` | `TIMER_DEINIT` | bits 1:0 id | — |
+| `0x14` | `PIN_FUNC` | bits 4:0 pin, 11:8 the pad function (pin mux numbers) | — |
+| `0x40` | `PWM_CFG` | the next word: 31:16 prescaler, 15:0 top (all channels) | — |
+| `0x41` | `PWM_DUTY` | bits 1:0 channel; the next word the duty compare | — |
+| `0x42` | `PWM_EN` | bits 3:0 the channels on | — |
+| `0x50` | `SPI_INIT` | bit 0 CPOL, 1 CPHA; the next word the half-period divider | — |
+| `0x51` | `SPI_XFER` | bits 7:0 n bytes, bit 8 answer the bytes read; ceil(n/3) words of bytes follow | with bit 8, ceil(n/3) words read |
+| `0x52` | `SPI_DEINIT` | | — |
+| `0x60` | `I2C_INIT` | the next words: the quarter-bit divider, the timeout in clocks | — |
+| `0x61` | `I2C_XFER` | bits 6:0 address, 7 read, 15:8 n bytes, 16 START, 17 STOP, 18 NACK the last byte read; a write's ceil(n/3) words follow | status (0, -19 ENODEV, -110 ETIMEDOUT, or for a write n minus the bytes acked), then a read's ceil(n/3) words |
+| `0x62` | `I2C_DEINIT` | | — |
+| `0x70` | `ADC_READ` | bits 3:0 channel | the code, left-aligned to 16 bits |
+| `0x80` | `WDT_START` | the next word: the timeout in ms | — |
+| `0x81` | `WDT_FEED` | | — |
+
+A word with channel `0x80` or above has bit 31 set, which a small int
+cannot hold in its payload, so `machine.py` writes those words as the
+negative ints they are (`-0x80000000` for `0x8000_0000`).
 
 An open-drain pin drives its pad only while its output is 0: `PIN_INIT`,
 `PIN_WRITE` and `PIN_TOGGLE` keep its `OE` bit the inverse of its `OUT`
@@ -366,8 +420,39 @@ v1.29.0's signatures:
 | `time.sleep`, `sleep_ms`, `sleep_us` | `_wfe` for the time left on `US`, then again, so a sleep is never shorter than asked; each pass is a soft point, so callbacks run during a sleep |
 | `time.time`, `time_ns` | Seconds and nanoseconds since the I/O core started (there is no RTC) |
 
+| `PWM(dest, *, freq, duty_u16, duty_ns, invert)`, `init`, `deinit`, `freq`, `duty_u16`, `duty_ns` | `PIN_FUNC`, `PWM_*`. Pads 0–3 are channels 0–3 (the pin mux's PWM functions); one counter, so every channel shares the last `freq` |
+| `SPI(0, baudrate, *, polarity, phase, bits=8, firstbit=MSB, sck, mosi, miso)`, `init`, `deinit`, `read`, `readinto`, `write`, `write_readinto` | `SPI_*`, three bytes a word; pads 10 SCK, 11 MOSI, 12 MISO (the bench's flash has CS on 13, a `Pin`) |
+| `I2C(0, *, scl, sda, freq=400000, timeout=50000)`, `scan`, `writeto`, `readfrom`, `readfrom_into`, `writeto_mem`, `readfrom_mem`, `readfrom_mem_into` | `I2C_*`; pads 14 SCL, 15 SDA. A missing device is `OSError(ENODEV)`, a stretch past the timeout `OSError(ETIMEDOUT)`; `writeto` returns the bytes acked |
+| `ADC(id)`, `read_u16` | `ADC_READ`; channels 0–15 |
+| `WDT(id=0, timeout=5000)`, `feed` | `WDT_START`, `WDT_FEED`; it cannot be stopped |
+| `reset()`, `soft_reset()`, `reset_cause()`, `unique_id()` | Reset (below); `unique_id` is SYS `UID`, 8 bytes |
+
 `machine.Pin`, `UART` and `Timer` raise `OSError(ENODEV)` (19) when the
 I/O core is not running (`IOC_CTRL` bit 0 clear).
+
+## Reset
+
+`mpy_soc` has two resets. `pwr_n`, the power-on reset (`rst_n_i` through
+two flops), resets everything. `por_n`, the hart domain's reset, is a
+flop: low at power on, and for 32 clocks after a system reset request
+(the bridge's `sys_reset_o`, one clock). It resets the SRAM clear, the
+boot loader, the collector and the core, so the image boots again; the
+I/O island, the bridge's FIFOs, `RESET_CAUSE` and `KEEP` are on `pwr_n`
+and carry on, as a separate I/O chip would. On a second boot the boot
+stream's I/O core section is not written again into the running island
+(`ld_push_i` is gated by `ioc_run`).
+
+Three things request a system reset: `machine.reset()` (`SYS_RESET` kind
+0), `machine.soft_reset()` (kind 1) and the watchdog's expiry. Before the
+store, the firmware (`_io.reset`) sends `SYS` `RESET`: the I/O core stops
+its timers, pin interrupts and UART triggers, returns the pads to inputs
+without pulls, the pin mux to GPIO, and turns PWM, SPI and I2C off, as
+MicroPython's soft reset deinitializes them (ports/rp2/main.c); for
+`machine.reset()` it also stops the watchdog. A soft reset leaves the
+watchdog running, as on a chip. UART0 keeps its rings and rate, since the
+console may be on it. Then the console drains (CON empty, the UART idle)
+and the store resets the hart.
+
 
 ## Events on the hart
 
@@ -473,7 +558,13 @@ spends the same cycles in every mode. With the `uart` strap `mpy_soc`
 sends those bytes into the bridge's CON FIFO instead of to the `con_*`
 port, and the I/O core moves them into UART0's TX ring; when CON is full
 the next store waits, as `print` waits on a slow UART. stdout and stderr
-share the UART, in order. Output is not cooked (`\n` is sent as is).
+share the UART, in order. The I/O core cooks the output as MicroPython's
+console does (`mp_hal_stdout_tx_strn_cooked`): `\n` goes out as `\r\n`,
+except after a `\r`, so the REPL's and `input()`'s own `\r\n` line ends
+pass unchanged. (MicroPython writes those raw; the hart has one output
+path, so a program's `print("a\r\n")` sends `a\r\n` here where
+MicroPython sends `a\r\r\n`.) Phase 2 sent `\n` as is; the UART-console
+goldens changed with phase 4.
 
 Input: the I/O core moves UART0's received bytes into the hart's CON_RX
 (with the `uart` strap; then `machine.UART(0)` sees none). Programs that
@@ -486,8 +577,60 @@ one CR LF pair and echoes CR LF, backspace echoes `\b\x1b[K`, Ctrl-C
 raises `KeyboardInterrupt`, Ctrl-D on an empty line `EOFError`, escape
 sequences are dropped). With the `sim` strap there is no input, and
 `input()` raises `EOFError` as at the end of a stream. The armed
-interrupt character raises `KeyboardInterrupt` at the next soft point. The
-REPL is phase 4.
+interrupt character raises `KeyboardInterrupt` at the next soft point.
+
+## REPL
+
+A REPL image (`mpy_build.build_program(repl=True)`, `repl = true` in the
+hardware-suite manifest) has the board I/O firmware, the REPL
+(`upycore/firmware/io/repl.py`, which replaces `_boot`) and the on-device
+compiler. With the `sim` strap it runs its program and halts, as every
+image does. With the `uart` (or `usb`) strap it does what
+`ports/rp2/main.c` does in MicroPython v1.29.0: it runs the program (the
+image's main.py, empty in the REPL tests), prints an uncaught exception,
+and runs the REPL; `SystemExit` or Ctrl-D at an empty prompt is a soft
+reboot (`MPY: soft reboot`, then `machine.soft_reset()`), and the REPL
+comes back in the mode it was in, kept in the bridge's `KEEP` word.
+After a soft reboot from the raw REPL the program does not run, as on
+rp2.
+
+The REPL follows `shared/runtime/pyexec.c` and
+`shared/readline/readline.c`:
+
+- **Friendly REPL.** The banner `MicroPython 062cf49b48 on 2026-10-14;
+  upycore` (`sys.version`'s name and `sys.implementation._machine`) and
+  `Type "help()" for more information.`, then `>>> `. A line is compiled
+  in `single` mode, so an expression's value is printed by
+  `__repl_print__` (a builtin only REPL images have). A line that
+  `mp_repl_continue_with_input` says is incomplete (a compound statement,
+  open brackets or triple quotes, a trailing backslash) reads more lines
+  at `... ` with auto-indent until an empty one. Ctrl-A changes to the
+  raw REPL, Ctrl-B prints the banner again, Ctrl-C cancels the line,
+  Ctrl-D soft-reboots, Ctrl-E is paste mode. Line editing is
+  readline's at the end of the line: printable bytes echo, backspace
+  erases one character (four inside an indent) with `\b\x1b[K`, tab
+  indents after a space. History, the arrow keys (their escape sequences
+  are dropped), tab completion and the emacs keys are not implemented.
+- **Raw REPL** (what `mpremote` drives). `raw REPL; CTRL-B to exit` and
+  `>`; bytes collect without echo until Ctrl-D, then `OK`, the output,
+  `\x04`, the exception if any, `\x04`, `>`. Ctrl-D on an empty
+  command soft-reboots; Ctrl-B returns to the friendly REPL; Ctrl-C
+  clears the command. Raw-paste mode (`\x05A\x01`) answers `R\x01`, a
+  128-byte window (`\x80\x00`) and `\x01`, then grants a window with
+  `\x01` after every 128 bytes, as `mp_reader_stdin` does; the source is
+  read to Ctrl-D before it is compiled (MicroPython compiles while it
+  reads, which only changes when a syntax error is reported).
+- **Ctrl-C.** The interrupt character is armed only while a command
+  runs (`mp_hal_set_interrupt_char`): at the prompt Ctrl-C is a byte the
+  REPL reads. When a command finishes the REPL disarms it, waits for the
+  I/O core to take the command (`_io.fence`), and clears a `KBD` event
+  that arrived meanwhile.
+- **Exceptions** print on stdout (`mp_plat_print`), the traceback with
+  `File "<stdin>"`.
+
+Each command is compiled on the hart by the frozen compiler, which takes
+about 15 million hart cycles for a short line (0.15 s at 100 MHz); the
+REPL tests run for minutes of simulation because of it.
 
 ## Benches and tests
 
@@ -522,7 +665,18 @@ intervals between them in ms, and the bytes the line model decoded.
 `sim_args` and `golden_base` (one program, a golden per strap) are
 manifest fields. With the `uart` strap the line model's bytes are the
 program's stdout, and the bench waits for the line to go quiet after the
-halt.
+halt. `+UART_SCRIPT=<file>` (the manifest's `uart_script`) is a host on
+the UART for the REPL tests: one step a line, `send <bytes>`, `expect
+<bytes>` (wait until the line model has decoded them after the previous
+match), `wait <µs>`, with `+UART_IN`'s escapes; the run ends with
+`MPY_SESSION_END` (a clean exit to `hw_tests.py`) once the last step is
+done and the line has been quiet for 2 ms, and a run that stops on a
+step prints `MPY_SESSION_STUCK step=<n>` (`+SCRIPT_LOG` prints each
+step). `+SPI_FLASH` puts an SPI NOR flash model (`tb_spi_flash`: READ,
+page program, write enable, status, JEDEC id) on pads 10–13,
+`+I2C_TARGET` a 24C02-style memory (`tb_i2c_target`, address 0x50, with
+pull-ups) on pads 14 and 15, and `tb_adc_model` answers every
+conversion with a code that depends on the channel.
 
 The hardware suite's `io` area: `bridge_loopback` (1,000 words through
 CMD and back through RSP), `bridge_regs` (EVT, EVT_SET, the state page
@@ -546,6 +700,19 @@ coalesced edges), `pin_irq_hard` (a hard handler, and one that allocates:
 the uncaught message, disabled), `timer_cb` (periodic, after `deinit`,
 ONE_SHOT, a soft callback), `disable_irq`, `uart_irq` (RXIDLE) and
 `ctrl_c` (Ctrl-C at the UART pin ends a running loop).
+
+The `system` area: `pwm_duty` (frequency and duty at the pad, invert),
+`spi_flash` (JEDEC id, page program, read back), `i2c_mem` (scan,
+`writeto`'s ACK count, memory writes and reads, a missing device's
+`ENODEV`), `adc`, `wdt` (fed, it keeps running; not fed, the next boot
+sees `WDT_RESET`), `reset_soft` and `reset_hard` (the reset cause, and a
+watchdog started before `machine.reset()` that does not fire after it).
+The `console` area adds the REPL: `repl_friendly` (the banner,
+expressions, a statement, continuation lines with auto-indent, an
+exception, Ctrl-C in a running loop, soft reboot) and `repl_raw` (an
+`mpremote` session: entering the raw REPL with a soft reset, a command in
+raw-paste mode, one in plain raw mode with an exception, the namespace
+kept between commands, back to the friendly REPL).
 
 The plan's clock-ratio sweep runs the `io`, `irq` and `console` areas at
 `io_clk` = hart/2 (the default, 20 ns), hart/1 (`--sim-arg

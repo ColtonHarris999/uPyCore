@@ -9,6 +9,8 @@
 #define CH_SYS        0x01   // 23:16 op
 #define   SYS_OP_PING 0x01   //   RSP: the protocol version
 #define   SYS_OP_FREQ 0x02   //   RSP: io_clk in Hz
+#define   SYS_OP_UID  0x03   //   RSP: the unique id, high word then low word
+#define   SYS_OP_RESET 0x04  //   before a hart reset: peripherals to their reset state; bit 0 also stops the watchdog. RSP: 0
 #define CH_ECHO       0x02   // RSP: the same word
 #define CH_EVT        0x03   // raise the events in 15:0 (a bridge test)
 #define CH_PAGE       0x04   // 4:0 page word, then its value (a bridge test). RSP: the CMD word
@@ -20,6 +22,25 @@
 #define CH_PIN_WRITE  0x11   // 4:0 pin, 8 value
 #define CH_PIN_TOGGLE 0x12   // 4:0 pin
 #define CH_PIN_IRQ    0x13   // 4:0 pin, 9:8 edges (1 rising, 2 falling, 3 both; 0 off)
+#define CH_PIN_FUNC   0x14   // 4:0 pin, 11:8 the pad function (pin mux: 0 GPIO, 1-4 PWM,
+                             // 5 SCK, 6 MOSI, 7 MISO, 8 SCL, 9 SDA, 10 UART TX, 11 UART RX)
+
+#define CH_PWM_CFG    0x40   // the next word: 31:16 prescaler, 15:0 top (all channels)
+#define CH_PWM_DUTY   0x41   // 1:0 channel; the next word: the duty compare (17 bits)
+#define CH_PWM_EN     0x42   // 3:0 channels on
+#define CH_SPI_INIT   0x50   // 0 CPOL, 1 CPHA; the next word: the half-period divider
+#define CH_SPI_XFER   0x51   // 7:0 n bytes, 8 answer the bytes read; then ceil(n/3)
+                             // words of bytes to send. RSP: ceil(n/3) words read (with 8)
+#define CH_SPI_DEINIT 0x52
+#define CH_I2C_INIT   0x60   // the next words: the quarter-bit divider, the timeout in clocks
+#define CH_I2C_XFER   0x61   // 6:0 address, 7 read, 15:8 n bytes, 16 START, 17 STOP,
+                             // 18 NACK the last byte read; a write's ceil(n/3) words follow.
+                             // RSP: status (0, -19 ENODEV, -110 ETIMEDOUT, or for a write
+                             // n - bytes acked), then a read's ceil(n/3) words
+#define CH_I2C_DEINIT 0x62
+#define CH_ADC_READ   0x70   // 3:0 channel. RSP: the code, left-aligned to 16 bits
+#define CH_WDT_START  0x80   // the next word: the timeout in ms
+#define CH_WDT_FEED   0x81
 
 #define CH_UART_INIT  0x20   // 3:0 id; the next word is the baud rate. RSP: the baud rate set
 #define CH_UART_TX1   0x21   // one to three bytes, byte 0 in bits 7:0
@@ -36,7 +57,7 @@
                              // the next word is the period in µs
 #define CH_TIMER_DEINIT 0x31 // 1:0 id
 
-#define PROTO_VERSION 3
+#define PROTO_VERSION 5
 
 // Event bits (the hart's EVT, set with BR_EVT).
 #define EV_SOFT    (1u << 0)   // micropython.schedule (the hart sets it itself)

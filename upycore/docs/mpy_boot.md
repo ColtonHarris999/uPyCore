@@ -141,6 +141,12 @@ An invalid image count or heap cap raises `boot_err_o` and keeps them in
 reset. Reset clears the full memory and metadata again, allowing a later
 boot to choose a different split without retaining stale data or tags.
 
+A system reset (`machine.reset()`, `machine.soft_reset()`, the I/O core's
+watchdog) is this reset of the hart domain alone: `mpy_soc` holds its
+`por_n` low for 32 clocks, and the clear, the boot and the collector run
+again. The I/O island, the bridge and its reset cause and keep word stay
+on the power-on reset ([`mpy_io_core.md`](mpy_io_core.md#reset)).
+
 `upycore/rtl/bsg_mem_1rw_sync_mask_write_bit.sv` is a behavioral stand-in
 with BaseJump's name and ports, for Verilator and Yosys. The class flow
 must use BaseJump's file instead (see below).
@@ -188,6 +194,8 @@ word every 64 clocks or more, far slower than the island takes them; the
 simulation shortcut waits while the FIFO is full. A count beyond the
 island's SRAM raises `boot_err_o`. `mpy_nand.py <image> --iocore <dir>`
 appends the section from the I/O core's `code.hex` and `data.hex`.
+After a system reset the island is still running its firmware, so the
+loader reads the section again but nothing is written to the island.
 
 ### SPI NAND
 

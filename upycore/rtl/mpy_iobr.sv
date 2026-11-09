@@ -31,7 +31,10 @@ module mpy_iobr #(
     parameter int NDN = 8        // state page words the hart writes
 ) (
     input  logic        clk_i,
-    input  logic        rst_n_i,
+    input  logic        rst_n_i,        // power-on: FIFOs, page copies, CMD_SENT, cause, keep
+    input  logic        hart_rst_n_i,   // the hart's reset: EVT, EVT_EN, EVT_MASK
+    output logic        sys_reset_o,    // a clock: reset the hart domain
+    input  logic        wdt_toggle_i,   // the island watchdog's expiries (io_clk flop)
 
     // Window accesses (hart clock).
     input  logic        acc_i,
@@ -92,7 +95,12 @@ module mpy_iobr #(
     localparam logic [9:0] O_CMD = 10'h000, O_RSP = 10'h001, O_STATUS = 10'h002, O_EVT = 10'h003,
                            O_EVT_EN = 10'h004, O_EVT_SET = 10'h005, O_EVT_MASK = 10'h006,
                            O_IOC_CTRL = 10'h007, O_CON_RX = 10'h008, O_CON_MODE = 10'h009,
-                           O_CMD_SENT = 10'h00A;
+                           O_CMD_SENT = 10'h00A, O_RESET_CAUSE = 10'h00B, O_SYS_RESET = 10'h00C,
+                           O_KEEP = 10'h00D;
+    // machine.reset_cause() values (extmod/modmachine.c names).
+    localparam logic [2:0] PWRON_RESET = 3'd1, HARD_RESET = 3'd2, WDT_RESET = 3'd3,
+                           SOFT_RESET = 3'd5;
+    localparam logic [27:0] RESET_KEY = 28'h0B007ED;   // SYS_RESET = KEY << 4 | 0 hard, 1 soft
 
     // ---- FIFOs ----
     logic        cmd_push, cmd_full;
@@ -196,7 +204,9 @@ module mpy_iobr #(
     end
 
     // ---- hart-side registers ----
-    logic [31:0] evt_r, evt_en_r, sent_r;
+    logic [31:0] evt_r, evt_en_r, sent_r, keep_r;
+    logic [2:0]  cause_r;
+    logic [2:0]  wdt_s;
     logic [1:0]  mask_r;
     logic [31:0] up_r [0:NUP-1];
     logic [31:0] dn_r [0:NDN-1];
@@ -236,6 +246,8 @@ module mpy_iobr #(
             4'(O_CON_RX):   rd_reg = {conrx_ne_r, 23'h0, conrx_ne_r ? conrx_head : 8'h0};
             4'(O_CON_MODE): rd_reg = {30'h0, con_mode_i};
             4'(O_CMD_SENT): rd_reg = sent_r;
+            4'(O_RESET_CAUSE): rd_reg = {29'h0, cause_r};
+            4'(O_KEEP):     rd_reg = keep_r;
             default:        rd_reg = 32'h0;
         endcase
         rdata_o = we_i ? 32'h0 : (({32{is_up}} & rd_up) | ({32{is_dn}} & rd_dn) | ({32{is_reg}} & rd_reg));
@@ -251,34 +263,56 @@ module mpy_iobr #(
                      (32'(cmd_wl) + 32'(cmd_push) >= 30) || (32'(con_wl) + 32'(con_push_i) >= 62) ||
                      (32'(dn_wl) + 32'(dn_push) >= 2) || (32'(ld_wl) + 32'(ld_push_i) >= 2);
 
+    // The reset controller's half here: machine.reset / soft_reset by a
+    // keyed store, or a watchdog expiry from the island (a toggle through
+    // two flops). The cause and the keep word see only power-on.
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) begin
-            evt_r <= 32'h0; evt_en_r <= 32'h0; mask_r <= 2'b00; sent_r <= 32'h0;
-            stall_o <= 1'b0; evt_pend_o <= 1'b0;
+            sent_r <= 32'h0; keep_r <= 32'h0; cause_r <= PWRON_RESET; wdt_s <= 3'b000;
+            sys_reset_o <= 1'b0;
+            stall_o <= 1'b0;
             stat_r <= 32'h0; rsp_ne_r <= 1'b0; conrx_ne_r <= 1'b0;
             for (int i = 0; i < NUP; i++) up_r[i] <= 32'h0;
             for (int i = 0; i < NDN; i++) dn_r[i] <= 32'h0;
         end else begin
+            wdt_s <= {wdt_s[1:0], wdt_toggle_i};
+            sys_reset_o <= 1'b0;
+            if (acc_i && we_i && off_i == O_SYS_RESET && wdata_i[31:4] == RESET_KEY) begin
+                sys_reset_o <= 1'b1;
+                cause_r <= wdata_i[0] ? SOFT_RESET : HARD_RESET;
+            end
+            if (wdt_s[2] != wdt_s[1]) begin
+                sys_reset_o <= 1'b1;
+                cause_r <= WDT_RESET;
+            end
+            if (acc_i && we_i && off_i == O_KEEP) keep_r <= wdata_i;
             stall_o <= stall_n;
             stat_r <= {!rsp_empty, con_wl, 5'h0, !conrx_empty, con_full, cmd_full,
                        3'h0, rsp_rl, 2'h0, cmd_wl};
             // A pop this clock empties the flop's view now, not a clock late.
             rsp_ne_r <= !rsp_empty && !(rsp_pop && rsp_rl == 5'd1);
             conrx_ne_r <= !conrx_empty && !conrx_pop;
+            // CMD_SENT: words pushed to CMD (the I/O core's SEQ page word
+            // counts the ones it has finished; machine waits for them to meet).
+            if (cmd_push) sent_r <= sent_r + 32'd1;
+            if (!upd_empty) up_r[upd_head[32 +: $clog2(NUP)]] <= upd_head[31:0];
+            if (dn_push) dn_r[off_i[$clog2(NDN)-1:0]] <= wdata_i;
+        end
+    end
+
+    always_ff @(posedge clk_i or negedge hart_rst_n_i) begin
+        if (!hart_rst_n_i) begin
+            evt_r <= 32'h0; evt_en_r <= 32'h0; mask_r <= 2'b00; evt_pend_o <= 1'b0;
+        end else begin
             // Events: the island's set-masks and EVT_SET set bits; a store of
             // 1s to EVT clears them (a set on the same clock wins).
             evt_r <= (evt_r & ~((acc_i && we_i && off_i == O_EVT) ? wdata_i : 32'h0))
                      | ((acc_i && we_i && off_i == O_EVT_SET) ? wdata_i : 32'h0)
                      | (!evt_empty ? {16'h0, evt_head} : 32'h0);
             if (acc_i && we_i && off_i == O_EVT_EN)   evt_en_r <= wdata_i;
-            // CMD_SENT: words pushed to CMD (the I/O core's SEQ page word
-            // counts the ones it has finished; machine waits for them to meet).
-            if (cmd_push) sent_r <= sent_r + 32'd1;
             if (acc_i && we_i && off_i == O_EVT_MASK) mask_r <= wdata_i[1:0];
             // Bit 0: a callback is running; bit 1: machine.disable_irq.
             evt_pend_o <= |(evt_r & evt_en_r) && mask_r == 2'b00;
-            if (!upd_empty) up_r[upd_head[32 +: $clog2(NUP)]] <= upd_head[31:0];
-            if (dn_push) dn_r[off_i[$clog2(NDN)-1:0]] <= wdata_i;
         end
     end
 

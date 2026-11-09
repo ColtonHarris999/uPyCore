@@ -586,7 +586,7 @@ bridge_unmapped = { file = "hw/io/bridge_unmapped.py", oracle = false, halt = "B
 mem32_align = { file = "hw/io/mem32_align.py", oracle = false }
 pin_loop = { file = "hw/io/pin_loop.py", oracle = false, sim_args = ["+GPIO_LOOP=1"] }
 blink = { file = "hw/io/blink.py", oracle = false }
-uart_echo = { file = "hw/io/uart_echo.py", oracle = false, sim_args = ["+UART_IN=hello world\n", "+UART_IN_US=4000"] }
+uart_echo = { file = "hw/io/uart_echo.py", oracle = false, sim_args = ["+UART_IN=hello world\n", "+UART_IN_US=8000"] }
 sleep_accuracy = { file = "hw/io/sleep_accuracy.py", cycles = 30_000_000, oracle = false }
 ticks = { file = "hw/io/ticks.py", oracle = false }
 
@@ -597,11 +597,22 @@ pin_irq = { file = "hw/irq/pin_irq.py", oracle = false, sim_args = ["+GPIO_LOOP=
 pin_irq_hard = { file = "hw/irq/pin_irq_hard.py", oracle = false, sim_args = ["+GPIO_LOOP=1"], cycles = 40_000_000, timeout = 300 }
 timer_cb = { file = "hw/irq/timer_cb.py", oracle = false, cycles = 60_000_000, timeout = 400 }
 disable_irq = { file = "hw/irq/disable_irq.py", oracle = false }
-uart_irq = { file = "hw/irq/uart_irq.py", oracle = false, sim_args = ["+UART_IN=abcde", "+UART_IN_US=3000"], cycles = 40_000_000, timeout = 300 }
+uart_irq = { file = "hw/irq/uart_irq.py", oracle = false, sim_args = ["+UART_IN=abcde", "+UART_IN_US=8000"], cycles = 40_000_000, timeout = 300 }
 ctrl_c = { file = "hw/irq/ctrl_c.py", oracle = false, sim_args = ["+CONSOLE=uart", '+UART_IN=\x03', "+UART_IN_US=5000"], cycles = 40_000_000, timeout = 300 }
+
+[system]
+pwm_duty = { file = "hw/system/pwm_duty.py", oracle = false, sim_args = ["+GPIO_LOOP=1"], cycles = 40_000_000, timeout = 300 }
+spi_flash = { file = "hw/system/spi_flash.py", oracle = false, sim_args = ["+SPI_FLASH=1"], cycles = 40_000_000, timeout = 300 }
+i2c_mem = { file = "hw/system/i2c_mem.py", oracle = false, sim_args = ["+I2C_TARGET=1"], cycles = 60_000_000, timeout = 400 }
+adc = { file = "hw/system/adc.py", oracle = false }
+reset_soft = { file = "hw/system/reset_soft.py", oracle = false, cycles = 40_000_000, timeout = 300 }
+reset_hard = { file = "hw/system/reset_hard.py", oracle = false, cycles = 40_000_000, timeout = 300 }
+wdt = { file = "hw/system/wdt.py", oracle = false, cycles = 40_000_000, timeout = 300 }
 
 [console]
 con_print = { file = "hw/console/con_print.py", oracle = false }
 con_print_uart = { file = "hw/console/con_print.py", golden_base = "hw/console/con_print_uart", oracle = false, sim_args = ["+CONSOLE=uart"], cycles = 40_000_000, timeout = 300 }
 con_input = { file = "hw/console/con_input.py", oracle = false }
 con_input_uart = { file = "hw/console/con_input.py", golden_base = "hw/console/con_input_uart", oracle = false, sim_args = ["+CONSOLE=uart", '+UART_IN=bob\rax\x08c\r\nxyzrest of line\n', "+UART_IN_US=3000"], cycles = 40_000_000, timeout = 300 }
+repl_friendly = { file = "hw/console/repl.py", golden_base = "hw/console/repl_friendly", repl = true, uart_script = "hw/console/repl_friendly.uart", oracle = false, sim_args = ["+CONSOLE=uart"], cycles = 400_000_000, timeout = 3600 }
+repl_raw = { file = "hw/console/repl.py", golden_base = "hw/console/repl_raw", repl = true, uart_script = "hw/console/repl_raw.uart", oracle = false, sim_args = ["+CONSOLE=uart"], cycles = 400_000_000, timeout = 3600 }

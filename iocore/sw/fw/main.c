@@ -16,6 +16,7 @@ static uint32_t ms_last;
 static uint8_t rx_ring[RING], tx_ring[RING];
 static uint32_t rx_head, rx_tail, tx_head, tx_tail;   // free-running indices
 static uint32_t con_mode;
+static uint32_t con_prev;           // the console's last byte out (cooking)
 static int uart0_open;
 static uint32_t kbd_char = 0x103;           // 8 armed, 7:0 the character (Ctrl-C)
 
@@ -56,6 +57,10 @@ static void rsp(uint32_t w) {
     BR_RSP = w;
 }
 
+static void service(void);
+static uint32_t cmd_next(void);
+static void rsp(uint32_t w);
+
 static void tx_put(uint8_t b) {
     while (tx_free() == 0) service();
     tx_ring[tx_head++ % RING] = b;
@@ -74,6 +79,103 @@ static void pin_init(uint32_t w) {
     od_mask = (mode == 2) ? (od_mask | bit) : (od_mask & ~bit);
 }
 
+// The chip's unique id (machine.unique_id): a constant of this build.
+#define UID_HI 0x75507943u   // "uPyC"
+#define UID_LO 0x494F0001u
+
+// SPI: n bytes out and in, three to a word each way.
+static void spi_xfer(uint32_t w) {
+    uint32_t n = w & 0xFF, want = (w >> 8) & 1, out = 0, in_w = 0, nin = 0, sent = 0, got = 0;
+    uint32_t have = 0;                     // the bytes of `out` not yet sent
+    while (got < n) {
+        if (sent < n && have == 0) { out = cmd_next(); have = 3; }
+        if (sent < n && (SPI_STATUS & 31) < 8) {
+            SPI_DATA = (out >> (8 * (sent % 3))) & 0xFF;
+            sent++;
+            have--;
+        }
+        uint32_t d = SPI_DATA;
+        if (d & (1u << 31)) {
+            in_w |= (d & 0xFF) << (8 * nin);
+            nin++;
+            got++;
+            if (nin == 3 || got == n) {
+                if (want) rsp(in_w);
+                in_w = 0;
+                nin = 0;
+            }
+        }
+    }
+}
+
+// I2C: one transfer on the epic branch's command controller.
+#define I2C_START 1
+#define I2C_STOP  2
+#define I2C_WRITE 3
+#define I2C_READ  4
+static uint32_t i2c_cmd(uint32_t c) {
+    I2C_CMDR = c;
+    uint32_t st;
+    while ((st = I2C_STATUS) & 1) service();
+    return st;
+}
+
+static void i2c_xfer(uint32_t w) {
+    uint32_t addr = w & 0x7F, rd = (w >> 7) & 1, n = (w >> 8) & 0xFF, words[86];
+    int32_t status = 0;
+    uint32_t nw = (n + 2) / 3;
+    if (!rd) for (uint32_t i = 0; i < nw; i++) words[i] = cmd_next();
+    if (w & (1u << 16)) {
+        uint32_t st = i2c_cmd(I2C_START);
+        if (st & 4) status = -110;
+    }
+    if (status == 0) {
+        uint32_t st = i2c_cmd(I2C_WRITE | (((addr << 1) | rd) << 8));
+        if (st & 4) status = -110;
+        else if (st & 2) status = -19;
+    }
+    uint32_t acked = 0;
+    for (uint32_t i = 0; i < n && status == 0; i++) {
+        if (rd) {
+            uint32_t last = (i + 1 == n) && (w & (1u << 18));
+            uint32_t st = i2c_cmd(I2C_READ | (last << 16));
+            if (st & 4) { status = -110; break; }
+            uint32_t b = (st >> 8) & 0xFF;
+            words[i / 3] = (i % 3 == 0 ? 0 : words[i / 3]) | (b << (8 * (i % 3)));
+        } else {
+            uint32_t st = i2c_cmd(I2C_WRITE | (((words[i / 3] >> (8 * (i % 3))) & 0xFF) << 8));
+            if (st & 4) { status = -110; break; }
+            if (st & 2) break;
+            acked++;
+        }
+    }
+    if (status == 0 && !rd) status = (int32_t)(n - acked);
+    if ((w & (1u << 17)) || status < 0) i2c_cmd(I2C_STOP);
+    rsp((uint32_t)status);
+    if (rd) for (uint32_t i = 0; i < nw; i++) rsp(status == 0 ? words[i] : 0);
+}
+
+// Before a hart reset (machine.reset, machine.soft_reset): what the hart
+// set up goes back to its reset state, as MicroPython's soft reset deinits
+// pins, timers and buses (ports/rp2/main.c). A hard reset also stops the
+// watchdog; a soft reset leaves it running, as on a chip. UART0 keeps its
+// rings and rate: the console may be on it.
+static void board_reset(uint32_t hard) {
+    for (int i = 0; i < NTIMERS; i++) tmr[i].on = 0;
+    timer_notify = 0;
+    pin_irq_mask = 0; pin_flags = 0;
+    for (int p = 0; p < NPINS; p++) pin_cnt[p] = 0;
+    for (int i = 0; i < 4; i++) page(PG_PIN_CNT + i, 0);
+    page(PG_PIN_FLAGS, 0);
+    GPIO_IRQEN = 0; GPIO_EDGE = 0; GPIO_STATUS = 0xFFFFu; GPIO_OE = 0; GPIO_PU = 0; GPIO_PD = 0; GPIO_OUT = 0;
+    od_mask = 0;
+    PINMUX(0) = 0; PINMUX(1) = 0;
+    PWM_EN = 0; SPI_CTRL = 0; I2C_CTRL = 0;
+    uart_irq_mask = 0; uart_ev = 0; page(PG_UART0_EV, 0);
+    uart0_open = 0;
+    if (hard) WDT_KICK = WDT_STOP_KEY;
+}
+
 static void command(uint32_t w) {
     uint32_t ch = w >> 24;
     switch (ch) {
@@ -85,6 +187,8 @@ static void command(uint32_t w) {
         switch ((w >> 16) & 0xFF) {
         case SYS_OP_PING: rsp(PROTO_VERSION); break;
         case SYS_OP_FREQ: rsp(SYS_FREQ); break;
+        case SYS_OP_UID: rsp(UID_HI); rsp(UID_LO); break;
+        case SYS_OP_RESET: board_reset(w & 1); rsp(0); break;
         default: break;
         }
         break;
@@ -106,6 +210,47 @@ static void command(uint32_t w) {
         break;
     }
     case CH_KBD: kbd_char = w & 0x1FF; break;
+    case CH_PIN_FUNC: {
+        uint32_t pin = w & 15, f = (w >> 8) & 15, sh = 4 * (pin % 8);
+        PINMUX(pin / 8) = (PINMUX(pin / 8) & ~(15u << sh)) | (f << sh);
+        break;
+    }
+    case CH_PWM_CFG: {
+        uint32_t v = cmd_next();
+        PWM_PRESC = v >> 16;
+        PWM_TOP = v & 0xFFFF;
+        break;
+    }
+    case CH_PWM_DUTY: PWM_DUTY(w & 3) = cmd_next(); break;
+    case CH_PWM_EN: PWM_EN = w & 15; break;
+    case CH_SPI_INIT: {
+        uint32_t div = cmd_next();
+        SPI_CTRL = 1 | ((w & 3) << 1) | ((div & 0xFFFF) << 8);
+        break;
+    }
+    case CH_SPI_DEINIT: SPI_CTRL = 0; break;
+    case CH_SPI_XFER: spi_xfer(w); break;
+    case CH_I2C_INIT: {
+        I2C_DIV = cmd_next();
+        I2C_TIMEOUT = cmd_next();
+        I2C_CTRL = 1;
+        break;
+    }
+    case CH_I2C_DEINIT: I2C_CTRL = 0; break;
+    case CH_I2C_XFER: i2c_xfer(w); break;
+    case CH_ADC_READ: {
+        ADC_CTRL = 0x100 | (w & 15);
+        while (ADC_STATUS & 1) service();
+        rsp(ADC_DATA & 0xFFFF);
+        break;
+    }
+    case CH_WDT_START: {
+        uint32_t ms = cmd_next();
+        WDT_LOAD = ms;
+        WDT_CTRL = 1;
+        break;
+    }
+    case CH_WDT_FEED: WDT_KICK = WDT_KEY; break;
     case CH_UART_IRQ: uart_irq_mask = w & 0xFFFF; break;
     case CH_PIN_TOGGLE: {
         uint32_t bit = 1u << (w & 15);
@@ -170,11 +315,17 @@ static void service(void) {
     // Console: UART input to the hart's CON_RX, the hart's output to UART TX.
     if (con_mode == 1) {
         while (rx_count() && !(BR_STATUS & BR_ST_CONRX_FULL)) BR_CONRX = rx_ring[rx_tail++ % RING];
+        // Cooked as MicroPython's console text is (mp_hal_stdout_tx_strn_cooked):
+        // \n goes out as \r\n, unless the byte before was \r (the REPL's own
+        // line ends, which MicroPython writes raw).
         for (;;) {
-            if (tx_free() == 0) break;
+            if (tx_free() < 2) break;
             uint32_t c = BR_CON;
             if (!(c & (1u << 31))) break;
-            tx_ring[tx_head++ % RING] = (uint8_t)c;
+            uint8_t b = (uint8_t)c;
+            if (b == '\n' && con_prev != '\r') tx_ring[tx_head++ % RING] = '\r';
+            tx_ring[tx_head++ % RING] = b;
+            con_prev = b;
         }
     }
     // TX ring into the UART's hardware FIFO.

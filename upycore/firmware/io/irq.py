@@ -112,6 +112,32 @@ def mod__io__uart_rx(n):
     return bytes(out)
 
 
+def mod__io__xfer(words, nrsp):
+    # Command words, then nrsp answer words, as one exchange.
+    for w in words:
+        _st(_IO_BASE, 0, w)
+    out = []
+    while len(out) < nrsp:
+        out.append(_rsp_wait())
+    return out
+
+
+def mod__io__reset(kind):
+    # machine.reset (0) / soft_reset (1): the I/O core puts the peripherals
+    # back (SYS_OP_RESET; a hard reset also stops the watchdog), the console
+    # drains (CON empty, then the UART's TX idle), then the keyed store
+    # resets the hart domain.
+    mod__io__req(0x01040000 | (1 - kind))
+    while (mod__io__rd(_STATUS) >> 24) & 127:
+        pass
+    mod__io__fence()
+    while mod__io__rd(_PAGE + 4 * 6) < 0:
+        pass
+    _st(_IO_BASE + 0x030, 0, 0x0B007ED0 | kind)
+    while True:
+        pass
+
+
 def mod__io__wfe(cycles):
     return _wfe(cycles)
 

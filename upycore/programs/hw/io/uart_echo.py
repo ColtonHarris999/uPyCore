@@ -1,6 +1,6 @@
 # UART at 115200 8N1 through the I/O core: the bench's line model sends a
-# line 4 ms after boot; the program reads it, prints it, and sends it
-# back in upper case, which the line model decodes (the .io golden). UART
+# line 8 ms after boot (`import machine` takes about 3.5 ms); the program
+# reads it, prints it, and sends it back in upper case, which the line model decodes (the .io golden). UART
 # methods follow MicroPython v1.29.0 (extmod/machine_uart.c): read() with
 # nothing waiting returns None, any() counts the bytes waiting, write()
 # returns the count. Hand-written golden.

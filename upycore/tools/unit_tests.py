@@ -106,6 +106,20 @@ class Bench:
     flags: list[str] = field(default_factory=list)
 
 
+def _model_args(flag: str) -> Callable[[Path], list[str]]:
+    def args(work: Path) -> list[str]:
+        r = subprocess.run([sys.executable, str(ROOT / "iocore" / "tools" / "iocore_periph_model.py"), flag],
+                           capture_output=True, text=True, check=True)
+        return r.stdout.split()
+    return args
+
+
+def _iocore_block(name: str, rtl: list[str], passed: str, args: Callable[[Path], list[str]] | None = None) -> "Bench":
+    # One of the I/O core's peripherals (iocore/tb/tb_iocore_<name>.sv).
+    return Bench(f"iocore_{name}", rtl, passed, args or (lambda work: []), top=f"tb_iocore_{name}",
+                 tb=f"iocore/tb/tb_iocore_{name}.sv", flags=IOCORE_FLAGS)
+
+
 def _island(core: str) -> tuple[list[str], list[str]]:
     files, inc = iocore_files.island(core)
     return files + ["iocore/tb/tb_uart_line.sv"], inc
@@ -146,6 +160,13 @@ BENCHES = [
     Bench("upycore_umod_seq", ["upycore_umod_seq.sv"], r"^PASS upycore_umod_seq "),
     Bench("mpy_iobr", ["mpy_async_fifo.sv", "mpy_iobr.sv"], r"^PASS mpy_iobr ",
           flags=["--timescale", "1ns/1ps"]),
+    _iocore_block("pwm", ["iocore/rtl/iocore_pwm.sv", "iocore/rtl/iocore_pinmux.sv"], r"^PASS: iocore pwm",
+                  _model_args("--pwm-plusargs")),
+    _iocore_block("spi", ["iocore/rtl/iocore_spi.sv", "iocore/tb/tb_spi_flash.sv"], r"^PASS: iocore spi"),
+    _iocore_block("i2c", ["iocore/rtl/iocore_i2c.sv", "iocore/tb/tb_i2c_target.sv"], r"^PASS: iocore i2c"),
+    _iocore_block("adc", ["iocore/rtl/iocore_adc.sv", "iocore/tb/tb_adc_model.sv"], r"^PASS: iocore adc",
+                  _model_args("--adc-plusargs")),
+    _iocore_block("wdt", ["iocore/rtl/iocore_wdt.sv"], r"^PASS: iocore wdt", _model_args("--wdt-plusargs")),
     Bench("iocore_cve2", _island("cve2")[0], r"^PASS tb_iocore ", _iocore_app("hello", "+UART_IN=AB"),
           top="tb_iocore", tb="iocore/tb/tb_iocore.sv", incdirs=_island("cve2")[1],
           parameters={"CORE": 0}, flags=IOCORE_FLAGS),

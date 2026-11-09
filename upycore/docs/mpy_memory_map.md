@@ -192,6 +192,10 @@ fault). The words are untagged: never a GC root, never heap.
 | `0x01C` | `IOC_CTRL` |
 | `0x020` | `CON_RX` |
 | `0x024` | `CON_MODE` |
+| `0x028` | `CMD_SENT` |
+| `0x02C` | `RESET_CAUSE` |
+| `0x030` | `SYS_RESET` |
+| `0x034` | `KEEP` (survives a system reset) |
 | `0x800`–`0x87C` | State page, 32 words the I/O core writes |
 | `0xC00`–`0xC1C` | State page, 8 words the hart writes |
 

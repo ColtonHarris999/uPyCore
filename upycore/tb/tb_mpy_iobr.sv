@@ -45,7 +45,7 @@ module tb_mpy_iobr;
     end
 
     mpy_iobr dut (
-        .clk_i(clk), .rst_n_i(rst_n),
+        .clk_i(clk), .rst_n_i(rst_n), .hart_rst_n_i(rst_n), .sys_reset_o(), .wdt_toggle_i(1'b0),
         .acc_i(acc), .we_i(we), .off_i(off), .wdata_i(wdata), .rdata_o(rdata),
         .acc_now_i(acc_now), .stall_o(stall),
         .con_push_i(con_push), .con_data_i(con_data), .con_mode_i(2'd1),

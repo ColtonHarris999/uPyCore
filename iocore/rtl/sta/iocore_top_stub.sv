@@ -51,11 +51,21 @@ module iocore_top #(
     input  logic        uart_rxd_i,
     output logic        uart_txd_o,
 
+    // The pads (after the pin mux): output, output enable, pulls, input.
     output logic [NPINS-1:0] gpio_o,
     output logic [NPINS-1:0] gpio_oe_o,
     output logic [NPINS-1:0] gpio_pu_o,
     output logic [NPINS-1:0] gpio_pd_o,
     input  logic [NPINS-1:0] gpio_i,
+
+    // The ADC converter (a model on the bench).
+    output logic        adc_start_o,
+    output logic [3:0]  adc_chan_o,
+    input  logic        adc_done_i,
+    input  logic [11:0] adc_code_i,
+    // The watchdog's reset request: a toggle per expiry (the hart side
+    // synchronizes it).
+    output logic        wdt_toggle_o,
 
     // The timer's microsecond and millisecond counts in gray code, from
     // flops, for mpy_iobr's tick crossing (one bit changes per count).
@@ -89,6 +99,8 @@ module iocore_top #(
     (* keep *) logic q_dn_empty_i;
     (* keep *) logic q_uart_rxd_i;
     (* keep *) logic [NPINS-1:0] q_gpio_i;
+    (* keep *) logic q_adc_done_i;
+    (* keep *) logic [11:0] q_adc_code_i;
     always_ff @(posedge io_clk_i) begin
         q_io_rst_n_i <= io_rst_n_i;
         q_run_i <= run_i;
@@ -109,6 +121,8 @@ module iocore_top #(
         q_dn_empty_i <= dn_empty_i;
         q_uart_rxd_i <= uart_rxd_i;
         q_gpio_i <= gpio_i;
+        q_adc_done_i <= adc_done_i;
+        q_adc_code_i <= adc_code_i;
     end
     // Outputs start at flops (their own sources, not the inputs).
     (* keep *) logic r_ld_pop_o;
@@ -162,6 +176,15 @@ module iocore_top #(
     (* keep *) logic [NPINS-1:0] r_gpio_pd_o;
     always_ff @(posedge io_clk_i) r_gpio_pd_o <= r_gpio_pd_o + 1'b1;
     assign gpio_pd_o = r_gpio_pd_o;
+    (* keep *) logic r_adc_start_o;
+    always_ff @(posedge io_clk_i) r_adc_start_o <= r_adc_start_o + 1'b1;
+    assign adc_start_o = r_adc_start_o;
+    (* keep *) logic [3:0] r_adc_chan_o;
+    always_ff @(posedge io_clk_i) r_adc_chan_o <= r_adc_chan_o + 1'b1;
+    assign adc_chan_o = r_adc_chan_o;
+    (* keep *) logic r_wdt_toggle_o;
+    always_ff @(posedge io_clk_i) r_wdt_toggle_o <= r_wdt_toggle_o + 1'b1;
+    assign wdt_toggle_o = r_wdt_toggle_o;
     (* keep *) logic [31:0] r_us_gray_o;
     always_ff @(posedge io_clk_i) r_us_gray_o <= r_us_gray_o + 1'b1;
     assign us_gray_o = r_us_gray_o;

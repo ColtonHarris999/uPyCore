@@ -1,0 +1,5 @@
+freq 1000 duty 16384
+quarter True
+three quarters True
+off 0
+on 1

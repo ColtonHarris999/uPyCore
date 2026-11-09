@@ -80,6 +80,10 @@ module mpy_soc #(
     output logic [15:0] gpio_pu_o,
     output logic [15:0] gpio_pd_o,
     input  logic [15:0] gpio_i,
+    output logic        adc_start_o,
+    output logic [3:0]  adc_chan_o,
+    input  logic        adc_done_i,
+    input  logic [11:0] adc_code_i,
     output logic        ioc_dbg_valid_o,
     output logic [7:0]  ioc_dbg_byte_o
 );
@@ -166,13 +170,32 @@ module mpy_soc #(
     // block reset below is a flop output, never a gate: the boot loader
     // starts after the SRAM clear, the collector after a good boot, and
     // the core and accelerator once the collector's table is clear.
+    //
+    // pwr_n is the power-on reset. por_n, the hart's reset, is a flop too:
+    // low at power-on, and for 32 clocks on a system reset (machine.reset,
+    // machine.soft_reset, the I/O core's watchdog: mpy_iobr's sys_reset_o).
+    // A system reset restarts everything on por_n (the SRAM clear, the
+    // boot, the collector, the core); the I/O island, the bridge's FIFOs,
+    // the reset cause and the keep word are on pwr_n and carry on, as a
+    // separate I/O chip would.
     logic [1:0]  por_q;
-    logic        por_n, boot_rst_n, gc_rst_n;
+    logic        pwr_n, por_n, boot_rst_n, gc_rst_n;
+    logic        sys_req;
+    logic [4:0]  sys_hold;
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) por_q <= 2'b00;
         else          por_q <= {por_q[0], 1'b1};
     end
-    assign por_n = por_q[1];
+    assign pwr_n = por_q[1];
+    always_ff @(posedge clk_i or negedge pwr_n) begin
+        if (!pwr_n) begin
+            por_n <= 1'b0; sys_hold <= 5'd0;
+        end else begin
+            if (sys_req) sys_hold <= 5'd31;
+            else if (sys_hold != 5'd0) sys_hold <= sys_hold - 5'd1;
+            por_n <= !sys_req && sys_hold == 5'd0;
+        end
+    end
 
     // image_words and requested_pool hold once boot_done rises, so the
     // check taken the cycle after is final; the collector (and so the core)
@@ -337,7 +360,7 @@ module mpy_soc #(
     logic c_sim, c_io, c_simpage;
     assign c_simpage = (c_addr[31:8] == MPY_SIM_BASE[31:8]);
     assign c_io = (c_addr[31:12] == MPY_MMIO_BASE[31:12]) && (c_addr[1:0] == 2'b00) &&
-                  ((c_addr[11:6] == 6'd0 && c_addr[5:2] <= 4'd10) ||    // 0x000-0x028 registers
+                  ((c_addr[11:6] == 6'd0 && c_addr[5:2] <= 4'd13) ||    // 0x000-0x034 registers
                    (c_addr[11:7] == 5'b10000) ||                        // 0x800-0x87C page (I/O core writes)
                    (c_addr[11:5] == 7'b1100000));                       // 0xC00-0xC1C page (hart writes)
     assign c_sim = c_simpage || c_io;
@@ -513,8 +536,8 @@ module mpy_soc #(
     // LD FIFO has drained (IOC_CTRL bit 0). With no section it stays in
     // reset.
     logic ioc_run;
-    always_ff @(posedge clk_i or negedge por_n) begin
-        if (!por_n) ioc_run <= 1'b0;
+    always_ff @(posedge clk_i or negedge pwr_n) begin
+        if (!pwr_n) ioc_run <= 1'b0;
         else if (boot_done && ioc_loaded && ioc_ld_idle && !ioc_we) ioc_run <= 1'b1;
     end
 
@@ -531,15 +554,18 @@ module mpy_soc #(
     logic [34:0] b_dn_data;
     logic [48:0] b_ld_data;
     logic [31:0] b_us_gray, b_ms_gray;
+    logic        b_wdt_toggle;
 
     mpy_iobr u_iobr (
-        .clk_i, .rst_n_i(por_n),
+        .clk_i, .rst_n_i(pwr_n), .hart_rst_n_i(por_n), .sys_reset_o(sys_req), .wdt_toggle_i(b_wdt_toggle),
         .acc_i(io_q_v), .we_i(io_q_we), .off_i(io_q_off), .wdata_i(io_q_wdata),
         .rdata_o(io_rdata), .acc_now_i(io_acc), .stall_o(io_stall),
         .con_push_i(con_valid_r && con_redir), .con_data_i({con_err_o, con_byte_o}),
         .con_mode_i(con_mode),
         .evt_pend_o(io_evt_pend),
-        .ld_push_i(ioc_we), .ld_data_i(ioc_data), .ld_idle_o(ioc_ld_idle),
+        // A system reset boots again: the I/O core's section is not loaded
+        // a second time into an island that is running.
+        .ld_push_i(ioc_we && !ioc_run), .ld_data_i(ioc_data), .ld_idle_o(ioc_ld_idle),
         .run_i(ioc_run), .loaded_i(ioc_loaded),
         .io_clk_i, .io_rst_n_i(io_por_n), .us_gray_i(b_us_gray), .ms_gray_i(b_ms_gray),
         .cmd_pop_i(b_cmd_pop), .cmd_data_o(b_cmd_data), .cmd_empty_o(b_cmd_empty), .cmd_level_o(b_cmd_level),
@@ -568,6 +594,7 @@ module mpy_soc #(
         .uart_rxd_i(uart0_rxd_i), .uart_txd_o(uart0_txd_o),
         .gpio_o, .gpio_oe_o, .gpio_pu_o, .gpio_pd_o, .gpio_i,
         .us_gray_o(b_us_gray), .ms_gray_o(b_ms_gray),
+        .adc_start_o, .adc_chan_o, .adc_done_i, .adc_code_i, .wdt_toggle_o(b_wdt_toggle),
         .dbg_valid_o(ioc_dbg_valid_o), .dbg_byte_o(ioc_dbg_byte_o), .halt_o(), .halt_value_o(),
         .sleep_o()
     );

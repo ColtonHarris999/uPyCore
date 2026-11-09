@@ -57,6 +57,8 @@ FW_ORDER = [
 # Board I/O firmware (upycore/firmware/io), appended after FW_ORDER only for
 # images that use board I/O (io_imports). Its own order, by file name.
 IO_FW_ORDER = ["io.py", "console.py", "irq.py"]
+# REPL images (build_program(repl=True)) add the REPL, which replaces _boot.
+REPL_FW_ORDER = ["repl.py"]
 IO_FW_SRC = FW_SRC / "io"
 # The I/O core's firmware (make -C iocore/sw), loaded from the boot stream's
 # IOCB section for those images.
@@ -73,7 +75,8 @@ RTL = [
     "upycore/rtl/mpy_gc.sv", "upycore/rtl/mpy_ca.sv", "upycore/rtl/bsg_mem_1rw_sync_mask_write_bit.sv",
     "upycore/rtl/mpy_mem.sv", "upycore/rtl/mpy_boot.sv", "upycore/rtl/mpy_async_fifo.sv",
     "upycore/rtl/mpy_iobr.sv", "upycore/rtl/mpy_soc.sv",
-    "upycore/tb/tb_spi_nand.sv", "iocore/tb/tb_uart_line.sv", "upycore/tb/tb_mpy_soc.sv",
+    "upycore/tb/tb_spi_nand.sv", "iocore/tb/tb_uart_line.sv", "iocore/tb/tb_spi_flash.sv",
+    "iocore/tb/tb_i2c_target.sv", "iocore/tb/tb_adc_model.sv", "upycore/tb/tb_mpy_soc.sv",
 ]
 # The I/O island (the I/O core, CVE2, and its peripherals): iocore/tools.
 sys.path.insert(0, str(ROOT / "iocore" / "tools"))
@@ -172,9 +175,10 @@ def compile_user(src: Path, out: Path, source_name: str, compiler: str = "mpy-cr
 _FW_IMPORT = re.compile(r"^\s*from\s+(\.?_abi|micropython)\s+import\s+")
 
 
-def firmware_source(io: bool = False) -> str:
+def firmware_source(io: bool = False, repl: bool = False) -> str:
     parts = []
     order = [FW_SRC / n for n in FW_ORDER] + ([IO_FW_SRC / n for n in IO_FW_ORDER] if io else [])
+    order += [IO_FW_SRC / n for n in REPL_FW_ORDER] if repl else []
     for i, path in enumerate(order):
         name = path.relative_to(FW_SRC).as_posix()
         if not path.exists():
@@ -187,15 +191,16 @@ def firmware_source(io: bool = False) -> str:
     return "\n".join(parts) + "\n"
 
 
-def build_firmware(out_dir: Path | None = None, io: bool = False) -> Path:
+def build_firmware(out_dir: Path | None = None, io: bool = False, repl: bool = False) -> Path:
     """Join and compile the firmware; returns the .mpy path. ``io`` appends
-    the board I/O firmware (a separate build in ``build/mpy/fw_io``)."""
+    the board I/O firmware (a separate build in ``build/mpy/fw_io``), and
+    ``repl`` the REPL after it (``build/mpy/fw_repl``)."""
 
-    out_dir = out_dir or BUILD / ("fw_io" if io else "fw")
+    out_dir = out_dir or BUILD / ("fw_repl" if repl else "fw_io" if io else "fw")
     out_dir.mkdir(parents=True, exist_ok=True)
     src = out_dir / "fw.py"
     mpy = out_dir / "fw.mpy"
-    text = firmware_source(io)
+    text = firmware_source(io or repl, repl)
     if not src.exists() or src.read_text() != text:
         src.write_text(text)
     if _newer(mpy, [src, MPY_CROSS]):
@@ -236,6 +241,7 @@ class SimResult:
         return None
 
 
+_SESSION_RE = re.compile(r"MPY_SESSION_END cycles=(\d+) ops=(\d+) gc=(\d+)")
 _HALT_RE = re.compile(r"MPY_HALT code=(\d+) value=([0-9a-f]+) cycles=(\d+) ops=(\d+) gc=(\d+)")
 _TIMEOUT_RE = re.compile(r"MPY_TIMEOUT cycles=(\d+) ops=(\d+) gc=(\d+)")
 
@@ -273,6 +279,10 @@ def run_image(image: Path, max_cycles: int = 50_000_000, trace: bool = False,
         code = int(m.group(1))
         return SimResult(stdout, stderr, HALT_NAMES.get(code, str(code)), int(m.group(2), 16),
                          int(m.group(3)), int(m.group(4)), int(m.group(5)), log)
+    m = _SESSION_RE.search(log)
+    if m:
+        # A +UART_SCRIPT session ran to its end: a clean exit.
+        return SimResult(stdout, stderr, "CLEAN", 0, int(m.group(1)), int(m.group(2)), int(m.group(3)), log)
     m = _TIMEOUT_RE.search(log)
     if m:
         return SimResult(stdout, stderr, "TIMEOUT", 0, int(m.group(1)), int(m.group(2)), int(m.group(3)), log)
@@ -442,26 +452,29 @@ def frozen_runtime_specs(compiler: bool = True, runtime: list[str] | tuple = ())
 
 def build_program(src: Path, work: Path, source_name: str | None = None,
                   modules: dict[str, Path] | None = None,
-                  compiler: str = "mpy-cross") -> Path:
+                  compiler: str = "mpy-cross", repl: bool = False) -> Path:
     """Compile and link one program (plus frozen modules); returns the image prefix.
 
     ``compiler`` selects the user-program compiler. The firmware is always
     built with ``mpy-cross``. ``mpyc`` is the vendored uPy2 compiler.
+    ``repl`` makes a REPL image: the board I/O firmware, the REPL and the
+    on-device compiler; on a uart or usb console it runs the program (its
+    main.py, often empty) and then the REPL.
     """
 
     work.mkdir(parents=True, exist_ok=True)
     sources = [src, *(modules or {}).values()]
-    io = bool(io_imports(sources))
+    io = repl or bool(io_imports(sources))
     # Without board I/O this is the call it always was (clock_bench.py
     # replaces build_firmware with a no-argument function).
-    fw = build_firmware(io=True) if io else build_firmware()
+    fw = build_firmware(io=True, repl=True) if repl else build_firmware(io=True) if io else build_firmware()
     name = source_name or src.name
     main_mpy = work / "main.mpy"
     compile_user(src, main_mpy, name, compiler)
     # The compiler is frozen bytecode. It is not compiled by itself.
     # A test that supplies its own module of the same name keeps it.
     runtime = [m for m in runtime_imports(sources) if m not in (modules or {})]
-    specs = frozen_runtime_specs(uses_compiler(sources), runtime)
+    specs = frozen_runtime_specs(repl or uses_compiler(sources), runtime)
     for mname, mpath in (modules or {}).items():
         mm = work / (mname.replace(".", "_") + ".mpy")
         mod_name = mpath.name if mpath.name != "__init__.py" else f"{mname.replace('.', '/')}/__init__.py"

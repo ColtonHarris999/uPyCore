@@ -129,6 +129,12 @@ class Test:
     # instead of the source: one program run under two straps keeps a
     # golden per strap.
     golden_base: str | None = None
+    # A REPL image (mpy_build.build_program(repl=True)): the program, then
+    # the REPL on a uart or usb console.
+    repl: bool = False
+    # A host session on the UART (tb_mpy_soc +UART_SCRIPT), from
+    # upycore/programs; the run ends when the session does.
+    uart_script: str | None = None
 
     @property
     def source(self) -> Path:
@@ -312,9 +318,10 @@ def run_device(t: Test, compiler: str = "mpy-cross") -> Outcome:
         return Outcome(t, False, f"missing {t.source}")
     work = (ROOT / "build" / ("hw-mpyc" if compiler == "mpyc" else "hw")) / t.name
     try:
-        image = build.build_program(t.source, work, t.source.name, _modules(t), compiler)
+        image = build.build_program(t.source, work, t.source.name, _modules(t), compiler, repl=t.repl)
+        script = [f"+UART_SCRIPT={PROGRAMS / t.uart_script}"] if t.uart_script else []
         res = build.run_image(image, max_cycles=t.cycles, timeout=t.timeout,
-                              sim_args=[*t.sim_args, *EXTRA_SIM_ARGS])
+                              sim_args=[*t.sim_args, *script, *EXTRA_SIM_ARGS])
     except build.BuildError as exc:
         text = str(exc).strip().splitlines()
         return Outcome(t, False, text[-1] if text else "build failed")

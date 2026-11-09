@@ -17,7 +17,18 @@
 //   +UART_IN=<string> +UART_IN_US=<n>       bytes the line model sends, n µs after boot
 //                                           (\n, \r, \t, \\ and \xHH are escapes)
 //   +UART_BPS=<n>                           the line model's baud rate (default 115200)
+//   +UART_SCRIPT=<path>                     a host session on the UART (the REPL tests): one
+//                                           step a line, "send <s>", "expect <s>" (wait until
+//                                           the line model has decoded <s> after the last
+//                                           match), "wait <us>", "#" comments; <s> takes the
+//                                           +UART_IN escapes. The run ends with
+//                                           MPY_SESSION_END once the last step is done and
+//                                           the UART has been quiet for 2 ms
 //   +GPIO_LOOP=1                            wire pad i to pad i^8 (pins 0-7 to 8-15)
+//   +SPI_FLASH=1                            an SPI NOR flash (tb_spi_flash) on pads 10 SCK,
+//                                           11 MOSI, 12 MISO, 13 CS
+//   +I2C_TARGET=1                           a 24C02-style I2C target at 0x50 (tb_i2c_target) on
+//                                           pads 14 SCL, 15 SDA, with the bus pull-ups
 //
 // Board I/O runs end with summary lines before the last line (hw_tests.py
 // compares them with a test's .io golden): `MPY_IO gpio<i> edges=<n>
@@ -65,19 +76,36 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
     end
     logic uart0_rxd, uart0_txd, ioc_dbg_valid;
     logic [15:0] gpio_out, gpio_oe, gpio_pu, gpio_pd, gpio_in;
-    // Pads: a driven pad shows its output; an undriven one its pull (a
-    // pull-up reads 1), else 0. With +GPIO_LOOP pads i and i^8 are one net.
-    bit gpio_loop;
-    initial gpio_loop = $test$plusargs("GPIO_LOOP");
+    // Pads: a pad the chip drives shows its output; else a bench device
+    // driving it; else its pull (a pull-up, the chip's or the I2C bus's,
+    // reads 1), else 0. With +GPIO_LOOP pads i and i^8 are one net.
+    bit gpio_loop, spi_on, i2c_on;
+    initial begin
+        gpio_loop = $test$plusargs("GPIO_LOOP");
+        spi_on = $test$plusargs("SPI_FLASH");
+        i2c_on = $test$plusargs("I2C_TARGET");
+    end
+    logic spi_miso, i2c_scl_low, i2c_sda_low;
+    tb_spi_flash u_flash (.cs_n(!spi_on || gpio_in[13]), .sck(spi_on && gpio_in[10]),
+                          .mosi(gpio_in[11]), .miso(spi_miso));
+    tb_i2c_target u_i2c (.clk(clk), .scl(gpio_in[14]), .sda(gpio_in[15]),
+                         .scl_low(i2c_scl_low), .sda_low(i2c_sda_low));
     always_comb begin
         for (int i = 0; i < 16; i++) begin
             int j = i ^ 8;
             if (gpio_oe[i]) gpio_in[i] = gpio_out[i];
             else if (gpio_loop && gpio_oe[j]) gpio_in[i] = gpio_out[j];
+            else if (spi_on && i == 12 && !gpio_in[13]) gpio_in[i] = spi_miso;
+            else if (i2c_on && i == 14) gpio_in[i] = !i2c_scl_low;
+            else if (i2c_on && i == 15) gpio_in[i] = !i2c_sda_low;
             else gpio_in[i] = gpio_pu[i] || (gpio_loop && gpio_pu[j]);
         end
     end
-    logic [7:0] ioc_dbg_byte;
+    // The ADC converter: channel c answers (273 * c + 100) & 0xFFF.
+    logic adc_start, adc_done;
+    logic [3:0] adc_chan;
+    logic [11:0] adc_code;
+    tb_adc_model u_adc (.clk(io_clk), .start(adc_start), .chan(adc_chan), .done(adc_done), .code(adc_code));
     logic term_rx_valid;
     logic [7:0] term_rx_byte;
     tb_uart_line u_term (.line_i(uart0_txd), .line_o(uart0_rxd),
@@ -96,6 +124,7 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
         .io_clk_i(io_clk), .console_sel_i(console_sel),
         .uart0_rxd_i(uart0_rxd), .uart0_txd_o(uart0_txd),
         .gpio_o(gpio_out), .gpio_oe_o(gpio_oe), .gpio_pu_o(gpio_pu), .gpio_pd_o(gpio_pd), .gpio_i(gpio_in),
+        .adc_start_o(adc_start), .adc_chan_o(adc_chan), .adc_done_i(adc_done), .adc_code_i(adc_code),
         .ioc_dbg_valid_o(ioc_dbg_valid), .ioc_dbg_byte_o(ioc_dbg_byte)
     );
 
@@ -181,6 +210,84 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
         end
     end
 
+    // +UART_SCRIPT: the host side of a console session.
+    bit script_on = 0, script_done = 0;
+    int script_step = 0;
+    initial begin
+        string path, ln, cmd, arg;
+        int fd, pos, from, sp, us;
+        if ($value$plusargs("UART_SCRIPT=%s", path)) begin
+            script_on = 1;
+            fd = $fopen(path, "r");
+            if (fd == 0) begin
+                $display("MPY_SESSION_FAIL cannot open %s", path);
+                $finish;
+            end
+            pos = 0;
+            wait (boot_done);
+            while ($fgets(ln, fd) > 0) begin
+                while (ln.len() > 0 && (ln[ln.len() - 1] == 8'h0A || ln[ln.len() - 1] == 8'h0D))
+                    ln = ln.substr(0, ln.len() - 2);
+                script_step++;
+                if (ln.len() == 0 || ln[0] == "#") continue;
+                if ($test$plusargs("SCRIPT_LOG")) begin
+                    $display("MPY_SESSION step %0d at %0t: %s", script_step, $time, ln);
+                    $fflush();
+                end
+                sp = 0;
+                while (sp < ln.len() && ln[sp] != " ") sp++;
+                cmd = ln.substr(0, sp - 1);
+                arg = (sp + 1 < ln.len()) ? ln.substr(sp + 1, ln.len() - 1) : "";
+                // Block variables in an initial block are static: clear them.
+                if (cmd == "send") begin
+                    byte q[$];
+                    q.delete();
+                    unescape(arg, q);
+                    foreach (q[i]) u_term.send(q[i]);
+                end else if (cmd == "expect") begin
+                    byte q[$];
+                    q.delete();
+                    unescape(arg, q);
+                    from = pos;
+                    forever begin
+                        int found;
+                        found = -1;
+                        for (int st = from; st + q.size() <= u_term.q.size(); st++) begin
+                            bit ok;
+                            ok = 1;
+                            for (int j = 0; j < q.size(); j++)
+                                if (u_term.q[st + j] != q[j]) begin ok = 0; break; end
+                            if (ok) begin found = st; break; end
+                        end
+                        if (found >= 0) begin
+                            pos = found + q.size();
+                            break;
+                        end
+                        if (u_term.q.size() - q.size() + 1 > from) from = u_term.q.size() - q.size() + 1;
+                        @(u_term.rx_valid_o);
+                    end
+                end else if (cmd == "wait") begin
+                    void'($sscanf(arg, "%d", us));
+                    #(us * 1us);
+                end else begin
+                    $display("MPY_SESSION_FAIL step %0d: %s", script_step, ln);
+                    $finish;
+                end
+            end
+            $fclose(fd);
+            begin
+                realtime quiet;
+                quiet = $realtime;
+                for (int k = 0; k < 200000; k++) begin
+                    #(1us);
+                    if (uart0_txd == 1'b0) quiet = $realtime;
+                    if ($realtime - quiet > 2.0e6) break;
+                end
+            end
+            script_done = 1;
+        end
+    end
+
 `ifdef MPY_PROFILE
     `include "upycore/tb/mpy_profile.svh"
 `endif
@@ -234,7 +341,7 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
     initial begin
         n = 0;
         @(posedge rst_n);
-        while (!halted && !boot_err && n < max_cycles) begin
+        while (!halted && !boot_err && !script_done && n < max_cycles) begin
             @(posedge clk);
             n++;
         end
@@ -254,8 +361,12 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
         io_summary();
         if (fd_out != 0) $fclose(fd_out);
         if (fd_err != 0) $fclose(fd_err);
+        if (script_on && !script_done)
+            $display("MPY_SESSION_STUCK step=%0d", script_step);
         if (boot_err)
             $display("MPY_BOOT_ERROR cycles=%0d", n);
+        else if (script_done)
+            $display("MPY_SESSION_END cycles=%0d ops=%0d gc=%0d", cycles, ops, gc_coll);
         else if (halted)
             $display("MPY_HALT code=%0d value=%08x cycles=%0d ops=%0d gc=%0d free=%0d boot=%0d",
                      halt_code, halt_value, cycles, ops, gc_coll, gc_free, boot_cycles);

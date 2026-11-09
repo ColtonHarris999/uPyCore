@@ -77,3 +77,34 @@ static inline void irq_on(void) { __asm__ volatile("csrsi mstatus, 8"); }
 static inline void irq_off(void) { __asm__ volatile("csrci mstatus, 8"); }
 static inline void wfi(void) { __asm__ volatile("wfi"); }
 #endif
+
+// The epic branch's blocks (each at its old offset's low byte)
+#define PWM_BASE      0x80005000u
+#define PWM_PRESC     REG(PWM_BASE + 0x00)
+#define PWM_TOP       REG(PWM_BASE + 0x04)
+#define PWM_EN        REG(PWM_BASE + 0x08)
+#define PWM_COUNT     REG(PWM_BASE + 0x0C)
+#define PWM_DUTY(c)   REG(PWM_BASE + 0x10 + 4 * (c))
+#define SPI_BASE      0x80006000u
+#define SPI_CTRL      REG(SPI_BASE + 0x00)
+#define SPI_DATA      REG(SPI_BASE + 0x04)
+#define SPI_STATUS    REG(SPI_BASE + 0x08)
+#define I2C_BASE      0x80007000u
+#define I2C_DIV       REG(I2C_BASE + 0x00)
+#define I2C_CMDR      REG(I2C_BASE + 0x04)
+#define I2C_STATUS    REG(I2C_BASE + 0x08)
+#define I2C_TIMEOUT   REG(I2C_BASE + 0x0C)
+#define I2C_CTRL      REG(I2C_BASE + 0x10)
+#define WDT_BASE      0x80008000u
+#define WDT_LOAD      REG(WDT_BASE + 0x00)
+#define WDT_CTRL      REG(WDT_BASE + 0x04)
+#define WDT_KICK      REG(WDT_BASE + 0x08)
+#define WDT_COUNT     REG(WDT_BASE + 0x0C)
+#define WDT_KEY       0x6B1DF00Du
+#define WDT_STOP_KEY  0x5709DEADu
+#define ADC_BASE      0x80009000u
+#define ADC_CTRL      REG(ADC_BASE + 0x00)
+#define ADC_DATA      REG(ADC_BASE + 0x04)
+#define ADC_STATUS    REG(ADC_BASE + 0x08)
+#define MUX_BASE      0x8000A000u
+#define PINMUX(i)     REG(MUX_BASE + 4 * (i))

@@ -43,6 +43,7 @@ module tb_iocore #(
         .dn_pop_o(), .dn_data_i(35'h0), .dn_empty_i(1'b1),
         .uart_rxd_i(rxd), .uart_txd_o(txd),
         .gpio_o(), .gpio_oe_o(), .gpio_pu_o(), .gpio_pd_o(), .gpio_i(16'h0),
+        .adc_start_o(), .adc_chan_o(), .adc_done_i(1'b0), .adc_code_i(12'h0), .wdt_toggle_o(),
         .us_gray_o(), .ms_gray_o(),
         .dbg_valid_o(dbg_valid), .dbg_byte_o(dbg_byte), .halt_o(halt), .halt_value_o(halt_value),
         .sleep_o(sleep)
