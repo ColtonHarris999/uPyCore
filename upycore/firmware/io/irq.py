@@ -96,20 +96,57 @@ def mod__io__page(i):
 
 
 def mod__io__uart_rx(n):
-    # Up to n received bytes (n < 256), as bytes.
+    # Up to n received bytes (n < 256), as bytes. UART_RX answers the count
+    # k, then ceil(k/4) words of four bytes, low byte first, with the unused
+    # bytes of the last word 0. Each word goes straight into the new bytes
+    # object's data (word-aligned, _strnew allocates ceil(k/4) words of it),
+    # so a word costs one RSP load and one store. STATUS is read once per
+    # batch, not once per word: its RSP level never counts more words than
+    # RSP holds (Clock domains), and only this command's answer is in RSP.
     _st(_IO_BASE, 0, 0x28000000 | n)
     k = _rsp_wait()
-    out = bytearray()
-    j = 0
-    while j < k:
-        w = _rsp_wait()
-        out.append(w & 255)
-        if j + 1 < k:
-            out.append((w >> 8) & 255)
-        if j + 2 < k:
-            out.append((w >> 16) & 255)
-        j += 3
-    return bytes(out)
+    if k == 0:
+        return b''
+    r = _strnew(k, TAG_BYTES)
+    d = _data(r)
+    nw = (k + 3) >> 2
+    i = 0
+    while i < nw:
+        e = i + ((_peek32(_IO_BASE + _STATUS) >> 8) & 31)
+        if e > nw:
+            e = nw
+        while i < e:
+            _st(d, i, _peek32(_IO_BASE + _RSP))
+            i += 1
+    return _strfin(r)
+
+
+def mod__io__uart_rx_into(buf, off, n):
+    # Up to n received bytes (n < 256) into buf from byte off, for
+    # machine.UART.readinto: buf is a bytearray or a writable memoryview of
+    # one, and the bytes go in by the copy engine (_bcopy). Returns the
+    # count (never past the end of buf), or -1 for any other buffer, before
+    # sending anything.
+    if _isbarr(buf):
+        dst = buf
+        end = _ld(buf, 0)
+    elif _ismv(buf) and _ld(buf, 5):
+        # The view's base is the bytearray's data block; _bcopy takes an
+        # INT as a plain address.
+        dst = _pay(_ld(buf, 2))
+        off += _ld(buf, 3)
+        end = _ld(buf, 3) + _ld(buf, 4)
+    else:
+        return -1
+    if n > end - off:
+        n = end - off
+    if n <= 0:
+        return 0
+    r = mod__io__uart_rx(n)
+    k = _slen(r)
+    if k:
+        _bcopy(dst, off, r, 0, k)
+    return k
 
 
 def mod__io__xfer(words, nrsp):

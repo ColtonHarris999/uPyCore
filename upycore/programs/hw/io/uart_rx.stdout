@@ -1,0 +1,21 @@
+values 256 11 48 230
+idle None None
+sent 15
+read 1 1 bytes True
+read 2 2 bytes True
+read 3 3 bytes True
+read 4 4 bytes True
+read 5 5 bytes True
+left 0 None
+sent 20
+into 6 True
+nbytes 3 True bytearray(b'...')
+view 7 True bytearray(b'\x00\x00') bytearray(b'\x00\x00\x00')
+past end 4 True
+left 0 None
+sent 5
+subclass 5 True 0
+sent 256
+into 256 256 True True
+sent 256
+read 256 256 True 0 None

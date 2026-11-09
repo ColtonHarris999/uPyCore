@@ -283,9 +283,28 @@ class UART:
         return self._take(n)
 
     def readinto(self, buf, nbytes=-1):
-        if nbytes < 0:
+        # mp_stream_readinto: at most len(buf) bytes, fewer with nbytes.
+        if nbytes < 0 or nbytes > len(buf):
             nbytes = len(buf)
         self._wait(nbytes)
+        # A bytearray or a writable memoryview of one: the firmware puts the
+        # bytes straight in, up to 255 a command, until a command finds
+        # fewer waiting than it asked for.
+        got = 0
+        while got < nbytes:
+            want = nbytes - got
+            if want > 255:
+                want = 255
+            k = _io.uart_rx_into(buf, got, want)
+            if k < 0:
+                return self._readinto_copy(buf, nbytes)
+            got += k
+            if k < want:
+                break
+        return got if got else None
+
+    def _readinto_copy(self, buf, nbytes):
+        # Any other writable buffer: a byte at a time.
         data = self._take(min(nbytes, self.any()))
         if not data:
             return None
