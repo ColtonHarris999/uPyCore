@@ -583,8 +583,10 @@ module mpy_core
         S_LS_FB,
         S_LS_IT,
         S_LS_LEN,
+        S_LS_LEN_NEG,
         S_LS_PUT,
         S_LS_S,
+        S_LS_S_NEG,
         S_LS_SB,
         S_LS_SC,
         S_MF_A,
@@ -746,6 +748,7 @@ module mpy_core
         S_SS_FB,
         S_SS_IT,
         S_SS_LEN,
+        S_SS_LEN_NEG,
         S_STM_R,
         S_STREQ,
         S_SW_E,
@@ -1829,6 +1832,24 @@ module mpy_core
         m_addr <= {a[31:2], 2'b00}; m_wdata <= {4{b}}; m_wtag <= 4'd0;
         m_we <= 1'b1; m_tag_we <= 1'b0; m_be <= 4'b0001 << a[1:0];
         post({a[31:2], 2'b00}, nxt);
+    endtask
+    task automatic load_seq_index(input logic [31:0] index);
+        // Bytearray index errors use the firmware's exception text.
+        if ((index[31] || index >= md) && is_mut(t[0], ABI_MUT_BYTEARRAY)) st <= S_LS_FB;
+        else if (index[31] || index >= md)
+            raise_msg((tg(t[0]) == ABI_TAG_TUPLE) ? ABI_MSG_TUPLE_INDEX : ABI_MSG_LIST_INDEX);
+        else if (tg(t[0]) == ABI_TAG_TUPLE) rd(adr(t[0]) + 32'd4 + (index << 2), S_LS_PUT);
+        else rd(aoff(adr(t[0]), 8), S_LS_IT);
+    endtask
+    task automatic load_string_index(input logic [31:0] index);
+        if (index[31] || index >= si_len)
+            raise_msg((tg(t[0]) == ABI_TAG_BYTES) ? ABI_MSG_BYTES_INDEX : ABI_MSG_STR_INDEX);
+        else rd(si_addr + {index[31:2], 2'b00}, S_LS_SB);
+    endtask
+    task automatic store_seq_index(input logic [31:0] index);
+        if ((index[31] || index >= md) && is_mut(t[0], ABI_MUT_BYTEARRAY)) st <= S_SS_FB;
+        else if (index[31] || index >= md) raise_msg(ABI_MSG_LIST_INDEX);
+        else rd(aoff(adr(t[0]), 8), S_SS_IT);
     endtask
     function automatic logic [31:0] scr_addr(input logic [3:0] id, input logic [3:0] wi);
         logic [31:0] basew;
@@ -3221,16 +3242,13 @@ module mpy_core
                     end else st <= S_LS_FB;
             S_LS_LEN: begin
                 v0 = ival(t[1]);
-                if (v0[31]) v0 = v0 + md;
-                x1 <= v0;
-                // A bad bytearray index raises from the hook, which owns
-                // that message; the miss path is not worth a new ABI text.
-                if ((v0[31] || v0 >= md) && is_mut(t[0], ABI_MUT_BYTEARRAY)) st <= S_LS_FB;
-                else if (v0[31] || v0 >= md)
-                    raise_msg((tg(t[0]) == ABI_TAG_TUPLE) ? ABI_MSG_TUPLE_INDEX : ABI_MSG_LIST_INDEX);
-                else if (tg(t[0]) == ABI_TAG_TUPLE) rd(adr(t[0]) + 4 + (v0 << 2), S_LS_PUT);
-                else rd(aoff(adr(t[0]), 8), S_LS_IT);
+                // A negative index needs length arithmetic before the
+                // bounds check and memory issue. md holds the length until
+                // the next read response, so the extra cycle needs only x1.
+                if (v0[31]) begin x1 <= v0 + md; st <= S_LS_LEN_NEG; end
+                else begin x1 <= v0; load_seq_index(v0); end
             end
+            S_LS_LEN_NEG: load_seq_index(x1);
             S_LS_IT: if (is_mut(t[0], ABI_MUT_BYTEARRAY)) rd(md + {x1[31:2], 2'b00}, S_LS_SB);
                      else rd(md + (x1 << 2), S_LS_PUT);
             S_LS_PUT: begin rf[`SX(6'(sp - 7'd2))] <= mv; sp <= sp - 7'd1; st <= S_FETCH; end
@@ -3239,14 +3257,12 @@ module mpy_core
                     else raise_err(ABI_ERR_KEY, t[1], VNULL);
             S_LS_S: begin
                 v0 = ival(t[1]);
-                if (v0[31]) v0 = v0 + si_len;
-                x1 <= v0;
                 // bytes index by byte, so only a str needs the code-point walk.
                 if (si_na && tg(t[0]) != ABI_TAG_BYTES) st <= S_LS_FB;
-                else if (v0[31] || v0 >= si_len)
-                    raise_msg((tg(t[0]) == ABI_TAG_BYTES) ? ABI_MSG_BYTES_INDEX : ABI_MSG_STR_INDEX);
-                else rd(si_addr + {v0[31:2], 2'b00}, S_LS_SB);
+                else if (v0[31]) begin x1 <= v0 + si_len; st <= S_LS_S_NEG; end
+                else begin x1 <= v0; load_string_index(v0); end
             end
+            S_LS_S_NEG: load_string_index(x1);
             S_LS_SB: if (!strlike(t[0])) begin
                          rf[`SX(6'(sp - 7'd2))] <= vint({24'd0, byte_of(md, x1[1:0])}); sp <= sp - 7'd1; st <= S_FETCH;
                      end else rd(h_chars + 4 * byte_of(md, x1[1:0]), S_LS_SC);
@@ -3373,12 +3389,10 @@ module mpy_core
                     else st <= S_SS_FB;
             S_SS_LEN: begin
                 v0 = ival(t[1]);
-                if (v0[31]) v0 = v0 + md;
-                x1 <= v0;
-                if ((v0[31] || v0 >= md) && is_mut(t[0], ABI_MUT_BYTEARRAY)) st <= S_SS_FB;
-                else if (v0[31] || v0 >= md) raise_msg(ABI_MSG_LIST_INDEX);
-                else rd(aoff(adr(t[0]), 8), S_SS_IT);
+                if (v0[31]) begin x1 <= v0 + md; st <= S_SS_LEN_NEG; end
+                else begin x1 <= v0; store_seq_index(v0); end
             end
+            S_SS_LEN_NEG: store_seq_index(x1);
             // The byte store is the only side effect and the last step; wrb
             // keeps the word's other lanes and its memory tag, and the port's
             // word-granular scoreboard holds it behind any copy in flight.
