@@ -353,10 +353,9 @@ places the five macros as `hardmacro` constraints and sets the die (DIE is
 ignored). fakeram makes each macro just tall enough for its pins and as wide
 as its area needs, so the 32K-word bank comes out 31 mm x 0.22 mm: the four
 are stacked in one column with the logic beside their pins, on a die about
-35 x 1 mm. `DESIGN_ARGS="--sram-pin-pitch 7000"` spaces the pins 10x wider
-(only the placeholder's shape changes, not its area or timing model), which
-makes the bank about 3 x 2 mm; place_macros.py then puts two columns of two
-facing a logic channel. `python3 place_macros.py <folder> --dry-run` prints
+35 x 1 mm. The shape is CACTI's (fakeram prints "Original fakeram_d32768_w36 size =
+31163.3 x 221.174"): the pin pitch does not change it, and a larger pitch only
+fails with "not enough tracks". `python3 place_macros.py <folder> --dry-run` prints
 the layout without writing it.
 
 Two options for closing timing after routing (any top, via DESIGN_ARGS):

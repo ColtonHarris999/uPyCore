@@ -21,8 +21,7 @@
 # whole chip from converted/mpy_soc.v instead. status then also counts the
 # macros in each netlist (want 5: 4 x d32768_w36, 1 x d600_w64).
 # With `par`, place_macros.py places the five macros and sets the die size
-# (DIE is ignored). DESIGN_ARGS="--sram-pin-pitch 7000" makes fakeram's
-# 31 mm x 0.22 mm bank a taller, narrower macro of the same area.
+# (DIE is ignored).
 # PLACE_ARGS passes place_macros.py options, e.g. PLACE_ARGS="--util 0.4".
 #
 # Die size: DIE="w h" in um, default 1500 1500 for the core, 4000 3000 for
