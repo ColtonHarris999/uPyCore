@@ -1,9 +1,9 @@
-version 2
-page0 0x494f0002
+version 3
+page0 0x494f0003
 con_mode 0 con_rx 0
 evt 0x14
-evt 0x115
-evt 0x101
+evt 0x314
+evt 0x300
 evt 0x0
 en 5 mask 1
 page20 0x12345678

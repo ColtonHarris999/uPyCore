@@ -2,7 +2,8 @@
 # EVT set by the I/O core and by EVT_SET, cleared by writing 1s; a page
 # word written by the I/O core (CH_PAGE) appears in the hart's copy; a
 # hart page word (0xC00) reads back and reaches the I/O core (CH_DNRD);
-# PING answers the protocol version. Hand-written golden.
+# PING answers the protocol version. The EVT bits set by hand are ones no
+# handler enables (bits 0 and 1 are live from boot). Hand-written golden.
 import machine
 
 B = 0x40000000
@@ -30,11 +31,11 @@ n = 0
 while m[EVT] & 0x14 != 0x14 and n < 100:
     n += 1
 print("evt", hex(m[EVT]))
-m[EVT_SET] = 0x101
+m[EVT_SET] = 0x300
 print("evt", hex(m[EVT]))
 m[EVT] = 0x14
 print("evt", hex(m[EVT]))
-m[EVT] = 0x101
+m[EVT] = 0x300
 print("evt", hex(m[EVT]))
 m[EVT_EN] = 0x5
 m[EVT_MASK] = 1

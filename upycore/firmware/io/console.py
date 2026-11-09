@@ -152,6 +152,11 @@ _io_build_sys = _build_sys
 
 
 def _build_sys(filename):
+    # Called by _boot before __main__: the board I/O firmware's start. The
+    # schedule and the console's interrupt character are live from here
+    # (EVT_EN bits 0 and 1); the I/O core arms Ctrl-C on a uart or usb
+    # console.
+    _st(_IO_BASE + 0x010, 0, mod__io__rd(0x010) | 3)
     m = _io_build_sys(filename)
     g = _ld(m, 2)
     g['stdin'] = _dget(_NATIVE_MODULES, '_stdin')

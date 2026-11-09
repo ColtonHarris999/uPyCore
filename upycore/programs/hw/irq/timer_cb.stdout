@@ -1,0 +1,4 @@
+periodic 10
+after deinit 10
+one shot [True]
+soft True

@@ -664,7 +664,12 @@ def link(main: Path, modules: list[tuple[str, Path, bool]], fw: Path, out: Path,
             type_methods[tname][meth] = val
 
     natives: dict[str, tuple[int, int]] = {}
+    # The board I/O natives exist only in images with the board I/O
+    # firmware (its _io module), so every other image is unchanged.
+    io_fw = any(name.startswith("mod__io__") for name in fw_names)
     for nname in abi.NATIVES:
+        if nname in abi.IO_NATIVES and not io_fw:
+            continue
         fb = NULL
         short = nname.split(".")[-1]
         fb_name = "_" + nname.replace(".", "__") + "_fb" if "." in nname else "_" + short.lstrip("_") + "_fb"
@@ -769,6 +774,11 @@ def link(main: Path, modules: list[tuple[str, Path, bool]], fw: Path, out: Path,
             hooks.append(fw_items[h])
         else:
             hooks.append(NULL)
+    # Optional hooks at the end that the firmware does not define are not
+    # emitted: the core never calls them (an image without the board I/O
+    # firmware never raises an event), and the table stays as it was.
+    while len(hooks) > 1 and abi.HOOKS[len(hooks) - 1] in abi.OPTIONAL_HOOKS and hooks[-1] == NULL:
+        hooks.pop()
     hooks_addr = img.emit_words(hooks)
     if hooks[abi.HOOK_ID["_boot"]] == NULL:
         raise LinkError("firmware has no _boot")

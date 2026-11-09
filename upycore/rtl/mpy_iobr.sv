@@ -91,7 +91,8 @@ module mpy_iobr #(
     // Word offsets.
     localparam logic [9:0] O_CMD = 10'h000, O_RSP = 10'h001, O_STATUS = 10'h002, O_EVT = 10'h003,
                            O_EVT_EN = 10'h004, O_EVT_SET = 10'h005, O_EVT_MASK = 10'h006,
-                           O_IOC_CTRL = 10'h007, O_CON_RX = 10'h008, O_CON_MODE = 10'h009;
+                           O_IOC_CTRL = 10'h007, O_CON_RX = 10'h008, O_CON_MODE = 10'h009,
+                           O_CMD_SENT = 10'h00A;
 
     // ---- FIFOs ----
     logic        cmd_push, cmd_full;
@@ -195,7 +196,7 @@ module mpy_iobr #(
     end
 
     // ---- hart-side registers ----
-    logic [31:0] evt_r, evt_en_r;
+    logic [31:0] evt_r, evt_en_r, sent_r;
     logic [1:0]  mask_r;
     logic [31:0] up_r [0:NUP-1];
     logic [31:0] dn_r [0:NDN-1];
@@ -234,6 +235,7 @@ module mpy_iobr #(
             4'(O_IOC_CTRL): rd_reg = {30'h0, loaded_i, run_i};
             4'(O_CON_RX):   rd_reg = {conrx_ne_r, 23'h0, conrx_ne_r ? conrx_head : 8'h0};
             4'(O_CON_MODE): rd_reg = {30'h0, con_mode_i};
+            4'(O_CMD_SENT): rd_reg = sent_r;
             default:        rd_reg = 32'h0;
         endcase
         rdata_o = we_i ? 32'h0 : (({32{is_up}} & rd_up) | ({32{is_dn}} & rd_dn) | ({32{is_reg}} & rd_reg));
@@ -251,7 +253,7 @@ module mpy_iobr #(
 
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) begin
-            evt_r <= 32'h0; evt_en_r <= 32'h0; mask_r <= 2'b00;
+            evt_r <= 32'h0; evt_en_r <= 32'h0; mask_r <= 2'b00; sent_r <= 32'h0;
             stall_o <= 1'b0; evt_pend_o <= 1'b0;
             stat_r <= 32'h0; rsp_ne_r <= 1'b0; conrx_ne_r <= 1'b0;
             for (int i = 0; i < NUP; i++) up_r[i] <= 32'h0;
@@ -269,8 +271,12 @@ module mpy_iobr #(
                      | ((acc_i && we_i && off_i == O_EVT_SET) ? wdata_i : 32'h0)
                      | (!evt_empty ? {16'h0, evt_head} : 32'h0);
             if (acc_i && we_i && off_i == O_EVT_EN)   evt_en_r <= wdata_i;
+            // CMD_SENT: words pushed to CMD (the I/O core's SEQ page word
+            // counts the ones it has finished; machine waits for them to meet).
+            if (cmd_push) sent_r <= sent_r + 32'd1;
             if (acc_i && we_i && off_i == O_EVT_MASK) mask_r <= wdata_i[1:0];
-            evt_pend_o <= |(evt_r & evt_en_r) && !mask_r[0];
+            // Bit 0: a callback is running; bit 1: machine.disable_irq.
+            evt_pend_o <= |(evt_r & evt_en_r) && mask_r == 2'b00;
             if (!upd_empty) up_r[upd_head[32 +: $clog2(NUP)]] <= upd_head[31:0];
             if (dn_push) dn_r[off_i[$clog2(NDN)-1:0]] <= wdata_i;
         end

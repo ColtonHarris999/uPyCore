@@ -56,7 +56,7 @@ FW_ORDER = [
 
 # Board I/O firmware (upycore/firmware/io), appended after FW_ORDER only for
 # images that use board I/O (io_imports). Its own order, by file name.
-IO_FW_ORDER = ["io.py", "console.py"]
+IO_FW_ORDER = ["io.py", "console.py", "irq.py"]
 IO_FW_SRC = FW_SRC / "io"
 # The I/O core's firmware (make -C iocore/sw), loaded from the boot stream's
 # IOCB section for those images.
@@ -335,8 +335,10 @@ IO_MODULES = {"machine", "time", "_io"}
 
 # Console input or the sys streams also need the board I/O firmware
 # (upycore/firmware/io/console.py): a call of input(), or sys.stdin,
-# sys.stdout or sys.stderr.
+# sys.stdout or sys.stderr. So do micropython's event functions
+# (upycore/firmware/io/irq.py), which are real only there.
 _CONSOLE_ATTRS = {"stdin", "stdout", "stderr"}
+_MP_IO_ATTRS = {"schedule", "heap_lock", "heap_unlock", "kbd_intr"}
 
 
 def io_imports(sources: list[Path]) -> list[str]:
@@ -357,12 +359,18 @@ def io_imports(sources: list[Path]) -> list[str]:
                     and isinstance(node.value, ast.Name) and node.value.id == "sys"):
                 found.add("console")
                 continue
+            if (isinstance(node, ast.Attribute) and node.attr in _MP_IO_ATTRS
+                    and isinstance(node.value, ast.Name) and node.value.id == "micropython"):
+                found.add("events")
+                continue
             if isinstance(node, ast.Import):
                 names = [a.name for a in node.names]
             elif isinstance(node, ast.ImportFrom) and not node.level and node.module:
                 names = [node.module]
                 if node.module == "sys" and any(a.name in _CONSOLE_ATTRS for a in node.names):
                     found.add("console")
+                if node.module == "micropython" and any(a.name in _MP_IO_ATTRS for a in node.names):
+                    found.add("events")
             else:
                 continue
             found.update(n.split(".")[0] for n in names if n.split(".")[0] in IO_MODULES)

@@ -590,6 +590,16 @@ uart_echo = { file = "hw/io/uart_echo.py", oracle = false, sim_args = ["+UART_IN
 sleep_accuracy = { file = "hw/io/sleep_accuracy.py", cycles = 30_000_000, oracle = false }
 ticks = { file = "hw/io/ticks.py", oracle = false }
 
+[irq]
+sched = { file = "hw/irq/sched.py", oracle = false }
+heap_lock = { file = "hw/irq/heap_lock.py", oracle = false }
+pin_irq = { file = "hw/irq/pin_irq.py", oracle = false, sim_args = ["+GPIO_LOOP=1"], cycles = 40_000_000, timeout = 300 }
+pin_irq_hard = { file = "hw/irq/pin_irq_hard.py", oracle = false, sim_args = ["+GPIO_LOOP=1"], cycles = 40_000_000, timeout = 300 }
+timer_cb = { file = "hw/irq/timer_cb.py", oracle = false, cycles = 60_000_000, timeout = 400 }
+disable_irq = { file = "hw/irq/disable_irq.py", oracle = false }
+uart_irq = { file = "hw/irq/uart_irq.py", oracle = false, sim_args = ["+UART_IN=abcde", "+UART_IN_US=3000"], cycles = 40_000_000, timeout = 300 }
+ctrl_c = { file = "hw/irq/ctrl_c.py", oracle = false, sim_args = ["+CONSOLE=uart", '+UART_IN=\x03', "+UART_IN_US=5000"], cycles = 40_000_000, timeout = 300 }
+
 [console]
 con_print = { file = "hw/console/con_print.py", oracle = false }
 con_print_uart = { file = "hw/console/con_print.py", golden_base = "hw/console/con_print_uart", oracle = false, sim_args = ["+CONSOLE=uart"], cycles = 40_000_000, timeout = 300 }

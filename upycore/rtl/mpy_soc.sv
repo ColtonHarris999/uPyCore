@@ -137,6 +137,7 @@ module mpy_soc #(
     logic [31:0] am_addr, am_wdata;
     logic [3:0]  am_wtag;
     logic        core_halted;
+    logic        io_evt_pend;     // mpy_iobr: an enabled event is pending (a flop)
     logic [3:0]  core_hcode;
     logic [31:0] core_hval, core_cycles;
 
@@ -252,6 +253,7 @@ module mpy_soc #(
         .sl_response_ready_o(sl_response_ready),
         .ca_dst_o(ca_dst), .ca_src_o(ca_src), .ca_n_o(ca_n), .ca_idle_i(ca_idle),
         .ca_fault_i(ca_fault), .ca_fault_reason_i(ca_fault_reason), .ca_fault_addr_i(ca_fault_addr),
+        .evt_pend_i(io_evt_pend),
         .halted_o(core_halted), .halt_code_o(core_hcode), .halt_value_o(core_hval),
         .cycles_o(core_cycles), .ops_o,
         .trace_o, .trace_pc_o, .trace_op_o, .trace_sp_o
@@ -335,7 +337,7 @@ module mpy_soc #(
     logic c_sim, c_io, c_simpage;
     assign c_simpage = (c_addr[31:8] == MPY_SIM_BASE[31:8]);
     assign c_io = (c_addr[31:12] == MPY_MMIO_BASE[31:12]) && (c_addr[1:0] == 2'b00) &&
-                  ((c_addr[11:6] == 6'd0 && c_addr[5:2] <= 4'd9) ||     // 0x000-0x024 registers
+                  ((c_addr[11:6] == 6'd0 && c_addr[5:2] <= 4'd10) ||    // 0x000-0x028 registers
                    (c_addr[11:7] == 5'b10000) ||                        // 0x800-0x87C page (I/O core writes)
                    (c_addr[11:5] == 7'b1100000));                       // 0xC00-0xC1C page (hart writes)
     assign c_sim = c_simpage || c_io;
@@ -528,7 +530,6 @@ module mpy_soc #(
     logic [36:0] b_upd_data;
     logic [34:0] b_dn_data;
     logic [48:0] b_ld_data;
-    logic        io_evt_pend;
     logic [31:0] b_us_gray, b_ms_gray;
 
     mpy_iobr u_iobr (
@@ -579,5 +580,5 @@ module mpy_soc #(
     assign gc_free_o = g_free;
 
     logic unused;
-    assign unused = ^{g_total, g_ovf, g_busy, ca_words, ca_cmds, io_evt_pend};
+    assign unused = ^{g_total, g_ovf, g_busy, ca_words, ca_cmds};
 endmodule

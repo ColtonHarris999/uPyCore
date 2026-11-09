@@ -1,8 +1,8 @@
 # The I/O core
 
-Status: phases 0 to 2 of [`planning/rv_io_core_plan.md`](../../planning/rv_io_core_plan.md)
-(the island, the hart-side bridge, the boot section, polled board I/O and
-the UART console). Events on the hart, the remaining peripherals, the
+Status: phases 0 to 3 of [`planning/rv_io_core_plan.md`](../../planning/rv_io_core_plan.md)
+(the island, the hart-side bridge, the boot section, polled board I/O, the
+UART console, and events on the hart). The remaining peripherals, the
 REPL and USB are added by later phases; this page grows with them. Progress and gate results:
 [`planning/rv_io_core_progress.md`](../../planning/rv_io_core_progress.md).
 
@@ -182,13 +182,14 @@ root.
 | `0x01C` | `IOC_CTRL` | Read-only. Bit 0: the I/O core runs. Bit 1: the boot stream had its section |
 | `0x020` | `CON_RX` | A load pops one console input byte: bit 31 valid, bits 7:0 the byte |
 | `0x024` | `CON_MODE` | Read-only: the console strap (`console_sel_i`: 0 `sim`, 1 `uart`, 2 `usb`) |
+| `0x028` | `CMD_SENT` | Read-only: CMD words pushed since power-on (the I/O core's `SEQ` page word counts the ones it has finished) |
 | `0x800`–`0x87C` | State page, I/O core words | 32 words the I/O core writes and the hart reads (stores are ignored) |
 | `0xC00`–`0xC1C` | State page, hart words | 8 words the hart writes (and reads back) and the I/O core reads |
 
 Each I/O core page word arrives through UPD as a whole word, so a load
 never sees half of one; a word updated twice in a row may skip the first
-value. `evt_pend` is the flop `|(EVT & EVT_EN) && !EVT_MASK[0]`, the only
-signal the I/O work gives `mpy_core` (from phase 3).
+value. `evt_pend` is the flop `|(EVT & EVT_EN) && EVT_MASK == 0`, the
+only signal the I/O work gives `mpy_core`.
 
 ### I/O core side (`0x8000_3000`)
 
@@ -220,14 +221,17 @@ and answers synchronous ones in RSP, in order.
 | `0x03` | `EVT` | bits 15:0 | raises those events (a bridge test) |
 | `0x04` | `PAGE` | bits 4:0 a page word; the next CMD word is its value | the CMD word, after the page word is pushed (a bridge test) |
 | `0x05` | `DNRD` | bits 2:0 a hart word | that word as the I/O core sees it |
+| `0x06` | `KBD` | bit 8 armed, bits 7:0 the console's interrupt character | — |
 | `0x10` | `PIN_INIT` | bits 4:0 pin, 7:5 mode (0 IN, 1 OUT, 2 OPEN_DRAIN), 9:8 pull (0 none, 1 up, 2 down), bit 10 set the value, bit 11 the value | — |
 | `0x11` | `PIN_WRITE` | bits 4:0 pin, bit 8 the value | — |
 | `0x12` | `PIN_TOGGLE` | bits 4:0 pin | — |
+| `0x13` | `PIN_IRQ` | bits 4:0 pin, 9:8 edges (1 rising, 2 falling, 3 both, 0 off) | — |
 | `0x20` | `UART_INIT` | bits 3:0 id; the next word is the baud rate | the rate the divider gives |
 | `0x21`–`0x23` | `UART_TX1`–`TX3` | one to three bytes, the first in bits 7:0 | — |
 | `0x28` | `UART_RX` | bits 7:0 the most bytes wanted | the count k, then ceil(k/3) words of three bytes |
 | `0x29` | `UART_DEINIT` | | — |
-| `0x30` | `TIMER_INIT` | bits 1:0 id, bit 2 periodic; the next word is the period in µs | — |
+| `0x2A` | `UART_IRQ` | bits 15:0 the triggers (`0x20` TXIDLE, `0x40` RXIDLE, rp2's values) | — |
+| `0x30` | `TIMER_INIT` | bits 1:0 id, bit 2 periodic, bit 3 raise `TIMER` on each expiration; the next word is the period in µs | — |
 | `0x31` | `TIMER_DEINIT` | bits 1:0 id | — |
 
 An open-drain pin drives its pad only while its output is 0: `PIN_INIT`,
@@ -240,20 +244,32 @@ Words the I/O core writes (`0x800 + 4*i` in the hart's window):
 
 | Word | Name | Contents |
 | --- | --- | --- |
-| 0 | `VERSION` | `0x494F_0002`: protocol version 2 |
+| 0 | `VERSION` | `0x494F_0003`: protocol version 3 |
 | 1 | `PIN_IN` | The pin levels (`GPIO IN`), pushed when they change |
+| 2 | `PIN_FLAGS` | Two bits per pin: the edges seen since its `PIN_IRQ` (1 rising, 2 falling) |
 | 3 | `MS` | The island timer's millisecond count (mpy_iobr's tick crossing, not UPD) |
 | 4 | `US` | Its microsecond count (the same) |
 | 5 | `CYCLES` | io_clk cycles, pushed each millisecond |
 | 6 | `UART0` | Bits 15:0 bytes waiting in the RX ring, 27:16 room in the TX ring, bit 31 TX busy (queued or on the wire) |
 | 7 | `SEQ` | CMD words the I/O core has finished |
 | 8–11 | `TIMER0`–`3` | Expirations of each software timer |
+| 12–15 | `PIN_CNT` | An 8-bit count of armed edges per pin, four pins a word |
+| 16 | `UART0_EV` | Bits 7:0 RXIDLE events, 15:8 TXIDLE events, 23:16 the last triggers |
 
-`SEQ` orders commands against state-page reads: `machine` counts the CMD
-words it sends, and before a read whose answer depends on earlier
-commands (`Pin.value()`, `UART.any()`, `txdone()`) it waits until `SEQ`
-has caught up (`_fence`). A read with nothing in flight costs one more
-word load.
+`SEQ` orders commands against state-page reads: before a read whose
+answer depends on earlier commands (`Pin.value()`, `UART.any()`,
+`txdone()`), `_io.page` waits until `SEQ` equals the bridge's
+`CMD_SENT`. A read with nothing in flight costs one more word load.
+
+Event bits the I/O core raises (the hart's `EVT`):
+
+| Bit | Name | When |
+| --- | --- | --- |
+| 0 | `SOFT` | `micropython.schedule` (the hart sets it with `EVT_SET`) |
+| 1 | `KBD` | The console's armed interrupt character arrived (it is not passed on as a byte) |
+| 2 | `UART0` | An armed `UART.irq` trigger |
+| 3 | `TIMER` | A timer with a callback expired |
+| 4 | `PIN` | An armed pin edge |
 
 ## Boot
 
@@ -315,7 +331,12 @@ behind it. At start the firmware sets the timer's divider from `FREQ`
 and UART0 to 115200 8N1 (the console's rate and `machine.UART`'s
 default), so bytes that arrive before `machine.UART()` are kept. Phase 2
 polls; interrupts and `wfi` come with the events of phase 3. The image is
-1.9 KB of code.
+2.6 KB of code. Events (phase 3): the loop also counts latched pin edges
+(the GPIO block holds them in `STATUS`, so a short pulse is not lost),
+raises `TIMER` for timers with a callback, raises `UART0` for RXIDLE (bytes,
+then 20 bit times quiet) and TXIDLE, and turns the console's interrupt
+character into `KBD`. Ctrl-C is armed from the start on a `uart` or `usb`
+console, as `pyexec` arms it for a script.
 
 `make -C iocore/sw APP=<dir>` builds `build/iocore/<dir>/code.hex` and
 `data.hex` (one 32-bit word a line). `.vectors` and `.text` go in code
@@ -334,16 +355,114 @@ v1.29.0's signatures:
 | --- | --- |
 | `Pin(id, mode=-1, pull=-1, *, value=None)`, `init`, `value`, `__call__`, `on`, `off`, `high`, `low`, `toggle`, `mode`, `pull` | `PIN_*` commands; `value()` reads `PIN_IN` after `_fence`. Ids 0–15; modes `IN`, `OUT`, `OPEN_DRAIN`; pulls `PULL_UP`, `PULL_DOWN` |
 | `UART(0, baudrate=115200, bits=8, parity=None, stop=1, *, timeout=0, ...)`, `init`, `deinit`, `any`, `read`, `readinto`, `readline`, `write`, `flush`, `txdone` | `UART_*` commands, three bytes a word each way; `any()` and `txdone()` read `UART0`. 8N1 only (anything else is `ValueError`). `read()` with nothing waiting returns `None` |
-| `Timer(id, *, mode, freq, period, callback)`, `init`, `deinit` | `TIMER_*` commands; ids 0–3. Callbacks come with phase 3; the expirations are counted in the page |
+| `Timer(id, *, mode, freq, period, callback, hard=True)`, `init`, `deinit` | `TIMER_*` commands; ids 0–3; the callback gets the Timer (Events on the hart) |
+| `Pin.irq(handler=None, trigger=IRQ_FALLING\|IRQ_RISING, hard=False)` | `PIN_IRQ`; returns the irq object (`flags()`, `trigger()`); `irq(None)` disarms |
+| `UART.irq(handler, trigger, hard=False)` | `UART_IRQ`; `IRQ_RXIDLE` (64) and `IRQ_TXIDLE` (32), rp2's values |
+| `disable_irq()`, `enable_irq(state)` | `EVT_MASK` bit 1 |
 | `mem32` | The bridge window (above) |
 | `freq()` | The hart's clock, 100 MHz (a constant) |
-| `idle()` | Returns at once (phase 3 waits for an event) |
+| `idle()` | `_wfe` for an event or 1 ms |
 | `time.ticks_ms`, `ticks_us`, `ticks_cpu`, `ticks_add`, `ticks_diff` | `MS` and `US` from the page, `ticks_cpu` the hart's cycle counter (`_io.cpu()`); period 2^30, `extmod/modtime.c`'s arithmetic and `OverflowError` |
-| `time.sleep`, `sleep_ms`, `sleep_us` | Poll `US` until the time has passed, so a sleep is never shorter than asked (phase 3 idles instead) |
+| `time.sleep`, `sleep_ms`, `sleep_us` | `_wfe` for the time left on `US`, then again, so a sleep is never shorter than asked; each pass is a soft point, so callbacks run during a sleep |
 | `time.time`, `time_ns` | Seconds and nanoseconds since the I/O core started (there is no RTC) |
 
 `machine.Pin`, `UART` and `Timer` raise `OSError(ENODEV)` (19) when the
 I/O core is not running (`IOC_CTRL` bit 0 clear).
+
+## Events on the hart
+
+Planning §5 as built. The only `mpy_core` changes are these three:
+
+- **Soft points.** A flop, `soft_pt`, is set when `JUMP`,
+  `POP_JUMP_IF_TRUE/FALSE`, `JUMP_IF_TRUE/FALSE_OR_POP`, `POP_EXCEPT_JUMP`
+  or `UNWIND_JUMP`'s last jump retires (taken or not) in a frame that is
+  not firmware, and cleared in `S_DEC`. `S_FETCH` gains one arm after its
+  fault, spill and reload arms: `soft_pt && evt_q` (`evt_q` is
+  `evt_pend_i` through one flop) goes to `S_IRQ`, which calls the hook
+  `_irq_dispatch` with return kind `DISCARD` (the ordinary call path; the
+  hook frame is firmware, so it adds no traceback line) and comes back to
+  `S_FETCH` with `pc` unchanged. A pending async ALU result is written back
+  first, by `S_FETCH`'s existing write-back arm. With nothing pending the
+  arm is never taken, so no opcode takes another cycle.
+- **`_wfe(cycles)`**, a native: the core waits in `S_WFE` until `evt_q`
+  (returns `True`) or the timeout (returns `False`). `time.sleep*` and
+  `machine.idle()` use it; the plan's third wake source, a tick change,
+  is not needed, since the sleep computes its timeout from the tick.
+- **The heap lock.** `_hlock` and `_hunlock` (natives) move a 15-bit depth
+  that wraps like `gc_lock_depth`; `_hunlock` returns the new depth. `S_AL`
+  goes to `S_HLK` while the depth is not 0: a soft allocation (a
+  traceback entry) fails quietly, any other raises
+  `MemoryError("memory allocation failed, heap is locked")`, the fixed
+  message the image already carries; its object is the one allocation
+  let past the lock (`hl_skip`), or the emergency `MemoryError` if even
+  that fails.
+
+The new natives and the hook are left out of images without the board
+I/O firmware (`mpy_abi.IO_NATIVES`, `OPTIONAL_HOOKS`; the linker drops a
+trailing optional hook nobody defines), so those images are unchanged.
+To keep the core's register groups as they were (gate G3), the dispatch
+call and the locked-heap raise each have their own state rather than
+logic in the existing `S_FETCH` and `S_AL` arms, and the call enters
+`S_HOOK` directly, as boot does, since it has no arguments.
+
+`_irq_dispatch` (`upycore/firmware/io/irq.py`):
+
+1. Sets `EVT_MASK` bit 0, reads `EVT & EVT_EN` and clears those bits.
+2. `KBD`: clears the mask and raises `KeyboardInterrupt`, which the
+   ordinary unwinder carries into the interrupted frame (the hook frame
+   is a callee at the boundary).
+3. `PIN`, `TIMER`, `UART0`: compares the state page's counts with the
+   counts each handler has seen; each new event schedules a soft handler
+   (dropped if the queue is full, as `mp_sched_schedule` drops it) or
+   runs a hard one at once with the heap locked. An exception from a
+   hard handler prints `Uncaught exception in IRQ callback handler` and
+   the exception on stderr and disables the handler
+   (`shared/runtime/mpirq.c`). Several pin edges before the handler runs
+   give one call; a timer gives one per expiration, up to four at a time.
+4. Runs at most one scheduled callback (`py/scheduler.c`), protected: an
+   exception is printed on stdout (`mp_call_function_1_protected`) and
+   the program goes on.
+5. Sets `SOFT` again if the queue is not empty, and clears the mask.
+
+The handler table and the queue are ordinary heap objects in a dict
+reachable from sysroot word 28, so the collector needs no mirror. A
+traceback of an exception from a hard handler has no frames (none can be
+recorded with the heap locked), and, as `py/obj.c` does, then prints no
+`Traceback` header.
+
+The `_io` helpers `machine` uses (`cmd`, `cmd2`, `req`, `req2`, `page`,
+`fence`, `uart_rx`, `set_handler`, `evt_enable`, `disable_irq`,
+`enable_irq`, `wfe`) are firmware functions: no soft point falls inside
+firmware, so a callback never runs halfway through a command and its
+answer, as one never runs halfway through a C function on MicroPython.
+
+`micropython.schedule`, `heap_lock`, `heap_unlock` and `kbd_intr` are the
+board I/O firmware's in images that have it; `mpy_build.io_imports`
+gives it to any program that names them. The schedule queue holds 8
+(rp2's depth; the ninth with eight waiting raises `RuntimeError("schedule
+queue full")`). `machine.disable_irq()` sets `EVT_MASK` bit 1 and returns
+whether events were enabled; `enable_irq(state)` restores it. The boot of
+an image with the board I/O firmware sets `EVT_EN` bits 0 and 1, so the
+schedule and Ctrl-C are live from the first instruction of the program.
+
+Deviations from MicroPython:
+
+- **`hard=True` (decision D2).** A hard handler runs at the next soft
+  point (a loop jump), like a soft one, with the heap locked so an
+  allocation still raises; on a microcontroller it runs inside the
+  interrupt within microseconds. Here it waits tens to hundreds of hart
+  cycles, because delivery at any instruction needs a per-opcode check
+  that would slow every program. Work that needs microseconds belongs in
+  the I/O core's C handlers.
+- Ctrl-C, callbacks and the real schedule exist only in images with the
+  board I/O firmware: a program that uses none of `machine`, `time`, the
+  console streams or `micropython`'s event functions has the base
+  firmware, which has no `_irq_dispatch`, so nothing enables an event for
+  it. (Such a program is not interrupted by Ctrl-C on the UART console;
+  the REPL image, phase 4, has the board I/O firmware.)
+- `Pin.irq` coalesces edges that arrive before the handler runs into one
+  call (MicroPython schedules the pending handler once too, but a hard
+  handler there runs once per edge).
 
 ## Console
 
@@ -366,8 +485,9 @@ streams to `sys` (native modules with `read`, `readline`, `write`,
 one CR LF pair and echoes CR LF, backspace echoes `\b\x1b[K`, Ctrl-C
 raises `KeyboardInterrupt`, Ctrl-D on an empty line `EOFError`, escape
 sequences are dropped). With the `sim` strap there is no input, and
-`input()` raises `EOFError` as at the end of a stream. The REPL is
-phase 4.
+`input()` raises `EOFError` as at the end of a stream. The armed
+interrupt character raises `KeyboardInterrupt` at the next soft point. The
+REPL is phase 4.
 
 ## Benches and tests
 
@@ -419,7 +539,15 @@ line, the streams, a traceback) and `con_input` (`input()` with editing,
 are decoded at the pin. Every board I/O golden is written by hand and
 names the MicroPython source it follows.
 
-The plan's clock-ratio sweep runs the `io` and `console` areas at
+The `irq` area: `sched` (deferral, order, the full queue, an exception in
+a scheduled callback), `heap_lock` (nesting, the depth, the locked
+MemoryError), `pin_irq` (rising, falling, both, `flags()`, disarm,
+coalesced edges), `pin_irq_hard` (a hard handler, and one that allocates:
+the uncaught message, disabled), `timer_cb` (periodic, after `deinit`,
+ONE_SHOT, a soft callback), `disable_irq`, `uart_irq` (RXIDLE) and
+`ctrl_c` (Ctrl-C at the UART pin ends a running loop).
+
+The plan's clock-ratio sweep runs the `io`, `irq` and `console` areas at
 `io_clk` = hart/2 (the default, 20 ns), hart/1 (`--sim-arg
 +IO_CLK_NS=10`) and hart×1.5 (`+IO_CLK_NS=6.667`); the outputs match, so
 each golden holds at all three.

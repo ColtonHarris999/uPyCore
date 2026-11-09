@@ -140,6 +140,10 @@ module mpy_core
     input  logic [3:0]  ca_fault_reason_i,
     input  logic [31:0] ca_fault_addr_i,
 
+    // Board I/O: an enabled event is pending (mpy_iobr's flop). Checked only
+    // at a soft point (planning/rv_io_core_plan.md §5.1).
+    input  logic        evt_pend_i,
+
     output logic        halted_o,
     output logic [3:0]  halt_code_o,
     output logic [31:0] halt_value_o,
@@ -1004,7 +1008,12 @@ module mpy_core
         S_SL_CORE_LEN,
         S_SL_DONE,
         S_LA_OLD_CLEAR,
-        S_LA_APPEND
+        S_LA_APPEND,
+        // Board I/O (planning/rv_io_core_plan.md §5.1): the dispatch call,
+        // the heap lock, _wfe.
+        S_IRQ,
+        S_HLK,
+        S_WFE
     } state_e;
 
     state_e st, wret;
@@ -1196,6 +1205,17 @@ module mpy_core
     logic        halted;
     logic [3:0]  hcode;
     logic [31:0] hval, cyc, nops;
+    // Board I/O events (upycore/docs/mpy_io_core.md, Events on the hart).
+    // evt_q: evt_pend_i, registered. soft_pt: the opcode that just retired
+    // was a jump (JUMP, POP_JUMP_IF_*, JUMP_IF_*_OR_POP, POP_EXCEPT_JUMP,
+    // UNWIND_JUMP's last jump) in a frame that is not firmware; S_DEC clears
+    // it. In S_FETCH both flops set means call _irq_dispatch. hl_cnt: the
+    // heap-lock depth (heap_lock/heap_unlock, 15 bits, wrapping like
+    // gc_lock_depth); hl_r: it is not 0; hl_skip: the next allocation is the
+    // heap-locked MemoryError itself. wfe_n: _wfe's cycles left.
+    logic        evt_q, soft_pt, hl_r, hl_skip;
+    logic [14:0] hl_cnt;
+    logic [31:0] wfe_n;
     logic        trace;
 
     // fetch queue (mpy_fetch): FE_QD words read ahead of pc. Three is the
@@ -1964,6 +1984,7 @@ module mpy_core
             ca_byte_o<=0;ca_reverse_o<=0; ca_valid <= 1'b0; ca_dst <= 32'd0; ca_src <= 32'd0; ca_n <= 32'd0;
             halted <= 1'b0; hcode <= 4'd0; hval <= 32'd0;
             cyc <= 32'd0; nops <= 32'd0; trace <= 1'b0;
+            evt_q <= 1'b0; soft_pt <= 1'b0; hl_r <= 1'b0; hl_skip <= 1'b0; hl_cnt <= 15'd0; wfe_n <= 32'd0;
             fe_flush <= 1'b0;
             h_nq <= 32'd0; h_qext <= 32'd0; h_qextn <= 32'd0; qd_nxt <= S_BOOT;
             sp <= 7'd0; nloc <= 8'd0; rf_base <= 6'd0; spilled_reals <= 16'd0;
@@ -2019,6 +2040,8 @@ module mpy_core
             mb_valid_o <= 1'b0;
             trace <= 1'b0;
             if (!halted) cyc <= cyc + 32'd1;
+            evt_q <= evt_pend_i;
+            hl_r <= (hl_cnt != 15'd0) && !hl_skip;
             // A spill or a reload moves sp without a push or a pop.
             if (sp_hold) sp_hold <= 1'b0;
             else if (sp < sp_d) rf_mono <= 1'b0;
@@ -2710,13 +2733,19 @@ module mpy_core
                              MPY_FAULT_FLASH_STORE: halt(ABI_HALT_FLASH_STORE, ca_fault_addr_i);
                              default: halt(ABI_HALT_BUS, ca_fault_addr_i);
                          endcase
-                     end else if (aalu_pend && (sp >= 7'(RF_SPILL_AT) || (has_link && sp <= 7'(RF_RELOAD_AT)))) begin
-                         // A spill or reload moves the ring under the busy slot.
+                     end else if (aalu_pend && (sp >= 7'(RF_SPILL_AT) || (has_link && sp <= 7'(RF_RELOAD_AT)) ||
+                                                (soft_pt && evt_q))) begin
+                         // A spill or reload moves the ring under the busy slot
+                         // (and the dispatcher's call spills the ring).
                          if (aalu_go) begin aalu_ret <= S_FETCH; st <= S_AALU_WB; end
                      end else if (sp >= 7'(RF_SPILL_AT)) begin
                          rf_resume <= S_FETCH; st <= S_RF_SPILL;
                      end else if (has_link && sp <= 7'(RF_RELOAD_AT)) begin
                          rf_resume <= S_FETCH; st <= S_RF_RELOAD;
+                     end else if (soft_pt && evt_q) begin
+                         // A soft point with an event pending (S_IRQ calls
+                         // the dispatcher).
+                         st <= S_IRQ;
                      end else if (fe_avail != 6'd0) begin
                          dq_bytes <= d_bytes; dq_n <= d_n; st <= S_DEC;
                      end
@@ -2735,6 +2764,7 @@ module mpy_core
                    else begin
                        op <= d_op; arg <= d_arg; ext <= d_ext;
                        op_pc <= pc; pc <= pc + d_len;
+                       soft_pt <= 1'b0;
                        extv <= d_extv;
                        nops <= nops + 32'd1; trace <= 1'b1;
                        st <= S_EXEC;
@@ -2828,7 +2858,7 @@ module mpy_core
                     rf[`SX(6'(sp - 7'd1))] <= rf[`SX(6'(sp - 7'd2))];
                     go_next();
                 end
-                8'h42: begin pc <= jt_c; st <= S_FETCH; end
+                8'h42: begin pc <= jt_c; st <= S_FETCH; soft_pt <= !(fflags & FF_FW); end
                 8'h43, 8'h44, 8'h45, 8'h46: begin tr_v <= rf[`SX(6'(sp - 7'd1))]; gosub(S_TR, S_JT); end
                 8'h47: begin t[0] <= rf[`SX(6'(sp - 7'd1))]; at_q <= ABI_Q_EXIT_D; gosub_scr(SCR_AT, S_AT, S_SW_X); end
                 8'h48, 8'h49: begin
@@ -2838,7 +2868,7 @@ module mpy_core
                         gosub(S_XPUSH, S_FETCH);
                     end
                 end
-                8'h4a: begin pc <= jt_c; sw_k <= 2'd0; gosub(S_XPOP, S_FETCH); end
+                8'h4a: begin pc <= jt_c; sw_k <= 2'd0; gosub(S_XPOP, S_FETCH); soft_pt <= !(fflags & FF_FW); end
                 8'h40: begin
                     rf[`SX(sp)] <= vint(jt_c); rf[`SX(6'(sp + 7'd1))] <= vint({24'd0, ext});
                     sp <= sp + 7'd2; st <= S_UJ;
@@ -3354,6 +3384,7 @@ module mpy_core
                         8'h46: if (!tr_r) pc <= jt; else sp <= sp - 7'd1;
                         default: rf[`SX(6'(sp - 7'd1))] <= vbool(!tr_r);   // UNARY_OP NOT
                     endcase
+                    if (op[7:3] == 5'b01000) soft_pt <= !(fflags & FF_FW);   // 0x43-0x46
                     st <= S_FETCH;
                 end
 
@@ -3552,6 +3583,7 @@ module mpy_core
             S_UJ_L: if (uj[6:0] == 7'd0) begin
                         pc <= rf[`SX(6'(sp - 7'd1))][31:0];
                         sp <= sp - 7'd1 - (uj[7] ? 7'd4 : 7'd0);
+                        soft_pt <= !(fflags & FF_FW);
                         st <= S_FETCH;
                     end else if (xsp == 5'd0) begin
                         uj <= uj - 32'd1;
@@ -4443,6 +4475,14 @@ module mpy_core
                     ABI_N_ISINSTANCE: if (v0 != 32'd2) st <= S_NAT_FB;
                         else rd(ab_ptr(ab_lo + 8'd1), S_NAT_ISI);
                     ABI_N_ID: deliver(vint(v1), crk);
+                    // _wfe(cycles): wait for an event or the timeout; True if
+                    // an event ended it. _hlock / _hunlock: the heap lock.
+                    ABI_N_WFE: begin wfe_n <= v1; st <= S_WFE; end
+                    ABI_N_HLOCK: begin hl_cnt <= hl_cnt + 15'd1; deliver(VNONE, crk); end
+                    ABI_N_HUNLOCK: begin
+                        hl_cnt <= hl_cnt - 15'd1;
+                        deliver(vint({17'd0, 15'(hl_cnt - 15'd1)}), crk);
+                    end
                     ABI_N_WR, ABI_N_WE: begin
                         x4 <= ABI_SIM_BASE + 4 * ((nid == ABI_N_WR) ? ABI_SIM_STDOUT : ABI_SIM_STDERR);
                         if (tg(mv) == ABI_TAG_INT)
@@ -5243,7 +5283,27 @@ module mpy_core
                   else begin wr(wb_a + 4 * wb_i, wb_v[wb_i[2:0]], S_WB); wb_i <= wb_i + 4'd1; end
 
             // allocate al_n words -> al_a (zeroed); GC once on failure
-            S_AL: begin gc_alloc_req <= 1'b1; al_gc <= 1'b0; st <= S_AL_W; end
+            S_AL: begin
+                      al_gc <= 1'b0; hl_skip <= 1'b0;
+                      if (hl_r) st <= S_HLK;
+                      else begin gc_alloc_req <= 1'b1; st <= S_AL_W; end
+                  end
+            // The heap is locked: a soft allocation (a traceback entry) fails
+            // quietly; any other raises MemoryError("memory allocation failed,
+            // heap is locked"), whose object is the one allocation let past
+            // the lock (hl_skip clears hl_r for it; if the heap is full, it
+            // is the emergency MemoryError instead).
+            S_HLK: if (al_soft) begin al_ok <= 1'b0; al_a <= 32'd0; ret(); end
+                   else begin hl_skip <= 1'b1; raise_msg(ABI_MSG_HEAP_LOCKED); end
+            // The dispatcher's call, with pc where the soft point left it; it
+            // returns to S_FETCH. S_FETCH has already landed a pending async
+            // ALU result (the call spills the registers).
+            S_IRQ: begin
+                       // No arguments, so straight to S_HOOK, as boot calls _boot.
+                       soft_pt <= 1'b0;
+                       ab_lo <= 8'd32; ab_pe <= 8'd32; ab_nkw <= 8'd0; crk <= ABI_RK_DISCARD;
+                       ab_chunked <= 1'b0; hk_id <= ABI_HOOK_IRQ_DISPATCH; st <= S_HOOK;
+                   end
             S_AL_W: if (gc_alloc_done_i) begin
                 if (gc_alloc_ok_i) begin al_a <= gc_alloc_addr_i; al_ok <= 1'b1; ret(); end
                 else if (!al_gc) begin al_gc <= 1'b1; gosub(S_GC, S_AL_RT); end
@@ -5270,6 +5330,9 @@ module mpy_core
                 end
             end
             S_AL_RT: begin gc_alloc_req <= 1'b1; st <= S_AL_W; end
+            S_WFE: if (evt_q) deliver(VTRUE, crk);
+                   else if (wfe_n == 32'd0 || wfe_n[31]) deliver(VFALSE, crk);
+                   else wfe_n <= wfe_n - 32'd1;
             S_AL_OOM: wr(aoff(EMERG_ADDR, 12), VNULL, S_AL_OOM2);
             S_AL_OOM2: raise_val(vobj(EMERG_ADDR));
             S_AL_CLR: if (cv_k == x1) wr(aoff(EMERG_ADDR, 20), vint(al_n << 2), S_AL_OOM);

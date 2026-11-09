@@ -337,7 +337,13 @@ NATIVES = [
     # type(x) by the core's S_TYPEOF; type(name, bases, dict) and metaclass
     # calls go to _new__type_fb
     "new.type",
+    # Board I/O (planning/rv_io_core_plan.md §5.1; IO_NATIVES): emitted only
+    # into images with the board I/O firmware, so other images are unchanged.
+    "_wfe",      # _wfe(cycles) -> True on an event, False on the timeout
+    "_hlock",    # _hlock(): heap lock depth + 1
+    "_hunlock",  # _hunlock() -> the new depth
 ]
+IO_NATIVES = {"_wfe", "_hlock", "_hunlock"}
 NATIVE_ID = {name: i for i, name in enumerate(NATIVES)}
 
 # Firmware hook table: the core calls these firmware functions by index.
@@ -367,7 +373,11 @@ HOOKS = [
     "_super_method",  # _super_method(type, obj, name): super().name
     "_warn",          # _warn(code): print a runtime warning to stderr
     "_bind_wide",     # _bind_wide(fun, n_pos, directory): bind a chunked star call
+    # Board I/O (OPTIONAL_HOOKS): only images with the board I/O firmware
+    # define it, and a trailing hook nobody defines is left out of the table.
+    "_irq_dispatch",  # _irq_dispatch(): events at a soft point
 ]
+OPTIONAL_HOOKS = {"_irq_dispatch"}
 HOOK_ID = {name: i for i, name in enumerate(HOOKS)}
 
 # _raise codes. The firmware formats the message with the oracle's text.

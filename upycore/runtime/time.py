@@ -41,27 +41,30 @@ def ticks_diff(end, start):
     return ((end - start + _HALF) & _MASK) - _HALF
 
 
-def sleep_ms(ms):
-    # On the microsecond count, so the sleep is never shorter than asked
-    # (a millisecond edge can be up to 1 ms away).
-    _need()
-    if ms <= 0:
-        return None
-    us = ms * 1000
-    t = _rd(_US)
-    while ((_rd(_US) - t) & 0xFFFFFFFF) < us:
-        pass
-    return None
+_CPU_PER_US = 100     # the hart's cycles per µs (machine.freq() / 1e6)
 
 
 def sleep_us(us):
+    # On the microsecond count, so a sleep is never shorter than asked. The
+    # hart waits in _wfe until an event or the time left; each pass of the
+    # loop is a soft point, so callbacks run while it sleeps.
     _need()
     if us <= 0:
         return None
     t = _rd(_US)
-    while ((_rd(_US) - t) & 0xFFFFFFFF) < us:
-        pass
-    return None
+    while True:
+        left = us - ((_rd(_US) - t) & 0xFFFFFFFF)
+        if left <= 0:
+            return None
+        if left > 2:
+            _io.wfe((left - 1) * _CPU_PER_US)
+
+
+def sleep_ms(ms):
+    if ms <= 0:
+        _need()
+        return None
+    return sleep_us(ms * 1000)
 
 
 def sleep(s):
