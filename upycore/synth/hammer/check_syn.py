@@ -33,7 +33,10 @@ from mpy_synth import GC_SRAM_MACRO, SRAM_BLOCKS, SRAM_MACRO
 # percent fewer is normal; far fewer means logic was optimized away.
 # Core: production short-list mode 2, comparison-only buffer removed,
 # synth -noabc -flatten -noshare (see docs/benchmarks/shortlist/ppa.json).
-RTL_FLOPS = {"mpy_alu": 5573, "mpy_decode": 461, "mpy_core": 14713}
+# mpy_decode has no flops since S_DEC decodes the registered window (0: no
+# ratio check). The November 9 round added 38 (fp_pow's registered pack
+# exponent and shift amount).
+RTL_FLOPS = {"mpy_alu": 6180, "mpy_decode": 0, "mpy_core": 14751}
 
 BAD_WARNING = re.compile(
     r"latch|unresolved|black ?box|undriven|not driven|multiple driver|"

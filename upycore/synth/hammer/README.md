@@ -13,25 +13,26 @@ the tool and library setup stay exactly as the class has them.
 This flow produced the 18 ns post-route result and the Genus reports that
 `upycore/docs/timing_100mhz.md` and `timing_10ns.md` start from.
 
-## Before the next run (November 2026 RTL)
+## Before the next run (main c895f2d)
 
-- **`converted/` is regenerated** for this RTL (sv2v v0.0.13; against
-  0.0.13.1 the output differs only in sv2v's internal helper names). A
-  simulation built from `converted/mpy_core.v` runs pystone in exactly the
-  RTL's 6,635,675 cycles.
-- **Timing.** The round was compared with f15327a (whose full chip met
-  10 ns in synthesis and whose core closed at 15 ns after place and route) in an open flow (`upycore/tools/sta/`,
-  `docs/timing_10ns.md`): `mpy_core` and `mpy_soc` are at or below the
-  baseline's worst paths. Input-to-register paths are longer (about 40 %
-  of the register-to-register plateau; the constraints allow 50 %).
-- **Core port.** `mpy_core`'s `m_gnt_i` is now `m_busy_i` (a flop in
-  `mpy_soc`: its one-entry request skid is full).
-- **Reset.** `mpy_soc` synchronizes `rst_n_i` with two flops (`por_n`);
-  the false path covers only the port, so the reset tree from those flops
-  is timed (recovery/removal) in a chip run.
-- **Flops.** `mpy_core` grew by 587 flops (store-address FIFO, burst
-  counters, complex operands); `check_syn.py` has the new counts.
-- **Power.** `activity/upycore_pystone.saif.gz` is the new RTL's run.
+- **`converted/` must be regenerated** with `convert_rtl.sh` (sv2v); the
+  files and `RTL_STAMP` here are still from c788c64, so `sweep.sh` will
+  refuse them.
+- **Timing.** c788c64 met 12, 13 and 15 ns in Genus and failed 10 ns
+  (worst -192 ps, 64 paths). `docs/timing_10ns.md` ("After the November 8
+  Genus run") lists each failing path and its change: the core's address
+  adds no longer collapse into a shared ripple incrementer in front of
+  `m_addr`; the FPU's significand multiplier registers its operands; the
+  pow pack exponent and shift amount, the divider step count, the slice
+  length and `boot_err_o`'s layout check are registered or shortened.
+  Rerun at 10 ns with the same constraints and macros. If `m_addr` is still
+  in the report, its startpoint names the next address source.
+- **Cycles.** A float multiply (and float `**`) takes one more cycle; every
+  other workload is unchanged, pystone included. Boot takes one more cycle.
+- **Flops.** `mpy_alu` and `mpy_core` +38 (fp_pow); `check_syn.py` has the
+  counts. `mpy_decode` is combinational.
+- **Power.** `activity/upycore_pystone.saif.gz` is this RTL's run (the
+  c788c64 file is kept as `upycore_pystone_c788c64.saif.gz`).
 
 ## Do not commit class files
 
@@ -100,7 +101,7 @@ python3 ~/upycore/upycore/synth/hammer/check_syn.py
 It lists errors (marking the expected ones from Hammer's placeholder
 `DEFAULT_CLOCK`), warnings by id with the dangerous kinds marked, latch
 cells and black boxes in the netlist, and the flop count against the RTL
-(slang counts: `mpy_alu` 6148, `mpy_decode` 461, `mpy_core` 14862). Genus
+(slang counts: `mpy_alu` 6180, `mpy_core` 14751; `mpy_decode` has none). Genus
 drops constant and duplicate flops, so 85 to 100% of the RTL count is
 normal. It exits 1 if anything needs a look.
 
@@ -226,9 +227,12 @@ the switching activity of `mpy_core` running perf_bench `misc_pystone`
 (`activity/misc_pystone_timed.py`: 300 loops, MicroPython startup
 included: 6,635,675 cycles at the testbench's 10 ns clock; the benchmark
 itself is 6,262,469, the run less the 373,206-cycle
-`activity/misc_pystone_base.py`). It matches the RTL from the November
-benchmark round on (`main` c788c64: posted stores and burst loads, the
-core request skid, the new natives). `upycore_pystone_f15327a.saif.gz` is
+`activity/misc_pystone_base.py`). It matches the RTL of the 10 ns round
+(`main` c895f2d: registered multiplier operands, pow and boot registers).
+`upycore_pystone_c788c64.saif.gz` is the same run on the RTL of the
+November benchmark round (c788c64: posted stores and burst loads, the core
+request skid, the new natives; the same cycle counts).
+`upycore_pystone_f15327a.saif.gz` is
 the same run on the RTL from aba9ce0 to f15327a (timing pipelines toward
 10 ns, short-list engine, GC table SRAM; 12,769,713 cycles, benchmark
 12,172,954).
