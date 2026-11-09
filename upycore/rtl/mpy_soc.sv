@@ -454,7 +454,7 @@ module mpy_soc #(
             end
             if (io_q_v) begin
                 sim_ack <= 1'b1;
-                sim_rdata <= io_q_we ? 32'd0 : io_rdata;
+                sim_rdata <= io_rdata;     // mpy_iobr answers a store with 0
             end
         end
     end

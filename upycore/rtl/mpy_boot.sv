@@ -86,8 +86,9 @@ module mpy_boot #(
     assign src_w = use_fast ? fast_w : spi_w;
 
     // ------------------------------------------------------ stream decoder
-    // C_IERR is the IOCB section's error: it reports like C_ERR, but no new
-    // transition leads into C_ERR, so that state's logic is the image's.
+    // C_IERR is the IOCB section's error: one clock later it becomes C_ERR,
+    // so the count checks are not in C_ERR's own next-state logic and err_o
+    // is the image's compare.
     typedef enum logic [3:0] { C_MAGIC, C_COUNT, C_TAG, C_DATA, C_DONE, C_ERR,
                                C_IOCB, C_INC, C_IND, C_IOW, C_IERR } cst_e;
     cst_e        cst;
@@ -99,8 +100,8 @@ module mpy_boot #(
     logic [MPY_FLASH_IDX_W:0] widx;
 
     assign image_words_o = (nwords + 32'd7) & 32'hfffffff8;
-    assign stop  = (cst == C_DONE) || (cst == C_ERR) || (cst == C_IERR);
-    assign err_o = (cst == C_ERR) || (cst == C_IERR);
+    assign stop  = (cst == C_DONE) || (cst == C_ERR);
+    assign err_o = (cst == C_ERR);
 
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) begin
@@ -179,6 +180,7 @@ module mpy_boot #(
                     default: ;
                 endcase
             end
+            if (cst == C_IERR) cst <= C_ERR;
         end
     end
 

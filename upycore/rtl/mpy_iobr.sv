@@ -215,27 +215,28 @@ module mpy_iobr #(
     assign rsp_pop   = acc_i && !we_i && off_i == O_RSP && rsp_ne_r;
     assign conrx_pop = acc_i && !we_i && off_i == O_CON_RX && conrx_ne_r;
 
+    // The answer is three parts ORed (no priority chain): a page word the
+    // I/O core writes, a hart page word, or a register. A store answers 0.
+    logic [31:0] rd_up, rd_dn, rd_reg;
+    logic        is_reg;
+    assign is_reg = off_i[9:8] == 2'b00;
     always_comb begin
-        rdata_o = 32'h0;
-        if (is_up && off_i[$clog2(NUP)-1:0] == PG_MS[$clog2(NUP)-1:0])
-            rdata_o = ms_r;
-        else if (is_up && off_i[$clog2(NUP)-1:0] == PG_US[$clog2(NUP)-1:0])
-            rdata_o = us_r;
-        else if (is_up)
-            rdata_o = up_r[off_i[$clog2(NUP)-1:0]];
-        else if (is_dn)
-            rdata_o = dn_r[off_i[$clog2(NDN)-1:0]];
-        else case (off_i)
-            O_RSP:      rdata_o = rsp_ne_r ? rsp_head : 32'h0;
-            O_STATUS:   rdata_o = stat_r;
-            O_EVT:      rdata_o = evt_r;
-            O_EVT_EN:   rdata_o = evt_en_r;
-            O_EVT_MASK: rdata_o = {30'h0, mask_r};
-            O_IOC_CTRL: rdata_o = {30'h0, loaded_i, run_i};
-            O_CON_RX:   rdata_o = {conrx_ne_r, 23'h0, conrx_ne_r ? conrx_head : 8'h0};
-            O_CON_MODE: rdata_o = {30'h0, con_mode_i};
-            default:    rdata_o = 32'h0;
+        if (off_i[$clog2(NUP)-1:0] == PG_MS[$clog2(NUP)-1:0])      rd_up = ms_r;
+        else if (off_i[$clog2(NUP)-1:0] == PG_US[$clog2(NUP)-1:0]) rd_up = us_r;
+        else                                                       rd_up = up_r[off_i[$clog2(NUP)-1:0]];
+        rd_dn = dn_r[off_i[$clog2(NDN)-1:0]];
+        case (off_i[3:0])
+            4'(O_RSP):      rd_reg = rsp_ne_r ? rsp_head : 32'h0;
+            4'(O_STATUS):   rd_reg = stat_r;
+            4'(O_EVT):      rd_reg = evt_r;
+            4'(O_EVT_EN):   rd_reg = evt_en_r;
+            4'(O_EVT_MASK): rd_reg = {30'h0, mask_r};
+            4'(O_IOC_CTRL): rd_reg = {30'h0, loaded_i, run_i};
+            4'(O_CON_RX):   rd_reg = {conrx_ne_r, 23'h0, conrx_ne_r ? conrx_head : 8'h0};
+            4'(O_CON_MODE): rd_reg = {30'h0, con_mode_i};
+            default:        rd_reg = 32'h0;
         endcase
+        rdata_o = we_i ? 32'h0 : (({32{is_up}} & rd_up) | ({32{is_dn}} & rd_dn) | ({32{is_reg}} & rd_reg));
     end
 
     // stall_o: no local access on the next clock. Always on the clock after
