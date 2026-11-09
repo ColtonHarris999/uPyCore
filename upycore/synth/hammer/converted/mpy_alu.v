@@ -33,9 +33,6 @@ module upycore_umul_seq (
 	reg [ACC_W - 1:0] acc_r;
 	reg [BWP - 1:0] lo_r;
 	reg [(AW + BW) - 1:0] product_r;
-	wire [AW - 1:0] a_cur;
-	wire [BWP - 1:0] b_cur;
-	wire [ACC_W - 1:0] acc_cur;
 	wire [STEP - 1:0] chunk;
 	wire [(AW + STEP) - 1:0] pp;
 	wire [ACC_W - 1:0] sum;
@@ -43,26 +40,23 @@ module upycore_umul_seq (
 	wire accept;
 	wire last_step;
 	assign accept = (start_i && !busy_r) && !done_r;
-	assign a_cur = (busy_r ? a_r : op_a_i);
-	function automatic [BWP - 1:0] sv2v_cast_EDFA3;
-		input reg [BWP - 1:0] inp;
-		sv2v_cast_EDFA3 = inp;
-	endfunction
-	assign b_cur = (busy_r ? b_r : sv2v_cast_EDFA3(op_b_i));
-	assign acc_cur = (busy_r ? acc_r : {ACC_W {1'sb0}});
-	assign chunk = b_cur[STEP - 1:0];
-	assign pp = a_cur * chunk;
+	assign chunk = b_r[STEP - 1:0];
+	assign pp = a_r * chunk;
 	function automatic [ACC_W - 1:0] sv2v_cast_60BB9;
 		input reg [ACC_W - 1:0] inp;
 		sv2v_cast_60BB9 = inp;
 	endfunction
-	assign sum = (acc_cur >> STEP) + sv2v_cast_60BB9(pp);
+	assign sum = (acc_r >> STEP) + sv2v_cast_60BB9(pp);
+	function automatic [BWP - 1:0] sv2v_cast_EDFA3;
+		input reg [BWP - 1:0] inp;
+		sv2v_cast_EDFA3 = inp;
+	endfunction
 	assign lo_next = sv2v_cast_EDFA3(lo_r >> STEP) | (sv2v_cast_EDFA3(sum[STEP - 1:0]) << (BWP - STEP));
 	function automatic signed [CNT_W - 1:0] sv2v_cast_7B3D1_signed;
 		input reg signed [CNT_W - 1:0] inp;
 		sv2v_cast_7B3D1_signed = inp;
 	endfunction
-	assign last_step = (busy_r ? cnt_r == sv2v_cast_7B3D1_signed(NSTEP - 1) : NSTEP == 1);
+	assign last_step = cnt_r == sv2v_cast_7B3D1_signed(NSTEP - 1);
 	function automatic [(AW + BW) - 1:0] sv2v_cast_074AA;
 		input reg [(AW + BW) - 1:0] inp;
 		sv2v_cast_074AA = inp;
@@ -80,24 +74,26 @@ module upycore_umul_seq (
 		end
 		else begin
 			done_r <= 1'b0;
-			if (accept || busy_r) begin
-				if (busy_r && !start_i)
+			if (!busy_r) begin
+				a_r <= op_a_i;
+				b_r <= sv2v_cast_EDFA3(op_b_i);
+				acc_r <= 1'sb0;
+				cnt_r <= 1'sb0;
+				if (accept)
+					busy_r <= 1'b1;
+			end
+			else begin
+				b_r <= b_r >> STEP;
+				acc_r <= sum;
+				lo_r <= lo_next;
+				cnt_r <= cnt_r + 1'b1;
+				if (last_step)
+					product_r <= sv2v_cast_074AA({sum[ACC_W - 1:STEP], lo_next});
+				if (!start_i)
 					busy_r <= 1'b0;
-				else begin
-					a_r <= a_cur;
-					b_r <= b_cur >> STEP;
-					acc_r <= sum;
-					lo_r <= lo_next;
-					if (last_step) begin
-						busy_r <= 1'b0;
-						done_r <= 1'b1;
-						cnt_r <= 1'sb0;
-						product_r <= sv2v_cast_074AA({sum[ACC_W - 1:STEP], lo_next});
-					end
-					else begin
-						busy_r <= 1'b1;
-						cnt_r <= (busy_r ? cnt_r + 1'b1 : sv2v_cast_7B3D1_signed(1));
-					end
+				else if (last_step) begin
+					busy_r <= 1'b0;
+					done_r <= 1'b1;
 				end
 			end
 		end
@@ -625,9 +621,8 @@ module upycore_div (
 	assign div_zero_o = start_i && (op_b_i == 64'd0);
 	wire [6:0] lz_a;
 	wire [6:0] lz_b;
-	wire [7:0] bits_a;
-	wire [7:0] bits_b;
-	wire signed [8:0] n_q;
+	wire [7:0] n_q1;
+	wire n_q_pos;
 	reg [7:0] n_pad;
 	reg [63:0] rem_init;
 	reg [63:0] bits;
@@ -665,17 +660,12 @@ module upycore_div (
 	endfunction
 	assign lz_a = upycore_clz64(a_mag_r);
 	assign lz_b = upycore_clz64(b_mag_r);
+	assign n_q_pos = lz_a <= lz_b;
 	function automatic [7:0] sv2v_cast_8;
 		input reg [7:0] inp;
 		sv2v_cast_8 = inp;
 	endfunction
-	assign bits_a = 8'd64 - sv2v_cast_8(lz_a);
-	assign bits_b = 8'd64 - sv2v_cast_8(lz_b);
-	function automatic [8:0] sv2v_cast_9;
-		input reg [8:0] inp;
-		sv2v_cast_9 = inp;
-	endfunction
-	assign n_q = ($signed(sv2v_cast_9(bits_a)) - $signed(sv2v_cast_9(bits_b))) + 9'sd1;
+	assign n_q1 = (sv2v_cast_8(lz_b) - sv2v_cast_8(lz_a)) + 8'd2;
 	reg [7:0] n_pad_r;
 	function automatic [15:0] sv2v_cast_16;
 		input reg [15:0] inp;
@@ -684,12 +674,12 @@ module upycore_div (
 	always @(*) begin
 		if (_sv2v_0)
 			;
-		if (n_q <= 9'sd0)
+		if (!n_q_pos)
 			n_pad = 8'd0;
 		else if (RL == 2)
-			n_pad = (n_q[7:0] + 8'd1) & 8'hfe;
+			n_pad = n_q1 & 8'hfe;
 		else
-			n_pad = n_q[7:0];
+			n_pad = (sv2v_cast_8(lz_b) - sv2v_cast_8(lz_a)) + 8'd1;
 		rem_init = a_mag_r >> n_pad_r;
 		bits = a_mag_r << (8'd64 - n_pad_r);
 		nsteps = (RL == 2 ? sv2v_cast_16(n_pad_r >> 1) : sv2v_cast_16(n_pad_r));
@@ -2511,9 +2501,29 @@ module upycore_fp_pow (
 	endfunction
 	assign p_sh = ((sv2v_cast_14_signed(ey_r) - 14'sd52) + sv2v_cast_14_signed(el_r)) + sv2v_cast_14_signed(FP);
 	assign t_amt = -p_sh;
-	assign q_shifted = (p_sh >= 14'sd0 ? q_prod : (t_amt >= sv2v_cast_14_signed(QW) ? {QW {1'sb0}} : q_prod >> t_amt[7:0]));
-	assign p_huge = (p_sh >= 14'sd0 ? q_prod != {QW {1'sb0}} : q_shifted[QW - 1:91] != {((QW - 1) >= 91 ? QW - 91 : 93 - QW) * 1 {1'sb0}});
+	reg sh_pos_r;
+	reg t_big_r;
+	reg [7:0] t_amt_r;
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i) begin
+			sh_pos_r <= 1'b0;
+			t_big_r <= 1'b0;
+			t_amt_r <= 1'sb0;
+		end
+		else begin
+			sh_pos_r <= p_sh >= 14'sd0;
+			t_big_r <= t_amt >= sv2v_cast_14_signed(QW);
+			t_amt_r <= t_amt[7:0];
+		end
+	assign q_shifted = (sh_pos_r ? q_prod : (t_big_r ? {QW {1'sb0}} : q_prod >> t_amt_r));
+	assign p_huge = (sh_pos_r ? q_prod != {QW {1'sb0}} : q_shifted[QW - 1:91] != {((QW - 1) >= 91 ? QW - 91 : 93 - QW) * 1 {1'sb0}});
 	assign pfix_s = (psign_r ? -$signed({1'b0, pfix_r}) : $signed({1'b0, pfix_r}));
+	reg signed [13:0] pexp_r;
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i)
+			pexp_r <= 1'sb0;
+		else
+			pexp_r <= $signed({i_int_r[12], i_int_r}) + 14'sd1023;
 	wire [63:0] pack_res;
 	localparam [63:0] UPY_F64_PINF = 64'h7ff0000000000000;
 	function automatic [63:0] upycore_f64_pack_round;
@@ -2566,7 +2576,7 @@ module upycore_fp_pow (
 			end
 		end
 	endfunction
-	assign pack_res = upycore_f64_pack_round(1'b0, $signed({i_int_r[12], i_int_r}) + 14'sd1023, z_r[FW:36], z_r[35], z_r[34], |z_r[33:0]);
+	assign pack_res = upycore_f64_pack_round(1'b0, pexp_r, z_r[FW:36], z_r[35], z_r[34], |z_r[33:0]);
 	localparam [63:0] UPY_F64_PZERO = 64'h0000000000000000;
 	function automatic [12:0] sv2v_cast_13;
 		input reg [12:0] inp;
