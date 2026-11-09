@@ -285,3 +285,104 @@ Deviations from the plan:
 - An exception from a hard handler has no traceback frames (none can be
   recorded with the heap locked), so it prints no `Traceback` header, as
   `py/obj.c` does then.
+
+## Phase 4: remaining peripherals, system reset, the REPL
+
+Commits `7645cc8` and `fec3269` (the register stage for the ported
+blocks); the gates ran on `fec3269`.
+
+Built:
+
+- The epic branch's PWM, SPI, I2C, ADC, watchdog and pin-mux blocks as
+  `iocore_*` on the island's bus, their register logic unchanged. Two
+  changes to the watchdog: an expiry stops it (the island is not reset
+  with the hart, so a running watchdog would reset the hart every tick)
+  and a stop key the firmware uses for `machine.reset()`. Every access to
+  the six blocks goes through a register stage (`fec3269`): their write
+  logic from CVE2's store address had pushed the island's worst
+  open-flow path from 18.21 to 21.82 ns; with the stage it is 18.93 ns.
+- `machine` gains `PWM`, `SPI`, `I2C`, `ADC`, `WDT`, `reset`,
+  `soft_reset`, `reset_cause`, `unique_id`.
+- System reset: `mpy_soc` splits `pwr_n` (power on) from `por_n`, which a
+  system reset request (`SYS_RESET`, the watchdog) holds low for 32
+  clocks; the island, the bridge, `RESET_CAUSE` and `KEEP` stay up.
+  Before it the I/O core puts the peripherals back (`SYS RESET`).
+- The REPL (`upycore/firmware/io/repl.py`, REPL images only):
+  MicroPython v1.29.0's friendly REPL (banner, `__repl_print__`,
+  continuation with auto-indent, paste mode, Ctrl-A to E) and raw REPL
+  with raw-paste mode, following `pyexec.c` and `readline.c`; the mode
+  survives a soft reboot in `KEEP`. The I/O core cooks console output
+  (`\n` as `\r\n`).
+- The bench: `+UART_SCRIPT` host sessions, the SPI flash, I2C target and
+  ADC models. Unit benches: the epic's PWM, SPI, I2C and ADC benches,
+  ported, and a new watchdog bench.
+- Tests: the `system` area (`pwm_duty`, `spi_flash`, `i2c_mem`, `adc`,
+  `wdt`, `reset_soft`, `reset_hard`) and the `console` area's
+  `repl_friendly` and `repl_raw` (an `mpremote` session, raw-paste
+  included).
+
+| Gate | Result |
+| --- | --- |
+| G1 | PASS: 23 of 23 workloads at +0.000 % |
+| G2 | PASS: 536 of 536 pass; 505 with the baseline's cycles, 0 moved, 31 new |
+| G3 | PASS: `mpy_core` 577 of 578 matched (the renumbered anonymous net of phase 3), none slower by > 0.1; `mpy_soc` 1,104 of 1,105 matched, none slower by > 0.1 beyond the `hvalid` noise. Phase 3's `equality.a_i` is back within 0.1 ns, as flow noise would be |
+| G4 | PASS: 505 identical, 0 differ, 31 not in both trees |
+| G5 | PASS: island 175,207 µm² + `mpy_iobr` 180,577 µm² = 355,784 of 450,000 |
+
+
+Unit benches: 36 of 36 (adds the PWM, SPI, I2C, ADC and watchdog benches).
+
+Deviations from the plan and test changes:
+
+- The UART-console goldens (`con_print_uart`, `con_input_uart`,
+  `ctrl_c`) changed with the output cooking.
+- `uart_echo` and `uart_irq` send their bytes 8 ms after boot instead of
+  3 and 4 ms: `import machine` grew to about 3.5 ms with the phase 4
+  classes, and the bytes arrived before the programs were ready.
+- A command word with bit 31 set (channel `0x80` and up) is written as a
+  negative int: `_st` stores a small int's payload, and `0x80000000` is
+  not one (the watchdog's commands were lost until this was found).
+- A REPL image is an image built with `repl=True`, which runs its
+  program (an empty one in the tests) before the REPL, as rp2 runs
+  `main.py`; the plan's "no program in the image" is the empty program.
+- History, arrow keys and tab completion are not implemented in the
+  REPL's line editing.
+
+## Phase 5: synthesis handoff
+
+Commit `82e4f79` (phase 7 adds the USB domain to the same files).
+
+Built: `make_hammer_design.py --top mpy_soc` writes `io_clk` (20 ns),
+asynchronous to `core_clk`, every crossing bounded by `set_max_delay` to
+the faster period, the island's pads timed against `io_clk` and the
+synchronized pins untimed; the island's SRAMs as `fakeram_d4096_w32` and
+`fakeram_d2048_w32`; `mpy_dc_unit.py` takes the island and puts the sky130
+ICG cell in place of CVE2's behavioral clock gate; `convert_rtl.sh` and
+`sweep.sh` cover the island. The generated `mpy_soc` unit elaborates as
+one file in yosys-slang.
+
+Island Fmax in the open flow: 18.93 ns worst path (phase 4 RTL), about
+53 MHz against the 50 MHz `io_clk`; 19.96 ns with phase 7's USB decode.
+
+Phase 5 changes no file the simulator, the firmware or the STA flow
+reads, so its G1 to G4 are phase 4's.
+
+Not done (tools not available here): the plan's Genus run of `mpy_soc`
+at 10 ns with the island in; sv2v regeneration of `converted/mpy_core.v`
+and `converted/mpy_soc.v` (a downloaded sv2v binary could not be run),
+which the synthesis README marks stale.
+
+## Phase 6: measurements
+
+Commits `f313e32` (hooks and `io_measure.py`) and the measurements
+commit. The table is in `upycore/docs/mpy_io_core.md` (Measurements),
+the data in `upycore/docs/mpy_io_core_measurements.json`: GPIO toggles at
+94,000 to 129,000 changes/s from Python; pin edge to the first opcode of
+a soft `Pin.irq` handler 56.4 / 58.2 / 62.7 µs (min / mean / max over
+1,000 edges, none missed), 7.3 µs of it the I/O core's; a 1 kHz Timer's
+period σ 1.65 µs; UART transmit at line rate to 3 Mbaud; UART receive
+complete at 115200 baud but losing bytes from 460800 (the hart drains
+about 10 KB/s). Island power was not computed: there is no power engine
+here; the SAIF files for Genus or Joules are produced. Phase 6 changes
+only the bench and tools, so its G1 to G4 are phase 4's and phase 7's.
+
