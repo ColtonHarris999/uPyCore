@@ -121,12 +121,17 @@ def g3(a) -> int:
     return 1 if bad else 0
 
 
+# Registers renamed by the I/O work with their logic unchanged: the new name
+# is compared against the baseline's group of the old name.
+RENAMES = {"con_valid_r": "con_valid_o"}
+
+
 def load_sta(p: Path) -> dict[str, float]:
     out = {}
     for ln in p.read_text().splitlines():
         m = re.match(r"\s+([\d.]+)\s+(\S+)\s+<- (\S+)", ln)
         if m:
-            out[m.group(2)] = float(m.group(1))
+            out[RENAMES.get(m.group(2), m.group(2))] = float(m.group(1))
     return out
 
 

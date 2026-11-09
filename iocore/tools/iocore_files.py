@@ -27,7 +27,7 @@ HAZARD3_INCDIRS = ["vendor/hazard3/hdl"]
 
 ISLAND_RTL = [
     "upycore/rtl/bsg_mem_1rw_sync_mask_write_bit.sv",
-    "iocore/rtl/iocore_timer.sv", "iocore/rtl/iocore_uart.sv",
+    "iocore/rtl/iocore_timer.sv", "iocore/rtl/iocore_uart.sv", "iocore/rtl/iocore_bridge.sv", "iocore/rtl/iocore_gpio.sv",
     "iocore/rtl/iocore_ahb2obi.sv", "iocore/rtl/iocore_cpu.sv", "iocore/rtl/iocore_top.sv",
 ]
 

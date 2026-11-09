@@ -97,9 +97,19 @@ def main() -> int:
         if Path(f).name == m.SRAM_MODEL:
             return f"{rel}/sram_stub.sv"
         return f if "/" in f else f"upycore/rtl/{f}"
-    files = " ".join(src(f) for f in (args.rtl or m.TOPS[args.top]))
+    rtl = list(args.rtl or m.TOPS[args.top])
+    incs = list(args.inc) if args.rtl else list(m.INCDIRS.get(args.top, [])) + list(args.inc)
+    if "iocore/rtl/iocore_top.sv" in rtl and os.environ.get("STA_ISLAND") != "1":
+        # The I/O island runs on its own clock and is timed in its own run
+        # (iocore/tools/island_measure.py). Here it is a stub whose pins are
+        # flops, as the SRAM macros are, so the hart-domain run sees the
+        # bridge's FIFOs and nothing behind them. STA_ISLAND=1 keeps it.
+        rtl = [f for f in rtl if not f.startswith(("vendor/", "iocore/rtl/"))]
+        rtl.insert(rtl.index("mpy_soc.sv"), "iocore/rtl/sta/iocore_top_stub.sv")
+        incs = [d for d in incs if not d.startswith("vendor/")]
+    files = " ".join(src(f) for f in rtl)
     module = args.module or args.top
-    inc = " ".join(f"-I {d}" for d in ["upycore/rtl", *args.inc])
+    inc = " ".join(f"-I {d}" for d in ["upycore/rtl", *incs])
     params = " ".join(f"-G {p}" for p in args.param)
     lines = [
         f"read_slang -j 1 --single-unit --top {module} -DSYNTHESIS {inc} {params} {files}",

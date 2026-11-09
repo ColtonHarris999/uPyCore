@@ -21,9 +21,8 @@ module tb_iocore #(
     logic rst_n = 1'b0;
     always #(CLK_NS / 2.0) clk = ~clk;
 
-    logic        run, ld_we, ld_data;
-    logic [15:0] ld_idx;
-    logic [31:0] ld_wdata;
+    logic        run, ld_valid, ld_pop;
+    logic [48:0] ld_data;
     logic        txd, rxd;
     logic        dbg_valid, halt, sleep;
     logic [7:0]  dbg_byte;
@@ -33,8 +32,18 @@ module tb_iocore #(
 
     iocore_top #(.CORE(CORE), .MUL(MUL), .BAUD_RESET(16'(BAUD))) dut (
         .io_clk_i(clk), .io_rst_n_i(rst_n), .run_i(run),
-        .ld_we_i(ld_we), .ld_data_i(ld_data), .ld_idx_i(ld_idx), .ld_wdata_i(ld_wdata),
+        .ld_valid_i(ld_valid), .ld_data_i(ld_data), .ld_pop_o(ld_pop),
+        // No hart: the bridge's FIFOs read empty and never fill.
+        .cmd_pop_o(), .cmd_data_i(32'h0), .cmd_empty_i(1'b1), .cmd_level_i(6'h0),
+        .rsp_push_o(), .rsp_data_o(), .rsp_full_i(1'b0),
+        .evt_push_o(), .evt_data_o(), .evt_full_i(1'b0),
+        .con_pop_o(), .con_data_i(9'h0), .con_empty_i(1'b1), .con_level_i(7'h0),
+        .conrx_push_o(), .conrx_data_o(), .conrx_full_i(1'b0),
+        .upd_push_o(), .upd_data_o(), .upd_full_i(1'b0),
+        .dn_pop_o(), .dn_data_i(35'h0), .dn_empty_i(1'b1),
         .uart_rxd_i(rxd), .uart_txd_o(txd),
+        .gpio_o(), .gpio_oe_o(), .gpio_pu_o(), .gpio_pd_o(), .gpio_i(16'h0),
+        .us_gray_o(), .ms_gray_o(),
         .dbg_valid_o(dbg_valid), .dbg_byte_o(dbg_byte), .halt_o(halt), .halt_value_o(halt_value),
         .sleep_o(sleep)
     );
@@ -66,7 +75,7 @@ module tb_iocore #(
         string path, s;
         int ncode, ndata;
         fd_out = 0;
-        run = 1'b0; ld_we = 1'b0; ld_data = 1'b0; ld_idx = '0; ld_wdata = '0;
+        run = 1'b0; ld_valid = 1'b0; ld_data = '0;
         ncode = 0; ndata = 0;
         if ($value$plusargs("CODE=%s", path)) ncode = read_hex(path, code);
         if ($value$plusargs("DATA=%s", path)) ndata = read_hex(path, data);
@@ -77,12 +86,12 @@ module tb_iocore #(
         rst_n = 1'b1;
         // The load port, one word a clock, as mpy_boot drives it.
         for (int i = 0; i < ncode; i++) begin
-            @(negedge clk); ld_we = 1'b1; ld_data = 1'b0; ld_idx = 16'(i); ld_wdata = code[i];
+            @(negedge clk); ld_valid = 1'b1; ld_data = {1'b0, 16'(i), code[i]};
         end
         for (int i = 0; i < ndata; i++) begin
-            @(negedge clk); ld_we = 1'b1; ld_data = 1'b1; ld_idx = 16'(i); ld_wdata = data[i];
+            @(negedge clk); ld_valid = 1'b1; ld_data = {1'b1, 16'(i), data[i]};
         end
-        @(negedge clk); ld_we = 1'b0;
+        @(negedge clk); ld_valid = 1'b0;
         run = 1'b1;
         $display("IOC_LOAD code=%0d data=%0d words", ncode, ndata);
         if ($value$plusargs("UART_IN=%s", s)) begin

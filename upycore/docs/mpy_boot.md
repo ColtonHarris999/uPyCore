@@ -169,6 +169,26 @@ The last group is padded with zero words. Each image word is written with
 its tag in one SRAM write. The stream ignores page boundaries. A
 200 KB image is about 100 pages of 2 KiB.
 
+An image that uses board I/O is followed by the I/O core's firmware
+([`mpy_io_core.md`](mpy_io_core.md#boot)):
+
+| Word | Contents |
+| --- | --- |
+| next | `MPY_IOCB_MAGIC`, bytes `IOCB` (`0x4243_4F49`) |
+| next | Code word count `nc` (0 to 4,096) |
+| next | Data word count `nd` (0 to 2,048) |
+| then | `nc` code SRAM words, then `nd` data SRAM words |
+
+The loader reads one word past the image. If it is not `IOCB` (an erased
+flash reads `0xFFFF_FFFF`) the stream ends there: there is no section and
+the I/O core stays in reset. Otherwise each section word goes to the I/O
+island's load port (through a dual-clock FIFO), and the I/O core is
+released when the last one has been written. The SPI stream delivers a
+word every 64 clocks or more, far slower than the island takes them; the
+simulation shortcut waits while the FIFO is full. A count beyond the
+island's SRAM raises `boot_err_o`. `mpy_nand.py <image> --iocore <dir>`
+appends the section from the I/O core's `code.hex` and `data.hex`.
+
 ### SPI NAND
 
 `mpy_boot` talks to a standard SPI NAND (Winbond W25N, GigaDevice GD5F,
@@ -231,6 +251,9 @@ default `mpy_boot` takes a simulation-only shortcut. With `+IMAGE` and
 files and feeds it one word per cycle. The stream decoder and the SRAM
 writes are the same; only the SPI transport is skipped. That boot takes
 the stream length plus the SRAM clear and GC metadata initialization.
+With `+IOC_CODE` (and `+IOC_DATA`) the shortcut appends the I/O core's
+section; without, it ends the stream with one zero word, which the
+decoder reads as "no section".
 
 ```bash
 python3 upycore/tools/mpy_build.py run -v upycore/programs/hello.py          # shortcut

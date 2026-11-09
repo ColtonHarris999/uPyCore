@@ -18,6 +18,13 @@
 # disabled: kept, not booted. Goldens still come from the unix oracle.
 # oracle = false: the unix port cannot import a filesystem module, so the
 # golden is the frozen-module result and regen leaves it alone.
+# halt = "BUS": the core must stop with that halt (mpy_abi.HALT) instead of
+# exiting; stdout and stderr are still compared.
+#
+# The board I/O areas (io, irq, system, console, usb) run with the I/O core
+# (upycore/docs/mpy_io_core.md). The unix port has no machine module, so
+# their goldens are written by hand (oracle = false); each program names
+# the MicroPython v1.29.0 source its expected output follows.
 # mpyc = false: mpy-cross still boots the program. The host uPy2 compiler
 # skips it. Generator programs match mpy-cross, so they stay in the compare.
 
@@ -570,3 +577,10 @@ gen_yield_from_send = { file = "hw/generators/gen_yield_from_send.py" }
 gen_yield_from_range = { file = "hw/generators/gen_yield_from_range.py" }
 gen_genexp_collect = { file = "hw/generators/gen_genexp_collect.py" }
 gen_user_next = { file = "hw/generators/gen_user_next.py" }
+
+[io]
+bridge_loopback = { file = "hw/io/bridge_loopback.py", cycles = 40_000_000, timeout = 300, oracle = false }
+bridge_regs = { file = "hw/io/bridge_regs.py", oracle = false }
+bridge_misaligned = { file = "hw/io/bridge_misaligned.py", oracle = false, halt = "UNALIGNED" }
+bridge_unmapped = { file = "hw/io/bridge_unmapped.py", oracle = false, halt = "BUS" }
+mem32_align = { file = "hw/io/mem32_align.py", oracle = false }

@@ -117,7 +117,7 @@ Word 1 is the type pointer, or 0. Fields start at word 2. Heap words are
 | --- | --- | ---: | --- |
 | Flash | `0x0000_0000` | `I = align_up(image_bytes, 32)` | Linked image, in the on-chip image SRAM that `mpy_boot` fills from SPI NAND ([`mpy_boot.md`](mpy_boot.md)). First 8 bytes reserved |
 | SRAM | `0x2000_0000` | `524288 - I` | Frame reserve, schedule ring, handler table, roots, argument buffer, GC pool |
-| MMIO | `0x4000_0000` | 4 KB | UART, GPIO, timer, IRQ |
+| MMIO | `0x4000_0000` | 4 KB | The I/O bridge (`mpy_iobr`): registers and the state page |
 | Sim control | `0xE000_0000` | 256 B | Halt reason, cycle counter. Simulation only |
 
 An address outside these windows is a bus fault. `0x00F4_0000` is outside
@@ -172,27 +172,32 @@ nibble.
 The call stack is 32 frames. A 33rd spill faults. Software reports
 `RuntimeError: maximum recursion depth exceeded`.
 
-### MMIO offsets
+### MMIO window
 
-Offsets from `0x4000_0000`. `mpy_mem` decodes the window and stores words.
-UART, timer, and IRQ side effects are not in that module.
+Offsets from `0x4000_0000`. The window is the hart's bridge to the I/O
+core ([`mpy_io_core.md`](mpy_io_core.md#bridge)). `mpy_soc` answers the
+implemented words itself, beside the simulator page; `mpy_mem` answers
+every other address in the window with a bus fault (or the unaligned
+fault). The words are untagged: never a GC root, never heap.
 
 | Offset | Name |
 | --- | --- |
-| `0x00` | `UART_TX` |
-| `0x04` | `UART_RX` |
-| `0x08` | `GPIO_OUT` |
-| `0x0C` | `TIMER_COUNT` |
-| `0x10` | `IRQ_STATUS` |
-| `0x14` | `IRQ_ENABLE` |
-| `0x18` | `IRQ_HARD` |
-| `0x1C` | `IRQ_GIE` |
-| `0x20` | `IRQ_ACTIVE` |
-| `0x24` | `IRQ_TABLE` |
-| `0x28` | `SCHED_HEAD` |
-| `0x2C` | `SCHED_TAIL` |
-| `0x30` | `GPIO_IN` |
-| `0x34` | `GPIO_EDGE` |
+| `0x000` | `CMD` |
+| `0x004` | `RSP` |
+| `0x008` | `STATUS` |
+| `0x00C` | `EVT` |
+| `0x010` | `EVT_EN` |
+| `0x014` | `EVT_SET` |
+| `0x018` | `EVT_MASK` |
+| `0x01C` | `IOC_CTRL` |
+| `0x020` | `CON_RX` |
+| `0x024` | `CON_MODE` |
+| `0x800`–`0x87C` | State page, 32 words the I/O core writes |
+| `0xC00`–`0xC1C` | State page, 8 words the hart writes |
+
+The register list the draft hart-side peripheral block (`mpy_periph`,
+`mpy_mmio_pkg`) used at these offsets is not mapped: that block is not
+instantiated, and board I/O goes through the I/O core.
 
 The sim-control page is not a Cortex-M system-control block. Halt names
 for that page: clean return, uncaught exception, unsupported opcode, bad

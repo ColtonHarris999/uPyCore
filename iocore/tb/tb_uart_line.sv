@@ -20,7 +20,7 @@ module tb_uart_line #(
     real bit_ns = BIT_NS;
     int  n_rx = 0;
     int  n_ferr = 0;
-    int  fd = 0;          // decoded bytes go here when set (else the log)
+    int  fd = 0;          // decoded bytes go here when set (0: the log, -1: nowhere)
     byte q[$];            // and into this queue
     logic [7:0] sh;
 
@@ -58,8 +58,8 @@ module tb_uart_line #(
                 rx_byte_o = sh;
                 n_rx++;
                 q.push_back(sh);
-                if (fd != 0) begin $fwrite(fd, "%c", sh); $fflush(fd); end
-                else $write("%c", sh);
+                if (fd > 0) begin $fwrite(fd, "%c", sh); $fflush(fd); end
+                else if (fd == 0) $write("%c", sh);
                 rx_valid_o = ~rx_valid_o;
             end else
                 n_ferr++;

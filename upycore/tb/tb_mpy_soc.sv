@@ -8,6 +8,15 @@
 //   +STDOUT=<path> +STDERR=<path>           console streams (default: this log)
 //   +MAX_CYCLES=<n>                         give up after n cycles (default 50M)
 //   +TRACE=1                                one line per executed opcode
+//   +IOC_CODE=<hex> +IOC_DATA=<hex>         the I/O core's firmware: mpy_boot's simulation
+//                                           stream appends the IOCB section
+//   +IO_CLK_NS=<ns>                         io_clk period (default 20: 50 MHz; the hart's is 10)
+//   +CONSOLE=sim|uart|usb                   the console strap (default sim)
+//   +IOC_LOG=<path>                         the I/O core's SYS DEBUG bytes
+//   +UART_OUT=<path>                        bytes the UART0 line model decodes
+//   +UART_IN=<string> +UART_IN_US=<n>       bytes the line model sends, n µs after reset
+//   +UART_BAUD=<n>                          io_clk cycles per bit of the line model (434)
+//   +GPIO_LOOP=1                            wire pad i to pad i^8 (pins 0-7 to 8-15)
 //
 // The last line is `MPY_BOOT_ERROR`, `MPY_HALT code=<n> value=<hex> cycles=<n> ops=<n> gc=<n>`
 // or `MPY_TIMEOUT cycles=<n> ...` (upycore/tools/mpy_build.py parses it).
@@ -28,6 +37,42 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
     logic        nand_sck, nand_cs_n, nand_mosi, nand_miso;
     logic        boot_done, boot_err;
 
+    // The I/O island's clock, independent of the hart's.
+    real io_clk_ns = 20.0;
+    logic io_clk = 1'b0;
+    initial begin
+        real r;
+        if ($value$plusargs("IO_CLK_NS=%f", r)) io_clk_ns = r;
+        // Start a fraction of a period off the hart's clock.
+        #(io_clk_ns * 0.37);
+        forever #(io_clk_ns / 2.0) io_clk = ~io_clk;
+    end
+    logic [1:0] console_sel = 2'd0;
+    initial begin
+        string c;
+        if ($value$plusargs("CONSOLE=%s", c))
+            console_sel = (c == "uart") ? 2'd1 : (c == "usb") ? 2'd2 : 2'd0;
+    end
+    logic uart0_rxd, uart0_txd, ioc_dbg_valid;
+    logic [15:0] gpio_out, gpio_oe, gpio_pu, gpio_pd, gpio_in;
+    // Pads: a driven pad shows its output; an undriven one its pull (a
+    // pull-up reads 1), else 0. With +GPIO_LOOP pads i and i^8 are one net.
+    bit gpio_loop;
+    initial gpio_loop = $test$plusargs("GPIO_LOOP");
+    always_comb begin
+        for (int i = 0; i < 16; i++) begin
+            int j = i ^ 8;
+            if (gpio_oe[i]) gpio_in[i] = gpio_out[i];
+            else if (gpio_loop && gpio_oe[j]) gpio_in[i] = gpio_out[j];
+            else gpio_in[i] = gpio_pu[i] || (gpio_loop && gpio_pu[j]);
+        end
+    end
+    logic [7:0] ioc_dbg_byte;
+    logic term_rx_valid;
+    logic [7:0] term_rx_byte;
+    tb_uart_line u_term (.line_i(uart0_txd), .line_o(uart0_rxd),
+                         .rx_valid_o(term_rx_valid), .rx_byte_o(term_rx_byte));
+
     tb_spi_nand u_nand (.sck(nand_sck), .cs_n(nand_cs_n), .mosi(nand_mosi), .miso(nand_miso));
 
     mpy_soc #(.SHORTLIST_MAX(SHORTLIST_MAX), .SHORTLIST_MODE(SHORTLIST_MODE)) u_soc (
@@ -37,8 +82,32 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
         .cycles_o(cycles), .ops_o(ops), .gc_collections_o(gc_coll), .gc_free_o(gc_free),
         .trace_o(trace), .trace_pc_o(trace_pc), .trace_op_o(trace_op), .trace_sp_o(trace_sp),
         .nand_sck_o(nand_sck), .nand_cs_n_o(nand_cs_n), .nand_mosi_o(nand_mosi),
-        .nand_miso_i(nand_miso), .boot_done_o(boot_done), .boot_err_o(boot_err)
+        .nand_miso_i(nand_miso), .boot_done_o(boot_done), .boot_err_o(boot_err),
+        .io_clk_i(io_clk), .console_sel_i(console_sel),
+        .uart0_rxd_i(uart0_rxd), .uart0_txd_o(uart0_txd),
+        .gpio_o(gpio_out), .gpio_oe_o(gpio_oe), .gpio_pu_o(gpio_pu), .gpio_pd_o(gpio_pd), .gpio_i(gpio_in),
+        .ioc_dbg_valid_o(ioc_dbg_valid), .ioc_dbg_byte_o(ioc_dbg_byte)
     );
+
+    int fd_ioc = 0;
+    always @(posedge io_clk) if (ioc_dbg_valid && fd_ioc != 0) begin
+        $fwrite(fd_ioc, "%c", ioc_dbg_byte);
+        $fflush(fd_ioc);
+    end
+    initial begin
+        string path, s;
+        int baud, at_us;
+        if ($value$plusargs("IOC_LOG=%s", path)) fd_ioc = $fopen(path, "wb");
+        if (!$value$plusargs("UART_BAUD=%d", baud)) baud = 434;
+        u_term.set_bit_ns(io_clk_ns * baud);
+        if ($value$plusargs("UART_OUT=%s", path)) u_term.fd = $fopen(path, "wb");
+        else u_term.fd = -1;
+        if ($value$plusargs("UART_IN=%s", s)) begin
+            if (!$value$plusargs("UART_IN_US=%d", at_us)) at_us = 100;
+            #(at_us * 1us);
+            for (int i = 0; i < s.len(); i++) u_term.send(s[i]);
+        end
+    end
 
 `ifdef MPY_PROFILE
     `include "upycore/tb/mpy_profile.svh"

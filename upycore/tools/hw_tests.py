@@ -117,6 +117,9 @@ class Test:
     disabled: str | None = None
     # False: mpy-cross still boots it. ``--compiler mpyc`` skips it.
     mpyc: bool = True
+    # The core must stop with this halt (a name from mpy_abi.HALT, such as
+    # BUS for a bus fault) instead of exiting; the .exit golden is ignored.
+    halt: str | None = None
 
     @property
     def source(self) -> Path:
@@ -309,7 +312,13 @@ def run_device(t: Test, compiler: str = "mpy-cross") -> Outcome:
         want_out, want_err, want_code = _read_golden(t)
     except FileNotFoundError as exc:
         return Outcome(t, False, str(exc), cycles=res.cycles, halt=res.halt)
-    detail = compare_streams(res.stdout, res.stderr, res.exit_code, want_out, want_err, want_code)
+    if t.halt is not None:
+        got_code = want_code if res.halt == t.halt else None
+        detail = compare_streams(res.stdout, res.stderr, got_code, want_out, want_err, want_code)
+        if res.halt != t.halt:
+            detail = f"halt {res.halt}, expected {t.halt}\n" + detail
+    else:
+        detail = compare_streams(res.stdout, res.stderr, res.exit_code, want_out, want_err, want_code)
     if detail:
         if res.exit_code is None:
             detail = f"{res.halt} value={res.value:#x} cycles={res.cycles}\n" + detail
@@ -335,6 +344,9 @@ def run_tests(tests: list[Test], jobs: int, compiler: str = "mpy-cross") -> list
         )
     build.build_sim()
     build.build_firmware()
+    if any(build.io_imports([t.source]) for t in tests if t.source.is_file()):
+        build.build_firmware(io=True)
+        build.build_iocore_fw()
     # The workers share the frozen-module cache; fill it before they start so
     # none links a .mpy another is still writing.
     build.frozen_runtime_specs()
