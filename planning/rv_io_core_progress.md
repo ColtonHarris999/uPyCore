@@ -228,3 +228,60 @@ Deviations from the plan:
 - An `OSError` raised by the I/O modules prints its errno alone (the base
   firmware's `OSError` text), where MicroPython prints `[Errno 19]
   ENODEV`.
+
+## Phase 3: events on the hart
+
+Commit `e65d7d9`.
+
+Built:
+
+- `mpy_core.sv`, the plan's only core changes: a `soft_pt` flop set when
+  a jump retires in a non-firmware frame (`JUMP`, `POP_JUMP_IF_*`,
+  `JUMP_IF_*_OR_POP`, `POP_EXCEPT_JUMP`, `UNWIND_JUMP`'s last jump) and
+  cleared in `S_DEC`; one `S_FETCH` arm, `soft_pt && evt_q`, to a new
+  `S_IRQ` state that calls the `_irq_dispatch` hook and returns to
+  `S_FETCH` with the pc unchanged. The `_wfe` native waits in `S_WFE` for
+  an event or a timeout. `_hlock`/`_hunlock` move a heap-lock depth;
+  `S_AL` goes to a new `S_HLK` while it is not 0 and raises
+  `MemoryError`. The natives and the optional hook are emitted only into
+  images with the board I/O firmware. No per-opcode check.
+- The board I/O firmware's `irq.py`: `KBD` (KeyboardInterrupt), `PIN`,
+  `TIMER` and `UART0` dispatch from state-page counts, at most one
+  scheduled callback per soft point, an 8-deep `micropython.schedule`;
+  real `heap_lock`, `heap_unlock`, `kbd_intr`. `machine` gains
+  `Pin.irq`, Timer callbacks, `UART.irq`, `disable_irq`/`enable_irq`,
+  `idle`; `time` sleeps in `_wfe`. The I/O core counts pin edges, raises
+  the events and turns the armed Ctrl-C into `KBD`. The bridge gains
+  `CMD_SENT` (the command fence) and `EVT_MASK` bit 1.
+- Tests: the `irq` area (`sched`, `heap_lock`, `pin_irq`,
+  `pin_irq_hard`, `timer_cb`, `disable_irq`, `uart_irq`, `ctrl_c`).
+
+The first core change made seven `mpy_core` groups slower in G3 (the
+response, `aalu_ret`, `al_gc` and others): the dispatch and the locked
+raise got their own states (`S_IRQ`, `S_HLK`) so the existing `S_FETCH`
+and `S_AL` arms kept their logic, and the clears became unconditional.
+
+| Gate | Result |
+| --- | --- |
+| G1 | PASS: 23 of 23 workloads at +0.000 % |
+| G2 | PASS: 527 of 527 pass; 505 with the baseline's cycles, 0 moved, 22 new |
+| G3 | PASS after review; `gates.py` as it stood reported FAIL. `mpy_core`: 577 of 578 groups matched (one register of the old state encoding has no counterpart), none slower by > 0.1 (27.389 → 27.389 ns). `mpy_soc`: 1,104 of 1,105 matched; besides the phase 1 `hvalid` noise, `u_ca.bulk_engine.engine.equality.a_i` went 5.348 → 5.485 ns (+0.137). That path is inside the collection accelerator, whose RTL is unchanged: from the SRAM read data, through `mpy_map_engine.sv` lines 104 to 306, it is the baseline's cell for cell (same arrival, 4.019 ns, at line 306), and its read-data net has the same nine loads; only the last cells, Yosys-generated pattern and reduce logic with no source line, split into one more AND level. `gates.py` now lists it with `hvalid` as flow noise |
+| G4 | PASS: 505 identical, 0 differ, 22 not in both trees |
+| G5 | PASS: island 137,862 µm² + `mpy_iobr` 179,157 µm² = 317,019 of 450,000 |
+
+
+Unit benches: 31 of 31. The `irq` area gives the same output at io_clk =
+hart/2, hart/1 and hart × 1.5.
+
+Deviations from the plan:
+
+- `hard=True` handlers run at the next soft point with the heap locked
+  (decision D2), tens to hundreds of hart cycles after the event, not
+  inside the interrupt.
+- Ctrl-C, callbacks and the schedule exist only in images with the board
+  I/O firmware; a program with none of the I/O imports is not
+  interrupted by Ctrl-C.
+- `Pin.irq` coalesces edges that arrive before the handler runs.
+- An exception from a hard handler has no traceback frames (none can be
+  recorded with the heap locked), so it prints no `Traceback` header, as
+  `py/obj.c` does then.

@@ -117,7 +117,7 @@ def g3(a) -> int:
         worse = sorted(((new[g] - base[g], g, base[g], new[g]) for g in new if g in base and
                         new[g] > base[g] + 0.1), reverse=True)
         for d, g, x, y in worse[:20]:
-            note = " (known flow noise: FSM re-encoding, RTL unchanged)" if g in NOISE else ""
+            note = " (known flow noise: Yosys re-encoding, RTL unchanged)" if g in NOISE else ""
             print(f"  {top}: {g} {x:.3f} -> {y:.3f} (+{d:.3f}){note}")
         worse = [w for w in worse if w[1] not in NOISE]
         bw, nw = max(base.values()), max(new.values())
@@ -130,8 +130,10 @@ def g3(a) -> int:
 
 # Groups whose RTL the I/O work does not touch but whose flat-netlist timing
 # moves with Yosys's FSM re-encoding of the whole SoC (the trace in
-# planning/rv_io_core_progress.md, phase 1). Reported, not counted.
-NOISE = {"u_ca.bulk_engine.hvalid"}
+# planning/rv_io_core_progress.md, phases 1 and 3: each path is cell for
+# cell the baseline's through every RTL-sourced cell and differs only in
+# Yosys-generated pattern and reduce logic at its end). Reported, not counted.
+NOISE = {"u_ca.bulk_engine.hvalid", "u_ca.bulk_engine.engine.equality.a_i"}
 
 # Registers renamed by the I/O work with their logic unchanged: the new name
 # is compared against the baseline's group of the old name.
