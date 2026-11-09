@@ -172,6 +172,18 @@ Cycle cost on the same images (`clock_bench.py`, `c788c64` against now):
 and the other project programs) is unchanged to the cycle. At 10 ns
 against the 12 ns that met, that is 0.83–0.86× the execution time.
 
+Verification of this round: hardware suite 505 of 505 (mpy-cross,
+including the `compiler` and `gc` areas); all 28 unit benches, including
+`mpy_numeric` (162,299 checks), `mpy_alu`, `upycore_fp_subnormal` and
+`mpy_boot`; outputs identical on every `clock_bench.py` workload. Built
+with Verilator 5.038: 5.032 stops with an internal error (V3Delayed,
+"Multiple Write refs on LHS of NBA") on `mpy_gc.sv` at `c788c64` itself.
+
+Backend: regenerate `converted/*.v` and `RTL_STAMP` on `synth` from this
+commit and rerun Genus at 10 ns with the same constraints and macros. If
+`m_addr` is still in the report, its startpoint names the next source;
+any `base + K` address left in the case is a candidate for `aoff()`.
+
 ## Cycle cost
 
 Same images on the baseline and the new simulator (`upycore/tools/clock_bench.py`):
