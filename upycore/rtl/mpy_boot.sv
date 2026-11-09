@@ -86,8 +86,10 @@ module mpy_boot #(
     assign src_w = use_fast ? fast_w : spi_w;
 
     // ------------------------------------------------------ stream decoder
+    // C_IERR is the IOCB section's error: it reports like C_ERR, but no new
+    // transition leads into C_ERR, so that state's logic is the image's.
     typedef enum logic [3:0] { C_MAGIC, C_COUNT, C_TAG, C_DATA, C_DONE, C_ERR,
-                               C_IOCB, C_INC, C_IND, C_IOW } cst_e;
+                               C_IOCB, C_INC, C_IND, C_IOW, C_IERR } cst_e;
     cst_e        cst;
     logic [15:0] ioc_nc, ioc_nd, ioc_i;
     logic        ioc_sel;
@@ -97,8 +99,8 @@ module mpy_boot #(
     logic [MPY_FLASH_IDX_W:0] widx;
 
     assign image_words_o = (nwords + 32'd7) & 32'hfffffff8;
-    assign stop  = (cst == C_DONE) || (cst == C_ERR);
-    assign err_o = (cst == C_ERR);
+    assign stop  = (cst == C_DONE) || (cst == C_ERR) || (cst == C_IERR);
+    assign err_o = (cst == C_ERR) || (cst == C_IERR);
 
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) begin
@@ -123,8 +125,10 @@ module mpy_boot #(
         end else begin
             ld_we_o <= 1'b0;
             ioc_we_o <= 1'b0;
-            // done_o rises once the last load write has gone out.
-            if (cst == C_DONE && !ld_we_o && !ioc_we_o) done_o <= 1'b1;
+            // done_o rises once the last load write has gone out. The last
+            // IOCB word may still be on its way to the island; mpy_soc
+            // releases the I/O core only once LD has drained.
+            if (cst == C_DONE && !ld_we_o) done_o <= 1'b1;
             if (src_v) begin
                 unique case (cst)
                     C_MAGIC: cst <= (src_w == MPY_BOOT_MAGIC) ? C_COUNT : C_ERR;
@@ -152,13 +156,13 @@ module mpy_boot #(
                     C_IOCB: cst <= (src_w == MPY_IOCB_MAGIC) ? C_INC : C_DONE;
                     C_INC: begin
                         ioc_nc <= src_w[15:0];
-                        cst <= (src_w > 32'(IOC_CODE_WORDS)) ? C_ERR : C_IND;
+                        cst <= (src_w > 32'(IOC_CODE_WORDS)) ? C_IERR : C_IND;
                     end
                     C_IND: begin
                         ioc_nd  <= src_w[15:0];
                         ioc_i   <= '0;
                         ioc_sel <= (ioc_nc == 16'd0);
-                        cst <= (src_w > 32'(IOC_DATA_WORDS)) ? C_ERR :
+                        cst <= (src_w > 32'(IOC_DATA_WORDS)) ? C_IERR :
                                (ioc_nc == 16'd0 && src_w == 32'd0) ? C_DONE : C_IOW;
                         if (src_w <= 32'(IOC_DATA_WORDS)) ioc_loaded_o <= 1'b1;
                     end

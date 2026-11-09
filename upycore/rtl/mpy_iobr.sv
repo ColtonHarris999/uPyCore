@@ -205,8 +205,15 @@ module mpy_iobr #(
     assign is_dn = off_i[9:8] == 2'b11;
     assign cmd_push  = acc_i && we_i && off_i == O_CMD;
     assign dn_push   = acc_i && we_i && is_dn;
-    assign rsp_pop   = acc_i && !we_i && off_i == O_RSP;
-    assign conrx_pop = acc_i && !we_i && off_i == O_CON_RX;
+    // Status the hart reads comes from flops (stat_r, rsp_ne_r, conrx_ne_r),
+    // a clock old: the synchronized pointers' gray-to-binary and level
+    // arithmetic stay out of the answer path. A pop is gated by the same
+    // flop, so it never takes a word the hart was not shown; with one bridge
+    // access every other clock, the flop has seen the last pop.
+    logic [31:0] stat_r;
+    logic        rsp_ne_r, conrx_ne_r;
+    assign rsp_pop   = acc_i && !we_i && off_i == O_RSP && rsp_ne_r;
+    assign conrx_pop = acc_i && !we_i && off_i == O_CON_RX && conrx_ne_r;
 
     always_comb begin
         rdata_o = 32'h0;
@@ -219,14 +226,13 @@ module mpy_iobr #(
         else if (is_dn)
             rdata_o = dn_r[off_i[$clog2(NDN)-1:0]];
         else case (off_i)
-            O_RSP:      rdata_o = rsp_empty ? 32'h0 : rsp_head;
-            O_STATUS:   rdata_o = {!rsp_empty, con_wl, 5'h0, !conrx_empty, con_full, cmd_full,
-                                   3'h0, rsp_rl, 2'h0, cmd_wl};
+            O_RSP:      rdata_o = rsp_ne_r ? rsp_head : 32'h0;
+            O_STATUS:   rdata_o = stat_r;
             O_EVT:      rdata_o = evt_r;
             O_EVT_EN:   rdata_o = evt_en_r;
             O_EVT_MASK: rdata_o = {30'h0, mask_r};
             O_IOC_CTRL: rdata_o = {30'h0, loaded_i, run_i};
-            O_CON_RX:   rdata_o = {!conrx_empty, 23'h0, conrx_empty ? 8'h0 : conrx_head};
+            O_CON_RX:   rdata_o = {conrx_ne_r, 23'h0, conrx_ne_r ? conrx_head : 8'h0};
             O_CON_MODE: rdata_o = {30'h0, con_mode_i};
             default:    rdata_o = 32'h0;
         endcase
@@ -246,10 +252,16 @@ module mpy_iobr #(
         if (!rst_n_i) begin
             evt_r <= 32'h0; evt_en_r <= 32'h0; mask_r <= 2'b00;
             stall_o <= 1'b0; evt_pend_o <= 1'b0;
+            stat_r <= 32'h0; rsp_ne_r <= 1'b0; conrx_ne_r <= 1'b0;
             for (int i = 0; i < NUP; i++) up_r[i] <= 32'h0;
             for (int i = 0; i < NDN; i++) dn_r[i] <= 32'h0;
         end else begin
             stall_o <= stall_n;
+            stat_r <= {!rsp_empty, con_wl, 5'h0, !conrx_empty, con_full, cmd_full,
+                       3'h0, rsp_rl, 2'h0, cmd_wl};
+            // A pop this clock empties the flop's view now, not a clock late.
+            rsp_ne_r <= !rsp_empty && !(rsp_pop && rsp_rl == 5'd1);
+            conrx_ne_r <= !conrx_empty && !conrx_pop;
             // Events: the island's set-masks and EVT_SET set bits; a store of
             // 1s to EVT clears them (a set on the same clock wins).
             evt_r <= (evt_r & ~((acc_i && we_i && off_i == O_EVT) ? wdata_i : 32'h0))
