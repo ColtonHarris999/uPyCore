@@ -1,12 +1,12 @@
 # Board I/O through an RV32 I/O core
 
-Status: **plan, for review.** Nothing here is built on `main`. Branch:
-`rv-io-core`, from `main` `c895f2d`.
+Status: **plan, decisions made (§11).** Nothing here is built on `main`.
+Branch: `rv-io-core`, from `main` `c895f2d`.
 
 Goal: uPyCore behaves like a MicroPython microcontroller board: `machine.Pin`,
 `UART`, `Timer`, `PWM`, `SPI`, `I2C`, `ADC`, `WDT`, pin and timer callbacks,
-`micropython.schedule`, Ctrl-C, `time.sleep_ms`/`ticks_ms`, and a UART
-console with the REPL. Board I/O goes through a small RV32 core (the **I/O
+`micropython.schedule`, Ctrl-C, `time.sleep_ms`/`ticks_ms`, and a USB (or
+UART) console with the REPL. Board I/O goes through a small RV32 core (the **I/O
 core**) that owns every peripheral. The hart reaches it through one
 memory-mapped bridge.
 
@@ -54,7 +54,7 @@ must not be undone. Every phase below has a gate that checks this (§8).
                                             ├─ EVT register ◀─ sync ─┼──    ├─ timer, ticks
                                             └─ state page (dual-port)┼──    ├─ UART, GPIO, PWM, pin mux
                evt_pend (flop) ──▶ mpy_core                          |      ├─ SPI, I2C, ADC, WDT
-                                                                     |      └─ (later) USB SIE
+                                                                     |      └─ USB SIE (usb_clk, 48 MHz)
 ```
 
 The rules that keep the hart fast:
@@ -98,10 +98,10 @@ picks one. Whichever is chosen:
 | --- | --- |
 | ISA | RV32IMC or RV32EMC, no FPU. Machine mode only |
 | Interrupts | A local interrupt controller: timer, each peripheral, the bridge's CMD-not-empty. `wfi` gates the core when idle |
-| Code SRAM | 8 KB (board I/O); 16 KB if USB lands (§7) |
-| Data SRAM | 4 KB (board I/O); 8 KB with USB |
+| Code SRAM | 16 KB (board I/O plus TinyUSB; the epic branch's USB firmware was about 10 KB) |
+| Data SRAM | 8 KB |
 | Bus | One simple valid/ready bus; peripherals are word-addressed slaves |
-| Clock | `io_clk`, set by a strap or a divider; simulation default 50 MHz |
+| Clock | `io_clk`, set by a strap or a divider; simulation default 50 MHz. The USB SIE has its own 48 MHz `usb_clk` |
 
 ### 3.2 Peripherals (on the I/O core's bus, not the hart's)
 
@@ -133,7 +133,7 @@ One event loop plus interrupt handlers:
 
 The build is `make -C iocore/sw` with the riscv GCC and picolibc packages the
 epic branch documents (`coproc/sw/TOOLCHAIN.md`). The image goes into the
-boot stream (§4.5). Size gate: board I/O firmware ≤ 6 KB code, ≤ 2 KB data.
+boot stream (§4.5). Size gate: board I/O plus USB firmware ≤ 14 KB code, ≤ 7 KB data (headroom inside the 16 + 8 KB SRAMs).
 
 ## 4. The hart-side bridge (`mpy_iobr.sv`, in `mpy_soc`)
 
@@ -165,6 +165,9 @@ simulator page itself, ordered behind outstanding memory acks (`c_out`). Add
 | `0x014` | `EVT_SET` | A store of 1s sets those bits from the hart (`micropython.schedule`, the soft event) |
 | `0x018` | `EVT_MASK` | Bit 0 masks delivery while a callback runs. Firmware sets it in `_irq_dispatch` and clears it on return |
 | `0x01C` | `IOC_CTRL` | I/O core run/hold and the firmware-loaded flag; read-only to programs |
+| `0x020` | `CON_RX` | A load pops one console input byte (UART RX or CDC OUT): bit 31 valid, bits 7:0 the byte |
+| `0x024` | `CON_MODE` | Read-only: the console strap (0 `sim`, 1 `uart`, 2 `usb`) |
+| — | console TX | Not a register: in `uart`/`usb` mode, `mpy_soc` redirects the simulator page's `SIM_STDOUT`/`SIM_STDERR` stores into a 64-byte CON FIFO to the I/O core, tagged stdout or stderr (§5.4) |
 | `0x800`–`0xFFF` | State page | 2 KB dual-port RAM. The hart reads and writes words; the I/O core owns the layout in §4.3 |
 
 Word access only, as in the epic branch's mailbox. A CMD word is a channel
@@ -288,11 +291,31 @@ from the system roots, so the collector needs no mirror.
 
 ### 5.4 Console
 
-The default console stays the simulator page, so every existing golden file
-stays valid. A boot strap (`+CONSOLE=uart` in the bench, a pin on the chip)
-sends `sys.stdout`/`sys.stdin` through the I/O core's UART, which enables the
-REPL and raw REPL (`mpremote`). `_wr` keeps its fast path; only the console
-redirect checks the strap.
+The console on the chip is the I/O core's **USB CDC** port by default, as
+on RP2 boards, and its **UART** by a boot strap. The simulator page remains as
+the test and semihosting console. The strap is `console_sel_i[1:0]`:
+`+CONSOLE=sim|uart|usb` in the bench, two pins on the chip.
+
+- **Output.** Firmware writes console bytes exactly as it does today (`_wr`,
+  `_we`: posted stores to `SIM_STDOUT`/`SIM_STDERR`), so the hart pays the same
+  cycles in every mode. In `uart` and `usb` modes, `mpy_soc` sends those stores
+  to the bridge's console channel (a CON FIFO to the I/O core), not to the
+  `con_*` port. A full CON FIFO holds the core through the skid, as a real
+  board's `print` blocks on a slow UART.
+- **Input.** `sys.stdin`, `input()` and the REPL read from the bridge's
+  console RX ring, which the I/O core fills from UART RX or CDC OUT. The armed
+  Ctrl-C character becomes the `KBD` event instead.
+- **REPL.** With the `uart` or `usb` strap and no program in the image, `_boot`
+  runs the friendly REPL; Ctrl-A enters the raw REPL that `mpremote` uses.
+  `sim` mode keeps today's behavior (run the program, halt).
+- **Tests.** The hardware suite runs in `sim` mode, so its goldens and cycle
+  counts stand (gate G2). A new `console` area runs a fixed program set
+  (prints, long output, `sys.stderr`, a traceback, `input()`, `sys.stdin`
+  reads, Ctrl-C during a loop, the friendly REPL, a raw-REPL `mpremote`
+  exchange) once over UART and once over USB. It decodes the bytes at the
+  pins (the UART line model; the USB host model's CDC IN) and compares them
+  with the same goldens. Any golden that legitimately differs between modes
+  (REPL banners, line endings) is documented beside the test.
 
 ## 6. Reuse from the epic branch
 
@@ -323,7 +346,7 @@ Each phase is one or more commits on `rv-io-core`. It ends with the gates in
 | **4. Remaining peripherals and REPL** | PWM, SPI, I2C, ADC, WDT, pin mux, `reset`; friendly and raw REPL on the UART console; `system` area | `mpremote`-style raw REPL session test passes |
 | **5. Synthesis handoff** | Two-clock constraints in `make_hammer_design.py` (`io_clk` asynchronous to `core_clk`; FIFO pointer paths constrained); SRAM macros for the island; `convert_rtl.sh` covers the island; `check_syn.py` counts | Genus at 10 ns on `core_clk` with the island in; the island's own Fmax recorded |
 | **6. Measurements for the paper** | Python GPIO toggle rate; pin-edge to first callback bytecode latency (min/mean/max over 1,000 edges); UART throughput; timer callback jitter; island idle and active power from SAIF | Table in `upycore/docs/mpy_io_core.md` |
-| **7. USB (optional, D3)** | The epic branch's TinyUSB CDC on the I/O core: SIE on a 48 MHz clock, ASIC replacements for no2usb's iCE40 primitives, `usb` test area | Enumeration and raw REPL over USB in simulation |
+| **7. USB (D3: in scope)** | The epic branch's TinyUSB CDC on the I/O core (code SRAM 16 KB, data 8 KB): the SIE on its own 48 MHz `usb_clk`, ASIC replacements for no2usb's iCE40 primitives (pad and IO cells as generic logic behind a pad wrapper), the USB console mode, the `usb` and `console` test areas; then the synthesis handoff for the USB domain | Enumeration, the console area over USB, raw REPL (`mpremote`) and a 4 KB loopback over CDC in simulation; Genus run with the USB domain |
 
 ## 8. Performance gates (every phase)
 
@@ -365,13 +388,13 @@ A phase may not trade hart cycles for I/O features.
 - `mpy_boot.md`: the `IOCB` section.
 - `README.md`, `synth/hammer/README.md`, `planning/README.md`.
 
-## 11. Decisions for review
+## 11. Decisions
 
-| # | Question | Recommendation |
+| # | Question | Decision |
 | --- | --- | --- |
-| D1 | I/O core: CVE2 or Hazard3 | Decide in phase 0 on area and timing. CVE2 if equal (more reuse from the epic branch) |
-| D2 | `hard=True` callbacks | Deliver at soft points with the heap locked. Any-boundary delivery would need the per-opcode check this plan exists to avoid |
-| D3 | USB in scope | After board I/O; optional phase 7 |
-| D4 | `io_clk` | Independent clock with full CDC (the hart's timing stays untouched). A same-clock option only if phase 0 shows the island meets 10 ns with margin |
-| D5 | Reads through the state page versus RPC | State page for everything polled; RPC only for transfers |
-| D6 | Console default | Simulator page (goldens unchanged); UART by strap |
+| D1 | I/O core: CVE2 or Hazard3 | Build both islands in phase 0 and measure them. If area and timing are similar, take the one that is easier to integrate (expected CVE2: the epic branch's wrapper, firmware layout and TinyUSB port already run on it). Record the numbers and the reason |
+| D2 | `hard=True` callbacks | Run them at the next soft point (a loop jump), like soft callbacks, but with the heap locked so allocation still raises. On a conventional MCU they run inside the interrupt within microseconds; here they run within tens to hundreds of hart cycles, because any-instruction delivery needs a per-opcode check that would slow every program. Microsecond work belongs in the I/O core's C handlers. Document it as a deviation |
+| D3 | USB | In scope (phase 7, required). USB CDC is the default console on the chip |
+| D4 | `io_clk` | Independent clock with full CDC; USB adds its own 48 MHz `usb_clk` inside the island |
+| D5 | Reads | Whatever measures better; start with the state page for polled values and the FIFOs for transfers, and record any change with numbers |
+| D6 | Console and tests | §5.4: USB by default, UART by strap, the simulator page as the test console. Tests may be restructured where that fits the final design better, provided the change is documented and the new `console` area covers the real paths thoroughly |
