@@ -443,3 +443,27 @@ Deviations and open items:
 - CI changes (the Docker image's RISC-V toolchain, the I/O areas in the
   matrix) were not run: there is no Docker or CI here. The image's
   Verilator is Debian's 5.032; this work used 5.038.
+
+## Final: the merged tree
+
+After phase 7 the branch was finalized (`060d42b`: the island's data
+SRAM to 7.5 KB so SRAM is 28 KB; G3 with `--no-fsm` on both trees), the
+UART receive rewrite landed (PR #58: four bytes per answer word,
+protocol 6; all 2,048 bytes arrive at up to 3 Mbaud), and `main` was
+merged in up to `676d273` (`766c176`), then `e567e82` (paper figures
+only). The gates ran on `766c176` against a baseline of `main` at
+`676d273` (its simulator, hardware suite and STA):
+
+| Gate | Result |
+| --- | --- |
+| G1 | PASS: 23 of 23 workloads at +0.000 % |
+| G2 | PASS: 548 of 548; the 509 non-I/O tests have the baseline's cycles, 39 I/O tests are new. `math_funcs` first hit the 180 s wall-clock limit while two suites shared the CPU; alone it passed at the baseline's 21,975,957 cycles |
+| G3 | **Accepted with exceptions.** Worst path unchanged (15.689 ns `mpy_core`, 16.105 ns `mpy_soc`). 15 `mpy_core` groups are 0.12–0.25 ns slower than `main`'s, the same with FSM extraction on or off: frame registers (`glb`, `loc`, `fun`, `rc`, `md`, `mt`, the arg bases) at about 6 ns. Each path matches `main`'s through every RTL-sourced cell; the difference is the register enables' shared decode, one net that now drives 100 loads instead of 1 and gets a buffer tree. The I/O core changes (the event states, the soft-point check, the new natives) passed G3 against `c895f2d`; with `main`'s "Accelerate common bytecode paths" logic the enable decode comes out shared, and no single change removes it (stubbing the event states out still leaves 12 groups). In `mpy_soc`, `u_boot.cst` (+0.205 ns: the IOCB data limit, now a compare against 1,920 rather than 2,048) and `u_ca.bulk_engine.engine.we_o` (+0.106 ns). All are about 9.5 ns inside the critical path; Genus decides whether they matter. Merged with these by decision |
+| G4 | PASS: 509 identical, 0 differ, 39 not in both trees |
+| G5 | PASS: logic as phase 7 (378,359 of 450,000 µm²; the receive rewrite is firmware only); SRAM 28 KB of 28 (16 KB code, 7.5 KB data, 4.5 KB of USB RAMs) |
+
+Unit benches: 37 of 37.
+
+Left for the optimization pass: those timing groups (the frame
+registers' enable decode in `mpy_core`, the boot limit compare); Genus,
+sv2v regeneration of `converted/`, and CI were not run here.
