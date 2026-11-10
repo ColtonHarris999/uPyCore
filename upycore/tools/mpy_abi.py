@@ -43,6 +43,7 @@ HDR = {
     "FLAGS": 15,
 }
 HEADER_WORDS = 16
+IMAGE_FLAG_BIGINT = 1
 
 # Native type table at a fixed flash address so the core never reads the
 # header to find a type: TYPE_TABLE_BASE + 4 * type_id.
@@ -142,6 +143,7 @@ OB = {
     "ELLIPSIS": 17,
     "NOTIMPL": 18,
     # Buffer view (firmware memview.py).
+    "BIGINT": 20,        # [2] signed limb count [3..] 30-bit limbs
     "MEMVIEW": 19,       # [2] base [3] byte offset [4] length [5] writable
 }
 OBJ_WORDS = {
@@ -337,8 +339,11 @@ NATIVES = [
     # type(x) by the core's S_TYPEOF; type(name, bases, dict) and metaclass
     # calls go to _new__type_fb
     "new.type",
+    "_limb_mac",  # (out, a, an, b, bn, k): write a*k + b, return signed carry
+    "_limb_new",  # (n): zeroed bigint storage for n limbs
     # Board I/O (planning/rv_io_core_plan.md §5.1; IO_NATIVES): emitted only
     # into images with the board I/O firmware, so other images are unchanged.
+    # They stay last, so every other native keeps its id.
     "_wfe",      # _wfe(cycles) -> True on an event, False on the timeout
     "_hlock",    # _hlock(): heap lock depth + 1
     "_hunlock",  # _hunlock() -> the new depth
@@ -373,8 +378,10 @@ HOOKS = [
     "_super_method",  # _super_method(type, obj, name): super().name
     "_warn",          # _warn(code): print a runtime warning to stderr
     "_bind_wide",     # _bind_wide(fun, n_pos, directory): bind a chunked star call
+    "_int_overflow",  # optional _int_overflow(op, a, b); NULL b for unary
     # Board I/O (OPTIONAL_HOOKS): only images with the board I/O firmware
-    # define it, and a trailing hook nobody defines is left out of the table.
+    # define it, and a trailing hook nobody defines is left out of the table,
+    # so it stays last.
     "_irq_dispatch",  # _irq_dispatch(): events at a soft point
 ]
 OPTIONAL_HOOKS = {"_irq_dispatch"}
@@ -673,6 +680,7 @@ def _sv_lines() -> list[str]:
         "GC_BLOCK_BYTES": GC_BLOCK_BYTES, "FRAME_BYTES": FRAME_BYTES,
         "FRAME_HDR_WORDS": FRAME_HDR_WORDS, "FRAME_EXC_WORDS": FRAME_EXC_WORDS,
         "EMERG_WORDS": EMERG_WORDS, "HEADER_WORDS": HEADER_WORDS,
+        "IMAGE_FLAG_BIGINT": IMAGE_FLAG_BIGINT,
         "SCOPE_GENERATOR": SCOPE_GENERATOR, "SCOPE_VARKEYWORDS": SCOPE_VARKEYWORDS,
         "SCOPE_VARARGS": SCOPE_VARARGS, "SCOPE_DEFKWARGS": SCOPE_DEFKWARGS,
         "RC_FLAG_FIRMWARE": RC_FLAG_FIRMWARE, "RC_FLAG_GENERATOR": RC_FLAG_GENERATOR,

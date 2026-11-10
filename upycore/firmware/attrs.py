@@ -230,13 +230,17 @@ def _as_index(x, what):
     if _isbool(x):
         return 1 if x else 0
     if _tag(x) == TAG_INT or _tag(x) == TAG_INT64:
-        return x
+        return _wide_i32(x) if _BIGINT_ENABLED else x
+    if _BIGINT_ENABLED and _iswide(x):
+        return _wide_i32(x)
     if _tag(x) == TAG_OBJECT:
         f = _tlookup(_ld(x, 1), '__index__')
         if f is not NULL:
             v = _call_member(f, x, ())
             if _tag(v) == TAG_INT or _tag(v) == TAG_INT64:
-                return v
+                return _wide_i32(v) if _BIGINT_ENABLED else v
+            if _BIGINT_ENABLED and _iswide(v):
+                return _wide_i32(v)
     _index_type(what, x)
 
 
@@ -247,7 +251,7 @@ def _word_index(obj, x):
         return 1 if x else 0
     if _tag(x) == TAG_INT:
         return x
-    if _tag(x) == TAG_INT64:
+    if _tag(x) == TAG_INT64 or (_BIGINT_ENABLED and _iswide(x)):
         raise OverflowError('overflow converting long int to machine word')
     _index_type(obj, x)
 

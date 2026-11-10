@@ -42,6 +42,7 @@ FW_SRC = ROOT / "upycore" / "firmware"
 ORACLE_SRC = ROOT / "build" / "oracle" / "src"
 MPY_CROSS = Path(os.environ.get("MPY_CROSS", ORACLE_SRC / "mpy-cross" / "build" / "mpy-cross"))
 ORACLE = Path(os.environ.get("MPY_ORACLE", ORACLE_SRC / "ports" / "unix" / "build-upycore" / "micropython"))
+MPZ_ORACLE = Path(os.environ.get("MPY_MPZ_ORACLE", ORACLE_SRC / "ports" / "unix" / "build-upycore-mpz" / "micropython"))
 SIM_DIR = ROOT / "build" / "mpy_soc"
 SIM = SIM_DIR / "obj" / "Vtb_mpy_soc"
 MPY_CROSS_FLAGS = ["-msmall-int-bits=31", "-O0"]
@@ -180,7 +181,7 @@ def compile_user(src: Path, out: Path, source_name: str, compiler: str = "mpy-cr
 _FW_IMPORT = re.compile(r"^\s*from\s+(\.?_abi|micropython)\s+import\s+")
 
 
-def firmware_source(io: bool = False, repl: bool = False) -> str:
+def firmware_source(io: bool = False, repl: bool = False, *, bigint: bool = False) -> str:
     parts = []
     order = [FW_SRC / n for n in FW_ORDER] + ([IO_FW_SRC / n for n in IO_FW_ORDER] if io else [])
     order += [IO_FW_SRC / n for n in REPL_FW_ORDER] if repl else []
@@ -193,19 +194,27 @@ def firmware_source(io: bool = False, repl: bool = False) -> str:
             lines = [ln for ln in lines if not _FW_IMPORT.match(ln)]
         parts.append(f"# ---- {name} ----")
         parts.extend(lines)
+        if i == 0:
+            parts.append(f"_BIGINT_ENABLED = const({int(bigint)})")
+    if bigint:
+        parts.append((FW_SRC / "bigint.py").read_text())
     return "\n".join(parts) + "\n"
 
 
-def build_firmware(out_dir: Path | None = None, io: bool = False, repl: bool = False) -> Path:
+def build_firmware(out_dir: Path | None = None, io: bool = False, repl: bool = False, *,
+                   bigint: bool = False) -> Path:
     """Join and compile the firmware; returns the .mpy path. ``io`` appends
     the board I/O firmware (a separate build in ``build/mpy/fw_io``), and
-    ``repl`` the REPL after it (``build/mpy/fw_repl``)."""
+    ``repl`` the REPL after it (``build/mpy/fw_repl``); ``bigint`` is the
+    wide-integer firmware (``build/mpy/fw-bigint``, with ``_io`` or ``_repl``
+    after it when those are on too)."""
 
-    out_dir = out_dir or BUILD / ("fw_repl" if repl else "fw_io" if io else "fw")
+    base = "fw-bigint" if bigint else "fw"
+    out_dir = out_dir or BUILD / (base + ("_repl" if repl else "_io" if io else ""))
     out_dir.mkdir(parents=True, exist_ok=True)
     src = out_dir / "fw.py"
     mpy = out_dir / "fw.mpy"
-    text = firmware_source(io or repl, repl)
+    text = firmware_source(io or repl, repl, bigint=bigint)
     if not src.exists() or src.read_text() != text:
         src.write_text(text)
     if _newer(mpy, [src, MPY_CROSS]):
@@ -457,7 +466,7 @@ def frozen_runtime_specs(compiler: bool = True, runtime: list[str] | tuple = ())
 
 def build_program(src: Path, work: Path, source_name: str | None = None,
                   modules: dict[str, Path] | None = None,
-                  compiler: str = "mpy-cross", repl: bool = False) -> Path:
+                  compiler: str = "mpy-cross", repl: bool = False, *, bigint: bool = False) -> Path:
     """Compile and link one program (plus frozen modules); returns the image prefix.
 
     ``compiler`` selects the user-program compiler. The firmware is always
@@ -470,9 +479,9 @@ def build_program(src: Path, work: Path, source_name: str | None = None,
     work.mkdir(parents=True, exist_ok=True)
     sources = [src, *(modules or {}).values()]
     io = repl or bool(io_imports(sources))
-    # Without board I/O this is the call it always was (clock_bench.py
-    # replaces build_firmware with a no-argument function).
-    fw = build_firmware(io=True, repl=True) if repl else build_firmware(io=True) if io else build_firmware()
+    # Without board I/O or bigint this is the call it always was (clock_bench.py
+    # and the other benches replace build_firmware with a no-argument function).
+    fw = (build_firmware(io=io, repl=repl, bigint=bigint) if io or bigint else build_firmware())
     name = source_name or src.name
     main_mpy = work / "main.mpy"
     compile_user(src, main_mpy, name, compiler)
@@ -510,6 +519,7 @@ def main(argv: list[str] | None = None) -> int:
     rp.add_argument("src", type=Path)
     rp.add_argument("--max-cycles", type=int, default=50_000_000)
     rp.add_argument("--trace", action="store_true")
+    rp.add_argument("--bigint", action="store_true", help="enable the experimental wide-integer firmware")
     rp.add_argument("-v", "--verbose", action="store_true", help="print the halt line")
     rp.add_argument("--work", type=Path, default=None)
     rp.add_argument("--sim-arg", action="append", default=[],
@@ -533,7 +543,7 @@ def main(argv: list[str] | None = None) -> int:
             return rc
         build_sim()
         work = args.work or BUILD / "run" / args.src.stem
-        image = build_program(args.src.resolve(), work)
+        image = build_program(args.src.resolve(), work, bigint=args.bigint)
         res = run_image(image, args.max_cycles, args.trace, sim_args=args.sim_arg, nand=args.nand)
     except BuildError as exc:
         print(exc, file=sys.stderr)

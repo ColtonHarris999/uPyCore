@@ -6,6 +6,8 @@ _HEX = '0123456789abcdef'
 
 def _istr(n):
     # Decimal text of an int (INT or INT64).
+    if _BIGINT_ENABLED and _iswide(n):
+        return _wide_repr(n)
     if 0 <= n < 10:
         return _ch(48 + n)
     buf = _newstr(21)
@@ -49,6 +51,8 @@ def _ubase(n, base, upper):
 
 
 def _int_base(n, base, prefix, upper):
+    if _BIGINT_ENABLED and _iswide(n):
+        return _wide_base(n, base, prefix, upper)
     if n < 0:
         if n == -9223372036854775807 - 1:
             # The magnitude does not fit; split off the last digit.
@@ -318,6 +322,8 @@ def _user_method(x, name):
 
 def _obj_repr(x, as_str):
     k = _ld(x, 0)
+    if _BIGINT_ENABLED and k == OB_BIGINT:
+        return _wide_repr(x)
     if k == OB_INSTANCE or k == OB_EXCEPTION:
         t = _ld(x, 1)
         if _ld(t, 7) & TF_USER:

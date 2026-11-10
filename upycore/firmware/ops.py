@@ -87,6 +87,19 @@ def _binop(op, a, b):
         return not _equal(a, b)
     if op == BINOP_EXCEPTION_MATCH:
         return _exc_match(a, b)
+    if _BIGINT_ENABLED and (_iswide(a) or _iswide(b)):
+        wide = _wide_binary(op, a, b)
+        if wide is not NULL:
+            return wide
+    if _BIGINT_ENABLED:
+        ta, tb = _tag(a), _tag(b)
+        if (ta == TAG_INT64 or tb == TAG_INT64) and (
+                ta == TAG_FLOAT or tb == TAG_FLOAT or ta == TAG_COMPLEX or tb == TAG_COMPLEX
+                or op == BINOP_TRUE_DIVIDE or op == BINOP_INPLACE_TRUE_DIVIDE
+                or ((op == BINOP_POWER or op == BINOP_INPLACE_POWER) and _isint(b) and b < 0)):
+            result = _wide_binary(op, a, b)
+            if result is not NULL:
+                return result
     if _small(a):
         tb = _tag(b)
         if tb == TAG_INT or tb == TAG_FLOAT or tb == TAG_COMPLEX:
@@ -312,7 +325,9 @@ def _int_maybe(x):
     # mp_obj_get_int_maybe: ints and bools; else NULL.
     t = _tag(x)
     if t == TAG_INT or t == TAG_INT64:
-        return x
+        return _wide_i32(x) if _BIGINT_ENABLED else x
+    if _BIGINT_ENABLED and _iswide(x):
+        return _wide_i32(x)
     if x is True:
         return 1
     if x is False:
@@ -517,6 +532,8 @@ def _cparts(x):
         return _mk(TAG_FLOAT, _pay(_ld(x, 0))), _mk(TAG_FLOAT, _pay(_ld(x, 1)))
     if t == TAG_FLOAT:
         return x, 0.0
+    if _BIGINT_ENABLED and (t == TAG_INT64 or _iswide(x)):
+        return _wide_float(x), 0.0
     if t == TAG_INT or t == TAG_INT64:
         return x + 0.0, 0.0
     if x is True:
@@ -618,6 +635,9 @@ def _equal(a, b):
         return True
     if a is None or b is None:
         return False
+    if _BIGINT_ENABLED and (_iswide(a) or _iswide(b)):
+        wide = _wide_binary(BINOP_EQUAL, a, b)
+        return wide if wide is not NULL else False
     if ta == TAG_INT:
         if _tag(b) == TAG_INT:
             return False
@@ -633,10 +653,16 @@ def _equal(a, b):
         # memoryview checks the other type (MP_TYPE_FLAG_EQ_CHECKS_OTHER_TYPE).
         return _mv_binop(BINOP_EQUAL, b, a)
     if _isnum(a) and _isnum(b):
-        if ta == TAG_COMPLEX or _tag(b) == TAG_COMPLEX:
+        tb = _tag(b)
+        if ta == TAG_COMPLEX or tb == TAG_COMPLEX:
             pa = _cparts(a)
             pb = _cparts(b)
             return pa[0] == pb[0] and pa[1] == pb[1]
+        if _BIGINT_ENABLED:
+            if ta == TAG_INT64 and tb == TAG_FLOAT:
+                return _wide_float(a) == b
+            if ta == TAG_FLOAT and tb == TAG_INT64:
+                return a == _wide_float(b)
         return a == b
     r = _type_binop(BINOP_EQUAL, a, b)
     if r is not NULL:
@@ -649,6 +675,8 @@ def _hashv(x):
     h = _hash(x)
     if h is not STOP:
         return h
+    if _BIGINT_ENABLED and _iswide(x):
+        return _wide_hash(x)
     t = _tag(x)
     if t == TAG_FLOAT:
         return _fhash(x)
@@ -731,6 +759,8 @@ def _unop(op, x):
         return -x if x < 0 or (x == 0 and _pay(x) < 0) else x
     if (t == TAG_INT or t == TAG_INT64) and op == UNOP_ABS:
         return -x if x < 0 else x
+    if _BIGINT_ENABLED and _iswide(x):
+        return _wide_unary(op, x)
     if t == TAG_OBJECT and _isuser(x):
         name = ('__pos__', '__neg__', '__invert__', '', '', '', '', '__abs__')[op]
         f = _tlookup(_ld(x, 1), name)

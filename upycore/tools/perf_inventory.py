@@ -78,8 +78,8 @@ def programs(only: list[str] | None) -> list[Path]:
     return out
 
 
-def oracle(src: Path, timeout: float) -> tuple[str, str, int]:
-    r = subprocess.run([str(b.ORACLE), src.name], cwd=src.parent, capture_output=True, timeout=timeout)
+def oracle(src: Path, timeout: float, executable: str) -> tuple[str, str, int]:
+    r = subprocess.run([executable, src.name], cwd=src.parent, capture_output=True, timeout=timeout)
     return r.stdout.decode(errors="replace"), r.stderr.decode(errors="replace"), r.returncode
 
 
@@ -87,7 +87,7 @@ def tagged(text: str, tag: str) -> list[str]:
     return [line[len(tag) + 1:] for line in text.splitlines() if line.startswith(tag + " ")]
 
 
-def run_case(prog: Path, n: int, m: int, out: Path, modes: list, max_cycles: int, timeout: float) -> dict:
+def run_case(prog: Path, n: int, m: int, out: Path, modes: list, max_cycles: int, timeout: float, bigint: bool) -> dict:
     text = prog.read_text()
     if "__perf_" in text:
         raise ValueError(f"{prog.stem}: harness names collide")
@@ -103,7 +103,14 @@ def run_case(prog: Path, n: int, m: int, out: Path, modes: list, max_cycles: int
     row = {"name": prog.stem, "point": f"{n}x{m}", "source_sha256": sha(prog.read_bytes()),
            "harness_sha256": sha(dev_src.read_bytes()), "runs": []}
 
-    o_out, o_err, o_rc = oracle(ora_src, timeout)
+    if bigint and b.MPZ_ORACLE.is_file():
+        reference, reference_name = str(b.MPZ_ORACLE), "MicroPython MPZ"
+    elif bigint and prog.stem == "bm_pidigits":
+        reference, reference_name = sys.executable, "CPython"
+    else:
+        reference, reference_name = str(b.ORACLE), "MicroPython"
+    o_out, o_err, o_rc = oracle(ora_src, timeout, reference)
+    row["reference"] = reference_name
     row["oracle"] = {"rc": o_rc, "stdout_tail": o_out[-400:], "stderr_tail": o_err[-400:]}
     o_results = tagged(o_out, "RESULT")
     o_skip = o_out.startswith("SKIP") or "NOPARAMS" in o_out
@@ -153,14 +160,14 @@ def markdown(data: dict) -> str:
              f"Commit `{data['commit'][:10]}`, MicroPython `{data['micropython'][:10]}`. "
              "Kernel cycles are run() alone, timed on the device; time at 18 ns is "
              "the optimization plan's assumed period.", "",
-             "| Program | Point | Mode | Status | Kernel cycles | ms at 18 ns | GC | Detail |",
-             "| --- | --- | --- | --- | ---: | ---: | ---: | --- |"]
+             "| Program | Point | Mode | Reference | Status | Kernel cycles | ms at 18 ns | GC | Detail |",
+             "| --- | --- | --- | --- | --- | ---: | ---: | ---: | --- |"]
     for row in data["rows"]:
         for run in row["runs"]:
             kc = run.get("kernel_cycles")
             ms = f"{kc * 0.000018:.1f}" if kc and run.get("status") == "PASS" else ""
             detail = str(run.get("detail", "")).replace("|", "\\|")[:90]
-            lines.append(f"| `{row['name']}` | {row['point']} | {run['mode']} | {run['status']} | "
+            lines.append(f"| `{row['name']}` | {row['point']} | {run['mode']} | {row['reference']} | {run['status']} | "
                          f"{kc if kc is not None else ''} | {ms} | {run.get('gc', '')} | {detail} |")
     return "\n".join(lines) + "\n"
 
@@ -171,12 +178,13 @@ def main() -> int:
     ap.add_argument("--points", default="100x100", help="comma-separated NxM points (default 100x100)")
     ap.add_argument("--modes", default="both", help="'both' (CA and AALU on), 'all' (four configurations), or names")
     ap.add_argument("--only", default="", help="comma-separated program names")
+    ap.add_argument("--bigint", action="store_true", help="enable wide integers and prefer the MicroPython MPZ oracle")
     ap.add_argument("--max-cycles", type=int, default=400_000_000)
     ap.add_argument("--timeout", type=float, default=3600)
     ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 1))
     args = ap.parse_args()
 
-    if not b.ORACLE.exists():
+    if not b.ORACLE.exists() and not (args.bigint and (b.MPZ_ORACLE.is_file() or args.only == "bm_pidigits")):
         raise SystemExit(f"oracle missing at {b.ORACLE} (make oracle-variant)")
     if not b.SIM.exists():
         raise SystemExit(f"simulator missing at {b.SIM} (python3 upycore/tools/mpy_build.py sim)")
@@ -194,7 +202,7 @@ def main() -> int:
     # wrapper runtime_profile.py and timing_bench.py use.
     fw_src = out / "bench_fw.py"
     fw_mpy = out / "bench_fw.mpy"
-    fw_src.write_text(b.firmware_source() + "\ndef bench_ticks():\n    return _ticks()\n")
+    fw_src.write_text(b.firmware_source(bigint=args.bigint) + "\ndef bench_ticks():\n    return _ticks()\n")
     b.mpy_cross(fw_src, fw_mpy, "_fw.py")
     b.build_firmware = lambda: fw_mpy
     b.frozen_runtime_specs(compiler=False, runtime=sorted(b.RUNTIME_MODULES))
@@ -211,7 +219,7 @@ def main() -> int:
             "rows": []}
     cases = [(p, n, m) for p in progs for (n, m) in points]
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
-        futs = {pool.submit(run_case, p, n, m, out, modes, args.max_cycles, args.timeout): (p, n, m) for p, n, m in cases}
+        futs = {pool.submit(run_case, p, n, m, out, modes, args.max_cycles, args.timeout, args.bigint): (p, n, m) for p, n, m in cases}
         for fut in concurrent.futures.as_completed(futs):
             p, n, m = futs[fut]
             row = fut.result()

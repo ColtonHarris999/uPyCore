@@ -38,12 +38,16 @@ def bool____new__(cls, x=False):
     return v
 
 
+def _int_space(c):
+    return c == 32 or 9 <= c <= 13
+
+
 def _parse_int(text, base):
     if base != 0 and (base < 2 or base > 36):
         raise ValueError('int() arg 2 must be >= 2 and <= 36')
     n = _slen(text)
     i = 0
-    while i < n and _byte(text, i) <= 32:
+    while i < n and (_int_space(_byte(text, i)) if _BIGINT_ENABLED else _byte(text, i) <= 32):
         i += 1
     if i >= n:
         raise ValueError(_s('invalid syntax for integer with base ', _istr(10 if base == 0 else base)))
@@ -52,6 +56,10 @@ def _parse_int(text, base):
     if c == 43 or c == 45:
         neg = c == 45
         i += 1
+    if _BIGINT_ENABLED and i + 1 < n and _byte(text, i) == 48:
+        p = _byte(text, i + 1) | 32
+        if (base == 16 and p == 120) or (base == 8 and p == 111) or (base == 2 and p == 98):
+            i += 2
     if base == 0:
         base = 10
         if i + 1 < n and _byte(text, i) == 48:
@@ -65,11 +73,14 @@ def _parse_int(text, base):
             elif p == 98 or p == 66:
                 base = 2
                 i += 2
+            elif _BIGINT_ENABLED:
+                base = 1
+    error_base = 0 if _BIGINT_ENABLED and base == 1 else base
     val = 0
     anyd = False
     while i < n:
         c = _byte(text, i)
-        if c <= 32:
+        if _int_space(c) if _BIGINT_ENABLED else c <= 32:
             break
         if 48 <= c <= 57:
             d = c - 48
@@ -78,22 +89,28 @@ def _parse_int(text, base):
         elif 65 <= c <= 90:
             d = c - 55
         elif c == 95:
+            if _BIGINT_ENABLED:
+                anyd = True
             i += 1
             continue
         else:
-            raise ValueError(_s('invalid syntax for integer with base ', _istr(base)))
+            raise ValueError(_s('invalid syntax for integer with base ', _istr(error_base)))
         if d >= base:
-            raise ValueError(_s('invalid syntax for integer with base ', _istr(base)))
-        val = val * base + d
+            raise ValueError(_s('invalid syntax for integer with base ', _istr(error_base)))
+        if _BIGINT_ENABLED and neg:
+            val = val * base - d
+        else:
+            val = val * base + d
         anyd = True
         i += 1
     while i < n:
-        if _byte(text, i) > 32:
-            raise ValueError(_s('invalid syntax for integer with base ', _istr(base)))
+        c = _byte(text, i)
+        if not _int_space(c) if _BIGINT_ENABLED else c > 32:
+            raise ValueError(_s('invalid syntax for integer with base ', _istr(error_base)))
         i += 1
     if not anyd:
-        raise ValueError(_s('invalid syntax for integer with base ', _istr(base)))
-    if neg:
+        raise ValueError(_s('invalid syntax for integer with base ', _istr(error_base)))
+    if not _BIGINT_ENABLED and neg:
         return -val
     return val
 
@@ -105,6 +122,8 @@ def _int_value(args):
         _arg_count(2, len(args))
     x = args[0]
     base = 10 if len(args) == 1 else args[1]
+    if _BIGINT_ENABLED:
+        base = _wide_i32(base)
     if len(args) == 2 and not _isstr(x) and _tag(x) != TAG_BYTES and not _isbarr(x):
         raise TypeError("int() can't convert non-string with explicit base")
     if x is True:
@@ -112,6 +131,8 @@ def _int_value(args):
     if x is False:
         return 0
     if _tag(x) == TAG_INT or _tag(x) == TAG_INT64:
+        return x
+    if _BIGINT_ENABLED and _iswide(x):
         return x
     if _tag(x) == TAG_FLOAT:
         i = _ftoi(x)
@@ -122,12 +143,20 @@ def _int_value(args):
             d = x - x
             if d != d:
                 raise OverflowError("can't convert inf to int")
+            if _BIGINT_ENABLED:
+                return _wide_from_float(x)
             raise ValueError('float too big')
         return i
     if _isstr(x):
         return _parse_int(x, base)
     if _tag(x) == TAG_BYTES or _isbarr(x):
+        if _BIGINT_ENABLED:
+            return _parse_int(_barr_bytes(x) if _isbarr(x) else x, base)
         return _parse_int(_decode(_barr_bytes(x) if _isbarr(x) else x, 'utf-8'), base)
+    if _BIGINT_ENABLED:
+        buf = _buf_bytes(x)
+        if buf is not NULL:
+            return _parse_int(buf, base)
     if _tag(x) == TAG_OBJECT:
         f = _tlookup(_ld(x, 1), '__int__')
         if f is NULL:
@@ -150,8 +179,12 @@ def int____new__(cls, *args):
 
 
 def int__to_bytes(self, length=1, byteorder='big', *, signed=False):
+    if _BIGINT_ENABLED:
+        length = _wide_i32(length)
     if length < 0:
         raise ValueError()
+    if _BIGINT_ENABLED and not _small(self):
+        return _wide_to_bytes(self, length, byteorder == 'little', signed)
     n = self
     if n < 0 and not signed:
         raise OverflowError("can't convert negative int to unsigned")
@@ -178,6 +211,12 @@ def int__to_bytes(self, length=1, byteorder='big', *, signed=False):
 
 
 def _int_from_bytes(cls, data, byteorder='big', _ignored=None):
+    if _BIGINT_ENABLED:
+        buf = _buf_bytes(data)
+        if buf is NULL:
+            raise TypeError('object with buffer protocol required')
+        n = _wide_from_bytes(buf, byteorder == 'little')
+        return n
     if _isstr(data):
         raise TypeError("cannot convert 'str' object to bytes")
     b = _barr_bytes(data) if _isbarr(data) else data
@@ -234,6 +273,8 @@ def any(iterable):
 
 def _chr_fb(i):
     # chr() for what the core's native does not take (mp_obj_get_int first).
+    if _BIGINT_ENABLED and (_iswide(i) or _tag(i) == TAG_INT64):
+        i = _wide_i32(i)
     if not _isint(i):
         raise TypeError(_s("can't convert ", _tname(i), ' to int'))
     if _tag(i) == TAG_INT64:
@@ -274,10 +315,20 @@ def oct(n):
 
 
 def divmod(a, b):
+    if _BIGINT_ENABLED and (_iswide(a) or _iswide(b)) and (_isint(a) or _iswide(a)) and (_isint(b) or _iswide(b)):
+        a, b = _wide_box(a), _wide_box(b)
+        return _wide_divmod(a, _ld(a, 2), b, _ld(b, 2))
     return (a // b, a % b)
 
 
 def pow(x, y, z=_MISSING):
+    if _BIGINT_ENABLED and z is None:
+        return x ** y
+    if _BIGINT_ENABLED and z is not _MISSING:
+        if (x is True or x is False or y is True or y is False or z is True or z is False
+                or not (_isint(x) or _iswide(x)) or not (_isint(y) or _iswide(y)) or not (_isint(z) or _iswide(z))):
+            raise TypeError('pow() with 3 arguments requires integers')
+        return _wide_pow(x, y, z)
     v = x ** y
     if z == _MISSING:
         return v
@@ -307,7 +358,7 @@ def round(number, ndigits=_MISSING):
             if ndigits == _MISSING:
                 return _call_member(f, number, ())
             return _call_member(f, number, (ndigits,))
-    if t == TAG_INT or t == TAG_INT64:
+    if t == TAG_INT or t == TAG_INT64 or (_BIGINT_ENABLED and _iswide(number)):
         if ndigits == _MISSING or ndigits >= 0:
             return number
         mult = 10 ** (-ndigits)

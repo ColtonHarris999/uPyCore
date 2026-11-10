@@ -491,6 +491,8 @@ def float____new__(cls, *args):
         t = _tag(a)
         if t == TAG_FLOAT:
             v = a
+        elif _BIGINT_ENABLED and (t == TAG_INT64 or _iswide(a)):
+            v = _wide_float(a)
         elif _isint(a):
             v = a + 0.0
         elif _isstr(a):
@@ -505,6 +507,16 @@ def float____new__(cls, *args):
     if cls is not float:
         return _native_sub_new(cls, v)
     return v
+
+
+def float___from_bits(bits):
+    # For binary32 array storage, including subnormals and signed zeros.
+    return _frombits(int(bits) & 4294967295)
+
+
+def complex___from_parts(real, imag):
+    # Used by cmath to retain both sign bits when the result contains zero.
+    return _complex(float(real), float(imag))
 
 
 def complex____new__(cls, *args):

@@ -340,7 +340,9 @@ def _make_type(name, bases, ns):
     for val in ns.values():
         if _tag(val) == TAG_OBJECT:
             vk = _ld(val, 0)
-            if vk == OB_PROPERTY or _tlookup(_ld(val, 1), '__set__') is not NULL:
+            # Plain bytecode functions bind as methods and have no __set__.
+            # Avoid scanning their type for every method in a class body.
+            if vk == OB_PROPERTY or (vk != OB_FUNCTION and _tlookup(_ld(val, 1), '__set__') is not NULL):
                 flags |= TF_DESC
     custom_new = _lookup(ns, '__new__')
     if custom_new is STOP:

@@ -538,8 +538,11 @@ module mpy_alu (
                     done_o <= 1'b1;
                 end
                 A_DIV: if (div_done) begin
-                    // upycore_div floors. Off the small-int range the oracle truncates.
-                    if (!small_r && rem != 64'd0 && (a[63] != b[63])) begin
+                    // The divider floors. Only the legacy long-long profile
+                    // truncates outside the small-int range.
+                    if (small_r && op == ALU_FLOOR && a == 64'h8000_0000_0000_0000 && b == 64'hffff_ffff_ffff_ffff) begin
+                        err_o <= AE_OVERFLOW;
+                    end else if (!small_r && rem != 64'd0 && (a[63] != b[63])) begin
                         res_o <= (op == ALU_FLOOR) ? quot + 64'd1 : rem - b;
                     end else begin
                         res_o <= (op == ALU_FLOOR) ? quot : rem;
@@ -604,6 +607,11 @@ module mpy_alu (
                         res_o <= ires;
                         if (op <= ALU_NE) begin
                             rkind_o <= AK_BOOL;
+                        end else if (small_r && (op == ALU_LSHIFT || op == ALU_RSHIFT) &&
+                                     b[63:31] != {33{b[31]}}) begin
+                            // Only the MPZ profile sets small_r with a
+                            // shift count beyond the signed machine word.
+                            err_o <= AE_OVERFLOW;
                         end else if (iverr) begin
                             err_o <= AE_NEG_SHIFT;
                         end else if (iovf) begin

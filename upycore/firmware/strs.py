@@ -43,11 +43,19 @@ def _bytes_from_args(args):
         if len(args) < 2:
             raise TypeError('string argument without an encoding')
         return _encode(a, args[1])
-    if _isint(a):
+    if _isint(a) or (_BIGINT_ENABLED and _iswide(a)):
+        if _BIGINT_ENABLED:
+            a = _wide_i32(a)
         if a < 0:
             raise ValueError('negative count')
         r = _strnew(a, TAG_BYTES)
         return _strfin(r)
+    if _tag(a) == TAG_OBJECT:
+        if _ismv(a):
+            return _mv_bytes(a)
+        arr = _array_buffer(a)
+        if arr is not NULL:
+            return _barr_bytes(arr[0])
     vals = _list_of_iter(a)
     r = _strnew(len(vals), TAG_BYTES)
     i = 0
@@ -90,17 +98,25 @@ def bytearray__clear(self):
 
 
 def bytearray__append32(self, v):
-    # One little-endian word. The compiler's array('i') used to allocate a
-    # 4-byte bytes object on every slot.
-    if v < 0:
-        v = v + 4294967296
+    # The compiler's arrays append at word-aligned offsets.
     n = _ld(self, 0)
     _barr_grow(self, n + 4)
     d = _data(self)
-    _poke8(d, n, v & 255)
-    _poke8(d, n + 1, (v >> 8) & 255)
-    _poke8(d, n + 2, (v >> 16) & 255)
-    _poke8(d, n + 3, (v >> 24) & 255)
+    if n & 3:
+        _poke8(d, n, v & 255)
+        _poke8(d, n + 1, (v >> 8) & 255)
+        _poke8(d, n + 2, (v >> 16) & 255)
+        _poke8(d, n + 3, (v >> 24) & 255)
+    else:
+        if _tag(v) == TAG_INT64:
+            v = v & 4294967295
+            if v >= 2147483648:
+                v -= 4294967296
+        elif not _isint(v):
+            _unsupported_un('__index__', v)
+        elif _isbool(v):
+            v = 1 if v else 0
+        _st(d + n, 0, v)
     _st(self, 0, n + 4)
     return None
 
@@ -161,7 +177,11 @@ def _barr_setslice(obj, sl, value):
     if deleting:
         value = b''
     src = _as_bytes(value) if _tag(value) == TAG_BYTES or _isbarr(value) else _bytes_from_args((value,))
-    # rebuild
+    count = _slen(src)
+    if count == b - a:
+        # Keep views of the buffer live when the replacement fits in place.
+        _bcopy(obj, a, src, 0, count)
+        return None
     left = _substr(_barr_bytes(obj), 0, a, TAG_BYTES)
     right = _substr(_barr_bytes(obj), b, n, TAG_BYTES)
     whole = _cat(_cat(left, src), right)
@@ -721,6 +741,8 @@ def _format_braces(fmt, args, kw):
 
 
 def _fmt_spec(val, spec):
+    if _BIGINT_ENABLED and (_iswide(val) or _isint(val) and not _isbool(val)):
+        return _wide_format(val, spec)
     if _slen(spec) == 0:
         return _str(val)
     conv = _byte(spec, _slen(spec) - 1)
@@ -752,9 +774,11 @@ def _fmt_spec(val, spec):
     elif conv == 114:
         text = _repr(val)
     elif conv == 120:
-        text = _ubase(val, 16, False)
+        text = _int_base(val, 16, '', False) if _BIGINT_ENABLED else _ubase(val, 16, False)
     elif conv == 88:
-        text = _ubase(val, 16, True)
+        text = _int_base(val, 16, '', True) if _BIGINT_ENABLED else _ubase(val, 16, True)
+    elif _BIGINT_ENABLED and (conv == 98 or conv == 111):
+        text = _int_base(val, 2 if conv == 98 else 8, '', False)
     else:
         text = _str(val)
     if _slen(text) >= width:
@@ -788,35 +812,77 @@ def _str_modulo(fmt, args, mapping):
         sign = ''
         width = 0
         prec = -1
-        if i < n and _byte(fmt, i) == 40:
+        named = i < n and _byte(fmt, i) == 40
+        if named:
             j = i + 1
             while j < n and _byte(fmt, j) != 41:
                 j += 1
             key = _substr(fmt, i + 1, j, TAG_STR)
             i = j + 1
             val = mapping[key]
-        else:
+        elif not _BIGINT_ENABLED:
             if ai >= len(args):
                 raise TypeError('not enough arguments for format string')
             val = args[ai]
             ai += 1
-        while i < n and (_byte(fmt, i) == 45 or _byte(fmt, i) == 43 or _byte(fmt, i) == 32 or _byte(fmt, i) == 48):
-            if _byte(fmt, i) == 45:
+        alternate, zero = False, False
+        while i < n:
+            flag = _byte(fmt, i)
+            if flag == 45:
                 left = True
+            elif flag == 43:
+                sign = '+'
+            elif flag == 32:
+                if sign != '+':
+                    sign = ' '
+            elif flag == 48:
+                zero = True
+            elif _BIGINT_ENABLED and flag == 35:
+                alternate = True
+            else:
+                break
             i += 1
-        while i < n and 48 <= _byte(fmt, i) <= 57:
-            width = width * 10 + _byte(fmt, i) - 48
+        if _BIGINT_ENABLED and i < n and _byte(fmt, i) == 42:
+            if ai >= len(args) or named:
+                raise TypeError('not enough arguments for format string')
+            width = _wide_i32(args[ai])
+            ai += 1
             i += 1
+        else:
+            while i < n and 48 <= _byte(fmt, i) <= 57:
+                width = width * 10 + _byte(fmt, i) - 48
+                i += 1
         if i < n and _byte(fmt, i) == 46:
             i += 1
             prec = 0
-            while i < n and 48 <= _byte(fmt, i) <= 57:
-                prec = prec * 10 + _byte(fmt, i) - 48
+            if _BIGINT_ENABLED and i < n and _byte(fmt, i) == 42:
+                if ai >= len(args) or named:
+                    raise TypeError('not enough arguments for format string')
+                prec = _wide_i32(args[ai])
+                ai += 1
                 i += 1
+            else:
+                while i < n and 48 <= _byte(fmt, i) <= 57:
+                    prec = prec * 10 + _byte(fmt, i) - 48
+                    i += 1
+        if _BIGINT_ENABLED and not named:
+            if ai >= len(args):
+                raise TypeError('not enough arguments for format string')
+            val = args[ai]
+            ai += 1
+        mpz_int = _BIGINT_ENABLED and (_isint(val) or _iswide(val))
         if i >= n:
             break
         conv = _byte(fmt, i)
         i += 1
+        if mpz_int and conv in (100, 105, 117, 111, 120, 88):
+            lead, digits = _wide_fmt_parts(val, chr(conv), alternate, sign, '')
+            digits = _zpad(digits, prec) if prec >= 0 else digits
+            align = '<' if left else '=' if zero else '>'
+            out.append(_wide_pad(lead, digits, width, align, '0' if zero else ' '))
+            continue
+        if mpz_int and conv == 99:
+            _wide_i32(val)
         if conv == 115:
             text = _str(val)
         elif conv == 114:
@@ -824,11 +890,11 @@ def _str_modulo(fmt, args, mapping):
         elif conv == 100 or conv == 105 or conv == 117:
             text = _istr(val)
         elif conv == 120:
-            text = _ubase(_u32(val) if val < 0 else val, 16, False)
+            text = _int_base(val, 16, '', False) if _BIGINT_ENABLED else _ubase(_u32(val) if val < 0 else val, 16, False)
         elif conv == 88:
-            text = _ubase(_u32(val) if val < 0 else val, 16, True)
+            text = _int_base(val, 16, '', True) if _BIGINT_ENABLED else _ubase(_u32(val) if val < 0 else val, 16, True)
         elif conv == 111:
-            text = _ubase(val, 8, False)
+            text = _int_base(val, 8, '', False) if _BIGINT_ENABLED else _ubase(val, 8, False)
         elif conv == 99:
             text = _ch(val) if _isint(val) else val
         elif conv == 102 or conv == 101 or conv == 103 or conv == 70 or conv == 69 or conv == 71:
