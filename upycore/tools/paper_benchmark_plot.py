@@ -6,6 +6,7 @@ import csv
 import json
 import math
 from pathlib import Path
+from statistics import fmean
 
 import matplotlib
 
@@ -82,12 +83,11 @@ def bar_style(device):
 def device_bars(values, xlabel, labels):
     fig, ax = plt.subplots(figsize=(3.45, 2.25), layout="constrained")
     for index, (device, value) in enumerate(values.items()):
-        if value is not None:
-            ax.barh(index, value, height=0.64, linewidth=0.65, **bar_style(device))
-        ax.annotate(labels[device], (value or 0, index), xytext=(3, 0),
+        ax.barh(index, value, height=0.64, linewidth=0.65, **bar_style(device))
+        ax.annotate(labels[device], (value, index), xytext=(3, 0),
                     textcoords="offset points", va="center")
     ax.set_yticks(range(len(values)), list(values))
-    ax.set(xlim=(0, 1.22 * max(value for value in values.values() if value is not None)),
+    ax.set(xlim=(0, 1.22 * max(values.values())),
            ylim=(len(values) - 0.5, -0.5), xlabel=xlabel)
     style_axis(ax)
     return fig, ax
@@ -115,14 +115,56 @@ def suite_plot(suite, devices):
     return fig
 
 
-def suite_totals(suite, devices):
-    totals = {}
-    coverage = {}
+def suite_comparisons(suite, devices):
+    comparisons = {}
     for device in devices:
-        times = [times[device] for _, times in suite.values() if device in times]
-        coverage[device] = len(times)
-        totals[device] = math.fsum(times) if len(times) == len(suite) else None
-    return totals, coverage
+        pairs = [(times[CORE], times[device]) for _, times in suite.values() if device in times]
+        comparisons[device] = (len(pairs), fmean(core for core, _ in pairs),
+                               fmean(board for _, board in pairs),
+                               fmean(board / core for core, board in pairs))
+    return comparisons
+
+
+def matched_runtime_plot(comparisons, suite_size):
+    fig, ax = plt.subplots(figsize=(3.45, 3.05), layout="constrained")
+    positions = list(range(len(comparisons)))
+    core_means = [core for _, core, _, _ in comparisons.values()]
+    board_means = [board for _, _, board, _ in comparisons.values()]
+    core = ax.barh([row - 0.18 for row in positions], core_means, height=0.32,
+                   label=CORE, linewidth=0.65, **bar_style(CORE))
+    boards = ax.barh([row + 0.18 for row in positions], board_means, height=0.32,
+                     label="Comparison board", linewidth=0.65, color="white",
+                     edgecolor="#595959", hatch="//")
+    for bars in (core, boards):
+        ax.bar_label(bars, fmt="%.1f", padding=3, fontsize=7)
+    ax.set_yticks(positions, [f"{device}\n({count}/{suite_size} kernels)"
+                              for device, (count, _, _, _) in comparisons.items()])
+    ax.set(xlim=(0, 1.24 * max(core_means + board_means)),
+           ylim=(len(positions) - 0.5, -0.5), xlabel="Mean runtime (ms/kernel)")
+    ax.xaxis.set_major_locator(MaxNLocator(5))
+    ax.legend(loc="lower left", bbox_to_anchor=(0, 1.01), ncol=2, frameon=False,
+              borderaxespad=0, columnspacing=1.0, handletextpad=0.4, fontsize=7)
+    style_axis(ax)
+    return fig
+
+
+def speedup_plot(comparisons, suite_size):
+    fig, ax = plt.subplots(figsize=(7.05, 2.45), layout="constrained")
+    labels = []
+    for index, (device, (count, _, _, speedup)) in enumerate(comparisons.items()):
+        bars = ax.bar(index, speedup, width=0.62, linewidth=0.75, **bar_style(device))
+        ax.bar_label(bars, labels=[f"{speedup:.2f}×"], padding=3)
+        labels.append(f"{device}\n({count}/{suite_size} kernels)")
+    ax.set_xticks(range(len(labels)), labels)
+    peak_speedup = max(speedup for _, _, _, speedup in comparisons.values())
+    ax.set(ylim=(0, 1.2 * max(1, peak_speedup)), ylabel="Mean µPyCore speedup (×)\n(projected)")
+    ax.yaxis.set_major_locator(MaxNLocator(5))
+    ax.set_axisbelow(True)
+    ax.grid(axis="y", color="#dddddd", linewidth=0.55)
+    ax.axhline(1, color="#595959", linestyle="--", linewidth=0.7)
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.tick_params(axis="x", length=0)
+    return fig
 
 
 def save(fig, directory, stem):
@@ -149,11 +191,9 @@ def main():
     devices = [device for device in STYLES
                if any(device in times for _, times in runtimes.values())]
     suite_size = len(runtimes)
-    totals, coverage = suite_totals(runtimes, devices)
-    means = {device: total / suite_size if total is not None else None
-             for device, total in totals.items()}
-    labels = {device: f"{mean:.1f}" if mean is not None else f"N/A ({coverage[device]}/{suite_size})"
-              for device, mean in means.items()}
+    comparisons = suite_comparisons(runtimes, [device for device in devices if device != CORE])
+    if not comparisons:
+        parser.error("the suite has no board timings to compare")
     rates = {device: 300_000 / ms for device, ms in pystone.items()}
 
     plt.rcParams.update({
@@ -168,14 +208,12 @@ def main():
     ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:,.0f}"))
     save(fig, args.out_dir, "upycore-pystone")
     save(suite_plot(runtimes, devices), args.out_dir, "upycore-benchmark-suite")
-    fig, ax = device_bars(means, f"Mean runtime (ms/kernel, {suite_size} non-Pystone kernels)", labels)
-    ax.xaxis.set_major_locator(MaxNLocator(5))
-    save(fig, args.out_dir, "upycore-benchmark-average-runtime")
+    save(matched_runtime_plot(comparisons, suite_size), args.out_dir, "upycore-benchmark-average-runtime")
+    save(speedup_plot(comparisons, suite_size), args.out_dir, "upycore-benchmark-average-speedup")
 
-    for device in devices:
-        total = totals[device]
-        summary = f"{total:.3f} ms total, {means[device]:.3f} ms/kernel" if total is not None else labels[device]
-        print(f"{device:22} {summary}")
+    for device, (count, core, board, speedup) in comparisons.items():
+        print(f"{device:17} {count}/{suite_size} kernels   µPyCore {core:.3f} ms   "
+              f"board {board:.3f} ms   {speedup:.3f}× mean speedup")
 
 
 if __name__ == "__main__":
