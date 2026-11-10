@@ -422,7 +422,9 @@ Clock-ratio sweep on the final tree (`--sim-arg +IO_CLK_NS=10` and
 firmware truncated the microsecond divider (`hz / 1000000 - 1`): at the
 bench's 149,992,500 Hz a microsecond was 149 io_clk cycles, 0.7 % short,
 so `ticks_us` ran fast against the hart's wait. It now rounds; with that
-`sleep_accuracy`, `ticks` and `blink` pass at all three ratios. Every
+`sleep_accuracy`, `ticks` and `blink` pass at all three ratios, every I/O
+area passes again at the default io_clk (io 10, irq 8, system 7, console
+9, usb 4) and the io area at hart × 1.5. Every
 I/O area also passes compiled by uPy2 (`--compiler mpyc`, as CI runs
 them): io 10, irq 8, system 7, console 9, usb 4.
 
