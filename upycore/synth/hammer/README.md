@@ -15,12 +15,8 @@ This flow produced the 18 ns post-route result and the Genus reports that
 
 ## Before the next run (the 32-macro memory)
 
-- **`converted/` must be regenerated** with `convert_rtl.sh` (sv2v) and
-  pushed; the files and `RTL_STAMP` here are from before the memory split.
-  Only `mpy_mem.sv`, `mpy_defs.svh` (four new constants) and `mpy_synth.py`
-  changed, so `converted/mpy_core.v` is still the same logic, and a
-  whole-chip run that takes the memory from the RTL (the default, without
-  `SOC_RTL=converted`) can start with `STALE_OK=1` until then.
+- **`converted/`** was regenerated for this RTL (bdb4880; only `mpy_soc.v`
+  and `RTL_STAMP` changed, the core's logic is the same).
 - **Memory.** Each bank is eight `fakeram_d4096_w36` macros (32 in all);
   see "Why 32 macros and not four" below. `check_syn.py` and
   `sweep.sh status` expect 33 macros.
