@@ -150,7 +150,7 @@ def uart_tx(io: float, bauds=(115200, 1_000_000, 3_000_000)) -> dict:
     return out
 
 
-def uart_rx(io: float, bauds=(115200, 460800, 1_000_000), count: int = 2048) -> dict:
+def uart_rx(io: float, bauds=(115200, 460800, 1_000_000, 3_000_000), count: int = 2048) -> dict:
     out = {}
     for baud in bauds:
         image = _program("uart_rx", {"BAUD": str(baud), "COUNT": str(count)}, f"_{baud}")

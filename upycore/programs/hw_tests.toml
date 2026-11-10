@@ -591,6 +591,7 @@ mem32_align = { file = "hw/io/mem32_align.py", oracle = false }
 pin_loop = { file = "hw/io/pin_loop.py", oracle = false, sim_args = ["+GPIO_LOOP=1"] }
 blink = { file = "hw/io/blink.py", oracle = false }
 uart_echo = { file = "hw/io/uart_echo.py", oracle = false, sim_args = ["+UART_IN=hello world\n", "+UART_IN_US=8000"] }
+uart_rx = { file = "hw/io/uart_rx.py", oracle = false, sim_args = ["+GPIO_LOOP=1"] }
 sleep_accuracy = { file = "hw/io/sleep_accuracy.py", cycles = 30_000_000, oracle = false }
 ticks = { file = "hw/io/ticks.py", oracle = false }
 

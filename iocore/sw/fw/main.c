@@ -274,9 +274,11 @@ static void command(uint32_t w) {
         uint32_t n = w & 0xFF, k = rx_count();
         if (k > n) k = n;
         rsp(k);
-        for (uint32_t i = 0; i < k; i += 3) {
+        // Four bytes a word: the hart stores each word straight into its
+        // bytes object (_io.uart_rx), so the unused high bytes stay 0.
+        for (uint32_t i = 0; i < k; i += 4) {
             uint32_t v = 0;
-            for (uint32_t j = 0; j < 3 && i + j < k; j++) v |= (uint32_t)rx_ring[rx_tail++ % RING] << (8 * j);
+            for (uint32_t j = 0; j < 4 && i + j < k; j++) v |= (uint32_t)rx_ring[rx_tail++ % RING] << (8 * j);
             rsp(v);
         }
         break;

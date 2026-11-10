@@ -46,8 +46,8 @@
 #define CH_UART_TX1   0x21   // one to three bytes, byte 0 in bits 7:0
 #define CH_UART_TX2   0x22
 #define CH_UART_TX3   0x23
-#define CH_UART_RX    0x28   // 7:0 at most this many bytes. RSP: count k, then ceil(k/3)
-                             // words of three bytes (byte 0 in bits 7:0)
+#define CH_UART_RX    0x28   // 7:0 at most this many bytes. RSP: count k, then ceil(k/4)
+                             // words of four bytes (byte 0 in bits 7:0; unused bytes 0)
 #define CH_UART_DEINIT 0x29
 #define CH_UART_IRQ   0x2A   // 15:0 the triggers to raise UART0_RX for (UIRQ_*)
 #define   UIRQ_TXIDLE 0x20   //   the TX ring and the line are idle after sending
@@ -57,7 +57,7 @@
                              // the next word is the period in µs
 #define CH_TIMER_DEINIT 0x31 // 1:0 id
 
-#define PROTO_VERSION 5
+#define PROTO_VERSION 6
 
 // Event bits (the hart's EVT, set with BR_EVT).
 #define EV_SOFT    (1u << 0)   // micropython.schedule (the hart sets it itself)

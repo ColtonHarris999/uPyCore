@@ -1,5 +1,5 @@
-version 5
-page0 0x494f0005
+version 6
+page0 0x494f0006
 con_mode 0 con_rx 0
 evt 0x14
 evt 0x314
