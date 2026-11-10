@@ -6,18 +6,21 @@ LEFs) and before `make syn`, so the config does not change under a finished
 synthesis. It rewrites cfg/*cfg.yml: the toplevel width and height, and one
 `hardmacro` entry per macro (Module 2 Task 3 does the same by hand):
 
-  * mpy_mem's four banks, mpy_soc/u_mem/g_blk[0..3].ram/macro.mem. Every bank
-    holds a quarter of memory (interleaved by word), so the logic should be
-    close to all four pins.
+  * mpy_mem's 32 macros, mpy_soc/u_mem/g_mac[0..31].ram/macro.mem (macro
+    8 * bank + k is the k-th eighth of a bank). Every bank holds a quarter
+    of memory (interleaved by word), so the logic should be close to all of
+    them.
   * mpy_gc's table, mpy_soc/u_gc/u_atb/macro.mem, in the logic area.
 
-Layout. fakeram puts every signal pin on one side edge. For a macro much
-wider than tall (the 31 mm x 0.22 mm d32768_w36 at the default pin pitch)
-the four banks are stacked in one column with the logic beside their pin
-edge. Otherwise two columns of two face each other across a logic channel,
-the left column mirrored so both pin edges face the channel. The logic
-area gets --logic-area / --util of room (default 40% full), 100 um from the die edge
-and 60 um between macros.
+Layout. fakeram puts every signal pin on one side edge, and a 4096 x 36
+macro is 3.95 mm x 0.16 mm. Two columns of 16 face each other across a
+logic channel, the left column mirrored so every pin edge faces the
+channel; a bank is one quadrant (bank 0 bottom left, 1 bottom right, 2 top
+left, 3 top right). Standard cells are kept out of everything but the
+channel, and the chip's I/O pins sit on the top edge across the channel
+only, clk_i in the middle: left to Hammer they fill a whole die edge and
+pull the logic out along the macros. The channel gets --logic-area / --util
+of room (default 45% full), 100 um from the die edge.
 
     python3 ~/upycore/upycore/synth/hammer/place_macros.py [design_folder]
 
@@ -40,13 +43,14 @@ except ImportError:
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1] / "tools"))
-from mpy_synth import GC_SRAM_MACRO, SRAM_BLOCKS, SRAM_MACRO  # noqa: E402
+from mpy_synth import GC_SRAM_MACRO, SRAM_BLOCKS, SRAM_MACRO, SRAM_MACROS, SRAM_MACROS_PER_BLOCK  # noqa: E402
 
 SITE_W, ROW_H = 0.46, 2.72      # sky130 hd placement site
 TOP = "mpy_soc"
 # Hammer writes `place_inst <path> ...` into Tcl without quoting, so the
 # brackets of the generate-block names are escaped here.
-BANK_PATH = TOP + "/u_mem/g_blk\\[{b}\\].ram/macro.mem"
+BANK_PATH = TOP + "/u_mem/g_mac\\[{b}\\].ram/macro.mem"
+MET2_PITCH, MET2_OFFSET = 0.46, 0.23   # sky130 met2 tracks (vertical)
 GC_PATH = TOP + "/u_gc/u_atb/macro.mem"
 
 
@@ -92,7 +96,28 @@ def layout(bank, gc, args):
     # Orientation that puts the pin edge on the given side.
     face = {"right": "r0" if bside == "right" else "my",
             "left": "r0" if bside == "left" else "my"}
-    if bw > 4 * bh:
+    if SRAM_MACROS > SRAM_BLOCKS:
+        # Two columns of macros, pin edges on the channel between them.
+        per_col = SRAM_MACROS // 2
+        g = args.stack_gap
+        col_h = per_col * bh + (per_col - 1) * g
+        die_h = snap(col_h + 2 * m, ROW_H, up=True)
+        halo = 10.0                      # clear of the macro pins
+        chan = max(logic / col_h, gw + 2 * s) + 2 * halo
+        die_w = snap(2 * m + 2 * bw + chan, SITE_W, up=True)
+        x_left, x_right = m, die_w - m - bw
+        for b in range(SRAM_BLOCKS):
+            x, o = (x_left, face["right"]) if b % 2 == 0 else (x_right, face["left"])
+            for k in range(SRAM_MACROS_PER_BLOCK):
+                slot = (b // 2) * SRAM_MACROS_PER_BLOCK + k
+                place.append((BANK_PATH.format(b=b * SRAM_MACROS_PER_BLOCK + k), x, m + slot * (bh + g), o))
+        place.append((GC_PATH, x_left + bw + (chan - gw) / 2, m, "r0"))
+        # No standard cells outside the channel: the die margins and the
+        # gaps between stacked macros would otherwise take logic.
+        edge = x_left + bw + halo
+        blocks.append((0, 0, edge, die_h))
+        blocks.append((die_w - edge, 0, edge, die_h))
+    elif bw > 4 * bh:
         # One column of banks, pins facing the logic on their pin side.
         col_h = SRAM_BLOCKS * bh + (SRAM_BLOCKS - 1) * s
         die_h = snap(max(col_h, gh) + 2 * m, ROW_H, up=True)
@@ -123,12 +148,48 @@ def layout(bank, gc, args):
             [(snap(x, SITE_W), y, snap(w, SITE_W), h) for x, y, w, h in blocks])
 
 
+def top_ports(path: Path) -> list[str]:
+    """Port bits of mpy_soc, from the sv2v file (numeric ranges), clk_i first."""
+    text = path.read_text()
+    m = re.search(r"^module %s\b.*?^endmodule" % TOP, text, re.S | re.M)
+    if not m:
+        sys.exit(f"{path}: no module {TOP}")
+    head = set(re.findall(r"\w+", m.group(0).split(");", 1)[0])[2:])
+    bits = []
+    for d in re.finditer(r"^\s*(?:input|output)\s+(?:wire|reg)\s*(?:\[(\d+):(\d+)\])?\s*(\w+)\s*;", m.group(0), re.M):
+        hi, lo, name = d.group(1), d.group(2), d.group(3)
+        if name not in head:
+            continue
+        if hi is None:
+            bits.append(name)
+        else:
+            bits += [f"{name}\\[{i}\\]" for i in range(int(lo), int(hi) + 1)]
+    return bits
+
+
+def pin_plan(bits: list[str], x0: float, x1: float, y: float) -> list[dict]:
+    """One met2 location per port bit on the top edge between x0 and x1."""
+    others = [b for b in bits if b != "clk_i"]
+    order = others[:len(others) // 2] + ["clk_i"] + others[len(others) // 2:]
+    step = (x1 - x0) / (len(order) + 1)
+    if step < 4 * MET2_PITCH:
+        sys.exit(f"{len(order)} pins do not fit on {x1 - x0:.0f} um of edge")
+    out = []
+    for i, b in enumerate(order):
+        x = round(round((x0 + (i + 1) * step - MET2_OFFSET) / MET2_PITCH) * MET2_PITCH + MET2_OFFSET, 3)
+        out.append({"pins": b, "side": "top", "layers": ["met2"], "location": [x, y]})
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("folder", nargs="?", default=".", type=Path, help="mpy_soc design folder")
     ap.add_argument("--logic-area", type=float, default=2.0e6,
                     help="standard-cell area in um^2 (mpy_soc synthesis: about 1.9e6 without macros)")
-    ap.add_argument("--util", type=float, default=0.4, help="target utilization of the logic area")
+    ap.add_argument("--util", type=float, default=0.45, help="target utilization of the logic area")
+    ap.add_argument("--stack-gap", type=float, default=21.76, help="between stacked memory macros, um (whole rows)")
+    ap.add_argument("--ports", type=Path, default=HERE / "converted" / (TOP + ".v"),
+                    help="Verilog file with the top's port list (for the pin plan)")
     ap.add_argument("--margin", type=float, default=100.0, help="die edge to macro, um")
     ap.add_argument("--spacing", type=float, default=60.0, help="between macros, um")
     ap.add_argument("--dry-run", action="store_true", help="print, do not write the config")
@@ -143,8 +204,12 @@ def main() -> int:
     # Chip I/O on the edge next to the logic. Left as the class has it, the
     # ~250 ports spread along the whole 36 mm bottom edge of the strip die
     # and drag the logic out after them.
-    strip = bank[0] > 4 * bank[1]
+    split = SRAM_MACROS > SRAM_BLOCKS
+    strip = not split and bank[0] > 4 * bank[1]
     pins = [{"pins": "*", "side": "left", "layers": ["met3"]}] if strip else None
+    if split:
+        x0 = args.margin + bank[0]
+        pins = pin_plan(top_ports(args.ports), x0 + 30, die_w - x0 - 30, die_h)
 
     print(f"{SRAM_MACRO['name']}: {bank[0]} x {bank[1]} um, pins on the {bank[2]}")
     print(f"{GC_SRAM_MACRO['name']}: {gc[0]} x {gc[1]} um, pins on the {gc[2]}")
@@ -189,7 +254,12 @@ def main() -> int:
         doc["vlsi.inputs.pin_mode"] = "generated"
         doc["vlsi.inputs.pin.generate_mode"] = "semi_auto"
         doc["vlsi.inputs.pin.assignments"] = pins
-        print("  all chip I/O pins on the left edge (met3), next to the logic")
+        if split:
+            xs = [q["location"][0] for q in pins]
+            print(f"  {len(pins)} chip I/O pins on the top edge (met2), x {min(xs):.2f}..{max(xs):.2f}, "
+                  "clk_i in the middle")
+        else:
+            print("  all chip I/O pins on the left edge (met3), next to the logic")
     text = yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100)
     cfg.write_text("\n".join(head + ["# Macro placement and die size by place_macros.py."]) + "\n" + text)
     print(f"wrote {cfg}")
