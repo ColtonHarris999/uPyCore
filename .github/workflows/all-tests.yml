@@ -16,10 +16,11 @@ on:
 permissions:
   contents: read
 
-# A title or body edit must not cancel the run a push just started.
+# A new push supersedes stale main runs. PR title and body edits must not
+# cancel the run a push just started.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' && (github.event.action != 'edited' || github.event.changes.base.ref.from) }}
+  cancel-in-progress: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && (github.event.action != 'edited' || github.event.changes.base.ref.from)) }}
 
 jobs:
   # Host checks. No Verilator. The uPy2 byte compare lives here too.
