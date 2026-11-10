@@ -166,13 +166,18 @@ module upycore_fp_divrem #(
     logic signed [13:0] r_exp;
     logic [52:0]        r_sig;
     logic               r_g, r_r, r_s;
-    logic [5:0]         rem_lz;
+    // A real fmod result needs leading-zero detection before normalization.
+    // Divide, sqrt and fmod special/small results keep their existing latency.
+    logic               mod_norm_r, pack_result;
+    logic [5:0]         rem_lz_r;
+    logic [52:0]        mod_rem_r;
     // Pack stage: the normalized result, rounded and packed next cycle.
     logic               p_valid_r, p_special_r, p_sign_r, p_g_r, p_r_r, p_s_r;
     logic [63:0]        p_special_val_r;
     logic signed [13:0] p_exp_r;
     logic [52:0]        p_sig_r;
 
+    assign pack_result = (core_done && !s2_fmod_r) || fin_r || mod_norm_r;
     assign core_start = start_i && !fin_r &&
                         ((s1_valid_r && !s1_special_r && !fmod_small) || core_busy);
 
@@ -198,6 +203,7 @@ module upycore_fp_divrem #(
             s1_special_r <= 1'b0; s1_special_val_r <= '0; s1_a_r <= '0;
             fin_r <= 1'b0; s2_fmod_r <= 1'b0; s2_sqrt_r <= 1'b0; s2_sign_r <= 1'b0; s2_exp_r <= '0;
             s2_special_r <= 1'b0; s2_special_val_r <= '0;
+            mod_norm_r <= 1'b0; rem_lz_r <= '0; mod_rem_r <= '0;
             p_valid_r <= 1'b0; p_special_r <= 1'b0; p_sign_r <= 1'b0;
             p_g_r <= 1'b0; p_r_r <= 1'b0; p_s_r <= 1'b0;
             p_special_val_r <= '0; p_exp_r <= '0; p_sig_r <= '0;
@@ -205,9 +211,15 @@ module upycore_fp_divrem #(
             s1_valid_r <= 1'b0;
             fin_r      <= 1'b0;
             p_valid_r  <= 1'b0;
+            mod_norm_r <= 1'b0;
         end else begin
-            p_valid_r <= core_done || fin_r;
-            if (core_done || fin_r) begin
+            mod_norm_r <= core_done && s2_fmod_r;
+            if (core_done && s2_fmod_r) begin
+                rem_lz_r  <= upycore_clz53(rem[52:0]);
+                mod_rem_r <= rem[52:0];
+            end
+            p_valid_r <= pack_result;
+            if (pack_result) begin
                 p_special_r     <= s2_special_r;
                 p_special_val_r <= s2_special_val_r;
                 p_sign_r        <= s2_sign_r;
@@ -247,11 +259,10 @@ module upycore_fp_divrem #(
     // ---------------- normalize (pack stage registers it) ----------------
 
     always_comb begin
-        rem_lz = upycore_clz53(rem[52:0]);
         if (s2_fmod_r) begin
             // Exact: the remainder (< b's significand) scaled by b's exponent.
-            r_exp = s2_exp_r - $signed(14'(rem_lz));
-            r_sig = rem[52:0] << rem_lz;
+            r_exp = s2_exp_r - $signed(14'(rem_lz_r));
+            r_sig = mod_rem_r << rem_lz_r;
             r_g   = 1'b0;
             r_r   = 1'b0;
             r_s   = 1'b0;
@@ -318,6 +329,6 @@ module upycore_fp_divrem #(
     end
     assign result_o = o_res_r;
     assign done_o   = o_valid_r;
-    assign busy_o   = s1_valid_r | core_busy | core_done | fin_r | p_valid_r | dn_pend_r | o_valid_r;
+    assign busy_o   = s1_valid_r | core_busy | core_done | fin_r | mod_norm_r | p_valid_r | dn_pend_r | o_valid_r;
 
 endmodule

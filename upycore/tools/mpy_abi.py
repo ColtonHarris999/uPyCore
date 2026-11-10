@@ -341,6 +341,7 @@ NATIVES = [
     "new.type",
     "_limb_mac",  # (out, a, an, b, bn, k): write a*k + b, return signed carry
     "_limb_new",  # (n): zeroed bigint storage for n limbs
+    "_find_bytes",  # (s, sub, start, end): byte search, with a one-byte RTL path
 ]
 NATIVE_ID = {name: i for i, name in enumerate(NATIVES)}
 

@@ -53,7 +53,7 @@ function automatic logic [10:0] upycore_f64_exp_eff(input logic [63:0] v);
 endfunction
 
 // ---------------------------------------------------------------------------
-// Leading-zero counts (priority encoders; the last assignment wins)
+// Leading-zero counts
 // ---------------------------------------------------------------------------
 function automatic logic [6:0] upycore_clz64(input logic [63:0] v);
     logic [63:0] x;
@@ -73,18 +73,14 @@ function automatic logic [6:0] upycore_clz64(input logic [63:0] v);
     end
 endfunction
 
+// A set bit below the significand makes the all-zero count saturate at
+// the significand width while keeping the same balanced encoder.
 function automatic logic [5:0] upycore_clz53(input logic [52:0] v);
-    upycore_clz53 = 6'd53;
-    for (int i = 0; i < 53; i++) begin
-        if (v[i]) upycore_clz53 = 6'(52 - i);
-    end
+    return 6'(upycore_clz64({v, 11'h400}));
 endfunction
 
 function automatic logic [5:0] upycore_clz56(input logic [55:0] v);
-    upycore_clz56 = 6'd56;
-    for (int i = 0; i < 56; i++) begin
-        if (v[i]) upycore_clz56 = 6'(55 - i);
-    end
+    return 6'(upycore_clz64({v, 8'h80}));
 endfunction
 
 // ---------------------------------------------------------------------------

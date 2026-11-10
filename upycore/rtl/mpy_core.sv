@@ -311,6 +311,17 @@ module mpy_core
         S_BF_VA,
         S_BF_VA2,
         S_BIN,
+        S_BIN_TYPES,
+        S_LCAT_AN,
+        S_LCAT_BN,
+        S_LCAT_ALLOC,
+        S_LCAT_HDR,
+        S_LCAT_AP,
+        S_LCAT_BP,
+        S_LCAT_COPY,
+        S_LCAT_R,
+        S_LCAT_W,
+        S_LCAT_NEXT,
         S_BIN_FB,
         S_BI_TRY,
         S_BI_L_KIND,
@@ -349,6 +360,7 @@ module mpy_core
         S_BOOT3,
         S_BOOT4,
         S_BOOT_FLAGS,
+        S_BOOT_STR,
         S_BOOT5,
         S_BOOT6,
         S_BOOT7,
@@ -367,6 +379,8 @@ module mpy_core
         S_CALL_MN,
         S_CALL_NI,
         S_CALL_TF,
+        S_CALL_STR,
+        S_CALL_MAKE,
         S_CB_A,
         S_CB_C,
         S_CB_L,
@@ -497,6 +511,9 @@ module mpy_core
         S_GI_V1,
         S_HASH,
         S_HASH_I64,
+        S_HASH_TUPLE_N,
+        S_HASH_TUPLE_ITEM,
+        S_HASH_TUPLE_NEXT,
         S_HASH_OBJ,
         S_HASH_W16,
         S_HC1,
@@ -535,6 +552,11 @@ module mpy_core
         S_KE_B0,
         S_KE_B1,
         S_KE_OBJ,
+        S_KE_TUPLE_AN,
+        S_KE_TUPLE_BN,
+        S_KE_TUPLE_A,
+        S_KE_TUPLE_B,
+        S_KE_TUPLE_NEXT,
         S_KE_S,
         S_LA,
         S_LA_A,
@@ -629,6 +651,15 @@ module mpy_core
         S_N_BCL,
         S_N_BCMP1,
         S_N_BCMP2,
+        S_N_FIND_SUB,
+        S_N_FIND_INFO,
+        S_N_FIND_BYTE,
+        S_N_FIND_START,
+        S_N_FIND_END,
+        S_N_FIND_SRC,
+        S_N_FIND_RD,
+        S_N_FIND_MATCH,
+        S_N_FIND_PICK,
         S_N_BEI,
         S_N_DATA,
         S_N_FGET,
@@ -673,6 +704,7 @@ module mpy_core
         S_QD,
         S_QOP,
         S_RAISE,
+        S_RX_DROP,
         S_RET,
         S_RET_D,
         S_RH,
@@ -1003,9 +1035,6 @@ module mpy_core
         S_FI_PRE,
         S_N_SF0B,
         S_SA_K2,
-        S_N_BCMP_W,
-        S_N_BCMP_W2,
-        S_N_BCI,
         S_N_BCF,
         S_NAT_WCA,
         S_LA_CA,
@@ -1113,7 +1142,7 @@ module mpy_core
     // Image qstr count, plus a RAM descriptor table for ids compiled code invents.
     logic [31:0] h_nq, h_qext, h_qextn, qid;
     state_e      qd_nxt;
-    val_t ty_fun, ty_bm, ty_cell, ty_obj, ty_stop, ty_mem, ty_slice;
+    val_t ty_fun, ty_bm, ty_cell, ty_obj, ty_stop, ty_mem, ty_slice, ty_str;
 
     // live frame
     logic [31:0] fbase, fprev, rc, pc, op_pc, qbase, cbase;
@@ -1277,6 +1306,8 @@ module mpy_core
     val_t        si_v; logic [31:0] si_len, si_hash, si_addr; logic si_na;  // SINFO
     val_t        se_a, se_b; logic se_eq;
     val_t        ke_a, ke_b; logic ke_eq, ke_cx;
+    logic [3:0]  key_tuple_len, key_tuple_index;
+    val_t        key_tuple_item;
     logic [1:0]  lk_mode; logic lk_set, lk_found, lk_cx, lk_ro;
     val_t        lk_res;
     logic        lk_hasav;
@@ -2208,7 +2239,8 @@ module mpy_core
             S_BOOT11: begin ty_obj <= mv; rd(TT + 4 * ABI_T_STOPITERATION, S_BOOT12); end
             S_BOOT12: begin ty_stop <= mv; rd(TT + 4 * ABI_T_MEMORYERROR, S_BOOT13); end
             S_BOOT13: begin ty_mem <= mv; rd(TT + 4 * ABI_T_SLICE, S_BOOT14); end
-            S_BOOT14: begin ty_slice <= mv; rd(h_msgs + 4 * ABI_MSG_MEMORY, S_BOOT15); end
+            S_BOOT14: begin ty_slice <= mv; rd(TT + 4 * ABI_T_STR, S_BOOT_STR); end
+            S_BOOT_STR: begin ty_str <= mv; rd(h_msgs + 4 * ABI_MSG_MEMORY, S_BOOT15); end
             S_BOOT15: begin
                 wb_v[0] <= vint(ABI_OB_EXCEPTION); wb_v[1] <= ty_mem; wb_v[2] <= mv;
                 wb_v[3] <= VNULL; wb_v[4] <= VNULL;
@@ -2256,8 +2288,15 @@ module mpy_core
             S_CALL_TF: begin
                 c_tflags <= md;
                 if (md & ABI_TF_INST) st <= S_NEW;
-                else rd(aoff(adr(ab_q), 32), S_CALL_MN);
+                else if (ab_q == ty_str && !ab_chunked && ab_nkw == 8'd0) begin
+                    if (ab_pe == ab_lo) deliver({ABI_TAG_QSTR, ABI_Q_EMPTY}, crk);
+                    else if (ab_pe == ab_lo + 8'd1) rd(ab_ptr(ab_lo), S_CALL_STR);
+                    else st <= S_CALL_MAKE;
+                end else rd(aoff(adr(ab_q), 32), S_CALL_MN);
             end
+            S_CALL_STR: if (strlike(mv)) deliver(mv, crk);
+                        else st <= S_CALL_MAKE;
+            S_CALL_MAKE: rd(aoff(adr(ab_q), 32), S_CALL_MN);
             S_CALL_MN: if (mv == VNULL) raise_err(ABI_ERR_CANT_CREATE, ab_q, VNULL);
                        else if (ab_lo <= 8'd2) raise_err(ABI_ERR_STAR_ARGS, VNULL, VNULL);
                        else begin
@@ -2758,15 +2797,8 @@ module mpy_core
             // One pop per visit. S_XPOP loads the new top before the next test.
             S_RX_H: if (xsp != 5'd0 && xh <= op_pc) begin
                         sw_k <= 2'd0; gosub(S_XPOP, S_RX_H);
-                    end else if (xsp != 5'd0) begin
-                        pc <= xh;
-                        xp <= xc;
-                        drop_left <= (stk_depth > xv) ? (stk_depth - xv) : 16'd0;
-                        drop_push_en <= 1'b1;
-                        drop_push_v <= xc;
-                        drop_then <= S_FETCH;
-                        st <= S_DROP;
-                    end else if (gen != VNULL && fprev != 32'd0) begin
+                    end else if (xsp != 5'd0) st <= S_RX_DROP;
+                    else if (gen != VNULL && fprev != 32'd0) begin
                         pc <= 32'd0;
                         st <= S_GN_ESC;
                     end else if (fprev == 32'd0) begin
@@ -2774,6 +2806,12 @@ module mpy_core
                     end else begin
                         rx_crk <= frk; fl_base <= fprev; gosub(S_FILL, S_RX_POP);
                     end
+            S_RX_DROP: begin
+                pc <= xh; xp <= xc;
+                drop_left <= (stk_depth > xv) ? (stk_depth - xv) : 16'd0;
+                drop_push_en <= 1'b1; drop_push_v <= xc; drop_then <= S_FETCH;
+                st <= S_DROP;
+            end
             S_RX_POP: begin rx_from <= 1'b1; st <= S_RAISE; end
 
             // ---------------- fetch / decode ----------------
@@ -4278,10 +4316,46 @@ module mpy_core
                         st <= S_NUM_GO;
                     end else st <= S_NUM;
                 end else if (v0 == ABI_BINOP_EQUAL || v0 == ABI_BINOP_NOT_EQUAL) st <= S_EQ;
-                else if (h_bigint && (tg(rf[`SX(6'(sp - 7'd2))]) == ABI_TAG_OBJECT ||
-                                      tg(rf[`SX(6'(sp - 7'd1))]) == ABI_TAG_OBJECT)) st <= S_BI_TRY;
+                else st <= S_BIN_TYPES;
+            end
+            S_BIN_TYPES: begin
+                if ((n_o == ABI_BINOP_LESS || n_o == ABI_BINOP_MORE ||
+                     n_o == ABI_BINOP_LESS_EQUAL || n_o == ABI_BINOP_MORE_EQUAL) &&
+                    ((strlike(t[0]) && strlike(t[1])) ||
+                     (tg(t[0]) == ABI_TAG_BYTES && tg(t[1]) == ABI_TAG_BYTES))) begin
+                    b0 <= 1'b0; si_v <= t[0]; gosub(S_SINFO, S_N_BCMP1);
+                end else if (n_o == ABI_BINOP_ADD && is_mut(t[0], ABI_MUT_LIST) && is_mut(t[1], ABI_MUT_LIST))
+                    rd(adr(t[0]), S_LCAT_AN);
+                else if (h_bigint && (tg(t[0]) == ABI_TAG_OBJECT || tg(t[1]) == ABI_TAG_OBJECT)) st <= S_BI_TRY;
                 else st <= S_BIN_FB;
             end
+            // Exact list concatenation. Coallocate the result like BUILD_LIST
+            // and use the normal tagged copy port and scoreboard.
+            S_LCAT_AN: begin x0 <= md; rd(adr(t[1]), S_LCAT_BN); end
+            S_LCAT_BN: begin x1 <= md; x4 <= x0 + md; st <= S_LCAT_ALLOC; end
+            S_LCAT_ALLOC: alloc(32'd3 + ((x4 < 32'd4) ? 32'd4 : x4), S_LCAT_HDR);
+            S_LCAT_HDR: begin
+                t[2] <= vmut(al_a, ABI_MUT_LIST);
+                wb_v[0] <= vint(x4);
+                wb_v[1] <= vint((x4 < 32'd4) ? 32'd4 : x4);
+                wb_v[2] <= {ABI_TAG_CONT, al_a + 32'd12};
+                x3 <= al_a + 32'd12; b0 <= 1'b0;
+                wblock(al_a, 4'd3, S_LCAT_AP);
+            end
+            S_LCAT_AP: rd(aoff(adr(t[0]), 8), S_LCAT_BP);
+            S_LCAT_BP: begin x2 <= md; gi <= 32'd0; st <= S_LCAT_COPY; end
+            S_LCAT_COPY: if (x0 == 32'd0) st <= S_LCAT_NEXT;
+                         else if (cfg_ca) begin
+                             if (ca_ok) begin ca_ship(x3, x2, x0); st <= S_LCAT_NEXT; end
+                         end else st <= S_LCAT_R;
+            S_LCAT_R: if (gi == x0) st <= S_LCAT_NEXT;
+                      else rd(x2 + (gi << 2), S_LCAT_W);
+            S_LCAT_W: begin wr(x3 + (gi << 2), mv, S_LCAT_R); gi <= gi + 32'd1; end
+            S_LCAT_NEXT: if (b0 || x1 == 32'd0) st <= S_NUM_PUT;
+                         else begin
+                             b0 <= 1'b1; x3 <= x3 + (x0 << 2); x0 <= x1;
+                             rd(aoff(adr(t[1]), 8), S_LCAT_BP);
+                         end
             S_BI_TRY: begin
                 v0 = 32'(n_o);
                 if (v0 >= ABI_BINOP_INPLACE_OR && v0 < ABI_BINOP_OR) v0 = v0 + 32'd13;
@@ -4743,7 +4817,11 @@ module mpy_core
                             r_rk <= crk; t[0] <= mv;
                             rd(ab_ptr(ab_lo + 8'd1), S_NAT_GR1);
                         end
-                    ABI_N_BCMP: begin si_v <= mv; gosub(S_SINFO, S_N_BCMP1); end
+                    ABI_N_FIND_BYTES: if (v0 != 32'd4 || !(strlike(mv) || tg(mv) == ABI_TAG_BYTES)) st <= S_NAT_FB;
+                        else begin t[0] <= mv; rd(ab_ptr(ab_lo + 8'd1), S_N_FIND_SUB); end
+                    ABI_N_BCMP: begin
+                        b0 <= 1'b1; si_v <= mv; gosub(S_SINFO, S_N_BCMP1);
+                    end
                     ABI_N_SEQSCAN: if(!cfg_ca || !cfg_bulk || v0!=5)deliver(vint(32'hfffffffe),crk);
                         else begin
                             mb_op_o<=7;mb_set_o<=1;mb_src_o<=ab_ptr(ab_lo+8'd3);mb_sn_o<=1;
@@ -5261,31 +5339,87 @@ module mpy_core
                       else wr(adr(t[3]), `iv[0], S_N_IN_W);
             S_N_IN_W: wr(aoff(adr(t[3]), 4), `iv[1], S_N_IN_D);
             S_N_IN_D: deliver(it_stop ? VSTOP : it_val, crk);
-            // SE stays resident. `la_len/`la_i alias sA[0]/sA[4], so the
-            // compare index lives in SE pads sA[6]/sA[7] and is mirrored
-            // into the LA image (words 0 and 4). The second operand is read
-            // from ARGBUF; si_len/si_addr survive the scratch switch.
-            S_N_BCMP1: if (scr_id != SCR_SE) scr_ensure(SCR_SE, S_N_BCMP1);
-                       else begin
-                           `se_len <= si_len; `se_pa <= si_addr;
-                           rd(ab_ptr(ab_lo + 8'd1), S_N_BCMP1B);
-                       end
+            // One-byte delimiter search for exact strings and bytes.
+            // Firmware owns argument normalization and the general matcher.
+            S_N_FIND_SUB: if (!(strlike(mv) || tg(mv) == ABI_TAG_BYTES)) st <= S_NAT_FB;
+                          else begin si_v <= mv; gosub(S_SINFO, S_N_FIND_INFO); end
+            S_N_FIND_INFO: if (si_len != 32'd1) st <= S_NAT_FB;
+                           else rd({si_addr[31:2], 2'b00}, S_N_FIND_BYTE);
+            S_N_FIND_BYTE: begin
+                x4 <= {24'd0, byte_of(md, si_addr[1:0])};
+                rd(ab_ptr(ab_lo + 8'd2), S_N_FIND_START);
+            end
+            S_N_FIND_START: if (tg(mv) != ABI_TAG_INT || mv[31]) st <= S_NAT_FB;
+                            else begin
+                                x0 <= {mv[31:2], 2'b00}; x1 <= mv[31:0];
+                                rd(ab_ptr(ab_lo + 8'd3), S_N_FIND_END);
+                            end
+            S_N_FIND_END: if (tg(mv) != ABI_TAG_INT || mv[31]) st <= S_NAT_FB;
+                          else begin x2 <= mv[31:0]; si_v <= t[0]; gosub(S_SINFO, S_N_FIND_SRC); end
+            S_N_FIND_SRC: if (x2 > si_len || si_addr[1:0] != 2'b00) st <= S_NAT_FB;
+                          else if (x1 >= x2) deliver(vint(32'hFFFF_FFFF), crk);
+                          else begin x3 <= si_addr; st <= S_N_FIND_RD; end
+            S_N_FIND_RD: if (x0 >= x2) deliver(vint(32'hFFFF_FFFF), crk);
+                         else rd(x3 + x0, S_N_FIND_MATCH);
+            S_N_FIND_MATCH: begin
+                for (int k = 0; k < 4; k++)
+                    gi[k] <= md[8*k +: 8] == x4[7:0] &&
+                             {x0[31:2], 2'(k)} >= x1 && {x0[31:2], 2'(k)} < x2;
+                st <= S_N_FIND_PICK;
+            end
+            S_N_FIND_PICK: if (gi[3:0] == 4'b0000) begin
+                               x0 <= x0 + 32'd4; st <= S_N_FIND_RD;
+                           end else begin
+                               casez (gi[3:0])
+                                   4'b???1: v0 = x0;
+                                   4'b??10: v0 = {x0[31:2], 2'd1};
+                                   4'b?100: v0 = {x0[31:2], 2'd2};
+                                   default: v0 = {x0[31:2], 2'd3};
+                               endcase
+                               deliver(vint(v0), crk);
+                           end
+
+            // Lexicographic byte comparison, shared by exact str/bytes
+            // ordering and the firmware's _bcmp primitive. Read each word
+            // pair once and mask lanes past the end of either operand.
+            S_N_BCMP1: begin
+                x0 <= si_len; x2 <= si_addr;
+                if (b0) rd(ab_ptr(ab_lo + 8'd1), S_N_BCMP1B);
+                else begin si_v <= t[1]; gosub(S_SINFO, S_N_BCMP2); end
+            end
             S_N_BCMP1B: begin si_v <= mv; gosub(S_SINFO, S_N_BCMP2); end
             S_N_BCMP2: begin
-                `se_pb <= si_addr; sA[6] <= si_len; sA[7] <= 32'd0; st <= S_N_BCMP_W;
+                x1 <= si_len; x3 <= si_addr;
+                x4 <= 32'd0; gi <= (x0 < si_len) ? x0 : si_len;
+                st <= S_N_BCL;
             end
-            S_N_BCMP_W: wr(scr_addr(SCR_LA, 4'd0), {4'd0, sA[6]}, S_N_BCMP_W2);
-            S_N_BCMP_W2: wr(scr_addr(SCR_LA, 4'd4), {4'd0, sA[7]}, S_N_BCL);
-            S_N_BCL: if (sA[7] == sA[0] || sA[7] == sA[6]) begin
-                         t[7] <= vint(sA[0] - sA[6]); d_rk <= crk; st <= S_N_BCF;
-                     end else rd(sA[2] + {sA[7][31:2], 2'b00}, S_N_BCA);
-            S_N_BCA: begin sA[5] <= md; rd(sA[3] + {sA[7][31:2], 2'b00}, S_N_BCB); end
-            S_N_BCB: if (byte_of(sA[5], sA[7][1:0]) != byte_of(md, sA[7][1:0])) begin
-                         t[7] <= vint({24'd0, byte_of(sA[5], sA[7][1:0])} - {24'd0, byte_of(md, sA[7][1:0])});
-                         d_rk <= crk; st <= S_N_BCF;
-                     end else begin sA[7] <= sA[7] + 32'd1; st <= S_N_BCI; end
-            S_N_BCI: wr(scr_addr(SCR_LA, 4'd4), {4'd0, sA[7]}, S_N_BCL);
-            S_N_BCF: wr(scr_addr(SCR_LA, 4'd4), {4'd0, sA[7]}, S_DELIVER);
+            S_N_BCL: if (x4 >= gi) begin
+                         t[7] <= vint(x0 - x1); st <= S_N_BCF;
+                     end else rd(x2 + x4, S_N_BCA);
+            S_N_BCA: begin t[2] <= vint(md); rd(x3 + x4, S_N_BCB); end
+            S_N_BCB: begin
+                v0 = gi - x4;
+                vs0 = 7'd4;
+                for (int k = 3; k >= 0; k--)
+                    if (32'(k) < v0 && t[2][8*k +: 8] != md[8*k +: 8]) vs0 = 7'(k);
+                if (vs0 != 7'd4) begin
+                    v1 = {24'd0, byte_of(t[2][31:0], vs0[1:0])};
+                    v2 = {24'd0, byte_of(md, vs0[1:0])};
+                    t[7] <= vint(v1 - v2); st <= S_N_BCF;
+                end else begin x4 <= x4 + 32'd4; st <= S_N_BCL; end
+            end
+            S_N_BCF: if (b0) deliver(t[7], crk);
+                     else begin
+                         v0 = t[7][31:0];
+                         case (n_o)
+                             ABI_BINOP_LESS: vb = v0[31];
+                             ABI_BINOP_LESS_EQUAL: vb = v0[31] || v0 == 0;
+                             ABI_BINOP_MORE: vb = !v0[31] && v0 != 0;
+                             default: vb = !v0[31];
+                         endcase
+                         rf[`SX(6'(sp - 7'd2))] <= vbool(vb);
+                         sp <= sp - 7'd1; st <= S_FETCH;
+                     end
             S_N_HASH: deliver(hok ? vint(hh) : VSTOP, crk);
             S_N_DATA: deliver(vint(si_addr), crk);
             S_N_FGET: if (x3 >= 32'd6 && x3 <= 32'd11) deliver(mv, crk);
@@ -5640,12 +5774,31 @@ module mpy_core
                     ABI_TAG_QSTR: begin qid <= hk[31:0]; qd_nxt <= S_HASH_W16; st <= S_QD; end
                     ABI_TAG_STR, ABI_TAG_BYTES: rd(aoff(adr(hk), 4), S_HASH_W16);
                     ABI_TAG_INT64: rd(adr(hk), S_HASH_I64);
+                    ABI_TAG_TUPLE: rd(adr(hk), S_HASH_TUPLE_N);
                     ABI_TAG_OBJECT: rd(adr(hk), S_HASH_OBJ);
                     default: begin hok <= 1'b0; ret(); end
                 endcase
             end
             S_HASH_W16: begin hh <= {16'd0, md[15:0]}; ret(); end
             S_HASH_I64: begin hh <= sx31(md); ret(); end
+            // Short tuples of unboxed integers and bools use the same
+            // additive, signed-31-bit hash as firmware's _hashv.
+            S_HASH_TUPLE_N: begin
+                hh <= 32'd12345;
+                if (md > 32'd15) begin hok <= 1'b0; ret(); end
+                else if (md == 32'd0) ret();
+                else begin
+                    key_tuple_len <= md[3:0]; key_tuple_index <= 4'd1;
+                    rd(ha_m4, S_HASH_TUPLE_ITEM);
+                end
+            end
+            S_HASH_TUPLE_ITEM: if (!intlike(mv)) begin hok <= 1'b0; ret(); end
+                              else begin hh <= sx31(hh + ival(mv)); st <= S_HASH_TUPLE_NEXT; end
+            S_HASH_TUPLE_NEXT: if (key_tuple_index == key_tuple_len) ret();
+                              else begin
+                                  key_tuple_index <= key_tuple_index + 4'd1;
+                                  rd(ha_m4, S_HASH_TUPLE_ITEM);
+                              end
             S_HASH_OBJ: begin
                 if (md == ABI_OB_INSTANCE || md == ABI_OB_EXCEPTION || md == ABI_OB_BIGINT) hok <= 1'b0;
                 else hh <= {1'b0, hk[31:1]};
@@ -5707,7 +5860,11 @@ module mpy_core
                 end
                 else if (tg(ke_a) == ABI_TAG_FLOAT || tg(ke_a) == ABI_TAG_COMPLEX) begin
                     ke_eq <= 1'b0; ke_cx <= numlike(ke_b); ret();
-                end else if (tg(ke_a) == ABI_TAG_OBJECT || tg(ke_a) == ABI_TAG_TUPLE) rd(adr(ke_a), S_KE_OBJ);
+                end else if (tg(ke_a) == ABI_TAG_TUPLE && tg(ke_b) == ABI_TAG_TUPLE)
+                    rd(adr(ke_a), S_KE_TUPLE_AN);
+                else if (tg(ke_a) == ABI_TAG_TUPLE && tg(ke_b) == ABI_TAG_OBJECT) begin
+                    ke_eq <= 1'b0; ke_cx <= 1'b1; ret();
+                end else if (tg(ke_a) == ABI_TAG_OBJECT) rd(adr(ke_a), S_KE_OBJ);
                 else begin ke_eq <= 1'b0; ret(); end
             end
             S_KE_S: begin ke_eq <= se_eq; ret(); end
@@ -5718,9 +5875,27 @@ module mpy_core
             S_KE_B1: begin ke_eq <= (md == `ke_w1); ret(); end
             S_KE_OBJ: begin
                 ke_eq <= 1'b0;
-                ke_cx <= (tg(ke_a) == ABI_TAG_TUPLE) ? (tg(ke_b) == ABI_TAG_TUPLE)
-                                                      : (md == ABI_OB_INSTANCE || md == ABI_OB_EXCEPTION);
+                ke_cx <= (md == ABI_OB_INSTANCE || md == ABI_OB_EXCEPTION);
                 ret();
+            end
+            S_KE_TUPLE_AN: if (md > 32'd15) begin ke_eq <= 1'b0; ke_cx <= 1'b1; ret(); end
+                           else begin key_tuple_len <= md[3:0]; rd(adr(ke_b), S_KE_TUPLE_BN); end
+            S_KE_TUPLE_BN: if (md != 32'(key_tuple_len)) begin ke_eq <= 1'b0; ret(); end
+                           else if (md == 32'd0) begin ke_eq <= 1'b1; ret(); end
+                           else begin key_tuple_index <= 4'd1; st <= S_KE_TUPLE_NEXT; end
+            S_KE_TUPLE_NEXT: rd(adr(ke_a) + {26'd0, key_tuple_index, 2'b00}, S_KE_TUPLE_A);
+            S_KE_TUPLE_A: begin
+                key_tuple_item <= mv;
+                rd(adr(ke_b) + {26'd0, key_tuple_index, 2'b00}, S_KE_TUPLE_B);
+            end
+            S_KE_TUPLE_B: begin
+                if (key_tuple_item == mv && tg(mv) != ABI_TAG_FLOAT && tg(mv) != ABI_TAG_COMPLEX ||
+                    intlike(key_tuple_item) && intlike(mv) && ival(key_tuple_item) == ival(mv)) begin
+                    if (key_tuple_index == key_tuple_len) begin ke_eq <= 1'b1; ret(); end
+                    else begin key_tuple_index <= key_tuple_index + 4'd1; st <= S_KE_TUPLE_NEXT; end
+                end else begin
+                    ke_eq <= 1'b0; ke_cx <= !(intlike(key_tuple_item) && intlike(mv)); ret();
+                end
             end
 
             // dict/set probe: t4 container, t5 key, t6 value; lk_mode, lk_set
