@@ -889,7 +889,7 @@ latency means stay within 0.2 %.
 | Edges missed | 0 of 1,000 (one rising edge every 200 µs) |
 | 1 kHz `machine.Timer` callback, period at the handler's first opcode | mean 999.990 µs, σ 1.65 µs, worst 5.18 µs off with the main program sleeping; σ 1.65 µs, worst 3.18 µs off while it spins |
 | UART transmit, 4 KB in 256-byte `write()`s | 11,518 B/s at 115200 baud (100 % of the line), 99,800 B/s at 1 Mbaud (99.8 %), 292,398 B/s at 3 Mbaud (97.5 %) |
-| UART receive, 2 KB back to back, `readinto` a memoryview slice | all 2,048 bytes at 115200, 460800, 1 M and 3 Mbaud: 11,521, 46,143, 100,279 and 298,021 B/s (100 %, 100 %, 100 %, 99.3 % of the line; a rate a little over 100 % is the first byte's timing). Phase 6's path lost bytes from 460800 baud (1,051 of 2,048 arrived; 635 at 1 Mbaud) |
+| UART receive, 2 KB back to back, `readinto` a memoryview slice | all 2,048 bytes at 115200, 460800, 1 M and 3 Mbaud: 11,525, 46,042, 100,294 and 300,734 B/s (100 % of the line at each; a rate a little over 100 % is the first byte's timing). Phase 6's path lost bytes from 460800 baud (1,051 of 2,048 arrived; 635 at 1 Mbaud) |
 | Island switching activity (SAIF), idle / busy | 0.0058 / 0.0074 toggles per bit per io_clk cycle over 117,946 bits |
 
 Reading the table:
@@ -910,8 +910,8 @@ Reading the table:
   the bytes one by one into the memoryview, 759,142 cycles for 200.
   Together, about 11.5 ms per 200 bytes, so the hart drained about
   10 KB/s and the 256-byte ring overflowed above 115200 baud. Now
-  `_io.uart_rx(200)` takes 15,272 cycles and `readinto` of 200 bytes into
-  a memoryview slice 25,783 (about 776 KB/s): each answer word is about
+  `_io.uart_rx(200)` takes 15,284 cycles and `readinto` of 200 bytes into
+  a memoryview slice 25,687 (about 780 KB/s): each answer word is about
   250 cycles of firmware loop (an RSP load and a store), and the I/O core
   fills RSP at about 170 hart cycles a word, so the two sides are now
   about even; a call's fixed cost (the command, the count, the
