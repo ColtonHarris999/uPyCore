@@ -125,29 +125,6 @@ def suite_comparisons(suite, devices):
     return comparisons
 
 
-def matched_runtime_plot(comparisons, suite_size):
-    fig, ax = plt.subplots(figsize=(3.45, 3.05), layout="constrained")
-    positions = list(range(len(comparisons)))
-    core_means = [core for _, core, _, _ in comparisons.values()]
-    board_means = [board for _, _, board, _ in comparisons.values()]
-    core = ax.barh([row - 0.18 for row in positions], core_means, height=0.32,
-                   label=CORE, linewidth=0.65, **bar_style(CORE))
-    boards = ax.barh([row + 0.18 for row in positions], board_means, height=0.32,
-                     label="Comparison board", linewidth=0.65, color="white",
-                     edgecolor="#595959", hatch="//")
-    for bars in (core, boards):
-        ax.bar_label(bars, fmt="%.1f", padding=3, fontsize=7)
-    ax.set_yticks(positions, [f"{device}\n({count}/{suite_size} kernels)"
-                              for device, (count, _, _, _) in comparisons.items()])
-    ax.set(xlim=(0, 1.24 * max(core_means + board_means)),
-           ylim=(len(positions) - 0.5, -0.5), xlabel="Mean runtime (ms/kernel)")
-    ax.xaxis.set_major_locator(MaxNLocator(5))
-    ax.legend(loc="lower left", bbox_to_anchor=(0, 1.01), ncol=2, frameon=False,
-              borderaxespad=0, columnspacing=1.0, handletextpad=0.4, fontsize=7)
-    style_axis(ax)
-    return fig
-
-
 def speedup_plot(comparisons, suite_size):
     fig, ax = plt.subplots(figsize=(7.05, 2.45), layout="constrained")
     labels = []
@@ -208,7 +185,6 @@ def main():
     ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:,.0f}"))
     save(fig, args.out_dir, "upycore-pystone")
     save(suite_plot(runtimes, devices), args.out_dir, "upycore-benchmark-suite")
-    save(matched_runtime_plot(comparisons, suite_size), args.out_dir, "upycore-benchmark-average-runtime")
     save(speedup_plot(comparisons, suite_size), args.out_dir, "upycore-benchmark-average-speedup")
 
     for device, (count, core, board, speedup) in comparisons.items():

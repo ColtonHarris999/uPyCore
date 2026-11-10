@@ -58,13 +58,11 @@ kernel.
 
 The script writes vector PDFs and 300 dpi PNGs. Pystone reports throughput for
 300 iterations. The suite plots the remaining 15 kernels as grouped bars on a
-linear runtime axis. An empty bar slot indicates a missing timing. The paired
-runtime summary shows arithmetic mean runtimes for µPyCore and each board on
-that board's subset of non-Pystone kernels with published timings. The speedup
+linear runtime axis. An empty bar slot indicates a missing timing. The speedup
 summary takes the arithmetic mean of the individual board-runtime-to-µPyCore
-runtime ratios on that same subset, giving each eligible kernel equal weight.
-Both figures show coverage for each board. The script prints the paired means
-and the mean speedup.
+runtime ratios on each board's subset of non-Pystone kernels with published
+timings. The figure shows each board's coverage and weights each eligible kernel
+equally. The script prints the paired mean runtimes and the mean speedup.
 
 [benchmark-board-ms.csv](benchmark-board-ms.csv) carries forward the published
 board comparison at the precision recorded in the prior benchmark reports.
