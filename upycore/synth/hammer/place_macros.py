@@ -83,12 +83,12 @@ def find_lef(folder: Path, name: str) -> Path:
 
 
 def layout(bank, gc, args):
-    """Return (die_w, die_h, [(path, x, y, orient)])."""
+    """Return (die_w, die_h, [(path, x, y, orient)], [(x, y, w, h) place blockages])."""
     bw, bh, bside = bank
     gw, gh, _ = gc
     m, s = args.margin, args.spacing
     logic = args.logic_area / args.util
-    place = []
+    place, blocks = [], []
     # Orientation that puts the pin edge on the given side.
     face = {"right": "r0" if bside == "right" else "my",
             "left": "r0" if bside == "left" else "my"}
@@ -102,6 +102,11 @@ def layout(bank, gc, args):
         for b in range(SRAM_BLOCKS):
             place.append((BANK_PATH.format(b=b), x_bank, m + b * (bh + s), face["left"]))
         place.append((GC_PATH, m, m, "r0"))
+        # Keep standard cells out of the strips around the 31 mm banks (the
+        # die edge and the gaps between banks): without this the placer
+        # spreads the logic along the whole die and the wires run for mm.
+        bx = x_bank + 20
+        blocks.append((bx, 0, die_w - bx, die_h))
     else:
         rows = math.ceil(SRAM_BLOCKS / 2)
         col_h = rows * bh + (rows - 1) * s
@@ -114,7 +119,8 @@ def layout(bank, gc, args):
             x, o = (x_left, face["right"]) if c == 0 else (x_right, face["left"])
             place.append((BANK_PATH.format(b=b), x, m + r * (bh + s), o))
         place.append((GC_PATH, x_left + bw + s + (chan - gw) / 2, m, "r0"))
-    return die_w, die_h, [(p, snap(x, SITE_W), snap(y, ROW_H), o) for p, x, y, o in place]
+    return (die_w, die_h, [(p, snap(x, SITE_W), snap(y, ROW_H), o) for p, x, y, o in place],
+            [(snap(x, SITE_W), y, snap(w, SITE_W), h) for x, y, w, h in blocks])
 
 
 def main() -> int:
@@ -133,13 +139,15 @@ def main() -> int:
     folder = args.folder.resolve()
     bank = read_lef(find_lef(folder, SRAM_MACRO["name"]))
     gc = read_lef(find_lef(folder, GC_SRAM_MACRO["name"]))
-    die_w, die_h, place = layout(bank, gc, args)
+    die_w, die_h, place, blocks = layout(bank, gc, args)
 
     print(f"{SRAM_MACRO['name']}: {bank[0]} x {bank[1]} um, pins on the {bank[2]}")
     print(f"{GC_SRAM_MACRO['name']}: {gc[0]} x {gc[1]} um, pins on the {gc[2]}")
     print(f"die {die_w} x {die_h} um ({die_w * die_h / 1e6:.1f} mm^2)")
     for p, x, y, o in place:
         print(f"  {p:45s} x {x:10.2f}  y {y:8.2f}  {o}")
+    for x, y, w, h in blocks:
+        print(f"  no standard cells in x {x:.2f}..{x + w:.2f}, y {y:.2f}..{y + h:.2f}")
     if args.dry_run:
         return 0
 
@@ -162,6 +170,10 @@ def main() -> int:
     pcs[:] = [c for c in pcs if not (isinstance(c, dict) and c.get("type") == "hardmacro")]
     for p, x, y, o in place:
         pcs.append({"path": p, "type": "hardmacro", "x": x, "y": y, "orientation": o})
+    pcs[:] = [c for c in pcs if not (isinstance(c, dict) and str(c.get("path", "")).startswith(TOP + "/mpy_blk"))]
+    for i, (x, y, w, h) in enumerate(blocks):
+        pcs.append({"path": f"{TOP}/mpy_blk{i}", "type": "obstruction", "obs_types": ["place"],
+                    "x": x, "y": y, "width": w, "height": h})
     text = yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100)
     cfg.write_text("\n".join(head + ["# Macro placement and die size by place_macros.py."]) + "\n" + text)
     print(f"wrote {cfg}")
