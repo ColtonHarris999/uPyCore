@@ -8,6 +8,10 @@
 #                               reports in ~/par_data/<folder>/ (PAR_DATA moves it)
 #   sweep.sh start 12 10 8      synthesis only: one folder and one `make syn` per period
 #   sweep.sh par 20 15          synthesis, then place and route (`make par`)
+#   sweep.sh floorplan 15       synthesis, then Innovus up to the floorplan only
+#                               (`make par-to-floorplan`): check the macros, blockages
+#                               and pins before a full run; `make par-from-floorplan`
+#                               in the folder then finishes it
 #   sweep.sh status             synthesis results of the `start` folders
 #   sweep.sh par-status         post-route results of the `par` folders
 #
@@ -15,14 +19,15 @@
 # upycore_par_p20 for `par` (prefix set by PREFIX). Each run takes a Genus or
 # Innovus license and several cores, so start three or four at a time.
 #
-# The whole chip with its five SRAM macros (four memory banks, the GC table): TOP=mpy_soc sweep.sh start 20 15
+# The whole chip with its 33 SRAM macros (32 of main memory, the GC table): TOP=mpy_soc sweep.sh start 20 15
 # (folders upycore_soc_p20, or upycore_socpar_p20 with `par`) runs `make sram`
 # first, with the core from converted/mpy_core.v. SOC_RTL=converted takes the
 # whole chip from converted/mpy_soc.v instead. status then also counts the
-# macros in each netlist (want 5: 4 x d32768_w36, 1 x d600_w64).
-# With `par`, place_macros.py places the five macros and sets the die size
-# (DIE is ignored).
-# PLACE_ARGS passes place_macros.py options, e.g. PLACE_ARGS="--util 0.4".
+# macros in each netlist (want 33: 32 x d4096_w36, 1 x d600_w64).
+# With `par`, place_macros.py places the macros, keeps standard cells in the
+# channel between them, puts the I/O pins on the channel's top edge and sets
+# the die size (DIE is ignored).
+# PLACE_ARGS passes place_macros.py options, e.g. PLACE_ARGS="--util 0.5".
 #
 # Die size: DIE="w h" in um, default 1500 1500 for the core, 4000 3000 for
 # the chip. DESIGN_ARGS passes extra make_hammer_design.py options, for example
@@ -33,6 +38,9 @@
 # converted/*.v were generated from the RTL in this checkout. When the RTL
 # changed and they were not regenerated, it stops: run convert_rtl.sh where
 # sv2v works (not the lab machines) and push. NO_PULL=1 skips the pull.
+# STALE_OK=1 runs anyway: only for an RTL change outside the converted files
+# the run reads (TOP=mpy_soc without SOC_RTL=converted reads mpy_core.v alone;
+# the memory, GC and SoC modules come straight from the RTL).
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../../.." && pwd)
@@ -53,7 +61,9 @@ check_fresh() {
         if [ -z "$SWEEP_REEXEC" ]; then SWEEP_REEXEC=1 NO_PULL=1 exec "$0" "$@"; fi
     fi
     want=$(cat "$here/converted/RTL_STAMP" 2>/dev/null || true)
-    if [ "$want" != "$(rtl_stamp)" ]; then
+    if [ "$want" != "$(rtl_stamp)" ] && [ -n "$STALE_OK" ]; then
+        echo "warning: converted/*.v are older than the RTL (STALE_OK set)"
+    elif [ "$want" != "$(rtl_stamp)" ]; then
         echo "converted/*.v are older than the RTL in $repo/upycore/rtl."
         echo "Regenerate them with convert_rtl.sh (needs sv2v) and push, then run this again."
         exit 1
@@ -104,12 +114,14 @@ if [ "$TOP" = mpy_soc ]; then
     # Place and route: place the macros and size the die from the generated
     # LEFs (place_macros.py) between `make sram` and `make syn`.
     par_steps="make sram && python3 $here/place_macros.py . ${PLACE_ARGS:-} && make syn && make par"
+    fp_steps="make sram && python3 $here/place_macros.py . ${PLACE_ARGS:-} && make syn && make par-to-floorplan"
 else
     syn_prefix=${PREFIX:-upycore_v2}
     par_prefix=${PREFIX:-upycore_par}
     src=(--rtl "$here/converted/$TOP.v" --die ${DIE:-1500 1500})
     syn_steps="make syn"
     par_steps="make syn && make par"
+    fp_steps="make syn && make par-to-floorplan"
 fi
 
 case "$1" in
@@ -126,6 +138,12 @@ par)
     shift
     launch "$par_prefix" "$par_steps" "$@"
     echo "place and route takes much longer than synthesis; check with: $0 par-status"
+    ;;
+floorplan)
+    check_fresh "$@"
+    shift
+    launch "$par_prefix" "$fp_steps" "$@"
+    echo "then look at it (make open-chip) or finish it: make par-from-floorplan"
     ;;
 status)
     printf "%-22s %-8s %10s %10s %10s %12s %7s\n" folder state "slack ns" "path ns" "min ns" "area um2" macros
@@ -156,7 +174,7 @@ status)
     echo "Critical path of one run: awk '/Startpoint/{n++} n==1' <folder>/build/syn-rundir/reports/final_time_ss_100C_1v60.setup_view.rpt | less"
     ;;
 par-status)
-    printf "%-20s %-8s %9s %9s %9s %9s %12s %s\n" folder state "slack ns" "min ns" "r2r slk" "r2r min" "area um2" "power mW (vectorless)"
+    printf "%-20s %-8s %9s %9s %9s %9s %9s %12s %s\n" folder state "log WNS" "slack ns" "min ns" "r2r slk" "r2r min" "area um2" "power mW (vectorless)"
     for d in "$DESIGNS"/${par_prefix}_p*; do
         [ -d "$d" ] || continue
         p=${d##*_p}
@@ -166,7 +184,11 @@ par-status)
         pwr=$run/${TOP}_power.rpt
         are=$run/${TOP}_area.rpt
         state=$(state_of "$d" "$pwr")
-        slack=- minp=- rslack=- rminp=- power=- area=-
+        slack=- minp=- rslack=- rminp=- power=- area=- wns=-
+        # Setup WNS of the last timing summary in the Innovus log: the stage
+        # the run is in (placement, clock tree, route), before any report.
+        lg=$(ls -t "$run"/*.log 2>/dev/null | head -1)
+        [ -n "$lg" ] && wns=$(grep -a 'WNS (ns):' "$lg" | tail -1 | awk -F'|' '{gsub(/ /, "", $3); print $3}')
         # Innovus: "Slack:=   -4.175" on the worst path first, in ns.
         if [ -f "$tim" ]; then
             slack=$(zcat "$tim" | awk '/Slack:=/{print $2; exit}')
@@ -179,9 +201,10 @@ par-status)
         [ -f "$pwr" ] && power=$(awk '/^Total Power:/{printf "%.2f", $3; exit}' "$pwr")
         # First data row of report_area: the whole design, total area in column 3.
         [ -f "$are" ] && area=$(awk -v t="$TOP" '$1 == t && $3 ~ /^[0-9.]+$/{printf "%.0f", $3; exit}' "$are")
-        printf "%-20s %-8s %9s %9s %9s %9s %12s %s\n" "${d##*/}" "$state" "${slack:--}" "${minp:--}" \
+        printf "%-20s %-8s %9s %9s %9s %9s %9s %12s %s\n" "${d##*/}" "$state" "${wns:--}" "${slack:--}" "${minp:--}" \
             "${rslack:--}" "${rminp:--}" "${area:--}" "${power:--}"
     done
+    echo "log WNS = worst setup slack in the newest timing summary of the Innovus log (any stage)."
     echo "Reports: <folder>/build/par-rundir. r2r = register-to-register paths only (no I/O)."
     echo "Power here is Innovus's guess (20% toggle, slow corner); use the SAIF power for the paper."
     echo "Worst path: zcat <reports>/timingReports/${TOP}_postRoute_all.tarpt.gz | less"
@@ -251,6 +274,9 @@ collect)
                 [ -f "$deep/setup.rpt" ] && { echo; echo "== setup: worst 3 paths in full"; full 3 < "$deep/setup.rpt"; }
                 [ -f "$deep/drc.rpt" ] && { echo; echo "== DRC summary"; tail -25 "$deep/drc.rpt"; }
                 [ -f "$deep/conn.rpt" ] && { echo; echo "== connectivity"; tail -40 "$deep/conn.rpt"; }
+                for g in clock_gating min_period congestion ports; do
+                    [ -f "$deep/$g.rpt" ] && { echo; echo "== $g"; head -120 "$deep/$g.rpt"; }
+                done
                 for g in clock_trees skew_groups route density power_hier; do
                     [ -f "$deep/$g.rpt" ] && { echo; echo "== $g"; head -200 "$deep/$g.rpt"; }
                 done

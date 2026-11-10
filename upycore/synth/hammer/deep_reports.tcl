@@ -26,4 +26,10 @@ deep_try skew    {report_skew_groups > $deep_dir/skew_groups.rpt}
 deep_try route   {report_route -summary > $deep_dir/route.rpt}
 deep_try density {report_density > $deep_dir/density.rpt}
 deep_try power   {report_power -hierarchy all > $deep_dir/power_hier.rpt}
+# Clock-gate enable checks (82 failed in the 12 ns core run), the macros'
+# minimum clock period (not part of setup slack), congestion, pin locations.
+deep_try clock_gating {report_timing -check_type clock_gating_setup -max_paths 200 -nworst 1 > $deep_dir/clock_gating.rpt}
+deep_try min_period   {report_constraint -check_type {clock_period pulse_width} -all_violators > $deep_dir/min_period.rpt}
+deep_try congestion   {report_congestion -hotspot > $deep_dir/congestion.rpt}
+deep_try ports        {report_ports > $deep_dir/ports.rpt}
 puts "deep_reports: done, wrote $deep_dir"

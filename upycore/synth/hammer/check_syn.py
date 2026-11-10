@@ -26,7 +26,7 @@ from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
-from mpy_synth import GC_SRAM_MACRO, SRAM_BLOCKS, SRAM_MACRO
+from mpy_synth import GC_SRAM_MACRO, SRAM_MACRO, SRAM_MACROS
 
 # Flip-flop bits counted with slang/Yosys from the generated unit.
 # Genus removes flops that are constant or duplicate another, so a few
@@ -114,9 +114,9 @@ def main() -> int:
         keywords = {"module", "input", "output", "inout", "wire", "reg", "assign", "endmodule"}
         cells = {k: v for k, v in used.items() if k not in keywords}
         latches = sum(v for k, v in cells.items() if re.match(r"sky130_fd_sc_\w+__dl[xr]", k))
-        # Macros each top should contain: mpy_mem's banks and mpy_gc's table.
-        expected_macros = {"mpy_soc": {SRAM_MACRO["name"]: SRAM_BLOCKS, GC_SRAM_MACRO["name"]: 1},
-                           "mpy_mem": {SRAM_MACRO["name"]: SRAM_BLOCKS},
+        # Macros each top should contain: mpy_mem's 32 macros and mpy_gc's table.
+        expected_macros = {"mpy_soc": {SRAM_MACRO["name"]: SRAM_MACROS, GC_SRAM_MACRO["name"]: 1},
+                           "mpy_mem": {SRAM_MACRO["name"]: SRAM_MACROS},
                            "mpy_gc": {GC_SRAM_MACRO["name"]: 1}}.get(top or "", {})
         allowed_macros = set(expected_macros)
         unknown = {k: v for k, v in cells.items()
