@@ -128,12 +128,12 @@ def g3(a) -> int:
     return 1 if bad else 0
 
 
-# Groups whose RTL the I/O work does not touch but whose flat-netlist timing
-# moves with Yosys's FSM re-encoding of the whole SoC (the trace in
-# planning/rv_io_core_progress.md, phases 1 and 3: each path is cell for
-# cell the baseline's through every RTL-sourced cell and differs only in
-# Yosys-generated pattern and reduce logic at its end). Reported, not counted.
-NOISE = {"u_ca.bulk_engine.hvalid", "u_ca.bulk_engine.engine.equality.a_i"}
+# Groups reported but not counted. Empty: G3 compares both trees with
+# Yosys's FSM extraction off (upycore/tools/sta/run.py --no-fsm), so a state
+# machine whose RTL is unchanged is timed the same in both. With it on, two
+# collection-accelerator groups moved with Yosys's recoding of the larger
+# netlist (planning/rv_io_core_progress.md, phases 1 and 3).
+NOISE: set[str] = set()
 
 # Registers renamed by the I/O work with their logic unchanged: the new name
 # is compared against the baseline's group of the old name.

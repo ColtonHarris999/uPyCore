@@ -44,7 +44,7 @@ module mpy_boot #(
     parameter logic [15:0] FIRST_PAGE     = 16'd0,
     parameter int          POWERUP_CYCLES = 0,
     parameter int          IOC_CODE_WORDS = 4096,
-    parameter int          IOC_DATA_WORDS = 2048
+    parameter int          IOC_DATA_WORDS = 1920
 ) (
     input  logic        clk_i,
     input  logic        rst_n_i,

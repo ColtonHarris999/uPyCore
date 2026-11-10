@@ -58,7 +58,7 @@ core takes as an access fault.
 | Address | Size | What |
 | --- | --- | --- |
 | `0x0000_0000` | 16 KB | Code SRAM. Vectors at 0, reset at `0x80`. Instruction port only |
-| `0x0001_0000` | 8 KB | Data SRAM: `.rodata`, `.data`, `.bss`, stack at the top |
+| `0x0001_0000` | 7.5 KB | Data SRAM (1,920 words): `.rodata`, `.data`, `.bss`, stack at the top |
 | `0x8000_0000` | 4 KB | SYS: id, debug byte, halt, interrupt controller |
 | `0x8000_1000` | 4 KB | Timer |
 | `0x8000_2000` | 4 KB | UART0 |
@@ -407,7 +407,7 @@ console, as `pyexec` arms it for a script.
 `data.hex` (one 32-bit word a line). `.vectors` and `.text` go in code
 SRAM; `.rodata` and `.data` in data SRAM at their run addresses, loaded
 by `mpy_boot`, so `crt0.S` copies nothing and only clears `.bss`. The
-link fails past 16 KB code or 8 KB data, or past the plan's budget of
+link fails past 16 KB code or 7.5 KB data, or past the plan's budget of
 14 KB code and 7 KB data with a 1 KB stack.
 
 ## machine and time
@@ -823,7 +823,7 @@ island's files and CVE2's includes):
   not timed.
 - **SRAM macros.** The island's code and data SRAMs are the same
   `bsg_mem_1rw_sync_mask_write_bit` wrapper as the chip's, so the class
-  hook swaps them for `fakeram_d4096_w32` and `fakeram_d2048_w32`
+  hook swaps them for `fakeram_d4096_w32` and `fakeram_d1920_w32`
   (`vlsi.inputs.sram_parameters` lists all seven shapes).
 - **Clock gate.** CVE2's behavioral clock gate (a latch and an AND) is
   `sky130_fd_sc_hd__dlclkp_1` in the generated unit
@@ -944,7 +944,7 @@ SIE, plus the hart-side bridge and its clock-domain crossings.
 | Item | Budget |
 | --- | --- |
 | Logic area, open flow as above (macros excluded) | ≤ 450,000 µm² |
-| SRAM | ≤ 28 KB: 16 KB code, 8 KB data, ≤ 4 KB of USB endpoint buffers |
+| SRAM | ≤ 28 KB: 16 KB code, 8 KB data, ≤ 4 KB of USB endpoint buffers (as set in phase 0; as built, 16 KB code, 7.5 KB data and 4.5 KB of USB RAMs, the 4 KB of endpoint buffers and the SIE's 512-byte endpoint status table) |
 
 Phase 0's island is 116,018 µm² of it. The estimate for the rest: about
 70,000 µm² of further peripherals (GPIO, PWM, SPI, I2C, ADC interface,

@@ -98,11 +98,11 @@ SRAM_BLOCKS = 4   # MPY_MEM_BLOCKS: interleaved shared image/data SRAM
 # word, mpy_abi.GC_TABLE_BYTES / 16 blocks), the same wrapper and hook.
 GC_SRAM_MACRO = {"name": "fakeram_d600_w64", "family": "1rw", "depth": 600, "width": 64,
                  "mask": True, "mux": 1, "vt": ""}
-# The I/O island's code (16 KB) and data (8 KB) SRAMs: the same wrapper,
-# 4096 x 32 and 2048 x 32 (iocore_top's CODE_WORDS and DATA_WORDS).
+# The I/O island's code (16 KB) and data (7.5 KB) SRAMs: the same wrapper,
+# 4096 x 32 and 1920 x 32 (iocore_top's CODE_WORDS and DATA_WORDS).
 IOCORE_CODE_SRAM_MACRO = {"name": "fakeram_d4096_w32", "family": "1rw", "depth": 4096, "width": 32,
                           "mask": True, "mux": 1, "vt": ""}
-IOCORE_DATA_SRAM_MACRO = {"name": "fakeram_d2048_w32", "family": "1rw", "depth": 2048, "width": 32,
+IOCORE_DATA_SRAM_MACRO = {"name": "fakeram_d1920_w32", "family": "1rw", "depth": 1920, "width": 32,
                           "mask": True, "mux": 1, "vt": ""}
 # The USB SIE's nine 256 x 16 RAMs (endpoint buffers and status; the
 # microcode ROM is logic): BaseJump's bsg_mem_1r1w_sync_mask_write_bit,

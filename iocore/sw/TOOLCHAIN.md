@@ -30,7 +30,7 @@ make -C iocore/sw                # APP=fw, the production image
 `0x0001_0000`. The data port cannot read code SRAM, so read-only data lives
 in data SRAM; `mpy_boot` loads both images from the boot stream, so the
 startup code copies nothing. The link fails if code passes 16 KB or data
-8 KB (the SRAMs), or code 14 KB or data 7 KB (the plan's budget).
+7.5 KB (the SRAMs), or code 14 KB or data 7 KB (the plan's budget).
 
 The same image runs on both core options (`iocore/rtl/iocore_cpu.sv`):
 both reset at `0x80` with a vectored `mtvec` at 0.

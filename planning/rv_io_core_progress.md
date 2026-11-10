@@ -17,7 +17,7 @@ compares it with the baseline:
 | --- | --- | --- |
 | G1 | `gates.py g1` (runs `clock_bench.py --before <base sim> --after <phase sim>`) | every workload 0 cycles changed |
 | G2 | `hw_tests.py --area all -j 3` on the phase's tree, then `gates.py g2 <base log> <phase log>` | every test passes; every test that does not use board I/O has the baseline's `cycles=` |
-| G3 | `sta/run.py mpy_core` and `mpy_soc --groups 400`, then `sta_lite.py` with every group, then `gates.py g3` | no group of either top slower by more than 0.1 |
+| G3 | `sta/run.py mpy_core` and `mpy_soc --groups 400`, then `sta_lite.py` with every group, then `gates.py g3`; for the final tree both trees with `--no-fsm` (Final) | no group of either top slower by more than 0.1 |
 | G4 | `gates.py g4 <base tree>` over `build/hw/*/image{.hex,.tags.hex}` of both suite runs | every image of a test without board I/O byte-identical |
 | G5 | `iocore/tools/island_measure.py` (island and hart-side bridge) | within the phase 0 budget |
 

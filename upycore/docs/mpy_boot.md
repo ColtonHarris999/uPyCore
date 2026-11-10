@@ -182,7 +182,7 @@ An image that uses board I/O is followed by the I/O core's firmware
 | --- | --- |
 | next | `MPY_IOCB_MAGIC`, bytes `IOCB` (`0x4243_4F49`) |
 | next | Code word count `nc` (0 to 4,096) |
-| next | Data word count `nd` (0 to 2,048) |
+| next | Data word count `nd` (0 to 1,920) |
 | then | `nc` code SRAM words, then `nd` data SRAM words |
 
 The loader reads one word past the image. If it is not `IOCB` (an erased

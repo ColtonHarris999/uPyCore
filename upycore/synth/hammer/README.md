@@ -170,8 +170,8 @@ clock at the same period so its flops are timed.
   `fakeram_d32768_w36` macros, the GC table as a `fakeram_d600_w64` macro,
   the SPI NAND boot loader, and the I/O island
   ([`../../docs/mpy_io_core.md`](../../docs/mpy_io_core.md)) with its
-  16 KB code and 8 KB data SRAMs as `fakeram_d4096_w32` and
-  `fakeram_d2048_w32` macros, and its USB SIE's nine 256 × 16 RAMs
+  16 KB code and 7.5 KB data SRAMs as `fakeram_d4096_w32` and
+  `fakeram_d1920_w32` macros, and its USB SIE's nine 256 × 16 RAMs
   (endpoint buffers and status) as one-read-one-write `fakeram_d256_w16`
   macros behind BaseJump's `bsg_mem_1r1w_sync_mask_write_bit` (sixteen
   macros in all; check that the class `bsg_fakeram` generator takes the

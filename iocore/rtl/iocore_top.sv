@@ -28,7 +28,7 @@ module iocore_top #(
     parameter int CORE = 0,               // iocore_cpu: 0 CVE2, 1 Hazard3
     parameter int MUL = 0,
     parameter int CODE_WORDS = 4096,      // 16 KB
-    parameter int DATA_WORDS = 2048,      // 8 KB
+    parameter int DATA_WORDS = 1920,      // 7.5 KB
     parameter logic [15:0] US_DIV_RESET = 16'd49,
     parameter logic [15:0] BAUD_RESET = 16'd0,
     parameter int NPINS = 16,

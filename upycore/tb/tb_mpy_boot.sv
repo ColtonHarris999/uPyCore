@@ -1,7 +1,7 @@
 `include "mpy_defs.svh"
 
 // Use the real SPI transport and decoder, including resets with new sizes,
-// and the I/O core's IOCB section after the image (trials 6-9).
+// and the I/O core's IOCB section after the image (trials 6-10).
 module tb_mpy_boot;
     logic clk = 0, rst_n = 0;
     always #5 clk = ~clk;
@@ -49,7 +49,7 @@ module tb_mpy_boot;
     end
     initial begin
         int n, offset;
-        for (int trial = 0; trial < 10; trial++) begin
+        for (int trial = 0; trial < 11; trial++) begin
             @(negedge clk); rst_n = 0;
             repeat (3) @(negedge clk);
             writes = 0; iwrites = 0;
@@ -67,11 +67,12 @@ module tb_mpy_boot;
                     stream_word(offset, pattern(8*g + k)); offset += 4;
                 end
             end
-            // Trials 6-9: an IOCB section after the image (9: counts too big).
+            // Trials 6-10: an IOCB section after the image (9: a code count too big,
+            // 10: a data count one past the island's 1,920-word data SRAM).
             nc = 0; nd = 0;
             if (trial >= 6) begin
-                nc = trial == 6 ? 5 : trial == 7 ? 0 : trial == 8 ? 37 : 4097;
-                nd = trial == 6 ? 3 : trial == 7 ? 6 : trial == 8 ? 0 : 1;
+                nc = trial == 6 ? 5 : trial == 7 ? 0 : trial == 8 ? 37 : trial == 9 ? 4097 : 2;
+                nd = trial == 6 ? 3 : trial == 7 ? 6 : trial == 8 ? 0 : trial == 9 ? 1 : 1921;
                 stream_word(offset, MPY_IOCB_MAGIC); offset += 4;
                 stream_word(offset, 32'(nc)); offset += 4;
                 stream_word(offset, 32'(nd)); offset += 4;
@@ -88,7 +89,7 @@ module tb_mpy_boot;
             end else if (trial >= 6 && trial < 9) begin
                 check(done && !err && writes == n, "image with an IOCB section boots");
                 check(ioc_loaded && iwrites == nc + nd, "every IOCB word reaches the load port");
-            end else if (trial == 9) begin
+            end else if (trial >= 9) begin
                 check(err && !done && iwrites == 0, "an IOCB count beyond the island's SRAM is rejected");
             end else check(err && !done && writes == 0, "invalid count or magic rejected before SRAM writes");
         end

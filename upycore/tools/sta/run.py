@@ -80,6 +80,10 @@ def main() -> int:
     ap.add_argument("--inc", action="append", default=[], help="extra include directory")
     ap.add_argument("--param", action="append", default=[], help="top parameter NAME=VALUE (slang -G)")
     ap.add_argument("--module", help="the top module when it differs from the top name")
+    ap.add_argument("--no-fsm", action="store_true",
+                    help="keep state machines as the RTL writes them (synth -nofsm): Yosys's FSM "
+                         "recoding responds to unrelated netlist changes, so gate G3 compares "
+                         "both trees this way")
     ap.add_argument("--techmap-async", action="store_true",
                     help="drop $print cells (initial $display) and techmap once more after "
                          "async2sync (word-level cells it leaves); for the I/O island with "
@@ -120,7 +124,7 @@ def main() -> int:
         f"read_verilog -lib {rel}/ffbox.v",
         f"hierarchy -check -top {module}",
         *(["delete t:$print", "opt_clean"] if args.techmap_async else []),
-        f"synth -flatten -noshare -noabc -top {module}",
+        f"synth -flatten -noshare -noabc{' -nofsm' if args.no_fsm else ''} -top {module}",
         # Flatten's scope annotations carry no logic; one survives for a
         # module with unconnected inout ports (the island stub's USB pads).
         "delete t:$scopeinfo",
