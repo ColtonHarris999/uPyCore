@@ -363,7 +363,7 @@ channel between them, on a die of about 9.7 x 3.0 mm:
 - Two placement blockages (`obstruction` constraints) cover everything
   outside the channel. Without them the placer puts cells in the die margin
   and in the 22 um gaps between stacked macros, millimetres from the logic.
-- The chip's 295 I/O pins get explicit met2 locations on the top edge,
+- The chip's 231 I/O pins get explicit met2 locations on the top edge,
   across the channel only, with `clk_i` in the middle. The class default
   spreads them along a whole die edge, which here runs over the macros.
 
