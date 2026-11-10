@@ -64,7 +64,7 @@ jobs:
           submodules: true
 
       - name: Oracle toolchain
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-i686-linux-gnu libc6-i386 patch
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-i686-linux-gnu libc6-dev-i386-cross libc6-i386 patch
 
       - name: Build the oracle and check every golden
         run: make oracle-variant check-goldens

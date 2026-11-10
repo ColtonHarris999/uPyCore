@@ -1,12 +1,18 @@
+FROM debian:forky-slim AS simulator
+RUN apt-get update && apt-get install -y --no-install-recommends verilator
+
 FROM python:3.14-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Verilator 5.032 (Debian trixie) builds the uPyCore hart. Ubuntu's 5.020
-# rejects slices of function-call return values used in the RTL.
+# Trixie's Verilator 5.032 crashes on the GC's indexed writes.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential git make verilator \
+        build-essential ccache git make perl \
  && rm -rf /var/lib/apt/lists/*
+
+COPY --from=simulator /usr/bin/verilator /usr/bin/verilator_bin /usr/bin/
+COPY --from=simulator /usr/share/verilator /usr/share/verilator
+RUN verilator --version
 
 WORKDIR /work
 
