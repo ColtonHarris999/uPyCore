@@ -96,8 +96,10 @@ and `mpy_build.py run --sim-arg +CA=0 --sim-arg +AALU=0` turns both off.
 
 ## Memory and boot
 
-Both memories are on-chip SRAM built from four 128 KiB blocks of 32768 x 36
-bits (payload and tag in one word), interleaved by word. Image and data
+Both memories are on-chip SRAM built from four 128 KiB banks of 36-bit
+words (payload and tag in one word), interleaved by word. Each bank is
+eight 4096 x 36 SRAM macros: a single 32768-word macro is 31 mm long and
+too slow for a 10 ns clock. Image and data
 share their 512 KiB payload capacity: boot rounds the actual image size
 up to 32 bytes and gives all remaining space to mutable data. Logical
 image/data addresses stay unchanged; there is no fixed partition. The collector, the core,

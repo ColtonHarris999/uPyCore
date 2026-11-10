@@ -13,26 +13,27 @@ the tool and library setup stay exactly as the class has them.
 This flow produced the 18 ns post-route result and the Genus reports that
 `upycore/docs/timing_100mhz.md` and `timing_10ns.md` start from.
 
-## Before the next run (main c895f2d)
+## Before the next run (the 32-macro memory)
 
-- **`converted/` must be regenerated** with `convert_rtl.sh` (sv2v); the
-  files and `RTL_STAMP` here are still from c788c64, so `sweep.sh` will
-  refuse them.
-- **Timing.** c788c64 met 12, 13 and 15 ns in Genus and failed 10 ns
-  (worst -192 ps, 64 paths). `docs/timing_10ns.md` ("After the November 8
-  Genus run") lists each failing path and its change: the core's address
-  adds no longer collapse into a shared ripple incrementer in front of
-  `m_addr`; the FPU's significand multiplier registers its operands; the
-  pow pack exponent and shift amount, the divider step count, the slice
-  length and `boot_err_o`'s layout check are registered or shortened.
-  Rerun at 10 ns with the same constraints and macros. If `m_addr` is still
-  in the report, its startpoint names the next address source.
-- **Cycles.** A float multiply (and float `**`) takes one more cycle; every
-  other workload is unchanged, pystone included. Boot takes one more cycle.
-- **Flops.** `mpy_alu` and `mpy_core` +38 (fp_pow); `check_syn.py` has the
-  counts. `mpy_decode` is combinational.
-- **Power.** `activity/upycore_pystone.saif.gz` is this RTL's run (the
-  c788c64 file is kept as `upycore_pystone_c788c64.saif.gz`).
+- **`converted/` must be regenerated** with `convert_rtl.sh` (sv2v) and
+  pushed; the files and `RTL_STAMP` here are from before the memory split.
+  Only `mpy_mem.sv`, `mpy_defs.svh` (four new constants) and `mpy_synth.py`
+  changed, so `converted/mpy_core.v` is still the same logic, and a
+  whole-chip run that takes the memory from the RTL (the default, without
+  `SOC_RTL=converted`) can start with `STALE_OK=1` until then.
+- **Memory.** Each bank is eight `fakeram_d4096_w36` macros (32 in all);
+  see "Why 32 macros and not four" below. `check_syn.py` and
+  `sweep.sh status` expect 33 macros.
+- **Cycles.** Nothing after boot changes: `misc_pystone_timed.py` is still
+  `cycles=6635675`. Boot ends 28,672 cycles earlier (`boot=61370`, was
+  90042), because the reset clear writes 4096 rows instead of 32768.
+- **Timing.** Synthesis met 10 ns with zero slack on the old memory
+  (c895f2d: 9 ns -0.662, 10 ns 0, 11 ns +0.022). The memory request path
+  now also decodes three row bits into a macro enable, and the read data
+  passes an 8:1 mux; the first 10 ns Genus run shows what that costs.
+- **Power.** `activity/upycore_pystone.saif.gz` predates the split: its
+  memory instances are `g_blk[0..3]`, now `g_mac[0..31]`. Rerecord it
+  before a power run of the whole chip.
 
 ## Do not commit class files
 
@@ -187,8 +188,8 @@ clock at the same period so its flops are timed.
   image leaves) is a `fakeram_d600_w64` macro; run `make sram` first.
   Boot selects the active subset after subtracting the image from shared
   SRAM.
-- `mpy_soc`: the whole chip, with the four 128 KiB SRAM blocks as
-  `fakeram_d32768_w36` macros, the GC table as a `fakeram_d600_w64` macro
+- `mpy_soc`: the whole chip, with the four 128 KiB SRAM banks as 32
+  `fakeram_d4096_w36` macros, the GC table as a `fakeram_d600_w64` macro
   and the SPI NAND boot loader. The script
   sets up the SRAM macros; run `make sram` before `make syn`, and add the
   macro placements. See
@@ -340,22 +341,60 @@ stops instead of building old RTL; `convert_rtl.sh` (where sv2v runs)
 rewrites the files and the stamp.
 
 `TOP=mpy_soc sweep.sh start 20 15` does the same for the whole chip:
-each `upycore_soc_p<period>` folder (`upycore_socpar_p<period>` with `par`) gets the four SRAM macros, and the
+each `upycore_soc_p<period>` folder (`upycore_socpar_p<period>` with `par`) gets the SRAM macros, and the
 background job runs `make sram` and then `make syn`. `DIE="w h"` sets the
 die (default 4000 x 3000 um) and `SOC_RTL=converted` takes the chip from
 `converted/mpy_soc.v`. `TOP=mpy_soc sweep.sh status` adds the macro count
-of each netlist (it must be 5: four banks and the GC table) and the macro
-footprints from their LEFs.
+of each netlist (it must be 33: 32 of main memory and the GC table) and the
+macro footprints from their LEFs.
 
 `TOP=mpy_soc sweep.sh par 15` places and routes the whole chip. Between
 `make sram` and `make syn` it runs `place_macros.py`, which reads the LEFs,
-places the five macros as `hardmacro` constraints and sets the die (DIE is
-ignored). The 32K-word bank comes out 31 mm x 0.22 mm, so the four
-are stacked in one column with the logic beside their pins, on a die about
-35 x 1 mm. The shape is CACTI's (fakeram prints "Original fakeram_d32768_w36 size =
-31163.3 x 221.174"): the pin pitch does not change it, and a larger pitch only
-fails with "not enough tracks". `python3 place_macros.py <folder> --dry-run` prints
+places the 33 macros as `hardmacro` constraints and sets the die (DIE is
+ignored). A 4096-word macro is 3.95 x 0.16 mm with every signal pin on one
+short edge. `python3 place_macros.py <folder> --dry-run` prints
 the layout without writing it.
+
+The floorplan is two columns of 16 memory macros with the logic in a
+channel between them, on a die of about 9.7 x 3.0 mm:
+
+- The left column is mirrored (`my`), so all 32 pin edges face the
+  channel. A bank is one quadrant: bank 0 bottom left, 1 bottom right,
+  2 top left, 3 top right.
+- The channel is sized for the logic at 45% utilization (`--util`,
+  `--logic-area`), about 1.5 x 2.8 mm. The GC table macro sits at its
+  bottom centre.
+- Two placement blockages (`obstruction` constraints) cover everything
+  outside the channel. Without them the placer puts cells in the die margin
+  and in the 22 um gaps between stacked macros, millimetres from the logic.
+- The chip's 295 I/O pins get explicit met2 locations on the top edge,
+  across the channel only, with `clk_i` in the middle. The class default
+  spreads them along a whole die edge, which here runs over the macros.
+
+`sweep.sh floorplan 15` stops Innovus after the floorplan
+(`make par-to-floorplan`), so the macros, blockages and pins can be checked
+before a full run; `make par-from-floorplan` in the folder finishes it.
+
+Why 32 macros and not four. Until November 2026 each bank was one
+`fakeram_d32768_w36`. CACTI makes that macro 31.2 x 0.22 mm, and its
+generated library gives the clock pin a minimum period of 22.08 ns. Setup
+slack does not include that check, so the earlier whole-chip synthesis
+results at 10 to 12 ns (`timing_10ns.md`, the `upycore_soc*` runs) reported
+positive slack on a memory that could not run at those clocks; treat them
+as logic-only numbers. A 4096-word macro's minimum period is 1.07 ns.
+`deep_reports.tcl` now writes the check to `min_period.rpt`.
+
+Clock tree settings. The class flow's Innovus script asks for a 0.03 ns
+skew target with a fanout of 10 and does not optimize clock gates; on the
+core alone that gave 1.6 ns of skew, 3.4 ns of insertion delay and 82
+failing clock-gate checks at 12 ns. `DESIGN_ARGS=--cts` runs with a 0.15 ns
+target, fanout 24 and `opt_clock_gate_aware`. It works through
+`upycore_hammer.py`, the class Hammer driver plus one hook that runs the
+folder's `cfg/par_settings.tcl` before `place_opt_design`;
+`--par-tcl '<line>'` adds any other Innovus line the same way, and
+`--set key=value` sets a Hammer key in `cfg.yml` (for example
+`par.generate_power_straps_options.by_tracks.power_utilization_met4=0.2`
+for more met4 routing room).
 
 Two options for closing timing after routing (any top, via DESIGN_ARGS):
 `--syn-margin 1.5` adds 1.5 ns of clock uncertainty in Genus only, so the
