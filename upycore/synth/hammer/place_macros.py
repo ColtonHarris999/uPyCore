@@ -140,6 +140,11 @@ def main() -> int:
     bank = read_lef(find_lef(folder, SRAM_MACRO["name"]))
     gc = read_lef(find_lef(folder, GC_SRAM_MACRO["name"]))
     die_w, die_h, place, blocks = layout(bank, gc, args)
+    # Chip I/O on the edge next to the logic. Left as the class has it, the
+    # ~250 ports spread along the whole 36 mm bottom edge of the strip die
+    # and drag the logic out after them.
+    strip = bank[0] > 4 * bank[1]
+    pins = [{"pins": "*", "side": "left", "layers": ["met3"]}] if strip else None
 
     print(f"{SRAM_MACRO['name']}: {bank[0]} x {bank[1]} um, pins on the {bank[2]}")
     print(f"{GC_SRAM_MACRO['name']}: {gc[0]} x {gc[1]} um, pins on the {gc[2]}")
@@ -174,6 +179,17 @@ def main() -> int:
     for i, (x, y, w, h) in enumerate(blocks):
         pcs.append({"path": f"{TOP}/mpy_blk{i}", "type": "obstruction", "obs_types": ["place"],
                     "x": x, "y": y, "width": w, "height": h})
+    if pins:
+        for k in [k for k in doc if k.startswith("vlsi.inputs.pin")]:
+            del doc[k]
+        vin = doc.get("vlsi.inputs")
+        if isinstance(vin, dict):
+            vin.pop("pin_mode", None)
+            vin.pop("pin", None)
+        doc["vlsi.inputs.pin_mode"] = "generated"
+        doc["vlsi.inputs.pin.generate_mode"] = "semi_auto"
+        doc["vlsi.inputs.pin.assignments"] = pins
+        print("  all chip I/O pins on the left edge (met3), next to the logic")
     text = yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, width=100)
     cfg.write_text("\n".join(head + ["# Macro placement and die size by place_macros.py."]) + "\n" + text)
     print(f"wrote {cfg}")
