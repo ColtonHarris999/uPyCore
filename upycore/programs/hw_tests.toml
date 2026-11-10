@@ -564,6 +564,7 @@ gen_pend = { file = "hw/generators/gen_pend.py" }
 gen_state = { file = "hw/generators/gen_state.py" }
 gen_repr = { file = "hw/generators/gen_repr.py" }
 gen_gc = { file = "hw/generators/gen_gc.py", cycles = 40_000_000, timeout = 240 }
+gen_resumed_local_gc = { file = "hw/generators/gen_resumed_local_gc.py" }
 gen_yield_from = { file = "hw/generators/gen_yield_from.py" }
 gen_yield_from_iter = { file = "hw/generators/gen_yield_from_iter.py" }
 gen_yield_from_throw = { file = "hw/generators/gen_yield_from_throw.py" }
