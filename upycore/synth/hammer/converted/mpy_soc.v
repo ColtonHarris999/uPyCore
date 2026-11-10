@@ -15505,7 +15505,7 @@ module mpy_hash (
 		end
 	endtask
 	initial if ((DEPTH < 1) || ((BYTES_PER_CYCLE != 1) && (BYTES_PER_CYCLE != 4)))
-		$display("Error [%0t] /tmp/tmp.RdCpQUTQ48/mpy_soc.sv:19915:13 - mpy_hash.<unnamed_block>.<unnamed_block>\n msg: ", $time, "mpy_hash: invalid parameters");
+		$display("Error [%0t] /tmp/tmp.qJUjjmms9z/mpy_soc.sv:19955:13 - mpy_hash.<unnamed_block>.<unnamed_block>\n msg: ", $time, "mpy_hash: invalid parameters");
 	always @(posedge clk_i or negedge rst_n_i)
 		if (!rst_n_i) begin
 			state <= 5'd0;
@@ -18913,8 +18913,14 @@ module mpy_mem (
 	localparam signed [31:0] W = MPY_MEM_WIDTH;
 	localparam signed [31:0] NB = MPY_MEM_BLOCKS;
 	localparam signed [31:0] BS = 2;
-	localparam signed [31:0] SROWS = MPY_MEM_BLOCK_WORDS;
-	localparam signed [31:0] CW = 15;
+	localparam signed [31:0] MPY_MEM_MACRO_WORDS = 4096;
+	localparam signed [31:0] MPY_MEM_MACROS_PER_BLOCK = MPY_MEM_BLOCK_WORDS / MPY_MEM_MACRO_WORDS;
+	localparam signed [31:0] NM = MPY_MEM_MACROS_PER_BLOCK;
+	localparam signed [31:0] MS = $clog2(NM);
+	localparam signed [31:0] MPY_MEM_MACRO_AW = 12;
+	localparam signed [31:0] MA = MPY_MEM_MACRO_AW;
+	localparam signed [31:0] SROWS = MPY_MEM_MACRO_WORDS;
+	localparam signed [31:0] CW = 12;
 	reg [31:0] image_words;
 	reg [31:0] data_words;
 	wire [31:0] image_words_n;
@@ -18933,26 +18939,54 @@ module mpy_mem (
 	reg [14:0] blk_addr [0:3];
 	reg [35:0] blk_data [0:3];
 	reg [35:0] blk_mask [0:3];
-	wire [35:0] blk_q [0:3];
-	genvar _gv_b_1;
+	reg [35:0] blk_q [0:3];
+	reg [NM - 1:0] blk_sel [0:3];
+	wire [35:0] mac_q [0:(NB * NM) - 1];
+	reg [MS - 1:0] bsub_r [0:3];
+	genvar _gv_m_1;
 	generate
-		for (_gv_b_1 = 0; _gv_b_1 < NB; _gv_b_1 = _gv_b_1 + 1) begin : g_blk
-			localparam b = _gv_b_1;
+		for (_gv_m_1 = 0; _gv_m_1 < (NB * NM); _gv_m_1 = _gv_m_1 + 1) begin : g_mac
+			localparam m = _gv_m_1;
 			bsg_mem_1rw_sync_mask_write_bit #(
 				.width_p(W),
-				.els_p(MPY_MEM_BLOCK_WORDS)
+				.els_p(MPY_MEM_MACRO_WORDS)
 			) ram(
 				.clk_i(clk_i),
 				.reset_i(!rst_n_i),
-				.data_i(blk_data[b]),
-				.addr_i(blk_addr[b]),
-				.v_i(blk_v[b]),
-				.w_mask_i(blk_mask[b]),
-				.w_i(blk_w[b]),
-				.data_o(blk_q[b])
+				.data_i(blk_data[m / NM]),
+				.addr_i(blk_addr[m / NM][11:0]),
+				.v_i(blk_v[m / NM] && blk_sel[m / NM][m % NM]),
+				.w_mask_i(blk_mask[m / NM]),
+				.w_i(blk_w[m / NM]),
+				.data_o(mac_q[m])
 			);
 		end
 	endgenerate
+	function automatic signed [31:0] sv2v_cast_32_signed;
+		input reg signed [31:0] inp;
+		sv2v_cast_32_signed = inp;
+	endfunction
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		begin : sv2v_autoblock_1
+			reg signed [31:0] b;
+			for (b = 0; b < NB; b = b + 1)
+				blk_q[b] = mac_q[(b * NM) + sv2v_cast_32_signed(bsub_r[b])];
+		end
+	end
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i) begin : sv2v_autoblock_2
+			reg signed [31:0] b;
+			for (b = 0; b < NB; b = b + 1)
+				bsub_r[b] <= 1'sb0;
+		end
+		else begin : sv2v_autoblock_3
+			reg signed [31:0] b;
+			for (b = 0; b < NB; b = b + 1)
+				if (blk_v[b] && !blk_w[b])
+					bsub_r[b] <= blk_addr[b][14:MA];
+		end
 	reg clr_busy;
 	reg [CW:0] clr_idx;
 	assign init_done_o = !clr_busy;
@@ -18969,6 +19003,7 @@ module mpy_mem (
 	reg [(NP * BS) - 1:0] p_blk;
 	reg [(NP * AW) - 1:0] p_row;
 	reg [(NP * W) - 1:0] p_mask;
+	reg [(NP * NM) - 1:0] p_sel;
 	localparam [3:0] MPY_FAULT_BUS = 4'd3;
 	localparam [3:0] MPY_FAULT_FLASH_STORE = 4'd2;
 	localparam [3:0] MPY_FAULT_NONE = 4'd0;
@@ -19028,13 +19063,17 @@ module mpy_mem (
 		input reg [1:0] inp;
 		sv2v_cast_62836 = inp;
 	endfunction
+	function automatic signed [NM - 1:0] sv2v_cast_DC604_signed;
+		input reg signed [NM - 1:0] inp;
+		sv2v_cast_DC604_signed = inp;
+	endfunction
 	always @(*) begin
 		if (_sv2v_0)
 			;
-		begin : sv2v_autoblock_1
+		begin : sv2v_autoblock_4
 			reg signed [31:0] p;
 			for (p = 0; p < NP; p = p + 1)
-				begin : sv2v_autoblock_2
+				begin : sv2v_autoblock_5
 					reg [2:0] region;
 					reg [MPY_MEM_WORD_AW - 1:0] sw;
 					reg [MPY_FLASH_IDX_W - 1:0] iw;
@@ -19060,7 +19099,8 @@ module mpy_mem (
 						p_blk[p * BS+:BS] = sv2v_cast_62836(sw);
 						p_row[p * AW+:AW] = sv2v_cast_DE851((sv2v_cast_32(sw) + image_words) >> BS);
 					end
-					begin : sv2v_autoblock_3
+					p_sel[p * NM+:NM] = sv2v_cast_DC604_signed(1) << p_row[(p * AW) + 14-:3];
+					begin : sv2v_autoblock_6
 						reg signed [31:0] k;
 						for (k = 0; k < 4; k = k + 1)
 							p_mask[(p * W) + (8 * k)+:8] = {8 {be_i[(p * 4) + k]}};
@@ -19073,17 +19113,19 @@ module mpy_mem (
 	wire [14:0] ld_row;
 	assign ld_blk = ld_idx_i[1:0];
 	assign ld_row = sv2v_cast_DE851(sv2v_cast_32(ld_idx_i) >> BS);
+	wire [NM - 1:0] ld_sel;
+	assign ld_sel = sv2v_cast_DC604_signed(1) << ld_row[14:MA];
 	function automatic signed [1:0] sv2v_cast_62836_signed;
 		input reg signed [1:0] inp;
 		sv2v_cast_62836_signed = inp;
 	endfunction
-	always @(*) begin : sv2v_autoblock_4
+	always @(*) begin : sv2v_autoblock_7
 		reg [3:0] taken;
 		if (_sv2v_0)
 			;
 		gnt_o = 1'sb0;
 		taken = 1'sb0;
-		begin : sv2v_autoblock_5
+		begin : sv2v_autoblock_8
 			reg signed [31:0] b;
 			for (b = 0; b < NB; b = b + 1)
 				begin
@@ -19092,11 +19134,13 @@ module mpy_mem (
 					blk_addr[b] = 1'sb0;
 					blk_data[b] = 1'sb0;
 					blk_mask[b] = 1'sb0;
+					blk_sel[b] = 1'sb0;
 					if (clr_busy) begin
 						blk_v[b] = 1'b1;
 						blk_w[b] = 1'b1;
-						blk_addr[b] = sv2v_cast_DE851(clr_idx[14:0]);
+						blk_addr[b] = sv2v_cast_DE851(clr_idx[11:0]);
 						blk_mask[b] = 1'sb1;
+						blk_sel[b] = 1'sb1;
 						taken[b] = 1'b1;
 					end
 					if (ld_we_i && (ld_blk == sv2v_cast_62836_signed(b))) begin
@@ -19105,11 +19149,12 @@ module mpy_mem (
 						blk_addr[b] = ld_row;
 						blk_data[b] = {ld_wtag_i, ld_wdata_i};
 						blk_mask[b] = 1'sb1;
+						blk_sel[b] = ld_sel;
 						taken[b] = 1'b1;
 					end
 				end
 		end
-		begin : sv2v_autoblock_6
+		begin : sv2v_autoblock_9
 			reg signed [31:0] p;
 			for (p = 0; p < NP; p = p + 1)
 				if (req_i[p] && ready[p]) begin
@@ -19123,12 +19168,13 @@ module mpy_mem (
 						blk_addr[p_blk[p * BS+:BS]] = p_row[p * AW+:AW];
 						blk_data[p_blk[p * BS+:BS]] = {wtag_i[p * 4+:4], wdata_i[p * 32+:32]};
 						blk_mask[p_blk[p * BS+:BS]] = p_mask[p * W+:W];
+						blk_sel[p_blk[p * BS+:BS]] = p_sel[p * NM+:NM];
 					end
 				end
 		end
 	end
-	function automatic signed [15:0] sv2v_cast_89787_signed;
-		input reg signed [15:0] inp;
+	function automatic signed [12:0] sv2v_cast_89787_signed;
+		input reg signed [12:0] inp;
 		sv2v_cast_89787_signed = inp;
 	endfunction
 	function automatic signed [7:0] sv2v_cast_8_signed;
@@ -19154,13 +19200,13 @@ module mpy_mem (
 		else begin
 			if (clr_busy && !ld_we_i) begin
 				clr_idx <= clr_idx + 1'b1;
-				if (clr_idx == sv2v_cast_89787_signed(32767))
+				if (clr_idx == sv2v_cast_89787_signed(4095))
 					clr_busy <= 1'b0;
 			end
-			begin : sv2v_autoblock_7
+			begin : sv2v_autoblock_10
 				reg signed [31:0] p;
 				for (p = 0; p < NP; p = p + 1)
-					begin : sv2v_autoblock_8
+					begin : sv2v_autoblock_11
 						reg [35:0] word;
 						word = (fresh_r[p] ? blk_q[rblk_r[p * BS+:BS]] : hold_r[p * W+:W]);
 						ack_o[p] <= 1'b0;
