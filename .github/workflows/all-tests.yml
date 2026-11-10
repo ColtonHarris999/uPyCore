@@ -67,7 +67,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-i686-linux-gnu libc6-dev-i386-cross libc6-i386 patch
 
       - name: Build the oracle and check every golden
-        run: make oracle-variant check-goldens
+        run: make oracle-variant oracle-mpz check-goldens
 
   # Hardware tests, one job per area of upycore/programs/hw_tests.toml.
   # Each job verilates once, then runs the area from mpy-cross and from uPy2.
