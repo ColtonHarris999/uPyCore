@@ -430,7 +430,9 @@ static void service(void) {
 
 int main(void) {
     uint32_t hz = SYS_FREQ;
-    TMR_DIV = hz / 1000000u - 1;
+    // The microsecond divider rounds to the nearest io_clk count (at
+    // 149,992,500 Hz truncating would make the µs 0.7 % short).
+    TMR_DIV = (hz + 500000u) / 1000000u - 1;
     con_mode = SYS_CON_MODE;
     // UART0 starts at 115200 8N1 (the console's rate, and machine.UART's
     // default), so bytes that arrive before machine.UART() are kept.

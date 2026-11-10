@@ -386,3 +386,58 @@ about 10 KB/s). Island power was not computed: there is no power engine
 here; the SAIF files for Genus or Joules are produced. Phase 6 changes
 only the bench and tools, so its G1 to G4 are phase 4's and phase 7's.
 
+
+## Phase 7: USB
+
+Commit `ada8605`; the gates ran on it, G3 rerun after the STA flow fix in the next commit.
+
+Built: the no2usb SIE on its own 48 MHz `usb_clk` behind a
+request/answer-toggle bridge from io_clk (`iocore_usb`); generic
+replacements for its iCE40 primitives (256 × 16 one-read-one-write RAMs
+behind BaseJump's `bsg_mem_1r1w_sync_mask_write_bit`, the microcode as a
+ROM of constants, `SB_IO` as flops and a pad wrapper); TinyUSB CDC ACM in
+the firmware with the epic branch's ported driver; the USB console
+(`+CONSOLE=usb`); the epic branch's USB host model in the bench; the
+`usb` area (`usb_loopback` 4 KB, `usb_ctrl_c`, `usb_suspend`,
+`usb_repl_raw`) and the console area over USB (`con_print_usb`,
+`con_input_usb`, `repl_friendly_usb`, the UART goldens); the
+`iocore_usb` crossing bench (12 ratios, 33,714 checks); `usb_clk` and
+the sixteen macros in the Hammer constraints; the I/O areas and the
+RISC-V toolchain in CI.
+
+| Gate | Result |
+| --- | --- |
+| G1 | PASS: 23 of 23 workloads at +0.000 % |
+| G2 | PASS: 543 of 543 pass; 505 with the baseline's cycles, 0 moved, 38 new |
+| G3 | PASS: `mpy_core` 577 of 578 matched, none slower by > 0.1 (27.389 → 27.389 ns); `mpy_soc` 1,104 of 1,105 matched, none slower by > 0.1 beyond the `hvalid` noise. The first run stopped on a `$scopeinfo` annotation the island stub's new inout ports left in the netlist; the STA flow now deletes those (they carry no logic) and the rerun on the same RTL passed |
+| G4 | PASS: 505 identical, 0 differ, 38 not in both trees |
+| G5 | Logic PASS: island with USB 197,782 µm² + `mpy_iobr` 180,577 µm² = 378,359 of 450,000 (the USB block alone 23,570 µm², 565 flops). SRAM **over**: 28.5 KB against 28 KB (16 KB code, 8 KB data, 4.5 KB of USB RAMs) |
+
+
+Unit benches: 37 of 37 (adds `iocore_usb`, the usb_clk crossing at twelve ratios).
+
+Clock-ratio sweep on the final tree (`--sim-arg +IO_CLK_NS=10` and
+`6.667`, every I/O area): all pass at hart/1; at hart × 1.5
+`io/sleep_accuracy` failed, a 20 ms sleep 150 µs long or more. The
+firmware truncated the microsecond divider (`hz / 1000000 - 1`): at the
+bench's 149,992,500 Hz a microsecond was 149 io_clk cycles, 0.7 % short,
+so `ticks_us` ran fast against the hart's wait. It now rounds; with that
+`sleep_accuracy`, `ticks` and `blink` pass at all three ratios. Every
+I/O area also passes compiled by uPy2 (`--compiler mpyc`, as CI runs
+them): io 10, irq 8, system 7, console 9, usb 4.
+
+Deviations and open items:
+
+- G5's SRAM budget: 28.5 KB against the 28 KB set in phase 0. The
+  endpoint buffers are 4 KB as budgeted; the SIE's 512-byte endpoint
+  status table was not in that budget.
+- Console output waits for the host (DTR) for at most 2 s before it is
+  dropped; MicroPython's CDC console drops it from the start. The tests
+  rely on the wait, so a program's first output is seen.
+- The SIE's `usb_clk` paths are not timed in the open flow (no model for
+  the PHY's negative-edge input register); the Genus run with the USB
+  domain was not run here. Whether the class `bsg_fakeram` generator
+  takes the `1r1w` family is not checked.
+- CI changes (the Docker image's RISC-V toolchain, the I/O areas in the
+  matrix) were not run: there is no Docker or CI here. The image's
+  Verilator is Debian's 5.032; this work used 5.038.
