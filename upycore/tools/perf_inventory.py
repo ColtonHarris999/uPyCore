@@ -117,7 +117,7 @@ def run_case(prog: Path, n: int, m: int, out: Path, modes: list, max_cycles: int
     row["expected"] = o_results[0] if o_results else None
 
     try:
-        image = b.build_program(dev_src, work, source_name=dev_src.name)
+        image = b.build_program(dev_src, work, source_name=dev_src.name, bigint=bigint)
     except Exception as e:  # noqa: BLE001 - recorded, not hidden
         row["runs"].append({"mode": "build", "status": "ERROR", "detail": f"{type(e).__name__}: {str(e)[-300:]}"})
         return row
@@ -204,7 +204,7 @@ def main() -> int:
     fw_mpy = out / "bench_fw.mpy"
     fw_src.write_text(b.firmware_source(bigint=args.bigint) + "\ndef bench_ticks():\n    return _ticks()\n")
     b.mpy_cross(fw_src, fw_mpy, "_fw.py")
-    b.build_firmware = lambda: fw_mpy
+    b.build_firmware = lambda *_args, **_kwargs: fw_mpy
     b.frozen_runtime_specs(compiler=False, runtime=sorted(b.RUNTIME_MODULES))
 
     git = lambda *a: subprocess.check_output(["git", *a], cwd=b.ROOT, text=True).strip()  # noqa: E731

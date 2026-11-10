@@ -341,6 +341,7 @@ NATIVES = [
     "new.type",
     "_limb_mac",  # (out, a, an, b, bn, k): write a*k + b, return signed carry
     "_limb_new",  # (n): zeroed bigint storage for n limbs
+    "_find_bytes",  # (s, sub, start, end): byte search, with a one-byte RTL path
     # Board I/O (planning/rv_io_core_plan.md §5.1; IO_NATIVES): emitted only
     # into images with the board I/O firmware, so other images are unchanged.
     # They stay last, so every other native keeps its id.

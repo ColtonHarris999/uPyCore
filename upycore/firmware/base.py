@@ -207,7 +207,7 @@ def _streq(a, b):
     return _bcmp(a, b) == 0
 
 
-def _find_bytes(s, sub, start, end):
+def _find_bytes_fb(s, sub, start, end):
     # Index of sub in s[start:end] (byte offsets), or -1.
     n = _slen(sub)
     if n == 0:

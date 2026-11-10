@@ -29,7 +29,7 @@
 //         Z * 2^I rounded to nearest even (upycore_f64_pack_round), which
 //         also denormalises small results and saturates overflow to +inf.
 //
-// Latency: 4 (reduction) + NLOG + 4 (normalise L) + mul + 2 (align)
+// Latency: 6 (unpack and reduction) + NLOG + 4 (normalise L) + mul + 2 (align)
 // + NEXP + 1 (pack) cycles; see docs/alu.md.  The result is +inf when
 // the true value overflows (the FPU turns that into OverflowError) and
 // +0 when it underflows.  Accuracy: better than 0.5 + 2^-11 ulp before
@@ -71,7 +71,7 @@ module upycore_fp_pow #(
     localparam logic [52:0] FOUR_THIRDS = 53'h15555555555555;
 
     typedef enum logic [3:0] {
-        S_IDLE, S_RED1, S_RED2, S_RED3, S_LOG, S_LSUM, S_LABS, S_LCLZ, S_LNORM,
+        S_IDLE, S_UNPACK, S_RED1, S_RED_MAG, S_RED2, S_RED3, S_LOG, S_LSUM, S_LABS, S_LCLZ, S_LNORM,
         S_MUL, S_PSH, S_PSPLIT, S_EXP, S_PACK
     } state_e;
 
@@ -79,7 +79,9 @@ module upycore_fp_pow #(
     logic   done_r;
     logic   rz_r;                         // m' - 1 == 0: no log digits to run
 
-    // ---- operands, unpacked in the accept cycle ----
+    // ---- operands, captured before subnormal normalization ----
+    logic [52:0]        x_sig_r, y_sig_r;
+    logic [10:0]        x_exp_r, y_exp_r;
     logic [52:0]        mx_r;             // x significand, normalised
     logic signed [12:0] ex_r;             // x = mx * 2^(ex - 52)
     logic [52:0]        my_r;
@@ -122,39 +124,29 @@ module upycore_fp_pow #(
     // ------------------------------------------------------------------
     // Accept-cycle unpacking
     // ------------------------------------------------------------------
-    logic [52:0] x_sig, y_sig;
     logic [5:0]  x_lz, y_lz;
-    logic [10:0] x_exp, y_exp;
 
-    assign x_sig = upycore_f64_sig(op_x_i);
-    assign y_sig = upycore_f64_sig(op_y_i);
-    assign x_lz  = upycore_clz53(x_sig);
-    assign y_lz  = upycore_clz53(y_sig);
-    assign x_exp = upycore_f64_exp_eff(op_x_i);
-    assign y_exp = upycore_f64_exp_eff(op_y_i);
+    assign x_lz = upycore_clz53(x_sig_r);
+    assign y_lz = upycore_clz53(y_sig_r);
 
     // ------------------------------------------------------------------
     // Reduction: r = m' - 1 as a WW-bit signed fixed-point number
     // ------------------------------------------------------------------
     logic                 halve;
     logic signed [WW-1:0] r_red;
-    logic [FW-1:0]        r_mag;
+    logic [FW-1:0]        r_mag_r;
     logic [7:0]           r_clz;
     logic [7:0]           j0_sel;
 
-    logic [52:0]          r_delta;        // 2^53 - mx  (< 2^52 here)
-    assign halve   = (mx_r > FOUR_THIRDS);
-    assign r_delta = 53'((54'd1 << 53) - 54'(mx_r));
-    // mx/2^52 - 1 = 0.mx[51:0]  (>= 0);  mx/2^53 - 1 = -(2^53 - mx)/2^53 (< 0)
-    assign r_red = halve ? -$signed({{(WW-FW){1'b0}}, r_delta,    {(FW-53){1'b0}}})
-                         :  $signed({{(WW-FW){1'b0}}, mx_r[51:0], {(FW-52){1'b0}}});
-    assign r_mag = r_r[WW-1] ? FW'(-r_r) : r_r[FW-1:0];
-
-    // leading zeros of |r| over its FW fraction bits (|r| < 1/2)
-    always_comb begin
-        r_clz = 8'(FW);
-        for (int b = 0; b < FW; b++) if (r_mag[b]) r_clz = 8'(FW - 1 - b);
-    end
+    assign halve = (mx_r > FOUR_THIRDS);
+    // With halving, m' - 1 = (mx - 2^53) / 2^53. Appending
+    // the sign bits gives that fixed-point value directly.
+    assign r_red = halve ? $signed({{(WW-FW-1){1'b1}}, 1'b1, mx_r, {(FW-53){1'b0}}})
+                         : $signed({{(WW-FW){1'b0}}, mx_r[51:0], {(FW-52){1'b0}}});
+    // The upper 64 bits and the tail can be encoded independently.
+    assign r_clz = (|r_mag_r[FW-1 -: 64])
+                   ? 8'(upycore_clz64(r_mag_r[FW-1 -: 64]))
+                   : 8'd64 + 8'(upycore_clz64({r_mag_r[FW-65:0], 1'b1, {(127-FW){1'b0}}}));
     assign j0_sel = (r_clz < 8'd2) ? 8'd2 : r_clz;
 
     // ------------------------------------------------------------------
@@ -229,9 +221,10 @@ module upycore_fp_pow #(
             v_sum = $signed({{(LW+1-13){e_r[12]}}, e_r}) <<< FW;
             v_sum = v_sum + ($signed({{(LW+1-AW){acc_r[AW-1]}}, acc_r}) >>> j0_r);
         end
-        lmag_clz = 7'(LW);
-        for (int b = 0; b < LW; b++) if (lmag_r[b]) lmag_clz = 7'(LW - 1 - b);
     end
+    assign lmag_clz = (|lmag_r[LW-1 -: 64])
+                      ? upycore_clz64(lmag_r[LW-1 -: 64])
+                      : 7'd64 + upycore_clz64({lmag_r[LW-65:0], 1'b1, {(127-LW){1'b0}}});
     assign lmag_norm = lmag_r << lz_r;
 
     // ------------------------------------------------------------------
@@ -297,6 +290,7 @@ module upycore_fp_pow #(
         if (!rst_n_i) begin
             state_r  <= S_IDLE;
             done_r   <= 1'b0;
+            x_sig_r <= '0; y_sig_r <= '0; x_exp_r <= '0; y_exp_r <= '0; r_mag_r <= '0;
             mx_r <= '0; ex_r <= '0; my_r <= '0; ey_r <= '0; ysign_r <= 1'b0;
             e_r <= '0; r_r <= '0; j_r <= '0; i_r <= '0; j0_r <= '0; acc_r <= '0; rz_r <= 1'b0;
             v_r <= '0; lsign_r <= 1'b0; lmag_r <= '0; lscale_r <= '0; lz_r <= '0; lm_r <= '0; el_r <= '0;
@@ -311,24 +305,35 @@ module upycore_fp_pow #(
             end else begin
                 unique case (state_r)
                     S_IDLE: if (start_i && !done_r) begin
-                        mx_r    <= x_sig << x_lz;
-                        ex_r    <= 13'(x_exp) - 13'(x_lz) - 13'sd1023;
-                        my_r    <= y_sig << y_lz;
-                        ey_r    <= 13'(y_exp) - 13'(y_lz) - 13'sd1023;
+                        x_sig_r <= upycore_f64_sig(op_x_i);
+                        y_sig_r <= upycore_f64_sig(op_y_i);
+                        x_exp_r <= upycore_f64_exp_eff(op_x_i);
+                        y_exp_r <= upycore_f64_exp_eff(op_y_i);
                         ysign_r <= op_y_i[63];
+                        state_r <= S_UNPACK;
+                    end
+                    S_UNPACK: begin
+                        mx_r    <= x_sig_r << x_lz;
+                        ex_r    <= 13'(x_exp_r) - 13'(x_lz) - 13'sd1023;
+                        my_r    <= y_sig_r << y_lz;
+                        ey_r    <= 13'(y_exp_r) - 13'(y_lz) - 13'sd1023;
                         state_r <= S_RED1;
                     end
                     S_RED1: begin
                         r_r     <= r_red;
                         e_r     <= halve ? ex_r + 13'sd1 : ex_r;
                         acc_r   <= '0;
+                        state_r <= S_RED_MAG;
+                    end
+                    S_RED_MAG: begin
+                        r_mag_r <= r_r[WW-1] ? FW'(-r_r) : r_r[FW-1:0];
                         state_r <= S_RED2;
                     end
                     S_RED2: begin
                         // j0 gets its own cycle: the leading-zero count and
                         // the ROM lookup it indexes would not fit in one.
                         j0_r    <= j0_sel;
-                        rz_r    <= (r_mag == '0);
+                        rz_r    <= (r_mag_r == '0);
                         state_r <= S_RED3;
                     end
                     S_RED3: begin
