@@ -6,28 +6,26 @@ import csv
 import json
 import math
 from pathlib import Path
-from statistics import geometric_mean
 
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.ticker import FuncFormatter, MaxNLocator, NullLocator
+from matplotlib.ticker import FuncFormatter, MaxNLocator
 
 REFERENCE = Path(__file__).resolve().parents[2] / "docs/paper/benchmark-board-ms.csv"
 CORE = "µPyCore (projected)"
-BASELINE = "Pico RP2040"
 PYSTONE = "misc_pystone"
 PIDIGITS = "bm_pidigits"
 FLAGS = ["+CA=1", "+AALU=1"]
 STYLES = {
-    CORE: ("#172b4d", "D", ""),
-    BASELINE: ("#0072b2", "o", "//"),
-    "Pico 2 Arm": ("#c94c00", "^", "xx"),
-    "Pico 2 RISC-V": ("#008268", "v", ".."),
-    "ESP32-C3": ("#963b72", "s", "++"),
-    "Pyboard v1.0": ("#866200", "P", "oo"),
-    "Pyboard v1.1": ("#595959", "X", "\\\\"),
+    CORE: ("#172b4d", ""),
+    "Pico RP2040": ("#0072b2", "//"),
+    "Pico 2 Arm": ("#c94c00", "xx"),
+    "Pico 2 RISC-V": ("#008268", ".."),
+    "ESP32-C3": ("#963b72", "++"),
+    "Pyboard v1.0": ("#866200", "oo"),
+    "Pyboard v1.1": ("#595959", "\\\\"),
 }
 
 
@@ -75,45 +73,56 @@ def style_axis(ax):
     ax.tick_params(axis="y", length=0)
 
 
-def device_bars(values, xlabel, annotate, baseline=None):
+def bar_style(device):
+    color, hatch = STYLES[device]
+    return {"color": color if device == CORE else "white",
+            "edgecolor": color, "hatch": hatch}
+
+
+def device_bars(values, xlabel, labels):
     fig, ax = plt.subplots(figsize=(3.45, 2.25), layout="constrained")
     for index, (device, value) in enumerate(values.items()):
-        color, _, hatch = STYLES[device]
-        ax.barh(index, value, height=0.64, color=color if device == CORE else "white",
-                edgecolor=color, linewidth=0.65, hatch=hatch)
-        ax.annotate(annotate(value), (value, index), xytext=(3, 0),
+        if value is not None:
+            ax.barh(index, value, height=0.64, linewidth=0.65, **bar_style(device))
+        ax.annotate(labels[device], (value or 0, index), xytext=(3, 0),
                     textcoords="offset points", va="center")
     ax.set_yticks(range(len(values)), list(values))
-    ax.invert_yaxis()
-    ax.set(xlim=(0, 1.22 * max(values.values())), xlabel=xlabel)
-    if baseline is not None:
-        ax.axvline(baseline, color="#555555", linestyle="--", linewidth=0.7, zorder=1.5)
+    ax.set(xlim=(0, 1.22 * max(value for value in values.values() if value is not None)),
+           ylim=(len(values) - 0.5, -0.5), xlabel=xlabel)
     style_axis(ax)
     return fig, ax
 
 
 def suite_plot(suite, devices):
-    fig, ax = plt.subplots(figsize=(7.05, 4.55), layout="constrained")
+    fig, ax = plt.subplots(figsize=(7.05, 6.6), layout="constrained")
     for index in range(0, len(suite), 2):
         ax.axhspan(index - 0.5, index + 0.5, color="#f4f4f4", zorder=0)
+    spacing = 0.88 / len(devices)
     for index, device in enumerate(devices):
-        color, marker, _ = STYLES[device]
-        offset = (index - (len(devices) - 1) / 2) * 0.11
+        offset = (index - (len(devices) - 1) / 2) * spacing
         positions = [(row, times[device]) for row, (_, times) in enumerate(suite.values())
                      if device in times]
         rows, times = zip(*positions)
-        ax.scatter(times, [row + offset for row in rows], label=device, marker=marker,
-                   s=16, color=color, linewidths=0, zorder=3)
-    ax.set(xscale="log", xlabel="Kernel runtime (ms, log scale)  ←  lower is better",
+        ax.barh([row + offset for row in rows], times, height=0.83 * spacing,
+                label=device, linewidth=0.5, zorder=3, **bar_style(device))
+    ax.set(xlim=(0, None), xlabel="Kernel runtime (ms)  ←  lower is better",
            ylim=(len(suite) - 0.5, -0.5))
     ax.set_yticks(range(len(suite)), [label for label, _ in suite.values()])
-    ax.set_xticks([1, 2, 5, 10, 20, 50, 100, 200, 500])
-    ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:g}"))
-    ax.xaxis.set_minor_locator(NullLocator())
+    ax.xaxis.set_major_locator(MaxNLocator(7))
     style_axis(ax)
     ax.legend(loc="lower left", bbox_to_anchor=(0, 1.01, 1, 0), mode="expand",
               frameon=False, ncol=4, borderaxespad=0, handletextpad=0.25)
     return fig
+
+
+def suite_totals(suite, devices):
+    totals = {}
+    coverage = {}
+    for device in devices:
+        times = [times[device] for _, times in suite.values() if device in times]
+        coverage[device] = len(times)
+        totals[device] = math.fsum(times) if len(times) == len(suite) else None
+    return totals, coverage
 
 
 def save(fig, directory, stem):
@@ -137,12 +146,14 @@ def main():
     cycles = load_cycles(args.shortlist, args.pidigits)
     runtimes = load_runtimes(args.board_ms, cycles, args.clock_ns)
     _, pystone = runtimes.pop(PYSTONE)
-    devices = list(pystone)
-    shared = [name for name, (_, times) in runtimes.items() if all(device in times for device in devices)]
-    if not shared:
-        parser.error("the board table has no non-Pystone kernel shared by all devices")
-    geo = {device: geometric_mean(runtimes[name][1][BASELINE] / runtimes[name][1][device]
-                                  for name in shared) for device in devices}
+    devices = [device for device in STYLES
+               if any(device in times for _, times in runtimes.values())]
+    suite_size = len(runtimes)
+    totals, coverage = suite_totals(runtimes, devices)
+    means = {device: total / suite_size if total is not None else None
+             for device, total in totals.items()}
+    labels = {device: f"{mean:.1f}" if mean is not None else f"N/A ({coverage[device]}/{suite_size})"
+              for device, mean in means.items()}
     rates = {device: 300_000 / ms for device, ms in pystone.items()}
 
     plt.rcParams.update({
@@ -151,18 +162,20 @@ def main():
         "hatch.linewidth": 0.45, "axes.unicode_minus": False,
     })
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    fig, ax = device_bars(rates, "Pystone iterations per second  →  higher is better", lambda x: f"{x:,.0f}")
+    fig, ax = device_bars(rates, "Pystone iterations per second  →  higher is better",
+                          {device: f"{rate:,.0f}" for device, rate in rates.items()})
     ax.xaxis.set_major_locator(MaxNLocator(5))
     ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:,.0f}"))
     save(fig, args.out_dir, "upycore-pystone")
     save(suite_plot(runtimes, devices), args.out_dir, "upycore-benchmark-suite")
-    fig, _ = device_bars(geo, f"Geomean speedup over {BASELINE} ({len(shared)} kernels)",
-                         lambda x: f"{x:.2f}×", baseline=1)
-    save(fig, args.out_dir, "upycore-benchmark-geomean")
+    fig, ax = device_bars(means, f"Mean runtime (ms/kernel, {suite_size} non-Pystone kernels)", labels)
+    ax.xaxis.set_major_locator(MaxNLocator(5))
+    save(fig, args.out_dir, "upycore-benchmark-average-runtime")
 
-    print("Geomean kernels:", ", ".join(shared))
     for device in devices:
-        print(f"{device:22} {rates[device]:9,.1f} pystones/s   {geo[device]:.4f}× geomean speedup")
+        total = totals[device]
+        summary = f"{total:.3f} ms total, {means[device]:.3f} ms/kernel" if total is not None else labels[device]
+        print(f"{device:22} {summary}")
 
 
 if __name__ == "__main__":

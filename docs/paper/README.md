@@ -57,12 +57,12 @@ harness identity and result callbacks, whose correctness coverage varies by
 kernel.
 
 The script writes vector PDFs and 300 dpi PNGs. Pystone reports throughput for
-300 iterations. The suite plots the remaining kernels on a log runtime axis
-with markers only where timings exist. The average is the geometric mean of
-`Pico RP2040 runtime / device runtime` across non-Pystone kernels with timings
-for every plotted device. With the supplied table those are Chaos, Fannkuch,
-N-Queens, Interned strings, and Generator delegation. The script prints the
-selected kernels and per-device scores.
+300 iterations. The suite plots the remaining 15 kernels as grouped bars on a
+linear runtime axis. An empty bar slot indicates a missing timing. The summary
+plots the arithmetic mean runtime per kernel across all 15 non-Pystone kernels.
+It marks devices with incomplete coverage as N/A and shows how many kernel
+timings are available. The script prints the mean and total runtime for devices
+with complete coverage.
 
 [benchmark-board-ms.csv](benchmark-board-ms.csv) carries forward the published
 board comparison at the precision recorded in the prior benchmark reports.
