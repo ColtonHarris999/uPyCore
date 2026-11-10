@@ -90,14 +90,24 @@ localparam int MPY_TAGS_PER_WORD = 8;
 // Address windows. There is no DRAM, no L1, and no L2.
 // The old 256 KB spill at 0xF40000 is not a window.
 //
-// Four physical SRAM banks share image and mutable data capacity. The
+// Four SRAM banks share image and mutable data capacity. The
 // constants below describe maximum address windows, not a fixed partition.
 // Boot places the image first (rounded to 32 bytes), then maps data offset
 // zero immediately after it. Logical pointers retain their existing bases.
+//
+// A bank is the unit of interleaving and arbitration (mpy_mem). Physically
+// each bank is MPY_MEM_MACROS_PER_BLOCK SRAM macros of MPY_MEM_MACRO_WORDS
+// words, picked by the upper row bits: a single 32768-word macro has a
+// minimum clock period of 22 ns in the EE 477 fakeram model and is 31 mm
+// long; a 4096-word one has 1.07 ns and is 3.95 mm.
 localparam int MPY_MEM_BLOCK_WORDS = 32768;
 localparam int MPY_MEM_BLOCK_AW    = $clog2(MPY_MEM_BLOCK_WORDS);
 localparam int MPY_MEM_WIDTH       = 36;
 localparam int MPY_MEM_BLOCKS      = 4;
+localparam int MPY_MEM_MACRO_WORDS      = 4096;
+localparam int MPY_MEM_MACRO_AW         = $clog2(MPY_MEM_MACRO_WORDS);
+localparam int MPY_MEM_MACROS_PER_BLOCK = MPY_MEM_BLOCK_WORDS / MPY_MEM_MACRO_WORDS;
+localparam int MPY_MEM_MACROS           = MPY_MEM_BLOCKS * MPY_MEM_MACROS_PER_BLOCK;
 localparam int MPY_MEM_WORDS       = MPY_MEM_BLOCKS * MPY_MEM_BLOCK_WORDS;
 localparam int MPY_MEM_BYTES       = MPY_MEM_WORDS * 4;
 localparam int MPY_MEM_WORD_AW     = $clog2(MPY_MEM_WORDS);
