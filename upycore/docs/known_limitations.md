@@ -29,6 +29,33 @@ Iterator-only pairs are also not handled like the reference implementation.
 A future fix should consume exactly two values and require exhaustion before
 inserting the pair, following the vendored `py/objdict.c`.
 
+## `str()` of a string returns the same object (deliberate)
+
+`str(s)` with one argument that is already a `str` returns `s` itself, in the
+core (`S_CALL_STR`) and in the firmware fallback (`fmt.py::_str`). The pinned
+oracle always builds a new string (`py/objstr.c`: `mp_obj_str_make_new` prints
+the argument into a buffer, `mp_obj_new_str_type_from_vstr` searches the
+interned strings with `qstr_find_strn` and returns the qstr when the text is
+interned, else a new copy). Values are always equal; only identity differs:
+
+| Expression (`s` a non-interned `str`) | Device | Pinned oracle | CPython |
+| --- | --- | --- | --- |
+| `str(s) == s` | `True` | `True` | `True` |
+| `str(s) is s` | `True` | `False` | `True` |
+
+Python does not specify whether `str(s)` is a new object; the device follows
+CPython and skips the copy, the search and the allocation. More generally the
+device never interns a string built at run time (concatenation, formatting,
+`str()` of other objects), where MicroPython returns the interned qstr when
+one with the same text exists, so `is` between such a string and an equal
+literal can differ the same way.
+
+Benchmarks: perf_bench `core_qstr` times exactly this call
+(`str("a string that shouldn't be interned")`, 400 times) to measure
+`qstr_find_strn` when the string is not found. On the device it does no
+search, so its ratio against the boards (29x to 98x) compares different work;
+`docs/paper/README.md` says how it is reported.
+
 ## Standard-library modules in Python (perf_bench coverage)
 
 `math`, `cmath`, `random` and `io` are frozen Python modules in

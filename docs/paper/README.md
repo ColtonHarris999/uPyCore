@@ -56,6 +56,18 @@ the MPZ oracle is unavailable. The shortlist comparison checks source and
 harness identity and result callbacks, whose correctness coverage varies by
 kernel.
 
+`core_qstr` needs a note wherever it is reported. It times `str()` of a
+non-interned string, which MicroPython answers with a search of the interned
+strings (`qstr_find_strn`) and a copy; µPyCore returns the argument itself
+(the CPython behaviour, a documented difference from the oracle:
+`upycore/docs/known_limitations.md`), so it does neither. Its ratios against
+the boards (29x to 98x) are not a like-for-like comparison. Quote summary
+speedups with and without it: on `45c8947` at the estimated 10.332 ns, the
+geometric mean over the board/kernel pairs is 4.05x with it and 3.17x without
+(per clock: 6.38x and 5.00x). The Pyboard v1.1 `core_qstr` time (62.2 ms,
+against 19.6 ms on Pyboard v1.0, the same MCU) should be checked against its
+source before it is published.
+
 The script writes 600 dpi PNGs sized for single- and double-column figures.
 Pystone reports throughput for 300 iterations. The suite plots the remaining
 15 kernels as grouped bars in two panels with a shared linear runtime axis.
