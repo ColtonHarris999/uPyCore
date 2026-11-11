@@ -213,6 +213,10 @@ def main() -> int:
                          "flops and has a 0.4 ns setup, so a late enable loses 1 to 1.6 ns "
                          "against a flop; the core's m_addr, m_wdata, rf and x registers failed "
                          "this way in every routed 10 ns run. Uses the upycore_hammer.py driver")
+    ap.add_argument("--no-clock-gate-in", action="append", default=[], metavar="INSTANCE",
+                    help="like --no-clock-gate for every flop that is a direct child of this "
+                         "instance, not of its submodules (u_core: the interpreter's own state, "
+                         "8,393 flops; a pattern cannot say this, since * crosses '/')")
     ap.add_argument("--par-tcl", action="append", default=[], metavar="LINE",
                     help="an Innovus Tcl line to run before place_opt_design, after the class "
                          "settings (repeatable). Uses the upycore_hammer.py driver")
@@ -439,6 +443,9 @@ def main() -> int:
         syn_tcl.append(f"set_db [get_db designs] .lp_clock_gating_max_flops {args.cg_max_flops}")
     for pat in args.no_clock_gate:
         syn_tcl.append(f"set_db [get_db insts {{{pat}}}] .lp_clock_gating_exclude true")
+    for inst in args.no_clock_gate_in:
+        syn_tcl.append(f"set_db [get_db insts -if {{.is_sequential && .parent.name == {inst}}}] "
+                       ".lp_clock_gating_exclude true")
     if par_tcl or syn_tcl:
         # Our driver in place of the class one (upycore_hammer.py). The
         # wrapper keeps the class driver's interpreter line.
