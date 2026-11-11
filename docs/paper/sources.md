@@ -82,8 +82,9 @@ they time the same work as µPyCore's N=100 M=100 runs.
   bm_pidigits 74477.50, core_qstr 32988.00, core_yield_from 74422.25,
   misc_aes 63978.75, misc_mandel 153923.00, misc_pystone 128676.88,
   misc_raytrace 122708.62. No bm_wordcount, core_locals or core_str.
-- Check: all 11 filled CSV cells match. The CSV leaves bm_fft (311.4 ms) and
-  bm_pidigits (74.5 ms) empty although the source has them.
+- Check: all 13 CSV cells match (bm_fft 311.4 ms and bm_pidigits 74.5 ms
+  were added from this source in November 2026; the other 11 were already
+  there).
 - The paper README cited a ChatGPT library link for these numbers; that is
   not a public source. The citation is now this discussion.
 
