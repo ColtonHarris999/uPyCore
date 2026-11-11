@@ -387,7 +387,9 @@ failing clock-gate checks at 12 ns. `DESIGN_ARGS=--cts` runs with a 0.15 ns
 target, fanout 24 and `opt_clock_gate_aware`. It works through
 `upycore_hammer.py`, the class Hammer driver plus one hook that runs the
 folder's `cfg/par_settings.tcl` before `place_opt_design`;
-`--par-tcl '<line>'` adds any other Innovus line the same way, and
+`--diodes` turns on antenna diode insertion the same way (the class flow
+repairs antennas by rerouting only), `--par-tcl '<line>'` adds any other
+Innovus line (not through `DESIGN_ARGS`, which splits on spaces), and
 `--set key=value` sets a Hammer key in `cfg.yml` (for example
 `par.generate_power_straps_options.by_tracks.power_utilization_met4=0.2`
 for more met4 routing room).
