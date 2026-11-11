@@ -36,8 +36,11 @@ def load_class_driver():
     return mod.ProjectHammerDriver
 
 
-def par_settings(tool) -> bool:
-    """Hammer hook: append the design's cfg/par_settings.tcl to the Innovus script."""
+def par_settings(tool: "HammerTool") -> bool:  # noqa: F821
+    """Hammer hook: append the design's cfg/par_settings.tcl to the Innovus script.
+
+    Hammer checks a hook's signature: the argument must be annotated
+    HammerTool (the name as a string is accepted) and the result bool."""
     path = os.environ.get("UPYCORE_PAR_TCL", "")
     if path and os.path.isfile(path):
         tool.append(f"# uPyCore settings from {path}")
