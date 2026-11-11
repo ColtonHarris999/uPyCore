@@ -77,7 +77,7 @@ runtime ratios on each board's subset of non-Pystone kernels with published
 timings. The figure shows each board's coverage and weights each eligible kernel
 equally. The script prints the paired mean runtimes and the mean speedup.
 
-[benchmark-board-ms.csv](benchmark-board-ms.csv) carries forward the published
+[benchmark-board-ms.csv](benchmark-board-ms.csv) carries forward (sources, raw numbers and what was verified: [sources.md](sources.md)) the published
 board comparison at the precision recorded in the prior benchmark reports.
 Empty cells indicate unavailable matched timings. The Pyboard columns use the
 baseline scores from the cited comparisons converted to milliseconds using
@@ -90,4 +90,4 @@ the µPyCore values as projected.
 - [Stock Pico 2 Arm and RISC-V measurements](https://forums.raspberrypi.com/viewtopic.php?p=2267212)
 - [Pyboard v1.0 standard VM measurements](https://github.com/micropython/micropython/pull/18571)
 - [Pyboard v1.1 baseline measurements](https://github.com/micropython/micropython/pull/10758)
-- [Prior comparison including the ESP32-C3 runtimes](https://chatgpt.com/library?file_id=libfile_946bed05b36c8191a4d14b1eebd4c29b&account_id=personal)
+- [ESP32-C3 runtimes (MicroPython discussion #10516)](https://github.com/micropython/micropython/discussions/10516)
