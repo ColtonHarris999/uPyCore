@@ -2,17 +2,19 @@
 """The class Hammer driver plus one place-and-route hook for uPyCore.
 
 The class flow runs Hammer through ee477-hammer-cad/hammer_run, a driver
-whose hooks are fixed. This file loads that driver unchanged and adds one
-hook: the Tcl in the design folder's cfg/par_settings.tcl runs in Innovus
+whose hooks are fixed. This file loads that driver unchanged and adds two
+hooks: the Tcl in the design folder's cfg/par_settings.tcl runs in Innovus
 just before place_opt_design, after the class and sky130 settings, so its
-set_db lines win. make_hammer_design.py --par-tcl/--cts writes that file
+set_db lines win; cfg/syn_settings.tcl runs in Genus just before
+syn_generic, with the design elaborated. make_hammer_design.py --par-tcl/--cts writes that file
 and a hammer_run_upycore wrapper next to the Makefile, and points the
 Makefile's HAMMER_EXEC at the wrapper. Without the Tcl file this is the
 class driver.
 
 Environment (set by the wrapper):
   UPYCORE_CLASS_HAMMER_RUN   the class hammer_run
-  UPYCORE_PAR_TCL            the Tcl file to insert
+  UPYCORE_PAR_TCL            the Tcl file to insert in Innovus
+  UPYCORE_SYN_TCL            the Tcl file to insert in Genus
 """
 
 import importlib.machinery
@@ -36,12 +38,8 @@ def load_class_driver():
     return mod.ProjectHammerDriver
 
 
-def par_settings(tool: "HammerTool") -> bool:  # noqa: F821
-    """Hammer hook: append the design's cfg/par_settings.tcl to the Innovus script.
-
-    Hammer checks a hook's signature: the argument must be annotated
-    HammerTool (the name as a string is accepted) and the result bool."""
-    path = os.environ.get("UPYCORE_PAR_TCL", "")
+def _append_tcl(tool, var: str) -> bool:
+    path = os.environ.get(var, "")
     if path and os.path.isfile(path):
         tool.append(f"# uPyCore settings from {path}")
         with open(path) as f:
@@ -49,6 +47,19 @@ def par_settings(tool: "HammerTool") -> bool:  # noqa: F821
                 if line.strip() and not line.lstrip().startswith("#"):
                     tool.append(line)
     return True
+
+
+def par_settings(tool: "HammerTool") -> bool:  # noqa: F821
+    """Hammer hook: append the design's cfg/par_settings.tcl to the Innovus script.
+
+    Hammer checks a hook's signature: the argument must be annotated
+    HammerTool (the name as a string is accepted) and the result bool."""
+    return _append_tcl(tool, "UPYCORE_PAR_TCL")
+
+
+def syn_settings(tool: "HammerTool") -> bool:  # noqa: F821
+    """Hammer hook: append the design's cfg/syn_settings.tcl to the Genus script."""
+    return _append_tcl(tool, "UPYCORE_SYN_TCL")
 
 
 def main() -> None:
@@ -59,6 +70,11 @@ def main() -> None:
         def get_extra_par_hooks(self):
             hooks = list(super().get_extra_par_hooks())
             hooks.append(hammer_vlsi.HammerTool.make_pre_insertion_hook("place_opt_design", par_settings))
+            return hooks
+
+        def get_extra_synthesis_hooks(self):
+            hooks = list(super().get_extra_synthesis_hooks())
+            hooks.append(hammer_vlsi.HammerTool.make_pre_insertion_hook("syn_generic", syn_settings))
             return hooks
 
     UpycoreHammerDriver().main()

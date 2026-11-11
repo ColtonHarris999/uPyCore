@@ -201,6 +201,11 @@ def main() -> int:
                          "path to this much positive slack, which leaves margin before routing for "
                          "what routed wires and crosstalk take away (3.5 ns in the first routed "
                          "10 ns run). Uses the upycore_hammer.py driver")
+    ap.add_argument("--cg-max-flops", type=int, metavar="N",
+                    help="Genus lp_clock_gating_max_flops: at most N flops behind one clock gate. "
+                         "A gate with thousands of flops sits near the clock root, about 1 ns "
+                         "before the flops that drive its enable, and that skew was the worst "
+                         "violation of every routed whole-chip run. Uses the upycore_hammer.py driver")
     ap.add_argument("--par-tcl", action="append", default=[], metavar="LINE",
                     help="an Innovus Tcl line to run before place_opt_design, after the class "
                          "settings (repeatable). Uses the upycore_hammer.py driver")
@@ -422,7 +427,10 @@ def main() -> int:
                     "set_db route_design_antenna_cell_name sky130_fd_sc_hd__diode_2"]
     if args.target_slack is not None:
         par_tcl.append(f"set_db opt_setup_target_slack {args.target_slack:g}")
-    if par_tcl:
+    syn_tcl = []
+    if args.cg_max_flops:
+        syn_tcl.append(f"set_db [get_db designs] .lp_clock_gating_max_flops {args.cg_max_flops}")
+    if par_tcl or syn_tcl:
         # Our driver in place of the class one (upycore_hammer.py). The
         # wrapper keeps the class driver's interpreter line.
         run = args.class_hammer_run.expanduser()
@@ -436,11 +444,15 @@ def main() -> int:
         tcl = cfg_dir / "par_settings.tcl"
         tcl.write_text("# Run before place_opt_design (make_hammer_design.py --cts/--par-tcl).\n"
                        + "\n".join(par_tcl) + "\n")
+        stcl = cfg_dir / "syn_settings.tcl"
+        stcl.write_text("# Run before syn_generic (make_hammer_design.py --cg-max-flops).\n"
+                        + "\n".join(syn_tcl) + "\n")
         wrapper = dest / "hammer_run_upycore"
         wrapper.write_text(f"{shebang}\n"
                            "import os, runpy\n"
                            f"os.environ.setdefault('UPYCORE_CLASS_HAMMER_RUN', {str(run)!r})\n"
                            f"os.environ.setdefault('UPYCORE_PAR_TCL', {str(tcl)!r})\n"
+                           f"os.environ.setdefault('UPYCORE_SYN_TCL', {str(stcl)!r})\n"
                            f"runpy.run_path({str(HERE / 'upycore_hammer.py')!r}, run_name='__main__')\n")
         wrapper.chmod(0o755)
         mk = dest / "Makefile"
@@ -460,6 +472,8 @@ def main() -> int:
         print("             run `make sram`, then place them (README.md, SRAM macros)")
     for line in par_tcl:
         print(f"  Innovus    {line} (cfg/par_settings.tcl)")
+    for line in syn_tcl:
+        print(f"  Genus      {line} (cfg/syn_settings.tcl)")
     for w in warnings:
         print(f"  WARNING: {w}")
     print("Next: cd into it and run: make syn")
