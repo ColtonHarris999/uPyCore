@@ -53,7 +53,7 @@ literal can differ the same way.
 Benchmarks: perf_bench `core_qstr` times exactly this call
 (`str("a string that shouldn't be interned")`, 400 times) to measure
 `qstr_find_strn` when the string is not found. On the device it does no
-search, so its ratio against the boards (29x to 98x) compares different work;
+search, so its ratio against the boards (29x to 52x) compares different work;
 `docs/paper/README.md` says how it is reported.
 
 ## Standard-library modules in Python (perf_bench coverage)

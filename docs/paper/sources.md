@@ -48,25 +48,35 @@ they time the same work as µPyCore's N=100 M=100 runs.
 - Check: every one of the 16 CSV cells equals `1000 * norm / score` to the
   0.1 ms shown.
 
-### Pyboard v1.1 (STM32F405, 168 MHz nominal): verified, exact, but old firmware
+### PyBD SF6 (STM32F767, 216 MHz nominal): verified, exact; replaces Pyboard v1.1
 
-- Source: MicroPython PR #10758, "py/qstr: qstr performance improvements.",
-  Jim Mussared, opened 15 Feb 2023, closed unmerged 13 Oct 2023 (in favour
-  of #12678). <https://github.com/micropython/micropython/pull/10758>
-- Run: `qstr-no-hash-pybv11-baseline`, N=100 M=100, scores. No baseline
-  commit (master, February 2023) and no clock given.
-- Published baseline scores: bm_chaos 350.03, bm_fannkuch 75.41, bm_fft
-  2298.91, bm_float 5669.53, bm_hexiom 40.46, bm_nqueens 4204.21,
-  bm_pidigits 627.46, core_qstr 64.34, core_yield_from 351.54, misc_aes
-  404.98, misc_mandel 3068.33, misc_pystone 2273.83, misc_raytrace 365.51.
-  The PR's table has no bm_wordcount, core_locals or core_str (they were
-  added to perf_bench later), which is why those cells are empty.
-- Check: all 13 CSV cells match the conversion.
-- Caveat: February 2023 firmware. Its `core_qstr` (62.2 ms) is three times
-  the Pyboard v1.0 time on the same MCU (19.6 ms) because the qstr lookup
-  was made faster after this run (the PR itself measures +342 % on
-  `core_qstr` for its change; the sorted-pool part landed as #12678). The
-  other kernels agree with Pyboard v1.0 within about 13 %.
+- Source: MicroPython PR #7688, "py/vm.c: Add a fast path for LOAD_ATTR on
+  instance types.", Jim Mussared, 19 Aug 2021
+  (<https://github.com/micropython/micropython/pull/7688>); the same
+  baseline run (`~/cache-baseline-sf6`) is also the left-hand side of the
+  three PYBD_SF6 tables in PR #7680 (18 Aug 2021,
+  <https://github.com/micropython/micropython/pull/7680>).
+- Run: `./run-perfbench.py -s ~/cache-baseline-sf6 ...`, N=100 M=100, scores.
+  No commit (August 2021 master) and no clock given.
+- Published baseline scores: bm_chaos 382.55, bm_fannkuch 101.40, bm_fft
+  1815.18, bm_float 5939.99, bm_hexiom 49.78, bm_nqueens 5706.74,
+  bm_pidigits 959.77, misc_aes 530.32, misc_mandel 4037.38, misc_pystone
+  2485.09, misc_raytrace 401.04. The run predates bm_wordcount,
+  core_locals, core_qstr, core_str and core_yield_from in perf_bench, so
+  those cells are empty (11 kernels).
+- The CSV cells are `1000 * norm / score` with today's `norm`. That
+  assumes those 11 kernels' parameters and `result()` are unchanged since
+  August 2021 (not checked against the 2021 source).
+- No newer PYBD table was found: PRs #16015, #19128, #19771 and #8733
+  mention PYBD boards but publish no PYBD numbers.
+- Caveat: August 2021 firmware, the oldest in the table. `bm_fft` (423.1 ms)
+  is slower than on Pyboard v1.0 (329.5 ms) although the F767 is the faster
+  MCU; PYBD builds use double-precision floats (my understanding of the
+  board config, not stated in the PR), and the run is four years older.
+
+The Pyboard v1.1 column (PR #10758, February 2023) was dropped: same MCU as
+Pyboard v1.0 on older firmware, and its `core_qstr` predates MicroPython's
+faster qstr lookup.
 
 ### ESP32-C3 (160 MHz): verified, exact; source citation corrected
 
@@ -130,13 +140,13 @@ they time the same work as µPyCore's N=100 M=100 runs.
 
 ## Other things to state in the paper
 
-- The board runs are from different MicroPython versions: January and
-  February 2023 (ESP32-C3, Pyboard v1.1), probably 2024–2025 (Pico
+- The board runs are from different MicroPython versions: August 2021 (PyBD SF6), January 2023
+  (ESP32-C3), probably 2024–2025 (Pico
   forum posts, to be confirmed), December 2025 (Pyboard v1.0). µPyCore
   matches MicroPython v1.29.0.
 - None of the sources states the clock it ran at except the ESP32-C3
   post (160 MHz). The per-clock comparison uses each board's stock
-  MicroPython clock (RP2040 125 MHz, RP2350 150 MHz, STM32F405 168 MHz);
+  MicroPython clock (RP2040 125 MHz, RP2350 150 MHz, STM32F405 168 MHz, STM32F767 216 MHz);
   that is an assumption.
 - `core_qstr` does different work on µPyCore (see
   `upycore/docs/known_limitations.md` and the README note).

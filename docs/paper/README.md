@@ -61,12 +61,12 @@ non-interned string, which MicroPython answers with a search of the interned
 strings (`qstr_find_strn`) and a copy; µPyCore returns the argument itself
 (the CPython behaviour, a documented difference from the oracle:
 `upycore/docs/known_limitations.md`), so it does neither. Its ratios against
-the boards (29x to 98x) are not a like-for-like comparison. Quote summary
+the boards (29x to 52x) are not a like-for-like comparison. Quote summary
 speedups with and without it: on `45c8947` at the estimated 10.332 ns, the
-geometric mean over the board/kernel pairs is 4.05x with it and 3.17x without
-(per clock: 6.38x and 5.00x). The Pyboard v1.1 `core_qstr` time (62.2 ms,
-against 19.6 ms on Pyboard v1.0, the same MCU) should be checked against its
-source before it is published.
+geometric mean over the board/kernel pairs (Pystone excluded, Pi digits
+included; the table of November 2026 with PyBD SF6 in place of Pyboard v1.1)
+is 3.87x with it and 3.22x without (per clock, at each board's stock clock:
+6.35x and 5.31x).
 
 The script writes 600 dpi PNGs sized for single- and double-column figures.
 Pystone reports throughput for 300 iterations. The suite plots the remaining
@@ -79,7 +79,7 @@ equally. The script prints the paired mean runtimes and the mean speedup.
 
 [benchmark-board-ms.csv](benchmark-board-ms.csv) carries forward (sources, raw numbers and what was verified: [sources.md](sources.md)) the published
 board comparison at the precision recorded in the prior benchmark reports.
-Empty cells indicate unavailable matched timings. The Pyboard columns use the
+Empty cells indicate unavailable matched timings. The Pyboard and PyBD columns use the
 baseline scores from the cited comparisons converted to milliseconds using
 each workload's normalization count. Firmware versions and measurement
 conditions vary across sources. µPyCore time is RTL cycles multiplied by the
@@ -89,5 +89,5 @@ the µPyCore values as projected.
 - [Original Pico measurements](https://forums.raspberrypi.com/viewtopic.php?p=2259682)
 - [Stock Pico 2 Arm and RISC-V measurements](https://forums.raspberrypi.com/viewtopic.php?p=2267212)
 - [Pyboard v1.0 standard VM measurements](https://github.com/micropython/micropython/pull/18571)
-- [Pyboard v1.1 baseline measurements](https://github.com/micropython/micropython/pull/10758)
+- [PyBD SF6 baseline measurements](https://github.com/micropython/micropython/pull/7688)
 - [ESP32-C3 runtimes (MicroPython discussion #10516)](https://github.com/micropython/micropython/discussions/10516)
