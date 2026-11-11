@@ -241,6 +241,68 @@ spread in the table (`bm_fannkuch` −7.9 % is the smallest cycle gain).
   were not changed, so `make check-goldens` is unaffected.
 - SAT proofs: decoder, `upycore_clz64`, `upycore_umod_seq` clz.
 
+## After merging `main` (`4bb97a7`)
+
+`main` had gained "Keep resumed generator locals in their SRAM image"
+(`d0c6e20`), which registers the frame's stack prefix itself
+(`stack_prefix_words`). The merge keeps that register in place of this
+round's `fgeo_r`, and the frame-bound registers use it. The merged netlist
+first moved `sp` → `m_req` to 10.66 ns (estimate). Two more changes bring it
+back down: `stk_hit` is now a subtract and a 7-bit compare against the
+resident count (SAT-proven equal while the depth cannot wrap 16 bits), and
+the wide-call copy loop tests residency by count (checked under
+`MPY_CHECK`).
+
+| | Branch | Merged |
+| --- | ---: | ---: |
+| `mpy_core` worst path (estimate) | 10.332 ns | 10.314 ns |
+| `mpy_soc` worst path (estimate) | 10.332 ns | 10.332 ns |
+
+Kernels on the merged tree, against `1b44d1e` at 16.105 → 10.332 ns:
+
+| Benchmark | Cycles before | Cycles merged | Cycles | Time ratio | Result |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `bm_chaos` | 3,952,735 | 3,415,375 | -13.59 % | 0.554 | same |
+| `bm_fannkuch` | 1,088,988 | 1,003,198 | -7.88 % | 0.591 | same |
+| `bm_fft` | 10,293,659 | 9,403,405 | -8.65 % | 0.586 | same |
+| `bm_float` | 3,292,939 | 2,884,645 | -12.40 % | 0.562 | same |
+| `bm_hexiom` | 11,580,088 | 9,999,797 | -13.65 % | 0.554 | same |
+| `bm_nqueens` | 13,953,480 | 11,891,961 | -14.77 % | 0.547 | same |
+| `bm_wordcount` | 7,774,990 | 6,604,660 | -15.05 % | 0.545 | same |
+| `core_locals` | 6,167,342 | 4,900,777 | -20.54 % | 0.510 | same |
+| `core_qstr` | 78,850 | 61,539 | -21.95 % | 0.501 | same |
+| `core_str` | 6,973,563 | 5,944,789 | -14.75 % | 0.547 | same |
+| `core_yield_from` | 4,449,947 | 3,210,984 | -27.84 % | 0.463 | same |
+| `misc_aes` | 1,510,327 | 1,370,947 | -9.23 % | 0.582 | same |
+| `misc_mandel` | 5,390,732 | 4,948,750 | -8.20 % | 0.589 | same |
+| `misc_pystone` | 3,496,801 | 2,946,340 | -15.74 % | 0.541 | same |
+| `misc_raytrace` | 6,533,393 | 5,666,797 | -13.26 % | 0.556 | same |
+| `bm_pidigits` | 1,510,982 | 1,383,642 | -8.43 % | 0.587 | same |
+
+Geometric mean over 16: cycles x0.857, time x0.550 (1.82x faster); worst time ratio 0.591.
+
+`core_yield_from` gains most from `main`'s change (−27.8 % cycles instead
+of −9.5 %).
+
+Verification of the merged tree: hardware suite 549 of 549 with
+`mpy-cross` and 549 of 549 with `--compiler mpyc` (the new
+`gen_resumed_local_gc` included); unit benches 37 of 37; checking build
+(`+define+MPY_CHECK`) clean on the generators, exceptions, calls and
+containers areas.
+
+## Hardware suite run time
+
+The `compiler` area runs the uPy2 compiler as bytecode on the simulated
+hart. Its programs are 15 to 420 million cycles each, and the model runs
+at roughly 100 to 200 thousand cycles a second. `compile_reject_locals`
+alone is 423 million cycles, 27 % of the area, and it started last. The
+`mpyc` pass then repeated the whole area, although uPy2 links the same
+bytes as `mpy-cross` for all 548 programs. `hw_tests.py` now reuses an
+identical run (same simulator, image and plusargs) and starts the longest
+tests first, and the model is compiled at `-O2`. The whole suite with both
+compilers took 74 minutes at `-j 4` (4,403 s for `mpy-cross`, 34 s for
+`mpyc`), against about five hours before.
+
 ## Not verified
 
 - Genus / Innovus timing of any kind; all periods are estimates.
