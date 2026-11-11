@@ -117,6 +117,9 @@ def build_sim(force: bool = False, quiet: bool = True, saif: bool = False) -> Pa
     cmd = [
         os.environ.get("VERILATOR", "verilator"), "-sv", "--binary", "--timing",
         "--timescale", "1ns/1ps", "-O3", "--x-assign", "fast", "--x-initial", "fast",
+        # The model's C++ at -O2 instead of verilated.mk's -Os: about 12 %
+        # more cycles per second on the hardware suite's longest programs.
+        "-MAKEFLAGS", "OPT_FAST=-O2", "-MAKEFLAGS", "OPT_GLOBAL=-O2",
         f"+incdir+{ROOT / 'upycore' / 'rtl'}", "-y", str(ROOT / "upycore" / "rtl"),
         *[f"+incdir+{ROOT / d}" for d in ISLAND_INCDIRS],
         "--top-module", "tb_mpy_soc",

@@ -39,6 +39,9 @@ import argparse
 import ctypes
 import difflib
 import fnmatch
+import hashlib
+import json
+import pickle
 import os
 import re
 import subprocess
@@ -58,6 +61,15 @@ import mpy_build as build  # noqa: E402
 MANIFEST = ROOT / "upycore" / "programs" / "hw_tests.toml"
 # Plusargs added to every run (--sim-arg), e.g. the clock-ratio sweep's +IO_CLK_NS.
 EXTRA_SIM_ARGS: list[str] = []
+# A run is a pure function of the simulator binary, the boot files and the
+# plusargs (the model is deterministic), so an identical run is reused
+# instead of repeated: the --compiler mpyc pass of a test whose uPy2 image
+# is byte-identical to mpy-cross's, or a test rerun on an unchanged tree.
+# --no-reuse turns it off.
+REUSE = True
+RUN_CACHE = ROOT / "build" / "hw-run-cache"
+# Each test's last cycle count, to start the longest tests first.
+CYCLES_RECORD = ROOT / "build" / "hw-test-cycles.json"
 PROGRAMS = ROOT / "upycore" / "programs"
 
 # Addresses inside repr. The hex digits are the only part that may differ.
@@ -156,6 +168,7 @@ class Outcome:
     detail: str = ""
     cycles: int | None = None
     halt: str = ""
+    reused: bool = False   # an identical earlier run's result (see REUSE)
 
     @property
     def expected_fail(self) -> bool:
@@ -328,8 +341,7 @@ def run_device(t: Test, compiler: str = "mpy-cross") -> Outcome:
                                     bigint=t.bigint)
         script = [f"+UART_SCRIPT={PROGRAMS / t.uart_script}"] if t.uart_script else []
         script += [f"+USB_SCRIPT={PROGRAMS / t.usb_script}"] if t.usb_script else []
-        res = build.run_image(image, max_cycles=t.cycles, timeout=t.timeout,
-                              sim_args=[*t.sim_args, *script, *EXTRA_SIM_ARGS])
+        res, reused = _run_reusable(image, t.cycles, t.timeout, [*t.sim_args, *script, *EXTRA_SIM_ARGS])
     except build.BuildError as exc:
         text = str(exc).strip().splitlines()
         return Outcome(t, False, text[-1] if text else "build failed")
@@ -357,7 +369,86 @@ def run_device(t: Test, compiler: str = "mpy-cross") -> Outcome:
         if res.exit_code is None:
             detail = f"{res.halt} value={res.value:#x} cycles={res.cycles}\n" + detail
         return Outcome(t, False, detail.strip(), cycles=res.cycles, halt=res.halt)
-    return Outcome(t, True, cycles=res.cycles, halt=res.halt)
+    return Outcome(t, True, cycles=res.cycles, halt=res.halt, reused=reused)
+
+
+_SIM_SHA: dict[str, str] = {}
+
+
+def _sha_file(p: Path) -> str:
+    return hashlib.sha256(p.read_bytes()).hexdigest()
+
+
+def _run_key(image: Path, max_cycles: int, sim_args: list[str]) -> str | None:
+    """Everything a run depends on, hashed; None when something is unknown."""
+    sim = Path(os.environ.get("MPY_SIM", str(build.SIM)))
+    if not sim.is_file():
+        return None
+    s = str(sim)
+    if s not in _SIM_SHA:
+        _SIM_SHA[s] = _sha_file(sim)
+    h = hashlib.sha256()
+    h.update(_SIM_SHA[s].encode())
+    for suffix in (".hex", ".tags.hex"):
+        h.update(_sha_file(Path(f"{image}{suffix}")).encode())
+    marker = Path(f"{image}.iocore")
+    if marker.exists():
+        ioc = Path(marker.read_text().strip())
+        for name in ("code.hex", "data.hex"):
+            h.update(_sha_file(ioc / name).encode())
+    args = [f"+MAX_CYCLES={max_cycles}", *os.environ.get("MPY_SIM_ARGS", "").split(), *sim_args]
+    for a in args:
+        h.update(a.encode() + b"\0")
+        # A plusarg naming a file (a UART script) depends on its contents.
+        if "=" in a:
+            f = Path(a.split("=", 1)[1])
+            if f.is_file():
+                h.update(_sha_file(f).encode())
+    return h.hexdigest()
+
+
+def _run_reusable(image: Path, max_cycles: int, timeout: float, sim_args: list[str]):
+    key = _run_key(image, max_cycles, sim_args) if REUSE else None
+    hit = RUN_CACHE / f"{key}.pkl" if key else None
+    if hit is not None and hit.is_file():
+        try:
+            return pickle.loads(hit.read_bytes()), True
+        except Exception:  # noqa: BLE001 - a damaged entry is just a miss
+            pass
+    res = build.run_image(image, max_cycles=max_cycles, timeout=timeout, sim_args=sim_args)
+    if hit is not None:
+        RUN_CACHE.mkdir(parents=True, exist_ok=True)
+        tmp = hit.with_suffix(f".{os.getpid()}.{threading.get_ident()}.tmp")
+        tmp.write_bytes(pickle.dumps(res))
+        tmp.replace(hit)
+    return res, False
+
+
+def _by_cost(tests: list[Test]) -> list[Test]:
+    """Longest first, so the area's slowest test does not start last: the
+    recorded cycles of the last run, else the manifest's limits."""
+    try:
+        seen = json.loads(CYCLES_RECORD.read_text())
+    except (OSError, ValueError):
+        seen = {}
+    return sorted(tests, key=lambda t: (-seen.get(t.name, 0), -t.timeout, -t.cycles))
+
+
+def _record_cycles(results: list[Outcome]) -> None:
+    try:
+        seen = json.loads(CYCLES_RECORD.read_text())
+    except (OSError, ValueError):
+        seen = {}
+    for o in results:
+        if o.cycles:
+            seen[o.test.name] = o.cycles
+    try:
+        CYCLES_RECORD.parent.mkdir(parents=True, exist_ok=True)
+        tmp = CYCLES_RECORD.with_suffix(f".{os.getpid()}.tmp")
+        tmp.write_text(json.dumps(seen, indent=0, sort_keys=True))
+        tmp.replace(CYCLES_RECORD)
+    except OSError:
+        pass
 
 
 def status_word(o: Outcome) -> str:
@@ -398,10 +489,13 @@ def run_tests(tests: list[Test], jobs: int, compiler: str = "mpy-cross") -> list
                 why = first
             if o.test.xfail and not o.passed:
                 why = f"{why} (known: {o.test.xfail})".strip()
+            if o.reused:
+                why = f"{why} (reused)".strip()
             _echo(f"{status_word(o):<5} {t.area}/{t.name}  {cyc} {why}".rstrip())
 
     with ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
-        list(pool.map(work, tests))
+        list(pool.map(work, _by_cost(tests)))
+    _record_cycles(results)
     order = {t.name: i for i, t in enumerate(tests)}
     results.sort(key=lambda o: order[o.test.name])
     return results
@@ -470,10 +564,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--check-goldens", action="store_true", help="fail if the oracle disagrees with the goldens")
     ap.add_argument("--compiler", choices=("mpy-cross", "mpyc"), default="mpy-cross",
                     help="compiler for the test program and its frozen modules")
+    ap.add_argument("--no-reuse", action="store_true",
+                    help="run every test even when an identical run (same simulator, image and plusargs) is cached")
     ap.add_argument("--include-disabled", action="store_true",
                     help="boot tests marked disabled (the device run skips them otherwise)")
     args = ap.parse_args(argv)
     EXTRA_SIM_ARGS.extend(args.sim_arg)
+    global REUSE
+    REUSE = not args.no_reuse
 
     tests = load_manifest()
     if not (args.area or args.names) and not args.list:
