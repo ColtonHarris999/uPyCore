@@ -195,6 +195,11 @@ def main() -> int:
                     help="place and route with antenna diode insertion (sky130_fd_sc_hd__diode_2). "
                          "The class flow repairs antennas by rerouting only, which leaves "
                          "hundreds of violations and adds shorts. Uses the upycore_hammer.py driver")
+    ap.add_argument("--target-slack", type=float, metavar="NS",
+                    help="Innovus opt_setup_target_slack (class 0.10): the optimizer works every "
+                         "path to this much positive slack, which leaves margin before routing for "
+                         "what routed wires and crosstalk take away (3.5 ns in the first routed "
+                         "10 ns run). Uses the upycore_hammer.py driver")
     ap.add_argument("--par-tcl", action="append", default=[], metavar="LINE",
                     help="an Innovus Tcl line to run before place_opt_design, after the class "
                          "settings (repeatable). Uses the upycore_hammer.py driver")
@@ -408,6 +413,8 @@ def main() -> int:
     if args.diodes:
         par_tcl += ["set_db route_design_antenna_diode_insertion true",
                     "set_db route_design_antenna_cell_name sky130_fd_sc_hd__diode_2"]
+    if args.target_slack is not None:
+        par_tcl.append(f"set_db opt_setup_target_slack {args.target_slack:g}")
     if par_tcl:
         # Our driver in place of the class one (upycore_hammer.py). The
         # wrapper keeps the class driver's interpreter line.
