@@ -85,9 +85,21 @@ def _q_intern(s):
     if hit is not NULL:
         return hit
     nimg = _peek32(4 * HDR_QSTR_COUNT)
+    # Each image qstr's descriptor word is its 16-bit hash (0 read as 1)
+    # with its length above; only an entry whose word matches is compared
+    # as text. (A text compare of every image qstr made each new name cost
+    # about 1,600 _streq calls: 80 % of compile() of a 241-parameter def.)
+    h = _hash(s)
+    if h is STOP:
+        h = 1
+    h = h & 65535
+    if h == 0:
+        h = 1
+    key = h | (_slen(s) << 16)
+    desc = _peek32(4 * HDR_QSTR_DESC)
     i = 0
     while i < nimg:
-        if _streq(s, _mk(TAG_QSTR, i)):
+        if _peek32(desc + 8 * i) == key and _streq(s, _mk(TAG_QSTR, i)):
             st[0][s] = i
             return i
         i += 1
