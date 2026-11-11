@@ -65,14 +65,12 @@ module mpy_shortlist #(parameter int MAX_ELEMS=16) (
             LENGTH_REQ,LENGTH_WAIT: begin addr_o=header; wdata_o=new_length; wtag_o=MPY_TAG_INT; end
             default: ;
         endcase
-        chk_busy_o = 0;
-        if(st!=IDLE) begin
-            if ({1'b0,chk_addr_i}>={1'b0,dst} && {1'b0,chk_addr_i}<dest_end) chk_busy_o=1;
-            if(chk_we_i && {1'b0,chk_addr_i}>=source_low && {1'b0,chk_addr_i}<source_end) chk_busy_o=1;
-            if(clear_tail && chk_addr_i==clear_addr) chk_busy_o=1;
-            if(put_value && chk_addr_i==put_addr) chk_busy_o=1;
-            if(write_length && chk_addr_i>=header && {1'b0,chk_addr_i}<header_end) chk_busy_o=1;
-        end
+        chk_busy_o = st!=IDLE && (
+            ({1'b0,chk_addr_i}>={1'b0,dst} && {1'b0,chk_addr_i}<dest_end) ||
+            (chk_we_i && {1'b0,chk_addr_i}>=source_low && {1'b0,chk_addr_i}<source_end) ||
+            (clear_tail && chk_addr_i==clear_addr) ||
+            (put_value && chk_addr_i==put_addr) ||
+            (write_length && chk_addr_i>=header && {1'b0,chk_addr_i}<header_end));
     end
     task automatic finish_items();
         if(clear_tail) st<=CLEAR_REQ;

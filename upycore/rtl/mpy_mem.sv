@@ -28,7 +28,13 @@
 module mpy_mem #(
     parameter int NP = 3,
     parameter int FLASH_WAIT_STATES = MPY_FLASH_WAIT_STATES,
-    parameter int SRAM_LATENCY = MPY_SRAM_LATENCY
+    parameter int SRAM_LATENCY = MPY_SRAM_LATENCY,
+    // Ports whose answer is not registered here: ack_o[p] and the word are
+    // given in the cycle the SRAM presents it (one cycle earlier), for a
+    // master that registers the word itself (the core's md). The path is
+    // the block output, the block select and the hold select into the
+    // master's flops, the same logic that feeds rdata_o's flops otherwise.
+    parameter logic [NP-1:0] EARLY = '0
 ) (
     input  logic                 clk_i,
     input  logic                 rst_n_i,
@@ -71,6 +77,10 @@ module mpy_mem #(
     // seen, and the round-up and subtract stay out of every access's
     // fault check and block arbitration.
     logic [31:0] image_words, data_words, image_words_n;
+    // The image is larger than an index can name (every index is inside
+    // it); with it the bound compares are index-wide, not 32 bits.
+    logic        img_big;
+    assign img_big = |image_words[31:MPY_FLASH_IDX_W];
     assign image_words_n = (image_words_i + 32'd7) & 32'hfffffff8;
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) begin
@@ -133,8 +143,10 @@ module mpy_mem #(
             logic [MPY_MEM_WORD_AW-1:0] sw;
             logic [MPY_FLASH_IDX_W-1:0] iw;
             region = mpy_region_of(addr_i[p]);
-            sw = mpy_sram_word_index(addr_i[p]);
-            iw = MPY_FLASH_IDX_W'(mpy_flash_word_index(addr_i[p]));
+            // Both bases have no low bits (checked below), so the word
+            // index is a bit select, not a subtract.
+            sw = addr_i[p][MPY_MEM_WORD_AW+1:2];
+            iw = addr_i[p][MPY_FLASH_IDX_W+1:2];
             ready[p] = !clr_busy && (phase_r[p] <= 8'd1);
             if (addr_i[p][1:0] != 2'b00)
                 p_fault[p] = MPY_FAULT_UNALIGNED;
@@ -145,8 +157,17 @@ module mpy_mem #(
                 p_fault[p] = (32'(sw) >= data_words) ? MPY_FAULT_BUS : MPY_FAULT_NONE;
             else
                 p_fault[p] = MPY_FAULT_BUS;
-            p_mem[p] = (p_fault[p] == MPY_FAULT_NONE);
-            p_img[p] = (region == MPY_REGION_FLASH);
+            // "No fault", flat: the two bound compares run beside the region
+            // tests and meet in one AND-OR (the SRAM base has no low bits,
+            // so its region test is three address bits and one compare).
+            // Taken from p_fault's priority chain it led each port's grant
+            // (the accelerators' address -> their grant, 12.0 ns). Simulation
+            // checks it against p_fault every cycle.
+            p_mem[p] = (addr_i[p][1:0] == 2'b00) &&
+                       (((addr_i[p] < MPY_FLASH_BYTES) && (img_big || (iw < image_words[MPY_FLASH_IDX_W-1:0])) && !we_i[p]) ||
+                        ((addr_i[p][31:29] == MPY_SRAM_BASE[31:29]) && ({3'd0, addr_i[p][28:0]} < MPY_SRAM_BYTES) &&
+                         ({1'b0, sw} < data_words[MPY_MEM_WORD_AW:0])));
+            p_img[p] = (addr_i[p] < MPY_FLASH_BYTES);
             if (p_img[p]) begin
                 p_blk[p] = iw[BS-1:0];
                 p_row[p] = AW'(32'(iw) >> BS);
@@ -162,6 +183,15 @@ module mpy_mem #(
         end
     end
 
+`ifdef MPY_CHECK
+    initial if (MPY_FLASH_BASE != 32'd0 || MPY_SRAM_BASE[28:0] != 29'd0 || MPY_SRAM_BYTES > 32'h2000_0000 ||
+                MPY_FLASH_BYTES > MPY_SRAM_BASE) $error("mpy_mem: region decode assumes the SRAM base's low 29 bits are 0");
+    always_ff @(posedge clk_i)
+        for (int p = 0; p < NP; p++)
+            if (rst_n_i && req_i[p] && (p_mem[p] != (p_fault[p] == MPY_FAULT_NONE) ||
+                                         p_img[p] != (mpy_region_of(addr_i[p]) == MPY_REGION_FLASH)))
+                $error("mpy_mem: flat fault decode differs on port %0d addr %08x", p, addr_i[p]);
+`endif
     // ------------------------------------------------------ block arbitration
     logic [BS-1:0] ld_blk;
     logic [AW-1:0] ld_row;
@@ -194,25 +224,55 @@ module mpy_mem #(
                 taken[b]    = 1'b1;
             end
         end
-        // Lowest port number first; each block serves one port.
+        // Lowest port number first; each block serves one port. Flat: a
+        // port is granted unless its block is cleared or loaded this cycle
+        // or a lower-numbered port wants the same block (that port, or one
+        // below it, has the block). As a running "taken" vector indexed by
+        // each port's block this was a chain through every port, 4.6 ns
+        // from the core's request to the accelerator's grant.
         for (int p = 0; p < NP; p++) begin
-            if (req_i[p] && ready[p]) begin
-                if (!p_mem[p]) begin
-                    gnt_o[p] = 1'b1;
-                end else if (!taken[p_blk[p]]) begin
-                    gnt_o[p] = 1'b1;
-                    taken[p_blk[p]] = 1'b1;
-                    blk_v[p_blk[p]]    = 1'b1;
-                    blk_w[p_blk[p]]    = we_i[p];
-                    blk_addr[p_blk[p]] = p_row[p];
-                    blk_data[p_blk[p]] = {wtag_i[p], wdata_i[p]};
-                    blk_mask[p_blk[p]] = p_mask[p];
-                end
-            end
+            logic lost;
+            lost = taken[p_blk[p]];
+            for (int j = 0; j < p; j++)
+                // Without p_mem[j]: a lower-numbered port's faulting request
+                // for the same block index makes this port wait a cycle. The
+                // fault test (a bound compare on the full address) would
+                // otherwise sit between the fetch queue and the grants of
+                // the ports below it (12.1 ns).
+                lost = lost | (req_i[j] && ready[j] && (p_blk[j] == p_blk[p]));
+            gnt_o[p] = req_i[p] && ready[p] && (!p_mem[p] || !lost);
         end
+        for (int b = 0; b < NB; b++)
+            for (int p = 0; p < NP; p++)
+                if (gnt_o[p] && p_mem[p] && (p_blk[p] == BS'(b))) begin
+                    blk_v[b]    = 1'b1;
+                    blk_w[b]    = blk_w[b] | we_i[p];
+                    blk_addr[b] = blk_addr[b] | p_row[p];
+                    blk_data[b] = blk_data[b] | {wtag_i[p], wdata_i[p]};
+                    blk_mask[b] = blk_mask[b] | p_mask[p];
+                end
     end
 
     // ------------------------------------------------------------ responses
+    logic [NP-1:0]        ack_q, fault_q;
+    logic [NP-1:0][31:0]  rdata_q;
+    logic [NP-1:0][3:0]   rtag_q, fault_reason_q;
+    logic [NP-1:0][W-1:0] word_c;
+    always_comb begin
+        for (int p = 0; p < NP; p++) begin
+            word_c[p] = fresh_r[p] ? blk_q[rblk_r[p]] : hold_r[p];
+            if (EARLY[p]) begin
+                ack_o[p]          = (phase_r[p] == 8'd1);
+                rdata_o[p]        = rd_r[p] ? word_c[p][31:0] : 32'd0;
+                rtag_o[p]         = rd_r[p] ? word_c[p][35:32] : 4'd0;
+                fault_o[p]        = (phase_r[p] == 8'd1) && (fault_r[p] != MPY_FAULT_NONE);
+                fault_reason_o[p] = fault_o[p] ? fault_r[p] : MPY_FAULT_NONE;
+            end else begin
+                ack_o[p] = ack_q[p]; rdata_o[p] = rdata_q[p]; rtag_o[p] = rtag_q[p];
+                fault_o[p] = fault_q[p]; fault_reason_o[p] = fault_reason_q[p];
+            end
+        end
+    end
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) begin
             clr_busy       <= 1'b1;
@@ -223,11 +283,11 @@ module mpy_mem #(
             rblk_r         <= '0;
             fresh_r        <= '0;
             hold_r         <= '0;
-            ack_o          <= '0;
-            rdata_o        <= '0;
-            rtag_o         <= '0;
-            fault_o        <= '0;
-            fault_reason_o <= '0;
+            ack_q          <= '0;
+            rdata_q        <= '0;
+            rtag_q         <= '0;
+            fault_q        <= '0;
+            fault_reason_q <= '0;
         end else begin
             // A load write takes its block's clear slot, so the row is
             // cleared again next cycle in every block.
@@ -238,21 +298,21 @@ module mpy_mem #(
             for (int p = 0; p < NP; p++) begin
                 logic [W-1:0] word;
                 word = fresh_r[p] ? blk_q[rblk_r[p]] : hold_r[p];
-                ack_o[p]          <= 1'b0;
-                fault_o[p]        <= 1'b0;
-                fault_reason_o[p] <= MPY_FAULT_NONE;
+                ack_q[p]          <= 1'b0;
+                fault_q[p]        <= 1'b0;
+                fault_reason_q[p] <= MPY_FAULT_NONE;
                 if (fresh_r[p]) begin
                     fresh_r[p] <= 1'b0;
                     hold_r[p]  <= blk_q[rblk_r[p]];
                 end
                 if (phase_r[p] == 8'd1) begin
                     phase_r[p] <= '0;
-                    ack_o[p]   <= 1'b1;
-                    rdata_o[p] <= rd_r[p] ? word[31:0] : 32'd0;
-                    rtag_o[p]  <= rd_r[p] ? word[35:32] : 4'd0;
+                    ack_q[p]   <= 1'b1;
+                    rdata_q[p] <= rd_r[p] ? word[31:0] : 32'd0;
+                    rtag_q[p]  <= rd_r[p] ? word[35:32] : 4'd0;
                     if (fault_r[p] != MPY_FAULT_NONE) begin
-                        fault_o[p]        <= 1'b1;
-                        fault_reason_o[p] <= fault_r[p];
+                        fault_q[p]        <= 1'b1;
+                        fault_reason_q[p] <= fault_r[p];
                     end
                 end else if (phase_r[p] != 8'd0) begin
                     phase_r[p] <= phase_r[p] - 8'd1;

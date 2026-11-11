@@ -285,10 +285,18 @@ module mpy_decode
     logic overflow;
     logic known;
     entry_e mapped;
-    logic signed [63:0] acc;
-    logic cont;
+    logic signed [63:0] acc, cand;
     logic [7:0] bv;
     logic [14:0] raw15;
+    // Flat length decode. The variable-length argument's continuation bits
+    // pick its byte count with a one-hot first-zero select, the argument is
+    // an AND-OR over the seven possible widths, and "truncated" is one
+    // compare of the total length against the bytes held. (As a loop over
+    // the bytes this was a seven-deep chain of compares in front of
+    // pc + len: the 15.7 ns path that set the core's clock.)
+    logic [6:0] vc, vf;
+    logic       is_var, is_off, has_extra;
+    logic [3:0] len_pre;
 
     always_comb begin
         nwin = (nbytes_i > 4'd8) ? 4'd8 : nbytes_i;
@@ -304,9 +312,9 @@ module mpy_decode
         known = 1'b0;
         mapped = ILLEGAL;
         acc = 64'sd0;
-        cont = 1'b0;
-        bv = 8'h00;
-        raw15 = 15'h0;
+        cand = 64'sd0;
+        bv = bytes_i[15:8];
+        raw15 = {bytes_i[23:16], bv[6:0]};
 
         decoded_valid_o = 1'b0;
         illegal_o = 1'b0;
@@ -321,88 +329,69 @@ module mpy_decode
         extra_valid_o = 1'b0;
         extra_o = 8'h00;
 
+        is_var = (fmt == FMT_QSTR) || (fmt == FMT_VARUINT);
+        is_off = (fmt == FMT_OFFSET);
+        has_extra = ((op & EXTRA_MASK) == 8'h00);
+        for (int unsigned k = 0; k < 7; k++) vc[k] = bytes_i[8 * (k + 1) + 7];
+        for (int unsigned k = 0; k < 7; k++)
+            vf[k] = !vc[k] && (&(vc | ~7'((1 << k) - 1)));
+
+        // Bytes before the extra byte.
+        len_pre = 4'd1;
+        if (is_var) begin
+            len_pre = 4'd0;
+            for (int unsigned k = 0; k < 7; k++)
+                if (vf[k]) len_pre = len_pre | 4'(k + 2);
+        end else if (is_off) begin
+            len_pre = bv[7] ? 4'd3 : 4'd2;
+        end
+        len_b = len_pre + {3'd0, has_extra};
+        trunc = (is_var && (&vc)) || (len_b > nwin);
+
         if (instr_valid_i) begin
             opcode_o = op;
             format_o = fmt;
-            if (nwin == 4'd0) begin
-                trunc = 1'b1;
-            end else if (fmt == FMT_QSTR || fmt == FMT_VARUINT) begin
-                if (nwin < 4'd2) begin
-                    trunc = 1'b1;
-                end else begin
-                    cont = 1'b1;
-                    for (int unsigned k = 0; k < 7; k++) begin
-                        if (cont && !trunc) begin
-                            if ((k + 1) >= {28'b0, nwin}) begin
-                                trunc = 1'b1;
-                                cont = 1'b0;
-                            end else begin
-                                bv = bytes_i[8 * (k + 1) +: 8];
-                                if (k == 0) begin
-                                    acc = 64'(bv[6:0]);
-                                    // Sign lives in bit 6 of the first group,
-                                    // before later groups are shifted in.
-                                    if ((op == BC_LOAD_CONST_SMALL_INT) && bv[6]) begin
-                                        acc[63:7] = {57{1'b1}};
-                                    end
-                                end else begin
-                                    acc = (acc << 7) | 64'(bv[6:0]);
-                                end
-                                cont = bv[7];
-                                len_b = 4'(k + 2);
-                            end
-                        end
-                    end
-                    if (cont) trunc = 1'b1;
+            if (is_var) begin
+                // k + 1 groups of seven bits, the first one the most
+                // significant; LOAD_CONST_SMALL_INT sign-extends from bit 6
+                // of the first group.
+                for (int unsigned k = 0; k < 7; k++) begin
+                    cand = ((op == BC_LOAD_CONST_SMALL_INT) && bytes_i[14]) ? -64'sd1 : 64'sd0;
+                    for (int unsigned j = 0; j <= k; j++)
+                        cand = (cand << 7) | 64'(bytes_i[8 * (j + 1) +: 7]);
+                    if (vf[k]) acc = acc | cand;
                 end
-                if (!trunc) begin
-                    arg_ok = 1'b1;
-                    arg = acc[31:0];
-                    if (op == BC_LOAD_CONST_SMALL_INT) begin
-                        overflow = (acc[63:31] != {33{acc[31]}});
-                    end else begin
-                        overflow = (acc[63:32] != 32'h0);
-                    end
-                end
-            end else if (fmt == FMT_OFFSET) begin
-                if (nwin < 4'd2) begin
-                    trunc = 1'b1;
+                arg_ok = 1'b1;
+                arg = acc[31:0];
+                if (op == BC_LOAD_CONST_SMALL_INT) begin
+                    overflow = (acc[63:31] != {33{acc[31]}});
                 end else begin
-                    bv = bytes_i[15:8];
-                    if (!bv[7]) begin
-                        len_b = 4'd2;
-                        arg_ok = 1'b1;
-                        if (offset_is_signed(op)) begin
-                            arg = $signed({25'b0, bv[6:0]}) - 32'sd64;
-                        end else begin
-                            arg = $signed({25'b0, bv[6:0]});
-                        end
-                    end else if (nwin < 4'd3) begin
-                        trunc = 1'b1;
+                    overflow = (acc[63:32] != 32'h0);
+                end
+            end else if (is_off) begin
+                arg_ok = 1'b1;
+                if (!bv[7]) begin
+                    if (offset_is_signed(op)) begin
+                        arg = $signed({25'b0, bv[6:0]}) - 32'sd64;
                     end else begin
-                        raw15 = {bytes_i[23:16], bv[6:0]};
-                        len_b = 4'd3;
-                        arg_ok = 1'b1;
-                        if (offset_is_signed(op)) begin
-                            arg = $signed({17'b0, raw15}) - 32'sd16384;
-                        end else begin
-                            arg = $signed({17'b0, raw15});
-                        end
+                        arg = $signed({25'b0, bv[6:0]});
+                    end
+                end else begin
+                    if (offset_is_signed(op)) begin
+                        arg = $signed({17'b0, raw15}) - 32'sd16384;
+                    end else begin
+                        arg = $signed({17'b0, raw15});
                     end
                 end
             end
 
-            if (!trunc && ((op & EXTRA_MASK) == 8'h00)) begin
-                if (len_b >= nwin) begin
-                    trunc = 1'b1;
-                end else begin
-                    extra_b = bytes_i[8 * len_b +: 8];
-                    extra_ok = 1'b1;
-                    len_b = len_b + 4'd1;
-                end
+            if (has_extra) begin
+                extra_ok = 1'b1;
+                for (int unsigned l = 1; l < 8; l++)
+                    if (len_pre == 4'(l)) extra_b = extra_b | bytes_i[8 * l +: 8];
             end
 
-            if (!trunc && fmt == FMT_BYTE) begin
+            if (fmt == FMT_BYTE) begin
                 if (op >= BC_SMALL_INT_BASE &&
                     op < BC_SMALL_INT_BASE + SMALL_INT_NUM) begin
                     arg_ok = 1'b1;

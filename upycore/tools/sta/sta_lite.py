@@ -259,14 +259,21 @@ def main():
         for g, (d, b) in grp.items():
             if re.fullmatch(tr, g):
                 x = b; print(f"TRACE {g} {d:.3f}")
+                last_src = None
                 while isinstance(x, int):
                     nm = netname.get(x, ('?', 1))
                     a_ = arr.get(x, (0, 0))[0]
                     drv = cells[drivers[x][0]]['type'] if x in drivers else 'PI'
                     if not nm[1] and not nm[0].startswith('$'):
                         print(f"   {a_:7.3f}  {nm[0]}  ({drv})")
+                    # TRACE_SRC=1: the RTL line of each cell on the path
+                    # (where it changes), for paths through unnamed nets.
+                    if os.environ.get('TRACE_SRC') and x in drivers:
+                        src = cells[drivers[x][0]].get('attributes', {}).get('src', '').split('|')[0]
+                        src = re.sub(r'\.\d+-\d+\.\d+$', '', src)
+                        if src and src != last_src:
+                            print(f"   {a_:7.3f}    @ {src}"); last_src = src
                     x = pred.get(x)
-                break
     for g, (d, b) in list(grp.items())[:top_n]:
         # start of path
         x = b; path = []

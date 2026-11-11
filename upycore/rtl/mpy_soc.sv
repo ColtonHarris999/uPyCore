@@ -344,7 +344,11 @@ module mpy_soc #(
     mpy_mem #(
         .NP(4),
         .FLASH_WAIT_STATES(FLASH_WAIT_STATES),
-        .SRAM_LATENCY(SRAM_LATENCY)
+        .SRAM_LATENCY(SRAM_LATENCY),
+        // The core and its fetch queue register the word themselves (md,
+        // the queue), so their answers skip mpy_mem's output flops: one
+        // cycle less on every load.
+        .EARLY(4'b0110)
     ) u_mem (
         .clk_i, .rst_n_i(por_n), .image_words_i(image_words),
         .req_i(m_req), .we_i(m_we), .tag_we_i(m_tag_we), .be_i(m_be),
@@ -501,7 +505,12 @@ module mpy_soc #(
     assign c_want = p_req && !p_sim;
     assign g_want = g_pend || gm_req;
 
-    assign m_req     = {am_req, f_req && sys_rst_n, c_want && !ca_busy, g_want};
+    // A bridge access is answered two clocks after it is taken (io_q_v,
+    // then sim_ack). The core's memory answers come straight from the SRAM
+    // cycle (mpy_mem EARLY), so a load granted in the clock between would
+    // be answered in the same clock as the bridge access and one of the
+    // two acks would be lost: no core grant while io_q_v (a flop).
+    assign m_req     = {am_req, f_req && sys_rst_n, c_want && !ca_busy && !io_q_v, g_want};
     assign m_we      = {am_we, 1'b0, p_we, gm_we};
     assign m_tag_we  = {am_we, 1'b0, p_tag_we, gm_tag_we};
     assign m_be      = {4'hF, 4'hF, p_be, 4'hF};

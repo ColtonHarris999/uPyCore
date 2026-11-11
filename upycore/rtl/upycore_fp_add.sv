@@ -92,7 +92,11 @@ module upycore_fp_add (
         if (s1_shift_r > 6'd55) begin
             aligned = {55'd0, |ext_small};
         end else begin
-            lost_mask = (56'd1 << s1_shift_r) - 56'd1;
+            // Bits below the shift, as 56 compares of the shift against a
+            // constant (a thermometer); (1 << shift) - 1 put a 56-bit
+            // subtract in front of the sticky bit and the add
+            // (s1_shift_r -> s2_sum_r, 11.6 ns).
+            for (int i = 0; i < 56; i++) lost_mask[i] = (6'(i) < s1_shift_r);
             sticky    = |(ext_small & lost_mask);
             aligned   = ext_small >> s1_shift_r;
             aligned[0] = aligned[0] | sticky;

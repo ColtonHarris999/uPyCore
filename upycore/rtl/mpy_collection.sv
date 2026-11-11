@@ -93,25 +93,25 @@ module mpy_collection #(parameter bit TYPE_CACHE=0, parameter int SHORTLIST_MAX=
     assign fault_addr_o = sl_fault ? sl_faddr : bm_fault ? bm_fault_addr : by_fault ? by_fault_addr : cp_fault_addr;
     assign fault_reason_o = sl_fault ? sl_reason : (bm_fault || by_fault) ? MPY_FAULT_BUS : cp_reason;
 
+    // Every range test feeds one OR (hit), not a chain of overriding
+    // assignments: the chain sat between the core's address and its
+    // request to mpy_mem (c_pend -> the engines' grants, 16.1 ns).
+    logic [9:0] chk_hit;
     always_comb begin
-        chk_busy_o = cp_busy || sl_lock;
+        chk_hit = '0;
         for (int i=0; i<2; i++) begin
             // Once a copy starts, its own scoreboard releases completed words.
             // A map retains whole-table ownership through count publication.
             if (occupied[i] && !(running && !owner_bulk && !owner_byte && head == 1'(i))) begin
-                if (chk_addr_i >= queue[i].dst_lo && chk_addr_i < queue[i].dst_end)
-                    chk_busy_o = 1;
-                if (chk_we_i && chk_addr_i >= queue[i].src_lo && chk_addr_i < queue[i].src_end)
-                    chk_busy_o = 1;
+                chk_hit[5*i+0] = chk_addr_i >= queue[i].dst_lo && chk_addr_i < queue[i].dst_end;
+                chk_hit[5*i+1] = chk_we_i && chk_addr_i >= queue[i].src_lo && chk_addr_i < queue[i].src_end;
                 // The *_v bits are only set for bulk commands.
-                if (chk_we_i && queue[i].hashes_v && chk_addr_i >= queue[i].hashes && chk_addr_i < queue[i].hashes_end)
-                    chk_busy_o = 1;
-                if (queue[i].header_v && chk_addr_i >= queue[i].header && chk_addr_i < queue[i].header_end)
-                    chk_busy_o = 1;
-                if (chk_we_i && queue[i].source_header_v && chk_addr_i >= queue[i].source_header && chk_addr_i < queue[i].source_header_end)
-                    chk_busy_o = 1;
+                chk_hit[5*i+2] = chk_we_i && queue[i].hashes_v && chk_addr_i >= queue[i].hashes && chk_addr_i < queue[i].hashes_end;
+                chk_hit[5*i+3] = queue[i].header_v && chk_addr_i >= queue[i].header && chk_addr_i < queue[i].header_end;
+                chk_hit[5*i+4] = chk_we_i && queue[i].source_header_v && chk_addr_i >= queue[i].source_header && chk_addr_i < queue[i].source_header_end;
             end
         end
+        chk_busy_o = cp_busy || sl_lock || (|chk_hit);
     end
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) begin

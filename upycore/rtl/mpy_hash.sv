@@ -36,7 +36,8 @@ module mpy_hash #(
     localparam integer SP_W = DEPTH < 2 ? 1 : $clog2(DEPTH + 1);
     typedef enum logic [4:0] {IDLE, DISPATCH, RESULT, RESP,
         I64, REAL_PART, REAL_HASH, REAL_SIGN, IMAG_PART, IMAG_HASH, IMAG_SIGN, QSTR, STR_HASH, STR_LEN, STR_PTR,
-        STR_DATA, STR_STEP, TUPLE_LEN, ELEM, SET_FLAGS, SET_LEN, SET_PTR} state_t;
+        STR_DATA, STR_STEP, TUPLE_LEN, ELEM, SET_FLAGS, SET_LEN, SET_PTR,
+        FLT_MAG, FLT_SIGN, FLT_MAG2, FLT_SIGN2} state_t;
     state_t state;
     logic [3:0] tag;
     logic [31:0] payload, result, real_hash, len, ptr, acc, byte_buffer;
@@ -101,7 +102,10 @@ module mpy_hash #(
                 default: fail();
             endcase
             1: hash_o <= hash_sx31(payload_i);
-            3: hash_o <= hash_float(payload_i);
+            // A float key takes the two-step hash the complex parts use
+            // (two cycles more; in one step the shift and the negate were
+            // op -> hash_value_i at 11.8 ns).
+            3: begin part_r <= payload_i; state <= FLT_MAG; end
             11, 12, 14: hash_o <= hash_sx31(payload_i >> 1);
             default: state <= DISPATCH;
         endcase
@@ -128,7 +132,7 @@ module mpy_hash #(
                 endcase
                 1: finish(payload);
                 2: state <= I64;
-                3: finish(hash_float(payload));
+                3: begin part_r <= payload; state <= FLT_MAG2; end
                 4: state <= REAL_PART;
                 6: state <= QSTR;
                 8, 13: state <= STR_HASH;
@@ -148,6 +152,10 @@ module mpy_hash #(
                 if (valid_i) accept(); else state <= IDLE;
             end
             I64: if (mem_ack_i) finish(mem_data_i);
+            FLT_MAG: begin mag_r <= hash_float_mag(part_r); state <= FLT_SIGN; end
+            FLT_SIGN: begin hash_o <= hash_float_sign(part_r[31], mag_r); state <= RESP; end
+            FLT_MAG2: begin mag_r <= hash_float_mag(part_r); state <= FLT_SIGN2; end
+            FLT_SIGN2: finish(hash_float_sign(part_r[31], mag_r));
             REAL_PART: if (mem_ack_i) begin part_r <= mem_data_i; state <= REAL_HASH; end
             // The shift and the sign each take a cycle (hash_float split).
             REAL_HASH: begin mag_r <= hash_float_mag(part_r); state <= REAL_SIGN; end

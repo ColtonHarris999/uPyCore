@@ -17,7 +17,12 @@ module tb_mpy_numeric;
         .small_i(1'b0), .done_o(done), .res_o(result), .rkind_o(kind), .err_o(err));
     logic [63:0] d;
     logic [31:0] narrow;
-    mpy_f32_narrow nar (.d_i(d), .q_o(narrow));
+    // The narrowing unit hands its sticky-shifted significand out for the
+    // caller to register (mpy_alu does, for subnormal results); the bench
+    // checks the combinational function, so it feeds it straight back.
+    logic [54:0] nar_jam;
+    logic        nar_sub;
+    mpy_f32_narrow nar (.d_i(d), .q_o(narrow), .jam_o(nar_jam), .jam_i(nar_jam), .sub_o(nar_sub));
     int checks = 0;
     task automatic i2f(input logic [63:0] x);
         int cycles;

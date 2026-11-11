@@ -27,9 +27,17 @@ module mpy_key_equal (
     logic [63:0] integer_value[2];
     logic [31:0] real_value[2],imag_value[2],length[2],ptr[2];
     logic [31:0] aword,bword,remaining,qcount,qbase,qext;
+    // qext - 8 * qcount, taken at accept: a descriptor address is then one
+    // add after the table select instead of a subtract and an add
+    // (side -> the engine's address, 10.3 ns).
+    logic [31:0] qext_off;
+    // The descriptor address, a cycle old: STR_PTR follows at least one
+    // cycle of STR_LEN on the same side, so its + 4 starts from a flop.
+    logic [31:0] desc_r;
     logic [2:0] acount,bcount;
     logic [35:0] current;
     logic [31:0] descriptor;
+    always_ff @(posedge clk_i) desc_r<=descriptor;
     logic [63:0] convert_input,magnitude,normalized;
     logic convert_sign,convert_side;
     logic [5:0] exponent_index,leading_index;
@@ -49,7 +57,7 @@ module mpy_key_equal (
         exponent_bits=8'd127+{2'b0,exponent_index}+{7'd0,rounded[24]};
     end
     assign current=side ? b : a;
-    assign descriptor=current[31:0]<qcount ? qbase+(current[31:0]<<3) : qext+((current[31:0]-qcount)<<3);
+    assign descriptor=current[31:0]<qcount ? qbase+(current[31:0]<<3) : qext_off+(current[31:0]<<3);
     assign ready_o=state==IDLE || (state==RESULT && ready_i);
     assign valid_o=state==RESULT;
     function automatic logic numeric(input logic [35:0] v);
@@ -69,6 +77,7 @@ module mpy_key_equal (
     task automatic accept;
         a<=a_i;b<=b_i;side<=0;error_o<=0;equal_o<=0;
         qcount<=qstr_count_i;qbase<=qstr_base_i;qext<=qstr_ext_i;
+        qext_off<=qstr_ext_i-(qstr_count_i<<3);
         state<=DISPATCH;
     endtask
     always_comb begin
@@ -77,7 +86,7 @@ module mpy_key_equal (
             NUM_LO:mem_addr_o=current[31:0];
             NUM_HI:mem_addr_o=current[31:0]+4;
             STR_LEN:mem_addr_o=current[35:32]==ABI_TAG_QSTR ? descriptor : current[31:0];
-            STR_PTR:mem_addr_o=current[35:32]==ABI_TAG_QSTR ? descriptor+4 : current[31:0]+8;
+            STR_PTR:mem_addr_o=current[35:32]==ABI_TAG_QSTR ? desc_r+4 : current[31:0]+8;
             READ_A:mem_addr_o={ptr[0][31:2],2'b00};
             READ_B:mem_addr_o={ptr[1][31:2],2'b00};
             default:mem_req_o=0;
@@ -87,7 +96,7 @@ module mpy_key_equal (
         if(!rst_n_i)begin
             state<=IDLE;a<=0;b<=0;side<=0;equal_o<=0;error_o<=0;
             convert_input<=0;magnitude<=0;normalized<=0;convert_sign<=0;convert_side<=0;exponent_index<=0;
-            qcount<=0;qbase<=0;qext<=0;aword<=0;bword<=0;remaining<=0;acount<=0;bcount<=0;
+            qcount<=0;qbase<=0;qext<=0;qext_off<=0;aword<=0;bword<=0;remaining<=0;acount<=0;bcount<=0;
             for(int i=0;i<2;i++)begin
                 is_float[i]<=0;integer_value[i]<=0;real_value[i]<=0;imag_value[i]<=0;length[i]<=0;ptr[i]<=0;
             end

@@ -484,8 +484,10 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
         else if (script_done || (u_host.done && !u_host.failed))
             $display("MPY_SESSION_END cycles=%0d ops=%0d gc=%0d", cycles, ops, gc_coll);
         else
-            $display("MPY_TIMEOUT cycles=%0d ops=%0d gc=%0d pc=%08x op=%02x",
-                     cycles, ops, gc_coll, trace_pc, trace_op);
+            // st, the posted-store count and the pending request, to place a hang.
+            $display("MPY_TIMEOUT cycles=%0d ops=%0d gc=%0d pc=%08x op=%02x st=%0d wret=%0d wpend=%0d m_req=%0d",
+                     cycles, ops, gc_coll, trace_pc, trace_op, u_soc.u_core.st, u_soc.u_core.wret,
+                     u_soc.u_core.wpend, u_soc.u_core.m_req);
         $finish;
     end
 endmodule

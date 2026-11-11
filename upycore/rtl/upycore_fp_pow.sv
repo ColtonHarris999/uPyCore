@@ -70,9 +70,9 @@ module upycore_fp_pow #(
     // 4/3 * 2^52, the m' boundary (significands above it are halved).
     localparam logic [52:0] FOUR_THIRDS = 53'h15555555555555;
 
-    typedef enum logic [3:0] {
+    typedef enum logic [4:0] {
         S_IDLE, S_UNPACK, S_RED1, S_RED_MAG, S_RED2, S_RED3, S_LOG, S_LSUM, S_LABS, S_LCLZ, S_LNORM,
-        S_MUL, S_PSH, S_PSPLIT, S_EXP, S_PACK
+        S_MUL, S_PSH, S_PSPLIT, S_EXP, S_PACK, S_PACK2
     } state_e;
 
     state_e state_r;
@@ -278,10 +278,16 @@ module upycore_fp_pow #(
         else          pexp_r <= $signed({i_int_r[12], i_int_r}) + 14'sd1023;
     end
 
+    // Two steps, as the multiplier and divider pack: S_PACK registers the
+    // (denormalized) significand and its exponent, S_PACK2 rounds and
+    // packs. upycore_f64_round_pack over upycore_f64_denorm equals
+    // upycore_f64_pack_round for every input (upycore_fp_defs.svh). In one
+    // step it was pexp_r -> pow_res at 14.5 ns.
+    logic [55:0]        pk_ext, pk_ext_r;
+    logic signed [13:0] pk_exp_r;
+    assign pk_ext = {z_r[FW:FW-52], z_r[FW-53], z_r[FW-54], |z_r[FW-55:0]};
     logic [63:0] pack_res;
-    assign pack_res = upycore_f64_pack_round(
-        1'b0, pexp_r,
-        z_r[FW:FW-52], z_r[FW-53], z_r[FW-54], |z_r[FW-55:0]);
+    assign pack_res = upycore_f64_round_pack(1'b0, pk_exp_r, pk_ext_r);
 
     // ------------------------------------------------------------------
     // Sequencer
@@ -290,6 +296,7 @@ module upycore_fp_pow #(
         if (!rst_n_i) begin
             state_r  <= S_IDLE;
             done_r   <= 1'b0;
+            pk_ext_r <= '0; pk_exp_r <= '0;
             x_sig_r <= '0; y_sig_r <= '0; x_exp_r <= '0; y_exp_r <= '0; r_mag_r <= '0;
             mx_r <= '0; ex_r <= '0; my_r <= '0; ey_r <= '0; ysign_r <= 1'b0;
             e_r <= '0; r_r <= '0; j_r <= '0; i_r <= '0; j0_r <= '0; acc_r <= '0; rz_r <= 1'b0;
@@ -402,6 +409,11 @@ module upycore_fp_pow #(
                         if (i_r == 7'(NEXP)) state_r <= S_PACK;
                     end
                     S_PACK: begin
+                        pk_ext_r <= (pexp_r > 14'sd0) ? pk_ext : upycore_f64_denorm(pk_ext, pexp_r);
+                        pk_exp_r <= (pexp_r > 14'sd0) ? pexp_r : 14'sd1;
+                        state_r  <= S_PACK2;
+                    end
+                    S_PACK2: begin
                         if (huge_r) result_r <= psign_r ? UPY_F64_PZERO : UPY_F64_PINF;
                         else        result_r <= pack_res;
                         done_r  <= 1'b1;
