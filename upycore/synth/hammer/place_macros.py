@@ -167,7 +167,7 @@ def top_ports(path: Path) -> list[str]:
         sys.exit(f"{path}: no module {TOP}")
     head = set(re.findall(r"\w+", m.group(0).split(");", 1)[0])[2:])
     bits = []
-    for d in re.finditer(r"^\s*(?:input|output)\s+(?:wire|reg)\s*(?:\[(\d+):(\d+)\])?\s*(\w+)\s*;", m.group(0), re.M):
+    for d in re.finditer(r"^\s*(?:input|output|inout)\s+(?:wire|reg)\s*(?:\[(\d+):(\d+)\])?\s*(\w+)\s*;", m.group(0), re.M):
         hi, lo, name = d.group(1), d.group(2), d.group(3)
         if name not in head:
             continue
