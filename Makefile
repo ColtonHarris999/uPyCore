@@ -70,10 +70,13 @@ test-hw: $(MPY_CROSS)
 
 # One area, on its own. CI runs these in parallel. The uPy2 pass reuses the
 # simulator just built. Disabled programs in the area are skipped.
+# HW_SHARD=K/N runs shard K of N of the area (CI splits compiler this way).
+HW_SHARD ?=
+SHARD_ARG := $(if $(HW_SHARD),--shard $(HW_SHARD))
 test-hw-%: $(MPY_CROSS)
 	$(PYTHON) $(BUILD_PY) sim
-	$(PYTHON) upycore/tools/hw_tests.py --area $*
-	$(PYTHON) upycore/tools/hw_tests.py --area $* --compiler mpyc
+	$(PYTHON) upycore/tools/hw_tests.py --area $* $(SHARD_ARG)
+	$(PYTHON) upycore/tools/hw_tests.py --area $* --compiler mpyc $(SHARD_ARG)
 
 test-unit: $(MPY_CROSS)
 	$(PYTHON) upycore/tools/unit_tests.py
@@ -122,7 +125,7 @@ docker-test: docker-build
 
 # `make docker-test-hw-alu` and `make docker-test-host`. CI uses these.
 docker-test-%: docker-build
-	docker run --rm -v "$(CURDIR):/work" -w /work $(DOCKER_IMAGE) make test-$*
+	docker run --rm -v "$(CURDIR):/work" -w /work $(DOCKER_IMAGE) make test-$* HW_SHARD=$(HW_SHARD)
 
 # Yosys + yosys-slang (OSS CAD Suite). SYNTH_TOP=mpy_core limits the run.
 # synth elaborates every top; synth-gates maps the logic tops (not full mem/gc).

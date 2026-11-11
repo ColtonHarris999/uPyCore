@@ -120,20 +120,20 @@ module tb_mpy_iobr;
                 ld_pop = 1; bump(C_LD);
             end
             if (!rsp_full && $urandom_range(0, 2) == 0) begin
-                logic [31:0] w = $urandom;
+                automatic logic [31:0] w = $urandom;
                 rsp_data = w; rsp_push = 1; q_rsp.push_back(w);
             end
             if (!conrx_full && $urandom_range(0, 3) == 0) begin
-                logic [7:0] b = 8'($urandom);
+                automatic logic [7:0] b = 8'($urandom);
                 conrx_data = b; conrx_push = 1; q_conrx.push_back(b);
             end
             if (!evt_full && $urandom_range(0, 15) == 0) begin
-                logic [15:0] e = 16'(1 << $urandom_range(0, 15));
+                automatic logic [15:0] e = 16'(1 << $urandom_range(0, 15));
                 evt_data = e; evt_push = 1; evt_sent |= 32'(e); bump(C_EVT);
             end
             if (!upd_full && $urandom_range(0, 7) == 0) begin
-                logic [4:0] i = 5'($urandom);
-                logic [31:0] v = $urandom;
+                automatic logic [4:0] i = 5'($urandom);
+                automatic logic [31:0] v = $urandom;
                 upd_data = {i, v}; upd_push = 1; page_want[i] = v; bump(C_UPD);
             end
         end
@@ -155,9 +155,9 @@ module tb_mpy_iobr;
 
     task automatic hart_op();
         logic [31:0] r;
-        int k = $urandom_range(0, 99);
+        automatic int k = $urandom_range(0, 99);
         if (k < 30) begin
-            logic [31:0] w = $urandom;
+            automatic logic [31:0] w = $urandom;
             access(1, 10'h000, w, r); q_cmd.push_back(w);
         end else if (k < 50) begin
             access(0, 10'h002, 0, r);          // STATUS
@@ -168,7 +168,7 @@ module tb_mpy_iobr;
                 bump(C_RSP);
             end
         end else if (k < 62) begin
-            logic [8:0] b = 9'($urandom);
+            automatic logic [8:0] b = 9'($urandom);
             // A console byte: mpy_soc pushes it in place of a SIM_STDOUT store.
             while (stall) begin @(negedge clk); bump(C_STALL); end
             con_push = 1; con_data = b; q_con.push_back(b);
@@ -181,13 +181,13 @@ module tb_mpy_iobr;
                 bump(C_CONRX);
             end else check(r == 0, "CON_RX empty reads 0");
         end else if (k < 76) begin
-            logic [2:0] j = 3'($urandom);
-            logic [31:0] v = $urandom;
+            automatic logic [2:0] j = 3'($urandom);
+            automatic logic [31:0] v = $urandom;
             access(1, {7'b1100000, j}, v, r); q_dn.push_back({j, v});
             access(0, {7'b1100000, j}, 0, r);
             check(r == v, "DN reads back");
         end else if (k < 82) begin
-            logic [48:0] v = {$urandom, $urandom};
+            automatic logic [48:0] v = {$urandom, $urandom};
             while (stall) begin @(negedge clk); bump(C_STALL); end
             ld_push = 1; ld_data = v; q_ld.push_back(v);
             @(negedge clk); ld_push = 0;
@@ -195,13 +195,13 @@ module tb_mpy_iobr;
             access(0, 10'h003, 0, r);          // EVT: bits only from what was raised
             check((r & ~evt_sent & 32'hFFFF) == 0, "EVT has only raised bits");
         end else if (k < 95) begin
-            logic [31:0] v = 32'(1 << $urandom_range(16, 31));
+            automatic logic [31:0] v = 32'(1 << $urandom_range(16, 31));
             access(1, 10'h005, v, r);          // EVT_SET
             access(0, 10'h003, 0, r);
             check((r & v) == v, "EVT_SET sets");
             access(1, 10'h003, v, r);          // clear it again
         end else if (k < 97) begin
-            logic [4:0] i = 5'($urandom);
+            automatic logic [4:0] i = 5'($urandom);
             access(0, {5'b10000, i}, 0, r);    // a page word: some value the island sent, or 0
         end else begin
             // The tick words: a count no newer than the island's, never
@@ -261,8 +261,8 @@ module tb_mpy_iobr;
         for (int i = 0; i < 9; i++) cnt[i] = 0;
         for (int t = 0; t < trials; t++) begin
             // Ratios from 1:3 to 3:1, plus random ones.
-            real ratios [6] = '{1.0/3.0, 0.5, 1.0, 1.5, 2.0, 3.0};
-            real ratio = (t < 6) ? ratios[t] : (0.34 + 2.66 * $urandom_range(0, 1000) / 1000.0);
+            automatic real ratios [6] = '{1.0/3.0, 0.5, 1.0, 1.5, 2.0, 3.0};
+            automatic real ratio = (t < 6) ? ratios[t] : (0.34 + 2.66 * $urandom_range(0, 1000) / 1000.0);
             hp = 10.0;
             ip = 10.0 * ratio;            // io period / hart period
             // Power-on reset of both sides (mid-traffic after the first trial).

@@ -41,8 +41,8 @@ module tb_mpy_boot;
         return 32'hA5000000 ^ (32'(i) * 32'h00010001);
     endfunction
     always @(negedge clk) if (rst_n && ioc_we) begin
-        logic expect_data = (iwrites >= nc);
-        int i = expect_data ? iwrites - nc : iwrites;
+        automatic logic expect_data = (iwrites >= nc);
+        automatic int i = expect_data ? iwrites - nc : iwrites;
         check(ioc_data[48] == expect_data && ioc_data[47:32] == 16'(i) && ioc_data[31:0] == ipat(iwrites),
               "IOCB word: SRAM, index and value in order");
         iwrites++;

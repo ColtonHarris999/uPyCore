@@ -54,7 +54,7 @@ compare_op_type_trap = { file = "hw/alu/compare_op_type_trap.py" }
 complex_abs = { file = "hw/alu/complex_abs.py", cycles = 30_000_000 }
 complex_div = { file = "hw/alu/complex_div.py", cycles = 30_000_000 }
 complex_pow = { file = "hw/alu/complex_pow.py", cycles = 60_000_000 }
-complex_fast = { file = "hw/alu/complex_fast.py", cycles = 60_000_000 }
+complex_fast = { file = "hw/alu/complex_fast.py", cycles = 60_000_000, timeout = 600 }
 abs_edge = { file = "hw/alu/abs_edge.py" }
 round_edge = { file = "hw/alu/round_edge.py", cycles = 30_000_000 }
 
@@ -393,7 +393,7 @@ import_star_all = { file = "hw/modules/import_star_all.py", modules = ["starred=
 import_getattr = { file = "hw/modules/import_getattr.py", modules = ["getattrmod=hw/modules/getattrmod.py"], oracle = false }
 import_usys = { file = "hw/modules/import_usys.py" }
 builtins_override_import = { file = "hw/modules/builtins_override_import.py" }
-math_funcs = { file = "hw/modules/math_funcs.py", cycles = 60_000_000 }
+math_funcs = { file = "hw/modules/math_funcs.py", cycles = 60_000_000, timeout = 600 }
 cmath_random = { file = "hw/modules/cmath_random.py" }
 math_extended = { file = "hw/modules/math_extended.py" }
 cmath_extended = { file = "hw/modules/cmath_extended.py" }

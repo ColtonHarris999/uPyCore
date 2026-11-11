@@ -68,8 +68,11 @@ EXTRA_SIM_ARGS: list[str] = []
 # --no-reuse turns it off.
 REUSE = True
 RUN_CACHE = ROOT / "build" / "hw-run-cache"
-# Each test's last cycle count, to start the longest tests first.
+# Each test's last cycle count, to start the longest tests first and to
+# split an area into balanced shards. The committed table is the fallback
+# for a fresh checkout (CI); a local run's own record wins.
 CYCLES_RECORD = ROOT / "build" / "hw-test-cycles.json"
+CYCLES_TABLE = ROOT / "upycore" / "programs" / "hw_test_cycles.json"
 PROGRAMS = ROOT / "upycore" / "programs"
 
 # Addresses inside repr. The hex digits are the only part that may differ.
@@ -424,14 +427,35 @@ def _run_reusable(image: Path, max_cycles: int, timeout: float, sim_args: list[s
     return res, False
 
 
+def _seen_cycles() -> dict[str, int]:
+    seen: dict[str, int] = {}
+    for f in (CYCLES_TABLE, CYCLES_RECORD):
+        try:
+            seen.update(json.loads(f.read_text()))
+        except (OSError, ValueError):
+            pass
+    return seen
+
+
 def _by_cost(tests: list[Test]) -> list[Test]:
     """Longest first, so the area's slowest test does not start last: the
     recorded cycles of the last run, else the manifest's limits."""
-    try:
-        seen = json.loads(CYCLES_RECORD.read_text())
-    except (OSError, ValueError):
-        seen = {}
-    return sorted(tests, key=lambda t: (-seen.get(t.name, 0), -t.timeout, -t.cycles))
+    seen = _seen_cycles()
+    return sorted(tests, key=lambda t: (-seen.get(t.name, 0), -t.timeout, -t.cycles, t.name))
+
+
+def shard(tests: list[Test], k: int, n: int) -> list[Test]:
+    """Shard k of n (1-based): the tests split into n groups of about equal
+    cycles (longest first, each to the lightest group), so n machines can
+    run one area. Deterministic for a given test list and cycle table."""
+    seen = _seen_cycles()
+    load = [0] * n
+    groups: list[list[Test]] = [[] for _ in range(n)]
+    for t in _by_cost(tests):
+        g = min(range(n), key=lambda i: (load[i], i))
+        groups[g].append(t)
+        load[g] += seen.get(t.name, t.cycles)
+    return groups[k - 1]
 
 
 def _record_cycles(results: list[Outcome]) -> None:
@@ -564,6 +588,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--check-goldens", action="store_true", help="fail if the oracle disagrees with the goldens")
     ap.add_argument("--compiler", choices=("mpy-cross", "mpyc"), default="mpy-cross",
                     help="compiler for the test program and its frozen modules")
+    ap.add_argument("--shard", metavar="K/N",
+                    help="run only shard K of N of the selected tests (balanced by recorded cycles)")
     ap.add_argument("--no-reuse", action="store_true",
                     help="run every test even when an identical run (same simulator, image and plusargs) is cached")
     ap.add_argument("--include-disabled", action="store_true",
@@ -613,6 +639,15 @@ def main(argv: list[str] | None = None) -> int:
         return regen(picked)
     if args.check_goldens:
         return check_goldens(picked)
+
+    if args.shard:
+        k, n = (int(x) for x in args.shard.split("/"))
+        if not 1 <= k <= n:
+            ap.error("--shard K/N needs 1 <= K <= N")
+        picked = shard(picked, k, n)
+        if not picked:
+            print(f"hw_tests: shard {k}/{n} is empty", flush=True)
+            return 0
 
     if args.compiler == "mpyc":
         opted = [t for t in picked if not t.mpyc]

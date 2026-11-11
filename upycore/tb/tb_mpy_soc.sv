@@ -126,7 +126,7 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
     logic pulse_level = 1'b0;
     always_comb begin
         for (int i = 0; i < 16; i++) begin
-            int j = i ^ 8;
+            automatic int j = i ^ 8;
             if (gpio_oe[i]) gpio_in[i] = gpio_out[i];
             else if (i == pulse_pin) gpio_in[i] = pulse_level;
             else if (gpio_loop && gpio_oe[j]) gpio_in[i] = gpio_out[j];
@@ -198,7 +198,7 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
     logic [15:0] gpio_prev = 16'h0;
     always @(gpio_out or gpio_oe) begin
         for (int i = 0; i < 16; i++) begin
-            logic v = gpio_oe[i] ? gpio_out[i] : 1'b0;
+            automatic logic v = gpio_oe[i] ? gpio_out[i] : 1'b0;
             if (v != gpio_prev[i] && rst_n && boot_done) begin
                 gpio_t[i].push_back($realtime);
                 if (fd_meas != 0) $fwrite(fd_meas, "pad %0d %0d %0d\n", i, longint'($realtime * 1000.0), v);
@@ -221,7 +221,7 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
         if (console_sel != 2'd1 && u_term.q.size() > 0) begin
             line = "MPY_IO uart=\"";
             foreach (u_term.q[k]) begin
-                byte c = u_term.q[k];
+                automatic byte c = u_term.q[k];
                 if (c == "\n") line = {line, "\\n"};
                 else if (c == "\r") line = {line, "\\r"};
                 else if (c == "\"" || c == "\\") line = {line, "\\", string'(c)};
@@ -239,10 +239,10 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
 
     // A plusarg string with C-style escapes, as bytes.
     function automatic void unescape(input string s, ref byte q[$]);
-        int i = 0;
+        automatic int i = 0;
         while (i < s.len()) begin
             if (s[i] == "\\" && i + 1 < s.len()) begin
-                byte c = s[i + 1];
+                automatic byte c = s[i + 1];
                 i += 2;
                 if (c == "n") q.push_back(8'h0A);
                 else if (c == "r") q.push_back(8'h0D);

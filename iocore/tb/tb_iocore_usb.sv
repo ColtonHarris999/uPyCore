@@ -95,8 +95,8 @@ module tb_iocore_usb;
                 access(2'd0, 1'b1, 12'h800 | 12'(i), {16'h0, model[i]}, q);
             end
             for (int n = 0; n < 600; n++) begin
-                int r = $urandom % 10;
-                logic [7:0] a = 8'($urandom);
+                automatic int r = $urandom % 10;
+                automatic logic [7:0] a = 8'($urandom);
                 if (r < 4) begin
                     model[a] = 16'($urandom);
                     access(2'd0, 1'b1, 12'h800 | 12'(a), {16'($urandom), model[a]}, q);

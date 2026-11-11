@@ -242,7 +242,7 @@ module tb_usb_host (
         unlock();
         if (debug) $display("USB t=%0t IN %0d.%0d st=%0d n=%0d", $time, a, ep, st, d.size());
         if (debug && st == ST_ERR) begin
-            string h = "";
+            automatic string h = "";
             foreach (p[k]) h = {h, $sformatf(" %02x", p[k])};
             $display("USB   bad packet:%s", h);
         end
@@ -394,7 +394,7 @@ module tb_usb_host (
 
     // ---- the script ----
     function automatic string unescape(input string s);
-        string o = "";
+        automatic string o = "";
         for (int i = 0; i < s.len(); i++) begin
             if (s[i] == "\\" && i + 1 < s.len()) begin
                 i++;
@@ -427,7 +427,7 @@ module tb_usb_host (
 
     function automatic bit rx_contains(input string pat, output int at);
         for (int i = rx_mark; i + pat.len() <= rx_n; i++) begin
-            bit m = 1;
+            automatic bit m = 1;
             for (int j = 0; j < pat.len() && m; j++)
                 if (rxmem[(i + j) % 65536] != pat[j]) m = 0;
             if (m) begin at = i + pat.len(); return 1; end
