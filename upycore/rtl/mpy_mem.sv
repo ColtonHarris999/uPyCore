@@ -8,6 +8,12 @@
 // image_words_i is fixed before masters leave reset. All SRAM is cleared
 // before boot writes begin; init_done_o is the clear completion signal.
 //
+// Each bank is eight 4096 x 36 macros (g_mac[8 * bank + macro]); macro =
+// row[14:12], macro row = row[11:0]. A bank's address, data and mask go to
+// all eight of its macros and only the selected one is enabled, so a bank
+// still does one access per cycle and behaves as one 32768-word SRAM. The
+// clear writes every macro at once, so it takes 4096 cycles.
+//
 // Ports. Port p is one master (mpy_soc: 0 collector, 1 core, 2 accelerator).
 // A master holds req_i[p] and its fields until gnt_o[p]. Each block takes
 // one access per cycle; when two ports want the same block, the lower port
@@ -67,7 +73,10 @@ module mpy_mem #(
     localparam int W  = MPY_MEM_WIDTH;
     localparam int NB = MPY_MEM_BLOCKS;       // 4, interleaved by word
     localparam int BS = $clog2(NB);
-    localparam int SROWS = MPY_MEM_BLOCK_WORDS; // clear every physical row
+    localparam int NM = MPY_MEM_MACROS_PER_BLOCK; // macros in a bank
+    localparam int MS = $clog2(NM);
+    localparam int MA = MPY_MEM_MACRO_AW;     // row address bits of a macro
+    localparam int SROWS = MPY_MEM_MACRO_WORDS; // clear every row of every macro
     localparam int CW = $clog2(SROWS);
 
     // The split is registered: image_words_i is fixed long before any
@@ -99,21 +108,41 @@ module mpy_mem #(
     logic [W-1:0]  blk_data [0:NB-1];
     logic [W-1:0]  blk_mask [0:NB-1];
     logic [W-1:0]  blk_q    [0:NB-1];
+    // One enable per macro. blk_sel is the macro an access to the bank
+    // picks (one-hot, all ones during the clear); it is formed beside
+    // blk_addr, so the macro enables are one AND after blk_v.
+    logic [NM-1:0] blk_sel  [0:NB-1];
+    logic [W-1:0]  mac_q    [0:NB*NM-1];
+    logic [MS-1:0] bsub_r   [0:NB-1];   // macro of the bank's last read
 
-    for (genvar b = 0; b < NB; b++) begin : g_blk
+    for (genvar m = 0; m < NB * NM; m++) begin : g_mac
         bsg_mem_1rw_sync_mask_write_bit #(
             .width_p(W),
-            .els_p(MPY_MEM_BLOCK_WORDS)
+            .els_p(MPY_MEM_MACRO_WORDS)
         ) ram (
             .clk_i(clk_i),
             .reset_i(!rst_n_i),
-            .data_i(blk_data[b]),
-            .addr_i(blk_addr[b]),
-            .v_i(blk_v[b]),
-            .w_mask_i(blk_mask[b]),
-            .w_i(blk_w[b]),
-            .data_o(blk_q[b])
+            .data_i(blk_data[m / NM]),
+            .addr_i(blk_addr[m / NM][MA-1:0]),
+            .v_i(blk_v[m / NM] && blk_sel[m / NM][m % NM]),
+            .w_mask_i(blk_mask[m / NM]),
+            .w_i(blk_w[m / NM]),
+            .data_o(mac_q[m])
         );
+    end
+
+    // A macro's output is used only in the cycle after its read, and
+    // bsub_r still names that read's macro then.
+    always_comb begin
+        for (int b = 0; b < NB; b++) blk_q[b] = mac_q[b * NM + int'(bsub_r[b])];
+    end
+    always_ff @(posedge clk_i or negedge rst_n_i) begin
+        if (!rst_n_i) begin
+            for (int b = 0; b < NB; b++) bsub_r[b] <= '0;
+        end else begin
+            for (int b = 0; b < NB; b++)
+                if (blk_v[b] && !blk_w[b]) bsub_r[b] <= blk_addr[b][AW-1:MA];
+        end
     end
 
     // ------------------------------------------------------- post-reset clear
@@ -136,6 +165,7 @@ module mpy_mem #(
     logic [NP-1:0][BS-1:0] p_blk;
     logic [NP-1:0][AW-1:0] p_row;
     logic [NP-1:0][W-1:0]  p_mask;
+    logic [NP-1:0][NM-1:0] p_sel;      // the macro of p_row, one-hot
 
     always_comb begin
         for (int p = 0; p < NP; p++) begin
@@ -177,6 +207,7 @@ module mpy_mem #(
                 p_blk[p] = BS'(sw);
                 p_row[p] = AW'((32'(sw) + image_words) >> BS);
             end
+            p_sel[p] = NM'(1) << p_row[p][AW-1:MA];
             for (int k = 0; k < 4; k++)
                 p_mask[p][8*k +: 8] = {8{be_i[p][k]}};
             p_mask[p][35:32] = {4{tag_we_i[p]}};
@@ -197,6 +228,8 @@ module mpy_mem #(
     logic [AW-1:0] ld_row;
     assign ld_blk = ld_idx_i[BS-1:0];
     assign ld_row = AW'(32'(ld_idx_i) >> BS);
+    logic [NM-1:0] ld_sel;
+    assign ld_sel = NM'(1) << ld_row[AW-1:MA];
 
     always_comb begin
         logic [NB-1:0] taken;
@@ -208,11 +241,13 @@ module mpy_mem #(
             blk_addr[b] = '0;
             blk_data[b] = '0;
             blk_mask[b] = '0;
+            blk_sel[b]  = '0;
             if (clr_busy) begin
                 blk_v[b]    = 1'b1;
                 blk_w[b]    = 1'b1;
                 blk_addr[b] = AW'(clr_idx[CW-1:0]);
                 blk_mask[b] = '1;
+                blk_sel[b]  = '1;
                 taken[b]    = 1'b1;
             end
             if (ld_we_i && (ld_blk == BS'(b))) begin
@@ -221,6 +256,7 @@ module mpy_mem #(
                 blk_addr[b] = ld_row;
                 blk_data[b] = {ld_wtag_i, ld_wdata_i};
                 blk_mask[b] = '1;
+                blk_sel[b]  = ld_sel;
                 taken[b]    = 1'b1;
             end
         end
@@ -250,6 +286,7 @@ module mpy_mem #(
                     blk_addr[b] = blk_addr[b] | p_row[p];
                     blk_data[b] = blk_data[b] | {wtag_i[p], wdata_i[p]};
                     blk_mask[b] = blk_mask[b] | p_mask[p];
+                    blk_sel[b]  = blk_sel[b] | p_sel[p];
                 end
     end
 

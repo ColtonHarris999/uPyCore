@@ -41,13 +41,19 @@ verify writes above the old 256 KiB boundary and across all four banks.
 
 ## SRAM blocks
 
-Every block is `bsg_mem_1rw_sync_mask_write_bit` from BaseJump STL with
-`els_p = 32768` and `width_p = 36`: one read/write port and a per-bit write
-mask. A word is `{tag[3:0], payload[31:0]}`, so one access reads a value
+Each of the four banks is eight `bsg_mem_1rw_sync_mask_write_bit` from
+BaseJump STL with `els_p = 4096` and `width_p = 36` (32 in all,
+`g_mac[8 * bank + macro]`): one read/write port and a per-bit write
+mask. The upper three row bits pick the macro; only that one is enabled, and
+a registered copy of those bits picks its read data the cycle after, so a
+bank still behaves as one 32768-word SRAM with the same latency. A word is `{tag[3:0], payload[31:0]}`, so one access reads a value
 and its tag together, and one write stores both. The mask turns a byte
 store, or a payload store that keeps the tag, into one write instead of a
-read and a write. In the EE 477 flow each block becomes a
-`fakeram_d32768_w36` macro.
+read and a write. In the EE 477 flow each of the 32 becomes a
+`fakeram_d4096_w36` macro (3.95 x 0.16 mm, minimum clock period 1.07 ns).
+One `fakeram_d32768_w36` per bank, as before, is 31.2 x 0.22 mm and its
+library sets a minimum clock period of 22 ns, so it cannot be clocked at
+10 ns however the logic is placed.
 
 `mpy_gc`'s allocation table uses the same wrapper with `els_p = 600` and
 `width_p = 64`: 32 two-bit block entries per word, one port, and the write
@@ -130,8 +136,9 @@ idle, since a copy in flight may be writing it. Image reads never wait.
 
 ## Reset
 
-After reset `mpy_mem` clears every physical SRAM row, all four banks at
-once (32,768 cycles). Boot waits for this clear before writing the image,
+After reset `mpy_mem` clears every physical SRAM row, all 32 macros at
+once (4,096 cycles; 32,768 before the banks were split, so boot ends
+28,672 cycles earlier and nothing after boot changes). Boot waits for this clear before writing the image,
 so clearing cannot overwrite loaded words. When loading finishes, the
 layout is fixed and `mpy_gc` clears its allocation table (19,200 blocks,
 sized for the largest heap a real image leaves; see `mpy_memory_map.md`),
@@ -279,7 +286,7 @@ The halt line reports `boot=<cycles>`. `--nand` writes the `.nand.bin` and
 - leaves the stand-in model out of `v/`
 - lists BaseJump's `bsg_mem_1rw_sync_mask_write_bit.v`, its synth model
   and helpers in `src.yml` (with the `subst` meta for `${bsg_root}`)
-- adds `fakeram_d32768_w36` (`mpy_mem`) and `fakeram_d600_w64` (`mpy_gc`'s
+- adds `fakeram_d4096_w36` (`mpy_mem`) and `fakeram_d600_w64` (`mpy_gc`'s
   allocation table) to `vlsi.inputs.sram_parameters`
 
 ```bash
@@ -297,23 +304,24 @@ cannot parse `mpy_core.sv`, and writes the rest (`mpy_gc`, `mpy_ca`,
 those modules, convert the whole `mpy_soc` with `convert_rtl.sh` instead.
 
 After `make sram`, read the macro size from the generated
-`fakeram_d32768_w36.lef` and `fakeram_d600_w64.lef` (`SIZE w BY h`) and
-pick a die that holds the four data macros, the table macro and the logic. `--die` is a starting guess. Then follow Module 2
-Task 3:
+`fakeram_d4096_w36.lef` and `fakeram_d600_w64.lef` (`SIZE w BY h`) and
+pick a die that holds the 32 data macros, the table macro and the logic.
+`place_macros.py` does all of this (see `synth/hammer/README.md`); by hand,
+`--die` is a starting guess and Module 2 Task 3 is:
 
-1. `make par-to-floorplan`, move the four macros inside the die, and note
+1. `make par-to-floorplan`, move the macros inside the die, and note
    each one's `location` and full instance path from Object Attributes.
 2. Add a `hardmacro` entry per block under `vlsi.inputs.placement_constraints`,
    and one for the table macro (something like `mpy_soc/u_gc/u_atb/macro.mem`;
    place it near the collector's logic).
 
-The paths look something like `mpy_soc/u_mem/g_blk[0].ram/macro.mem` to
-`g_blk[3]`; every block holds a quarter of the data SRAM and of the image,
-so they are equally busy and the core's logic should sit near all four. Copy
-the exact names from Innovus.
+The paths look something like `mpy_soc/u_mem/g_mac[0].ram/macro.mem` to
+`g_mac[31]` (`g_mac[8 * bank + macro]`); every bank holds a quarter of the
+data SRAM and of the image, so they are equally busy and the core's logic
+should sit near all of them. Copy the exact names from Innovus.
 
 ```yaml
-  - path: "mpy_soc/u_mem/g_blk[0].ram/macro.mem"
+  - path: "mpy_soc/u_mem/g_mac[0].ram/macro.mem"
     type: hardmacro
     x: <x>
     y: <y>
@@ -322,7 +330,7 @@ the exact names from Innovus.
 
 Mirror (`mx`, `my`) but do not rotate the macros: rotating them breaks
 their power rails. After `make syn`, the mapped netlist should instantiate
-`fakeram_d32768_w36` four times (`grep -c fakeram_d32768_w36
+`fakeram_d4096_w36` 32 times (`grep -c fakeram_d4096_w36
 build/syn-rundir/mpy_soc.mapped.v`) and `fakeram_d600_w64` once. If a block shows up as
 `notmacro.synth`, its depth or width does not match the `sram_parameters`
 entry and Genus is building 590K bits of flops. A run that takes far

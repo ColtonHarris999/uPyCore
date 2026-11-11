@@ -1,4 +1,4 @@
-// Generated from the uPyCore RTL by mpy_dc_unit.py and sv2v v0.0.12
+// Generated from the uPyCore RTL by mpy_dc_unit.py and sv2v v0.0.13
 // (see ../README.md). Do not edit; regenerate with convert_rtl.sh.
 module mpy_decode (
 	instr_valid_i,
@@ -199,16 +199,26 @@ module mpy_decode (
 	reg known;
 	reg [6:0] mapped;
 	reg signed [63:0] acc;
-	reg cont;
+	reg signed [63:0] cand;
 	reg [7:0] bv;
 	reg [14:0] raw15;
-	function automatic [63:0] sv2v_cast_64;
-		input reg [63:0] inp;
-		sv2v_cast_64 = inp;
+	reg [6:0] vc;
+	reg [6:0] vf;
+	reg is_var;
+	reg is_off;
+	reg has_extra;
+	reg [3:0] len_pre;
+	function automatic signed [6:0] sv2v_cast_7_signed;
+		input reg signed [6:0] inp;
+		sv2v_cast_7_signed = inp;
 	endfunction
 	function automatic [3:0] sv2v_cast_4;
 		input reg [3:0] inp;
 		sv2v_cast_4 = inp;
+	endfunction
+	function automatic [63:0] sv2v_cast_64;
+		input reg [63:0] inp;
+		sv2v_cast_64 = inp;
 	endfunction
 	function automatic [31:0] sv2v_cast_32;
 		input reg [31:0] inp;
@@ -230,9 +240,9 @@ module mpy_decode (
 		known = 1'b0;
 		mapped = 7'd0;
 		acc = 64'sd0;
-		cont = 1'b0;
-		bv = 8'h00;
-		raw15 = 15'h0000;
+		cand = 64'sd0;
+		bv = bytes_i[15:8];
+		raw15 = {bytes_i[23:16], bv[6:0]};
 		decoded_valid_o = 1'b0;
 		illegal_o = 1'b0;
 		truncated_o = 1'b0;
@@ -245,86 +255,81 @@ module mpy_decode (
 		arg_o = 32'sd0;
 		extra_valid_o = 1'b0;
 		extra_o = 8'h00;
+		is_var = (fmt == FMT_QSTR) || (fmt == FMT_VARUINT);
+		is_off = fmt == FMT_OFFSET;
+		has_extra = (op & EXTRA_MASK) == 8'h00;
+		begin : sv2v_autoblock_1
+			reg [31:0] k;
+			for (k = 0; k < 7; k = k + 1)
+				vc[k] = bytes_i[(8 * (k + 1)) + 7];
+		end
+		begin : sv2v_autoblock_2
+			reg [31:0] k;
+			for (k = 0; k < 7; k = k + 1)
+				vf[k] = !vc[k] && &(vc | ~sv2v_cast_7_signed((1 << k) - 1));
+		end
+		len_pre = 4'd1;
+		if (is_var) begin
+			len_pre = 4'd0;
+			begin : sv2v_autoblock_3
+				reg [31:0] k;
+				for (k = 0; k < 7; k = k + 1)
+					if (vf[k])
+						len_pre = len_pre | sv2v_cast_4(k + 2);
+			end
+		end
+		else if (is_off)
+			len_pre = (bv[7] ? 4'd3 : 4'd2);
+		len_b = len_pre + {3'd0, has_extra};
+		trunc = (is_var && &vc) || (len_b > nwin);
 		if (instr_valid_i) begin
 			opcode_o = op;
 			format_o = fmt;
-			if (nwin == 4'd0)
-				trunc = 1'b1;
-			else if ((fmt == FMT_QSTR) || (fmt == FMT_VARUINT)) begin
-				if (nwin < 4'd2)
-					trunc = 1'b1;
-				else begin
-					cont = 1'b1;
-					begin : sv2v_autoblock_1
-						reg [31:0] k;
-						for (k = 0; k < 7; k = k + 1)
-							if (cont && !trunc) begin
-								if ((k + 1) >= {28'b0000000000000000000000000000, nwin}) begin
-									trunc = 1'b1;
-									cont = 1'b0;
-								end
-								else begin
-									bv = bytes_i[8 * (k + 1)+:8];
-									if (k == 0) begin
-										acc = sv2v_cast_64(bv[6:0]);
-										if ((op == BC_LOAD_CONST_SMALL_INT) && bv[6])
-											acc[63:7] = {57 {1'b1}};
-									end
-									else
-										acc = (acc << 7) | sv2v_cast_64(bv[6:0]);
-									cont = bv[7];
-									len_b = sv2v_cast_4(k + 2);
-								end
+			if (is_var) begin
+				begin : sv2v_autoblock_4
+					reg [31:0] k;
+					for (k = 0; k < 7; k = k + 1)
+						begin
+							cand = ((op == BC_LOAD_CONST_SMALL_INT) && bytes_i[14] ? -64'sd1 : 64'sd0);
+							begin : sv2v_autoblock_5
+								reg [31:0] j;
+								for (j = 0; j <= k; j = j + 1)
+									cand = (cand << 7) | sv2v_cast_64(bytes_i[8 * (j + 1)+:7]);
 							end
-					end
-					if (cont)
-						trunc = 1'b1;
+							if (vf[k])
+								acc = acc | cand;
+						end
 				end
-				if (!trunc) begin
-					arg_ok = 1'b1;
-					arg = acc[31:0];
-					if (op == BC_LOAD_CONST_SMALL_INT)
-						overflow = acc[63:31] != {33 {acc[31]}};
+				arg_ok = 1'b1;
+				arg = acc[31:0];
+				if (op == BC_LOAD_CONST_SMALL_INT)
+					overflow = acc[63:31] != {33 {acc[31]}};
+				else
+					overflow = acc[63:32] != 32'h00000000;
+			end
+			else if (is_off) begin
+				arg_ok = 1'b1;
+				if (!bv[7]) begin
+					if (offset_is_signed(op))
+						arg = $signed({25'b0000000000000000000000000, bv[6:0]}) - 32'sd64;
 					else
-						overflow = acc[63:32] != 32'h00000000;
+						arg = $signed({25'b0000000000000000000000000, bv[6:0]});
+				end
+				else if (offset_is_signed(op))
+					arg = $signed({17'b00000000000000000, raw15}) - 32'sd16384;
+				else
+					arg = $signed({17'b00000000000000000, raw15});
+			end
+			if (has_extra) begin
+				extra_ok = 1'b1;
+				begin : sv2v_autoblock_6
+					reg [31:0] l;
+					for (l = 1; l < 8; l = l + 1)
+						if (len_pre == sv2v_cast_4(l))
+							extra_b = extra_b | bytes_i[8 * l+:8];
 				end
 			end
-			else if (fmt == FMT_OFFSET) begin
-				if (nwin < 4'd2)
-					trunc = 1'b1;
-				else begin
-					bv = bytes_i[15:8];
-					if (!bv[7]) begin
-						len_b = 4'd2;
-						arg_ok = 1'b1;
-						if (offset_is_signed(op))
-							arg = $signed({25'b0000000000000000000000000, bv[6:0]}) - 32'sd64;
-						else
-							arg = $signed({25'b0000000000000000000000000, bv[6:0]});
-					end
-					else if (nwin < 4'd3)
-						trunc = 1'b1;
-					else begin
-						raw15 = {bytes_i[23:16], bv[6:0]};
-						len_b = 4'd3;
-						arg_ok = 1'b1;
-						if (offset_is_signed(op))
-							arg = $signed({17'b00000000000000000, raw15}) - 32'sd16384;
-						else
-							arg = $signed({17'b00000000000000000, raw15});
-					end
-				end
-			end
-			if (!trunc && ((op & EXTRA_MASK) == 8'h00)) begin
-				if (len_b >= nwin)
-					trunc = 1'b1;
-				else begin
-					extra_b = bytes_i[8 * len_b+:8];
-					extra_ok = 1'b1;
-					len_b = len_b + 4'd1;
-				end
-			end
-			if (!trunc && (fmt == FMT_BYTE)) begin
+			if (fmt == FMT_BYTE) begin
 				if ((op >= BC_SMALL_INT_BASE) && (op < (BC_SMALL_INT_BASE + SMALL_INT_NUM))) begin
 					arg_ok = 1'b1;
 					arg = ($signed({24'b000000000000000000000000, op}) - 32'sd112) - sv2v_cast_32(SMALL_INT_EXCESS);

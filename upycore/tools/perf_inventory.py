@@ -214,7 +214,7 @@ def main() -> int:
             "compiler_sha256": sha(b.MPY_CROSS.read_bytes()), "compiler_flags": b.MPY_CROSS_FLAGS,
             "measurement_firmware_sha256": sha(fw_mpy.read_bytes()),
             "simulator_sha256": sha(b.SIM.read_bytes()),
-            "verilator": subprocess.run(["verilator", "--version"], capture_output=True, text=True).stdout.strip(),
+            "verilator": subprocess.run([os.environ.get("VERILATOR", "verilator"), "--version"], capture_output=True, text=True).stdout.strip(),
             "max_cycles": args.max_cycles, "boundary": "bench_ticks() around run(); 31-bit counter",
             "rows": []}
     cases = [(p, n, m) for p in progs for (n, m) in points]

@@ -88,12 +88,14 @@ INCDIRS: dict[str, list[str]] = {"mpy_soc": ISLAND_INCDIRS}
 CORE_FILES = TOPS["mpy_core"]
 
 # Behavioral stand-in for BaseJump's SRAM wrapper. The EE 477 flow reads
-# BaseJump's file instead and swaps each 32768 x 36 instance for this
-# bsg_fakeram macro (MPY_MEM_BLOCK_WORDS x MPY_MEM_WIDTH in mpy_defs.svh).
+# BaseJump's file instead and swaps each 4096 x 36 instance for this
+# bsg_fakeram macro (MPY_MEM_MACRO_WORDS x MPY_MEM_WIDTH in mpy_defs.svh).
 SRAM_MODEL = "bsg_mem_1rw_sync_mask_write_bit.sv"
-SRAM_MACRO = {"name": "fakeram_d32768_w36", "family": "1rw", "depth": 32768, "width": 36,
+SRAM_MACRO = {"name": "fakeram_d4096_w36", "family": "1rw", "depth": 4096, "width": 36,
               "mask": True, "mux": 1, "vt": ""}
-SRAM_BLOCKS = 4   # MPY_MEM_BLOCKS: interleaved shared image/data SRAM
+SRAM_BLOCKS = 4   # MPY_MEM_BLOCKS: interleaved shared image/data SRAM banks
+SRAM_MACROS_PER_BLOCK = 8   # MPY_MEM_MACROS_PER_BLOCK: macros in a bank, by row[14:12]
+SRAM_MACROS = SRAM_BLOCKS * SRAM_MACROS_PER_BLOCK   # mpy_mem's g_mac[0..31]
 # mpy_gc's allocation table: 600 words x 64 bits (32 two-bit entries per
 # word, mpy_abi.GC_TABLE_BYTES / 16 blocks), the same wrapper and hook.
 GC_SRAM_MACRO = {"name": "fakeram_d600_w64", "family": "1rw", "depth": 600, "width": 64,

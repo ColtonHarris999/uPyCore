@@ -47,11 +47,11 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1] / "tools"))
 from mpy_dc_unit import write_unit  # noqa: E402
 from mpy_synth import (CORE_FILES, GC_SRAM_MACRO, IOCORE_CODE_SRAM_MACRO, IOCORE_DATA_SRAM_MACRO,  # noqa: E402
-                       SRAM_BLOCKS, SRAM_MACRO, SRAM_MODEL, TOPS, USB_SRAM_BLOCKS, USB_SRAM_MACRO,
+                       SRAM_MACRO, SRAM_MACROS, SRAM_MODEL, TOPS, USB_SRAM_BLOCKS, USB_SRAM_MACRO,
                        USB_SRAM_MODEL)
 
 # BaseJump STL sources for the SRAM wrapper, in the class src.yml style.
-# The fakeram hook swaps each 32768 x 36 bsg_mem_1rw_sync_mask_write_bit
+# The fakeram hook swaps each 4096 x 36 bsg_mem_1rw_sync_mask_write_bit
 # for the generated macro; the other files are what its synth model and
 # options name.
 BSG_SRAM_FILES = [
@@ -253,6 +253,29 @@ def main() -> int:
     ap.add_argument("--die", nargs=2, type=float, metavar=("W", "H"),
                     help="die width and height in um (the TOP placement constraint); four "
                          "SRAM macros need far more than a logic-only example")
+    ap.add_argument("--syn-margin", type=float, default=0.0, metavar="NS",
+                    help="extra clock uncertainty in synthesis only: Genus targets a clock this "
+                         "much faster, leaving slack for routed wires (try 10-15%% of the period)")
+    ap.add_argument("--par-effort", choices=["express", "standard", "extreme"],
+                    help="Innovus design_flow_effort (Hammer default standard); extreme "
+                         "optimizes timing harder and runs longer")
+    ap.add_argument("--cts", action="store_true",
+                    help="place and route with uPyCore's clock tree settings instead of the class "
+                         "ones: skew target 0.15 ns (class 0.03), fanout 24 (class 10), and "
+                         "clock-gate-aware optimization. Uses the upycore_hammer.py driver")
+    ap.add_argument("--diodes", action="store_true",
+                    help="place and route with antenna diode insertion (sky130_fd_sc_hd__diode_2). "
+                         "The class flow repairs antennas by rerouting only, which leaves "
+                         "hundreds of violations and adds shorts. Uses the upycore_hammer.py driver")
+    ap.add_argument("--par-tcl", action="append", default=[], metavar="LINE",
+                    help="an Innovus Tcl line to run before place_opt_design, after the class "
+                         "settings (repeatable). Uses the upycore_hammer.py driver")
+    ap.add_argument("--class-hammer-run", type=Path, metavar="FILE",
+                    default=Path.home() / "ee477/ee477-hammer-cad/hammer_run",
+                    help="the class Hammer driver that upycore_hammer.py extends")
+    ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", dest="sets",
+                    help="set a Hammer key in cfg.yml (value parsed as YAML), e.g. "
+                         "par.generate_power_straps_options.by_tracks.power_utilization_met4=0.2")
     ap.add_argument("--force", action="store_true", help="replace dest if it exists")
     args = ap.parse_args()
 
@@ -358,10 +381,12 @@ def main() -> int:
         doc = _replace_strings(doc, old_top, args.top)
     _set(doc, "synthesis.inputs.top_module", args.top)
     if srams:
-        # One shape for mpy_mem's four blocks and one for mpy_gc's table:
+        # One shape for mpy_mem's 32 macros and one for mpy_gc's table:
         # `make sram` generates them and the hook swaps every matching
         # instance (docs/mpy_boot.md).
         _set(doc, "vlsi.inputs.sram_parameters", [dict(m) for m in macros])
+    if args.par_effort:
+        _set(doc, "par.innovus.design_flow_effort", args.par_effort)
     if args.die:
         pcs = _get(doc, "vlsi.inputs.placement_constraints")
         tops = [c for c in pcs or [] if isinstance(c, dict) and c.get("type") == "toplevel"]
@@ -369,6 +394,9 @@ def main() -> int:
             tops[0]["width"], tops[0]["height"] = args.die
         else:
             warnings.append("example has no toplevel placement constraint; set the die size by hand")
+    for kv in args.sets:
+        k, _, v = kv.partition("=")
+        _set(doc, k.strip(), yaml.safe_load(v))
     clocks = _get(doc, "vlsi.inputs.clocks")
     if isinstance(clocks, list) and clocks and isinstance(clocks[0], dict):
         # Only if the example already uses it: keep it consistent with the SDC.
@@ -412,6 +440,15 @@ def main() -> int:
                                           "\n# Input-to-output feedthroughs are timed in the system.\n"
                                           "set_false_path -from $data_in -to [all_outputs]\n"
                                           if args.no_feedthrough else "")))
+    if args.syn_margin:
+        # Genus and Innovus both read this file; Innovus reads it after the
+        # SDC Genus wrote, so the plain uncertainty above wins there.
+        with sdc.open("a") as f:
+            f.write("\n# Synthesis margin (--syn-margin): Genus alone sees a tighter clock, so\n"
+                    "# the netlist keeps slack for routed wires. Innovus gets the plain value.\n"
+                    "if {[string match -nocase *genus* [file tail [info nameofexecutable]]]} {\n"
+                    f"    set_clock_uncertainty {float(args.uncertainty) + args.syn_margin:g} [all_clocks]\n"
+                    "}\n")
     if "constraints.tcl" not in cfg.read_text() and not any(
             "constraints.tcl" in f.read_text() for f in cfg_dir.glob("*.yml")):
         warnings.append("no yml file names constraints.tcl; find how the example loads it")
@@ -452,6 +489,38 @@ def main() -> int:
             _set(d, "sim.inputs.trace_files", [])
     _dump(cfg, doc, note)
 
+    par_tcl = list(args.par_tcl)
+    if args.cts:
+        par_tcl = ["set_db cts_target_skew 0.15", "set_db cts_max_fanout 24",
+                   "set_db opt_clock_gate_aware true"] + par_tcl
+    if args.diodes:
+        par_tcl += ["set_db route_design_antenna_diode_insertion true",
+                    "set_db route_design_antenna_cell_name sky130_fd_sc_hd__diode_2"]
+    if par_tcl:
+        # Our driver in place of the class one (upycore_hammer.py). The
+        # wrapper keeps the class driver's interpreter line.
+        run = args.class_hammer_run.expanduser()
+        shebang = "#!/usr/bin/env python3"
+        if run.is_file():
+            first = run.read_text(errors="replace").splitlines()[:1]
+            if first and first[0].startswith("#!"):
+                shebang = first[0]
+        else:
+            warnings.append(f"no class driver at {run}; pass --class-hammer-run")
+        tcl = cfg_dir / "par_settings.tcl"
+        tcl.write_text("# Run before place_opt_design (make_hammer_design.py --cts/--par-tcl).\n"
+                       + "\n".join(par_tcl) + "\n")
+        wrapper = dest / "hammer_run_upycore"
+        wrapper.write_text(f"{shebang}\n"
+                           "import os, runpy\n"
+                           f"os.environ.setdefault('UPYCORE_CLASS_HAMMER_RUN', {str(run)!r})\n"
+                           f"os.environ.setdefault('UPYCORE_PAR_TCL', {str(tcl)!r})\n"
+                           f"runpy.run_path({str(HERE / 'upycore_hammer.py')!r}, run_name='__main__')\n")
+        wrapper.chmod(0o755)
+        mk = dest / "Makefile"
+        mk.write_text(f"# uPyCore driver: the class one plus cfg/par_settings.tcl.\n"
+                      f"HAMMER_EXEC := {wrapper}\n" + mk.read_text())
+
     print(f"Created {dest}")
     print(f"  top        {args.top}")
     print(f"  RTL        {unit.relative_to(dest)} ({sum(1 for _ in unit.open())} lines)")
@@ -463,9 +532,11 @@ def main() -> int:
         print(f"  input file {f}")
     if srams:
         for m in macros:
-            n = SRAM_BLOCKS if m is SRAM_MACRO else USB_SRAM_BLOCKS if m is USB_SRAM_MACRO else 1
+            n = SRAM_MACROS if m is SRAM_MACRO else USB_SRAM_BLOCKS if m is USB_SRAM_MACRO else 1
             print(f"  SRAM       {n} x {m['name']} (vlsi.inputs.sram_parameters)")
         print("             run `make sram`, then place them (README.md, SRAM macros)")
+    for line in par_tcl:
+        print(f"  Innovus    {line} (cfg/par_settings.tcl)")
     for w in warnings:
         print(f"  WARNING: {w}")
     print("Next: cd into it and run: make syn")

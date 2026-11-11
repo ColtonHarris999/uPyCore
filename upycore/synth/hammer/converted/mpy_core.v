@@ -1,4 +1,4 @@
-// Generated from the uPyCore RTL by mpy_dc_unit.py and sv2v v0.0.12
+// Generated from the uPyCore RTL by mpy_dc_unit.py and sv2v v0.0.13
 // (see ../README.md). Do not edit; regenerate with convert_rtl.sh.
 module upycore_umul_seq (
 	clk_i,
@@ -629,33 +629,58 @@ module upycore_div (
 	reg [15:0] nsteps;
 	function automatic [6:0] upycore_clz64;
 		input reg [63:0] v;
-		reg [63:0] x;
-		reg [5:0] n;
+		reg [31:0] z1;
+		reg [31:0] c1;
+		reg [15:0] z2;
+		reg [31:0] c2;
+		reg [7:0] z3;
+		reg [23:0] c3;
+		reg [3:0] z4;
+		reg [15:0] c4;
+		reg [1:0] z5;
+		reg [9:0] c5;
 		begin
-			x = v;
-			n = 1'sb0;
-			if (x[63:32] == 0) begin
-				n[5] = 1'b1;
-				x = x << 32;
+			begin : sv2v_autoblock_1
+				reg signed [31:0] i;
+				for (i = 0; i < 32; i = i + 1)
+					begin
+						z1[i] = !v[(2 * i) + 1] && !v[2 * i];
+						c1[i] = !v[(2 * i) + 1];
+					end
 			end
-			if (x[63:48] == 0) begin
-				n[4] = 1'b1;
-				x = x << 16;
+			begin : sv2v_autoblock_2
+				reg signed [31:0] i;
+				for (i = 0; i < 16; i = i + 1)
+					begin
+						z2[i] = z1[(2 * i) + 1] && z1[2 * i];
+						c2[2 * i+:2] = (z1[(2 * i) + 1] ? {1'b1, c1[2 * i]} : {1'b0, c1[(2 * i) + 1]});
+					end
 			end
-			if (x[63:56] == 0) begin
-				n[3] = 1'b1;
-				x = x << 8;
+			begin : sv2v_autoblock_3
+				reg signed [31:0] i;
+				for (i = 0; i < 8; i = i + 1)
+					begin
+						z3[i] = z2[(2 * i) + 1] && z2[2 * i];
+						c3[3 * i+:3] = (z2[(2 * i) + 1] ? {1'b1, c2[2 * (2 * i)+:2]} : {1'b0, c2[2 * ((2 * i) + 1)+:2]});
+					end
 			end
-			if (x[63:60] == 0) begin
-				n[2] = 1'b1;
-				x = x << 4;
+			begin : sv2v_autoblock_4
+				reg signed [31:0] i;
+				for (i = 0; i < 4; i = i + 1)
+					begin
+						z4[i] = z3[(2 * i) + 1] && z3[2 * i];
+						c4[4 * i+:4] = (z3[(2 * i) + 1] ? {1'b1, c3[3 * (2 * i)+:3]} : {1'b0, c3[3 * ((2 * i) + 1)+:3]});
+					end
 			end
-			if (x[63:62] == 0) begin
-				n[1] = 1'b1;
-				x = x << 2;
+			begin : sv2v_autoblock_5
+				reg signed [31:0] i;
+				for (i = 0; i < 2; i = i + 1)
+					begin
+						z5[i] = z4[(2 * i) + 1] && z4[2 * i];
+						c5[5 * i+:5] = (z4[(2 * i) + 1] ? {1'b1, c4[4 * (2 * i)+:4]} : {1'b0, c4[4 * ((2 * i) + 1)+:4]});
+					end
 			end
-			n[0] = !x[63];
-			upycore_clz64 = (v == 0 ? 7'd64 : {1'b0, n});
+			upycore_clz64 = (z5[1] && z5[0] ? 7'd64 : (z5[1] ? {2'b01, c5[4:0]} : {2'b00, c5[9:5]}));
 		end
 	endfunction
 	assign lz_a = upycore_clz64(a_mag_r);
@@ -828,33 +853,58 @@ module upycore_ipow (
 	assign overflow = mul_hi_i != {64 {mul_lo_i[63]}};
 	function automatic [6:0] upycore_clz64;
 		input reg [63:0] v;
-		reg [63:0] x;
-		reg [5:0] n;
+		reg [31:0] z1;
+		reg [31:0] c1;
+		reg [15:0] z2;
+		reg [31:0] c2;
+		reg [7:0] z3;
+		reg [23:0] c3;
+		reg [3:0] z4;
+		reg [15:0] c4;
+		reg [1:0] z5;
+		reg [9:0] c5;
 		begin
-			x = v;
-			n = 1'sb0;
-			if (x[63:32] == 0) begin
-				n[5] = 1'b1;
-				x = x << 32;
+			begin : sv2v_autoblock_1
+				reg signed [31:0] i;
+				for (i = 0; i < 32; i = i + 1)
+					begin
+						z1[i] = !v[(2 * i) + 1] && !v[2 * i];
+						c1[i] = !v[(2 * i) + 1];
+					end
 			end
-			if (x[63:48] == 0) begin
-				n[4] = 1'b1;
-				x = x << 16;
+			begin : sv2v_autoblock_2
+				reg signed [31:0] i;
+				for (i = 0; i < 16; i = i + 1)
+					begin
+						z2[i] = z1[(2 * i) + 1] && z1[2 * i];
+						c2[2 * i+:2] = (z1[(2 * i) + 1] ? {1'b1, c1[2 * i]} : {1'b0, c1[(2 * i) + 1]});
+					end
 			end
-			if (x[63:56] == 0) begin
-				n[3] = 1'b1;
-				x = x << 8;
+			begin : sv2v_autoblock_3
+				reg signed [31:0] i;
+				for (i = 0; i < 8; i = i + 1)
+					begin
+						z3[i] = z2[(2 * i) + 1] && z2[2 * i];
+						c3[3 * i+:3] = (z2[(2 * i) + 1] ? {1'b1, c2[2 * (2 * i)+:2]} : {1'b0, c2[2 * ((2 * i) + 1)+:2]});
+					end
 			end
-			if (x[63:60] == 0) begin
-				n[2] = 1'b1;
-				x = x << 4;
+			begin : sv2v_autoblock_4
+				reg signed [31:0] i;
+				for (i = 0; i < 4; i = i + 1)
+					begin
+						z4[i] = z3[(2 * i) + 1] && z3[2 * i];
+						c4[4 * i+:4] = (z3[(2 * i) + 1] ? {1'b1, c3[3 * (2 * i)+:3]} : {1'b0, c3[3 * ((2 * i) + 1)+:3]});
+					end
 			end
-			if (x[63:62] == 0) begin
-				n[1] = 1'b1;
-				x = x << 2;
+			begin : sv2v_autoblock_5
+				reg signed [31:0] i;
+				for (i = 0; i < 2; i = i + 1)
+					begin
+						z5[i] = z4[(2 * i) + 1] && z4[2 * i];
+						c5[5 * i+:5] = (z4[(2 * i) + 1] ? {1'b1, c4[4 * (2 * i)+:4]} : {1'b0, c4[4 * ((2 * i) + 1)+:4]});
+					end
 			end
-			n[0] = !x[63];
-			upycore_clz64 = (v == 0 ? 7'd64 : {1'b0, n});
+			upycore_clz64 = (z5[1] && z5[0] ? 7'd64 : (z5[1] ? {2'b01, c5[4:0]} : {2'b00, c5[9:5]}));
 		end
 	endfunction
 	assign lz = upycore_clz64(bits_r);
@@ -1042,6 +1092,10 @@ module upycore_fp_add (
 	reg [56:0] sum;
 	assign ext_big = {s1_sig_big_r, 3'b000};
 	assign ext_small = {s1_sig_small_r, 3'b000};
+	function automatic signed [5:0] sv2v_cast_6_signed;
+		input reg signed [5:0] inp;
+		sv2v_cast_6_signed = inp;
+	endfunction
 	always @(*) begin
 		if (_sv2v_0)
 			;
@@ -1050,7 +1104,11 @@ module upycore_fp_add (
 		if (s1_shift_r > 6'd55)
 			aligned = {55'd0, |ext_small};
 		else begin
-			lost_mask = (56'd1 << s1_shift_r) - 56'd1;
+			begin : sv2v_autoblock_1
+				reg signed [31:0] i;
+				for (i = 0; i < 56; i = i + 1)
+					lost_mask[i] = sv2v_cast_6_signed(i) < s1_shift_r;
+			end
 			sticky = |(ext_small & lost_mask);
 			aligned = ext_small >> s1_shift_r;
 			aligned[0] = aligned[0] | sticky;
@@ -1080,33 +1138,58 @@ module upycore_fp_add (
 	reg n_s;
 	function automatic [6:0] upycore_clz64;
 		input reg [63:0] v;
-		reg [63:0] x;
-		reg [5:0] n;
+		reg [31:0] z1;
+		reg [31:0] c1;
+		reg [15:0] z2;
+		reg [31:0] c2;
+		reg [7:0] z3;
+		reg [23:0] c3;
+		reg [3:0] z4;
+		reg [15:0] c4;
+		reg [1:0] z5;
+		reg [9:0] c5;
 		begin
-			x = v;
-			n = 1'sb0;
-			if (x[63:32] == 0) begin
-				n[5] = 1'b1;
-				x = x << 32;
+			begin : sv2v_autoblock_2
+				reg signed [31:0] i;
+				for (i = 0; i < 32; i = i + 1)
+					begin
+						z1[i] = !v[(2 * i) + 1] && !v[2 * i];
+						c1[i] = !v[(2 * i) + 1];
+					end
 			end
-			if (x[63:48] == 0) begin
-				n[4] = 1'b1;
-				x = x << 16;
+			begin : sv2v_autoblock_3
+				reg signed [31:0] i;
+				for (i = 0; i < 16; i = i + 1)
+					begin
+						z2[i] = z1[(2 * i) + 1] && z1[2 * i];
+						c2[2 * i+:2] = (z1[(2 * i) + 1] ? {1'b1, c1[2 * i]} : {1'b0, c1[(2 * i) + 1]});
+					end
 			end
-			if (x[63:56] == 0) begin
-				n[3] = 1'b1;
-				x = x << 8;
+			begin : sv2v_autoblock_4
+				reg signed [31:0] i;
+				for (i = 0; i < 8; i = i + 1)
+					begin
+						z3[i] = z2[(2 * i) + 1] && z2[2 * i];
+						c3[3 * i+:3] = (z2[(2 * i) + 1] ? {1'b1, c2[2 * (2 * i)+:2]} : {1'b0, c2[2 * ((2 * i) + 1)+:2]});
+					end
 			end
-			if (x[63:60] == 0) begin
-				n[2] = 1'b1;
-				x = x << 4;
+			begin : sv2v_autoblock_5
+				reg signed [31:0] i;
+				for (i = 0; i < 4; i = i + 1)
+					begin
+						z4[i] = z3[(2 * i) + 1] && z3[2 * i];
+						c4[4 * i+:4] = (z3[(2 * i) + 1] ? {1'b1, c3[3 * (2 * i)+:3]} : {1'b0, c3[3 * ((2 * i) + 1)+:3]});
+					end
 			end
-			if (x[63:62] == 0) begin
-				n[1] = 1'b1;
-				x = x << 2;
+			begin : sv2v_autoblock_6
+				reg signed [31:0] i;
+				for (i = 0; i < 2; i = i + 1)
+					begin
+						z5[i] = z4[(2 * i) + 1] && z4[2 * i];
+						c5[5 * i+:5] = (z4[(2 * i) + 1] ? {1'b1, c4[4 * (2 * i)+:4]} : {1'b0, c4[4 * ((2 * i) + 1)+:4]});
+					end
 			end
-			n[0] = !x[63];
-			upycore_clz64 = (v == 0 ? 7'd64 : {1'b0, n});
+			upycore_clz64 = (z5[1] && z5[0] ? 7'd64 : (z5[1] ? {2'b01, c5[4:0]} : {2'b00, c5[9:5]}));
 		end
 	endfunction
 	function automatic [5:0] sv2v_cast_6;
@@ -1236,7 +1319,11 @@ module upycore_fp_add (
 			if (sh > 14'sd55)
 				upycore_f64_denorm = {55'd0, |ext};
 			else begin
-				lost_mask = (56'd1 << sh[5:0]) - 56'd1;
+				begin : sv2v_autoblock_7
+					reg signed [31:0] i;
+					for (i = 0; i < 56; i = i + 1)
+						lost_mask[i] = sv2v_cast_6_signed(i) < sh[5:0];
+				end
 				upycore_f64_denorm = ext >> sh[5:0];
 				upycore_f64_denorm[0] = upycore_f64_denorm[0] | (|(ext & lost_mask));
 			end
@@ -1365,33 +1452,58 @@ module upycore_fp_mul (
 	assign sig_b = upycore_f64_sig(op_b_i);
 	function automatic [6:0] upycore_clz64;
 		input reg [63:0] v;
-		reg [63:0] x;
-		reg [5:0] n;
+		reg [31:0] z1;
+		reg [31:0] c1;
+		reg [15:0] z2;
+		reg [31:0] c2;
+		reg [7:0] z3;
+		reg [23:0] c3;
+		reg [3:0] z4;
+		reg [15:0] c4;
+		reg [1:0] z5;
+		reg [9:0] c5;
 		begin
-			x = v;
-			n = 1'sb0;
-			if (x[63:32] == 0) begin
-				n[5] = 1'b1;
-				x = x << 32;
+			begin : sv2v_autoblock_1
+				reg signed [31:0] i;
+				for (i = 0; i < 32; i = i + 1)
+					begin
+						z1[i] = !v[(2 * i) + 1] && !v[2 * i];
+						c1[i] = !v[(2 * i) + 1];
+					end
 			end
-			if (x[63:48] == 0) begin
-				n[4] = 1'b1;
-				x = x << 16;
+			begin : sv2v_autoblock_2
+				reg signed [31:0] i;
+				for (i = 0; i < 16; i = i + 1)
+					begin
+						z2[i] = z1[(2 * i) + 1] && z1[2 * i];
+						c2[2 * i+:2] = (z1[(2 * i) + 1] ? {1'b1, c1[2 * i]} : {1'b0, c1[(2 * i) + 1]});
+					end
 			end
-			if (x[63:56] == 0) begin
-				n[3] = 1'b1;
-				x = x << 8;
+			begin : sv2v_autoblock_3
+				reg signed [31:0] i;
+				for (i = 0; i < 8; i = i + 1)
+					begin
+						z3[i] = z2[(2 * i) + 1] && z2[2 * i];
+						c3[3 * i+:3] = (z2[(2 * i) + 1] ? {1'b1, c2[2 * (2 * i)+:2]} : {1'b0, c2[2 * ((2 * i) + 1)+:2]});
+					end
 			end
-			if (x[63:60] == 0) begin
-				n[2] = 1'b1;
-				x = x << 4;
+			begin : sv2v_autoblock_4
+				reg signed [31:0] i;
+				for (i = 0; i < 4; i = i + 1)
+					begin
+						z4[i] = z3[(2 * i) + 1] && z3[2 * i];
+						c4[4 * i+:4] = (z3[(2 * i) + 1] ? {1'b1, c3[3 * (2 * i)+:3]} : {1'b0, c3[3 * ((2 * i) + 1)+:3]});
+					end
 			end
-			if (x[63:62] == 0) begin
-				n[1] = 1'b1;
-				x = x << 2;
+			begin : sv2v_autoblock_5
+				reg signed [31:0] i;
+				for (i = 0; i < 2; i = i + 1)
+					begin
+						z5[i] = z4[(2 * i) + 1] && z4[2 * i];
+						c5[5 * i+:5] = (z4[(2 * i) + 1] ? {1'b1, c4[4 * (2 * i)+:4]} : {1'b0, c4[4 * ((2 * i) + 1)+:4]});
+					end
 			end
-			n[0] = !x[63];
-			upycore_clz64 = (v == 0 ? 7'd64 : {1'b0, n});
+			upycore_clz64 = (z5[1] && z5[0] ? 7'd64 : (z5[1] ? {2'b01, c5[4:0]} : {2'b00, c5[9:5]}));
 		end
 	endfunction
 	function automatic [5:0] sv2v_cast_6;
@@ -1524,6 +1636,10 @@ module upycore_fp_mul (
 	reg [55:0] dn_r;
 	wire [55:0] r_ext;
 	assign r_ext = {r_sig, r_g, r_r, r_s};
+	function automatic signed [5:0] sv2v_cast_6_signed;
+		input reg signed [5:0] inp;
+		sv2v_cast_6_signed = inp;
+	endfunction
 	function automatic [55:0] upycore_f64_denorm;
 		input reg [55:0] ext;
 		input reg signed [13:0] exp_s;
@@ -1534,7 +1650,11 @@ module upycore_fp_mul (
 			if (sh > 14'sd55)
 				upycore_f64_denorm = {55'd0, |ext};
 			else begin
-				lost_mask = (56'd1 << sh[5:0]) - 56'd1;
+				begin : sv2v_autoblock_6
+					reg signed [31:0] i;
+					for (i = 0; i < 56; i = i + 1)
+						lost_mask[i] = sv2v_cast_6_signed(i) < sh[5:0];
+				end
 				upycore_f64_denorm = ext >> sh[5:0];
 				upycore_f64_denorm[0] = upycore_f64_denorm[0] | (|(ext & lost_mask));
 			end
@@ -1654,33 +1774,58 @@ module upycore_fp_divrem (
 	assign sig_b = upycore_f64_sig(op_b_i);
 	function automatic [6:0] upycore_clz64;
 		input reg [63:0] v;
-		reg [63:0] x;
-		reg [5:0] n;
+		reg [31:0] z1;
+		reg [31:0] c1;
+		reg [15:0] z2;
+		reg [31:0] c2;
+		reg [7:0] z3;
+		reg [23:0] c3;
+		reg [3:0] z4;
+		reg [15:0] c4;
+		reg [1:0] z5;
+		reg [9:0] c5;
 		begin
-			x = v;
-			n = 1'sb0;
-			if (x[63:32] == 0) begin
-				n[5] = 1'b1;
-				x = x << 32;
+			begin : sv2v_autoblock_1
+				reg signed [31:0] i;
+				for (i = 0; i < 32; i = i + 1)
+					begin
+						z1[i] = !v[(2 * i) + 1] && !v[2 * i];
+						c1[i] = !v[(2 * i) + 1];
+					end
 			end
-			if (x[63:48] == 0) begin
-				n[4] = 1'b1;
-				x = x << 16;
+			begin : sv2v_autoblock_2
+				reg signed [31:0] i;
+				for (i = 0; i < 16; i = i + 1)
+					begin
+						z2[i] = z1[(2 * i) + 1] && z1[2 * i];
+						c2[2 * i+:2] = (z1[(2 * i) + 1] ? {1'b1, c1[2 * i]} : {1'b0, c1[(2 * i) + 1]});
+					end
 			end
-			if (x[63:56] == 0) begin
-				n[3] = 1'b1;
-				x = x << 8;
+			begin : sv2v_autoblock_3
+				reg signed [31:0] i;
+				for (i = 0; i < 8; i = i + 1)
+					begin
+						z3[i] = z2[(2 * i) + 1] && z2[2 * i];
+						c3[3 * i+:3] = (z2[(2 * i) + 1] ? {1'b1, c2[2 * (2 * i)+:2]} : {1'b0, c2[2 * ((2 * i) + 1)+:2]});
+					end
 			end
-			if (x[63:60] == 0) begin
-				n[2] = 1'b1;
-				x = x << 4;
+			begin : sv2v_autoblock_4
+				reg signed [31:0] i;
+				for (i = 0; i < 4; i = i + 1)
+					begin
+						z4[i] = z3[(2 * i) + 1] && z3[2 * i];
+						c4[4 * i+:4] = (z3[(2 * i) + 1] ? {1'b1, c3[3 * (2 * i)+:3]} : {1'b0, c3[3 * ((2 * i) + 1)+:3]});
+					end
 			end
-			if (x[63:62] == 0) begin
-				n[1] = 1'b1;
-				x = x << 2;
+			begin : sv2v_autoblock_5
+				reg signed [31:0] i;
+				for (i = 0; i < 2; i = i + 1)
+					begin
+						z5[i] = z4[(2 * i) + 1] && z4[2 * i];
+						c5[5 * i+:5] = (z4[(2 * i) + 1] ? {1'b1, c4[4 * (2 * i)+:4]} : {1'b0, c4[4 * ((2 * i) + 1)+:4]});
+					end
 			end
-			n[0] = !x[63];
-			upycore_clz64 = (v == 0 ? 7'd64 : {1'b0, n});
+			upycore_clz64 = (z5[1] && z5[0] ? 7'd64 : (z5[1] ? {2'b01, c5[4:0]} : {2'b00, c5[9:5]}));
 		end
 	endfunction
 	function automatic [5:0] sv2v_cast_6;
@@ -1984,6 +2129,10 @@ module upycore_fp_divrem (
 	reg [55:0] dn_r;
 	wire [55:0] p_ext;
 	assign p_ext = {p_sig_r, p_g_r, p_r_r, p_s_r};
+	function automatic signed [5:0] sv2v_cast_6_signed;
+		input reg signed [5:0] inp;
+		sv2v_cast_6_signed = inp;
+	endfunction
 	function automatic [55:0] upycore_f64_denorm;
 		input reg [55:0] ext;
 		input reg signed [13:0] exp_s;
@@ -1994,7 +2143,11 @@ module upycore_fp_divrem (
 			if (sh > 14'sd55)
 				upycore_f64_denorm = {55'd0, |ext};
 			else begin
-				lost_mask = (56'd1 << sh[5:0]) - 56'd1;
+				begin : sv2v_autoblock_6
+					reg signed [31:0] i;
+					for (i = 0; i < 56; i = i + 1)
+						lost_mask[i] = sv2v_cast_6_signed(i) < sh[5:0];
+				end
 				upycore_f64_denorm = ext >> sh[5:0];
 				upycore_f64_denorm[0] = upycore_f64_denorm[0] | (|(ext & lost_mask));
 			end
@@ -2096,7 +2249,7 @@ module upycore_fp_pow (
 	localparam signed [31:0] QW = 53 + LMW;
 	localparam signed [31:0] PW = 92;
 	localparam [52:0] FOUR_THIRDS = 53'h15555555555555;
-	reg [3:0] state_r;
+	reg [4:0] state_r;
 	reg done_r;
 	reg rz_r;
 	reg [52:0] x_sig_r;
@@ -2136,33 +2289,58 @@ module upycore_fp_pow (
 	wire [5:0] y_lz;
 	function automatic [6:0] upycore_clz64;
 		input reg [63:0] v;
-		reg [63:0] x;
-		reg [5:0] n;
+		reg [31:0] z1;
+		reg [31:0] c1;
+		reg [15:0] z2;
+		reg [31:0] c2;
+		reg [7:0] z3;
+		reg [23:0] c3;
+		reg [3:0] z4;
+		reg [15:0] c4;
+		reg [1:0] z5;
+		reg [9:0] c5;
 		begin
-			x = v;
-			n = 1'sb0;
-			if (x[63:32] == 0) begin
-				n[5] = 1'b1;
-				x = x << 32;
+			begin : sv2v_autoblock_1
+				reg signed [31:0] i;
+				for (i = 0; i < 32; i = i + 1)
+					begin
+						z1[i] = !v[(2 * i) + 1] && !v[2 * i];
+						c1[i] = !v[(2 * i) + 1];
+					end
 			end
-			if (x[63:48] == 0) begin
-				n[4] = 1'b1;
-				x = x << 16;
+			begin : sv2v_autoblock_2
+				reg signed [31:0] i;
+				for (i = 0; i < 16; i = i + 1)
+					begin
+						z2[i] = z1[(2 * i) + 1] && z1[2 * i];
+						c2[2 * i+:2] = (z1[(2 * i) + 1] ? {1'b1, c1[2 * i]} : {1'b0, c1[(2 * i) + 1]});
+					end
 			end
-			if (x[63:56] == 0) begin
-				n[3] = 1'b1;
-				x = x << 8;
+			begin : sv2v_autoblock_3
+				reg signed [31:0] i;
+				for (i = 0; i < 8; i = i + 1)
+					begin
+						z3[i] = z2[(2 * i) + 1] && z2[2 * i];
+						c3[3 * i+:3] = (z2[(2 * i) + 1] ? {1'b1, c2[2 * (2 * i)+:2]} : {1'b0, c2[2 * ((2 * i) + 1)+:2]});
+					end
 			end
-			if (x[63:60] == 0) begin
-				n[2] = 1'b1;
-				x = x << 4;
+			begin : sv2v_autoblock_4
+				reg signed [31:0] i;
+				for (i = 0; i < 4; i = i + 1)
+					begin
+						z4[i] = z3[(2 * i) + 1] && z3[2 * i];
+						c4[4 * i+:4] = (z3[(2 * i) + 1] ? {1'b1, c3[3 * (2 * i)+:3]} : {1'b0, c3[3 * ((2 * i) + 1)+:3]});
+					end
 			end
-			if (x[63:62] == 0) begin
-				n[1] = 1'b1;
-				x = x << 2;
+			begin : sv2v_autoblock_5
+				reg signed [31:0] i;
+				for (i = 0; i < 2; i = i + 1)
+					begin
+						z5[i] = z4[(2 * i) + 1] && z4[2 * i];
+						c5[5 * i+:5] = (z4[(2 * i) + 1] ? {1'b1, c4[4 * (2 * i)+:4]} : {1'b0, c4[4 * ((2 * i) + 1)+:4]});
+					end
 			end
-			n[0] = !x[63];
-			upycore_clz64 = (v == 0 ? 7'd64 : {1'b0, n});
+			upycore_clz64 = (z5[1] && z5[0] ? 7'd64 : (z5[1] ? {2'b01, c5[4:0]} : {2'b00, c5[9:5]}));
 		end
 	endfunction
 	function automatic [5:0] sv2v_cast_6;
@@ -2233,15 +2411,15 @@ module upycore_fp_pow (
 			;
 		(* full_case, parallel_case *)
 		case (state_r)
-			4'd5: begin
+			5'd5: begin
 				pf_k = j0_r;
 				pf_sh = 7'd0;
 			end
-			4'd6: begin
+			5'd6: begin
 				pf_k = j_r + 8'd1;
 				pf_sh = i_r + 7'd1;
 			end
-			4'd13: begin
+			5'd13: begin
 				pf_k = 8'd1;
 				pf_sh = 7'd1;
 			end
@@ -2548,7 +2726,7 @@ module upycore_fp_pow (
 	end
 	assign lmag_clz = (|lmag_r[100-:64] ? upycore_clz64(lmag_r[100-:64]) : 7'd64 + upycore_clz64({lmag_r[36:0], 1'b1, {26 {1'b0}}}));
 	assign lmag_norm = lmag_r << lz_r;
-	assign mul_start_o = state_r == 4'd11;
+	assign mul_start_o = state_r == 5'd11;
 	assign mul_a_o = lm_r;
 	assign mul_b_o = my_r;
 	assign q_prod = mul_product_i;
@@ -2587,43 +2765,25 @@ module upycore_fp_pow (
 			pexp_r <= 1'sb0;
 		else
 			pexp_r <= $signed({i_int_r[12], i_int_r}) + 14'sd1023;
+	wire [55:0] pk_ext;
+	reg [55:0] pk_ext_r;
+	reg signed [13:0] pk_exp_r;
+	assign pk_ext = {z_r[FW:36], z_r[35], z_r[34], |z_r[33:0]};
 	wire [63:0] pack_res;
 	localparam [63:0] UPY_F64_PINF = 64'h7ff0000000000000;
-	function automatic [63:0] upycore_f64_pack_round;
+	function automatic [63:0] upycore_f64_round_pack;
 		input reg sign;
-		input reg signed [13:0] exp_s;
-		input reg [52:0] sig;
-		input reg g;
-		input reg r;
-		input reg s;
-		reg [55:0] ext;
-		reg [55:0] shifted;
-		reg [55:0] lost_mask;
-		reg signed [13:0] sh;
-		reg signed [13:0] exp_eff;
+		input reg signed [13:0] exp_eff_i;
+		input reg [55:0] shifted;
 		reg inc;
 		reg [53:0] sig_r;
+		reg signed [13:0] exp_eff;
 		reg [10:0] e_field;
 		begin
-			ext = {sig, g, r, s};
-			if (ext == 56'd0)
-				upycore_f64_pack_round = {sign, 63'd0};
+			exp_eff = exp_eff_i;
+			if (shifted == 56'd0)
+				upycore_f64_round_pack = {sign, 63'd0};
 			else begin
-				if (exp_s <= 14'sd0) begin
-					sh = 14'sd1 - exp_s;
-					if (sh > 14'sd55)
-						shifted = {55'd0, |ext};
-					else begin
-						lost_mask = (56'd1 << sh[5:0]) - 56'd1;
-						shifted = ext >> sh[5:0];
-						shifted[0] = shifted[0] | (|(ext & lost_mask));
-					end
-					exp_eff = 14'sd1;
-				end
-				else begin
-					shifted = ext;
-					exp_eff = exp_s;
-				end
 				inc = shifted[2] & ((shifted[1] | shifted[0]) | shifted[3]);
 				sig_r = {1'b0, shifted[55:3]} + {53'd0, inc};
 				if (sig_r[53]) begin
@@ -2631,16 +2791,40 @@ module upycore_fp_pow (
 					exp_eff = exp_eff + 14'sd1;
 				end
 				if (exp_eff >= 14'sd2047)
-					upycore_f64_pack_round = {sign, UPY_F64_PINF[62:0]};
+					upycore_f64_round_pack = {sign, UPY_F64_PINF[62:0]};
 				else begin
 					e_field = (sig_r[52] ? exp_eff[10:0] : 11'd0);
-					upycore_f64_pack_round = {sign, e_field, sig_r[51:0]};
+					upycore_f64_round_pack = {sign, e_field, sig_r[51:0]};
 				end
 			end
 		end
 	endfunction
-	assign pack_res = upycore_f64_pack_round(1'b0, pexp_r, z_r[FW:36], z_r[35], z_r[34], |z_r[33:0]);
+	assign pack_res = upycore_f64_round_pack(1'b0, pk_exp_r, pk_ext_r);
 	localparam [63:0] UPY_F64_PZERO = 64'h0000000000000000;
+	function automatic signed [5:0] sv2v_cast_6_signed;
+		input reg signed [5:0] inp;
+		sv2v_cast_6_signed = inp;
+	endfunction
+	function automatic [55:0] upycore_f64_denorm;
+		input reg [55:0] ext;
+		input reg signed [13:0] exp_s;
+		reg signed [13:0] sh;
+		reg [55:0] lost_mask;
+		begin
+			sh = 14'sd1 - exp_s;
+			if (sh > 14'sd55)
+				upycore_f64_denorm = {55'd0, |ext};
+			else begin
+				begin : sv2v_autoblock_6
+					reg signed [31:0] i;
+					for (i = 0; i < 56; i = i + 1)
+						lost_mask[i] = sv2v_cast_6_signed(i) < sh[5:0];
+				end
+				upycore_f64_denorm = ext >> sh[5:0];
+				upycore_f64_denorm[0] = upycore_f64_denorm[0] | (|(ext & lost_mask));
+			end
+		end
+	endfunction
 	function automatic [10:0] upycore_f64_exp_eff;
 		input reg [63:0] v;
 		upycore_f64_exp_eff = (v[62:52] == 11'd0 ? 11'd1 : v[62:52]);
@@ -2671,8 +2855,10 @@ module upycore_fp_pow (
 	endfunction
 	always @(posedge clk_i or negedge rst_n_i)
 		if (!rst_n_i) begin
-			state_r <= 4'd0;
+			state_r <= 5'd0;
 			done_r <= 1'b0;
+			pk_ext_r <= 1'sb0;
+			pk_exp_r <= 1'sb0;
 			x_sig_r <= 1'sb0;
 			y_sig_r <= 1'sb0;
 			x_exp_r <= 1'sb0;
@@ -2709,51 +2895,51 @@ module upycore_fp_pow (
 		end
 		else begin
 			done_r <= 1'b0;
-			if ((state_r != 4'd0) && !start_i)
-				state_r <= 4'd0;
+			if ((state_r != 5'd0) && !start_i)
+				state_r <= 5'd0;
 			else
 				(* full_case, parallel_case *)
 				case (state_r)
-					4'd0:
+					5'd0:
 						if (start_i && !done_r) begin
 							x_sig_r <= upycore_f64_sig(op_x_i);
 							y_sig_r <= upycore_f64_sig(op_y_i);
 							x_exp_r <= upycore_f64_exp_eff(op_x_i);
 							y_exp_r <= upycore_f64_exp_eff(op_y_i);
 							ysign_r <= op_y_i[63];
-							state_r <= 4'd1;
+							state_r <= 5'd1;
 						end
-					4'd1: begin
+					5'd1: begin
 						mx_r <= x_sig_r << x_lz;
 						ex_r <= (sv2v_cast_13(x_exp_r) - sv2v_cast_13(x_lz)) - 13'sd1023;
 						my_r <= y_sig_r << y_lz;
 						ey_r <= (sv2v_cast_13(y_exp_r) - sv2v_cast_13(y_lz)) - 13'sd1023;
-						state_r <= 4'd2;
+						state_r <= 5'd2;
 					end
-					4'd2: begin
+					5'd2: begin
 						r_r <= r_red;
 						e_r <= (halve ? ex_r + 13'sd1 : ex_r);
 						acc_r <= 1'sb0;
-						state_r <= 4'd3;
+						state_r <= 5'd3;
 					end
-					4'd3: begin
+					5'd3: begin
 						r_mag_r <= (r_r[89] ? sv2v_cast_88_signed(-r_r) : r_r[87:0]);
-						state_r <= 4'd4;
+						state_r <= 5'd4;
 					end
-					4'd4: begin
+					5'd4: begin
 						j0_r <= j0_sel;
 						rz_r <= r_mag_r == {88 {1'sb0}};
-						state_r <= 4'd5;
+						state_r <= 5'd5;
 					end
-					4'd5: begin
+					5'd5: begin
 						r_r <= -r_r <<< j0_r;
 						j_r <= j0_r;
 						i_r <= 1'sb0;
 						cpos_r <= pf_pos;
 						cneg_r <= pf_neg;
-						state_r <= (rz_r ? 4'd7 : 4'd6);
+						state_r <= (rz_r ? 5'd7 : 5'd6);
 					end
-					4'd6: begin
+					5'd6: begin
 						r_r <= w_next;
 						acc_r <= acc_next;
 						j_r <= j_r + 8'd1;
@@ -2761,45 +2947,45 @@ module upycore_fp_pow (
 						cpos_r <= pf_pos;
 						cneg_r <= pf_neg;
 						if (i_r == sv2v_cast_7_signed(79))
-							state_r <= 4'd7;
+							state_r <= 5'd7;
 					end
-					4'd7: begin
+					5'd7: begin
 						v_r <= v_sum;
 						lscale_r <= (e_r == 13'sd0 ? j0_r : 8'd0);
-						state_r <= 4'd8;
+						state_r <= 5'd8;
 					end
-					4'd8: begin
+					5'd8: begin
 						lsign_r <= v_r[LW];
 						lmag_r <= sv2v_cast_4587C_signed((v_r[LW] ? -v_r : v_r));
-						state_r <= 4'd9;
+						state_r <= 5'd9;
 					end
-					4'd9: begin
+					5'd9: begin
 						lz_r <= lmag_clz;
-						state_r <= 4'd10;
+						state_r <= 5'd10;
 					end
-					4'd10: begin
+					5'd10: begin
 						lm_r <= lmag_norm[100:LW - LMW];
 						el_r <= ((sv2v_cast_13_signed(LW - LMW) - sv2v_cast_13(lz_r)) - sv2v_cast_13_signed(FW)) - sv2v_cast_13(lscale_r);
 						psign_r <= ysign_r ^ lsign_r;
-						state_r <= 4'd11;
+						state_r <= 5'd11;
 					end
-					4'd11:
+					5'd11:
 						if (mul_done)
-							state_r <= 4'd12;
-					4'd12: begin
+							state_r <= 5'd12;
+					5'd12: begin
 						pfix_r <= q_shifted[91:0];
 						huge_r <= p_huge;
-						state_r <= 4'd13;
+						state_r <= 5'd13;
 					end
-					4'd13: begin
+					5'd13: begin
 						i_int_r <= pfix_s[PW:FP];
 						f_r <= {pfix_s[79:0], {FW - FP {1'b0}}};
 						z_r <= {1'b1, {FW {1'b0}}};
 						i_r <= 7'd1;
 						cpos_r <= pf_pos;
-						state_r <= (huge_r ? 4'd15 : 4'd14);
+						state_r <= (huge_r ? 5'd15 : 5'd14);
 					end
-					4'd14: begin
+					5'd14: begin
 						if (exp_take) begin
 							f_r <= f_r - exp_c;
 							z_r <= z_r + z_sh;
@@ -2807,22 +2993,27 @@ module upycore_fp_pow (
 						i_r <= i_r + 7'd1;
 						cpos_r <= pf_pos;
 						if (i_r == sv2v_cast_7_signed(NEXP))
-							state_r <= 4'd15;
+							state_r <= 5'd15;
 					end
-					4'd15: begin
+					5'd15: begin
+						pk_ext_r <= (pexp_r > 14'sd0 ? pk_ext : upycore_f64_denorm(pk_ext, pexp_r));
+						pk_exp_r <= (pexp_r > 14'sd0 ? pexp_r : 14'sd1);
+						state_r <= 5'd16;
+					end
+					5'd16: begin
 						if (huge_r)
 							result_r <= (psign_r ? UPY_F64_PZERO : UPY_F64_PINF);
 						else
 							result_r <= pack_res;
 						done_r <= 1'b1;
-						state_r <= 4'd0;
+						state_r <= 5'd0;
 					end
-					default: state_r <= 4'd0;
+					default: state_r <= 5'd0;
 				endcase
 		end
 	assign result_o = result_r;
 	assign done_o = done_r;
-	assign busy_o = state_r != 4'd0;
+	assign busy_o = state_r != 5'd0;
 	initial _sv2v_0 = 0;
 endmodule
 module upycore_fpu (
@@ -3102,12 +3293,14 @@ module upycore_fpu (
 	assign b_sig = {12'h001, br[51:0]};
 	assign b_trunc_ok = (br[62:52] != 11'h7ff) && ((br[62:52] < 11'd1023) || (b_uexp < 11'd63));
 	assign b_trunc_abs = (!b_trunc_ok || (br[62:52] < 11'd1023) ? 64'd0 : (b_uexp < 11'd52 ? b_sig >> (11'd52 - b_uexp) : b_sig << (b_uexp - 11'd52)));
-	function automatic signed [63:0] sv2v_cast_64_signed;
-		input reg signed [63:0] inp;
-		sv2v_cast_64_signed = inp;
-	endfunction
-	assign pow_n_small = b_trunc_abs <= sv2v_cast_64_signed(POW_CHAIN_MAX);
+	localparam [63:0] POW_LIM = $realtobits(real'(POW_CHAIN_MAX + 1));
+	assign pow_n_small = br[62:0] < POW_LIM[62:0];
+	wire dec_direct;
 	localparam [4:0] UPY_ALU_ADD = 5'd0;
+	localparam [4:0] UPY_ALU_MUL = 5'd2;
+	localparam [4:0] UPY_ALU_SUB = 5'd1;
+	localparam [4:0] UPY_ALU_TRUE_DIV = 5'd4;
+	assign dec_direct = (((op_i == UPY_ALU_ADD) || (op_i == UPY_ALU_SUB)) || (op_i == UPY_ALU_MUL)) || ((op_i == UPY_ALU_TRUE_DIV) && !b_zero);
 	localparam [4:0] UPY_ALU_EQ = 5'd16;
 	localparam [4:0] UPY_ALU_FLOOR_DIV = 5'd3;
 	localparam [4:0] UPY_ALU_GE = 5'd21;
@@ -3115,18 +3308,12 @@ module upycore_fpu (
 	localparam [4:0] UPY_ALU_LE = 5'd19;
 	localparam [4:0] UPY_ALU_LT = 5'd18;
 	localparam [4:0] UPY_ALU_MOD = 5'd5;
-	localparam [4:0] UPY_ALU_MUL = 5'd2;
 	localparam [4:0] UPY_ALU_NE = 5'd17;
 	localparam [4:0] UPY_ALU_NEG = 5'd12;
 	localparam [4:0] UPY_ALU_NOT = 5'd15;
 	localparam [4:0] UPY_ALU_PASS = 5'd22;
 	localparam [4:0] UPY_ALU_POS = 5'd13;
 	localparam [4:0] UPY_ALU_POWER = 5'd6;
-	localparam [4:0] UPY_ALU_SUB = 5'd1;
-	localparam [4:0] UPY_ALU_TRUE_DIV = 5'd4;
-	localparam [63:0] UPY_F64_HALF = 64'h3fe0000000000000;
-	localparam [63:0] UPY_F64_NONE = 64'hbff0000000000000;
-	localparam [63:0] UPY_F64_PINF = 64'h7ff0000000000000;
 	function automatic upycore_f64_compare_op;
 		input reg [4:0] op;
 		input reg [63:0] a;
@@ -3182,53 +3369,8 @@ module upycore_fpu (
 				dec_next = 6'd5;
 			end
 			UPY_ALU_POWER: begin
-				dec_kind = 2'd0;
-				if (b_zero)
-					dec_result = UPY_F64_ONE;
-				else if (a_nan)
-					dec_result = ar;
-				else if (b_nan)
-					dec_result = (ar == UPY_F64_ONE ? UPY_F64_ONE : br);
-				else if (b_inf) begin
-					if (a_abs_one)
-						dec_result = UPY_F64_ONE;
-					else if (b_gt0 == a_abs_gt_one)
-						dec_result = UPY_F64_PINF;
-					else
-						dec_result = UPY_F64_PZERO;
-				end
-				else if (a_inf) begin
-					if (b_gt0)
-						dec_result = (b_odd ? ar : a_abs);
-					else
-						dec_result = (b_odd ? {ar[63], 63'd0} : UPY_F64_PZERO);
-				end
-				else if (a_zero) begin
-					if (b_lt0)
-						dec_kind = 2'd1;
-					else
-						dec_result = (b_odd ? ar : UPY_F64_PZERO);
-				end
-				else if (!b_int && ar[63])
-					dec_kind = 2'd1;
-				else if (a_abs_one)
-					dec_result = (ar[63] && b_odd ? UPY_F64_NONE : UPY_F64_ONE);
-				else if (br == UPY_F64_HALF) begin
-					dec_kind = 2'd3;
-					dec_next = 6'd24;
-				end
-				else if ((b_int && b_trunc_ok) && pow_n_small) begin
-					dec_kind = 2'd3;
-					dec_next = 6'd15;
-					dec_pow_neg = ar[63] && b_odd;
-					dec_pow_recip = b_lt0;
-					dec_pow_n = b_trunc_abs;
-				end
-				else begin
-					dec_kind = 2'd3;
-					dec_next = 6'd23;
-					dec_pow_neg = ar[63] && b_odd;
-				end
+				dec_kind = 2'd3;
+				dec_next = 6'd25;
 			end
 			UPY_ALU_NEG: begin
 				dec_kind = 2'd0;
@@ -3249,6 +3391,91 @@ module upycore_fpu (
 			default: dec_kind = 2'd1;
 		endcase
 	end
+	reg pf_int_r;
+	reg pf_odd_r;
+	reg pf_tok_r;
+	reg pf_small_r;
+	reg [63:0] pf_n_r;
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i) begin
+			pf_int_r <= 1'b0;
+			pf_odd_r <= 1'b0;
+			pf_tok_r <= 1'b0;
+			pf_small_r <= 1'b0;
+			pf_n_r <= 1'sb0;
+		end
+		else begin
+			pf_int_r <= b_int;
+			pf_odd_r <= b_odd;
+			pf_tok_r <= b_trunc_ok;
+			pf_small_r <= pow_n_small;
+			pf_n_r <= b_trunc_abs;
+		end
+	reg [1:0] pw_kind;
+	reg [63:0] pw_result;
+	reg [63:0] pw_n;
+	reg [5:0] pw_next;
+	reg pw_neg;
+	reg pw_recip;
+	localparam [63:0] UPY_F64_HALF = 64'h3fe0000000000000;
+	localparam [63:0] UPY_F64_NONE = 64'hbff0000000000000;
+	localparam [63:0] UPY_F64_PINF = 64'h7ff0000000000000;
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		pw_result = 1'sb0;
+		pw_next = 6'd0;
+		pw_neg = 1'b0;
+		pw_recip = 1'b0;
+		pw_n = 1'sb0;
+		pw_kind = 2'd0;
+		if (b_zero)
+			pw_result = UPY_F64_ONE;
+		else if (a_nan)
+			pw_result = ar;
+		else if (b_nan)
+			pw_result = (ar == UPY_F64_ONE ? UPY_F64_ONE : br);
+		else if (b_inf) begin
+			if (a_abs_one)
+				pw_result = UPY_F64_ONE;
+			else if (b_gt0 == a_abs_gt_one)
+				pw_result = UPY_F64_PINF;
+			else
+				pw_result = UPY_F64_PZERO;
+		end
+		else if (a_inf) begin
+			if (b_gt0)
+				pw_result = (pf_odd_r ? ar : a_abs);
+			else
+				pw_result = (pf_odd_r ? {ar[63], 63'd0} : UPY_F64_PZERO);
+		end
+		else if (a_zero) begin
+			if (b_lt0)
+				pw_kind = 2'd1;
+			else
+				pw_result = (pf_odd_r ? ar : UPY_F64_PZERO);
+		end
+		else if (!pf_int_r && ar[63])
+			pw_kind = 2'd1;
+		else if (a_abs_one)
+			pw_result = (ar[63] && pf_odd_r ? UPY_F64_NONE : UPY_F64_ONE);
+		else if (br == UPY_F64_HALF) begin
+			pw_kind = 2'd3;
+			pw_next = 6'd24;
+		end
+		else if ((pf_int_r && pf_tok_r) && pf_small_r) begin
+			pw_kind = 2'd3;
+			pw_next = 6'd15;
+			pw_neg = ar[63] && pf_odd_r;
+			pw_recip = b_lt0;
+			pw_n = pf_n_r;
+		end
+		else begin
+			pw_kind = 2'd3;
+			pw_next = 6'd23;
+			pw_neg = ar[63] && pf_odd_r;
+		end
+	end
 	always @(*) begin
 		if (_sv2v_0)
 			;
@@ -3264,7 +3491,7 @@ module upycore_fpu (
 		(* full_case, parallel_case *)
 		case (state_r)
 			6'd0:
-				if (start_i && (dec_kind == 2'd2)) begin
+				if (start_i && dec_direct) begin
 					u_add_start = !dec_mul && !dec_div;
 					u_sub = dec_sub;
 					u_mul_start = dec_mul;
@@ -3402,33 +3629,58 @@ module upycore_fpu (
 	assign pow_overflow = upycore_f64_is_inf(t0_r);
 	function automatic [6:0] upycore_clz64;
 		input reg [63:0] v;
-		reg [63:0] x;
-		reg [5:0] n;
+		reg [31:0] z1;
+		reg [31:0] c1;
+		reg [15:0] z2;
+		reg [31:0] c2;
+		reg [7:0] z3;
+		reg [23:0] c3;
+		reg [3:0] z4;
+		reg [15:0] c4;
+		reg [1:0] z5;
+		reg [9:0] c5;
 		begin
-			x = v;
-			n = 1'sb0;
-			if (x[63:32] == 0) begin
-				n[5] = 1'b1;
-				x = x << 32;
+			begin : sv2v_autoblock_1
+				reg signed [31:0] i;
+				for (i = 0; i < 32; i = i + 1)
+					begin
+						z1[i] = !v[(2 * i) + 1] && !v[2 * i];
+						c1[i] = !v[(2 * i) + 1];
+					end
 			end
-			if (x[63:48] == 0) begin
-				n[4] = 1'b1;
-				x = x << 16;
+			begin : sv2v_autoblock_2
+				reg signed [31:0] i;
+				for (i = 0; i < 16; i = i + 1)
+					begin
+						z2[i] = z1[(2 * i) + 1] && z1[2 * i];
+						c2[2 * i+:2] = (z1[(2 * i) + 1] ? {1'b1, c1[2 * i]} : {1'b0, c1[(2 * i) + 1]});
+					end
 			end
-			if (x[63:56] == 0) begin
-				n[3] = 1'b1;
-				x = x << 8;
+			begin : sv2v_autoblock_3
+				reg signed [31:0] i;
+				for (i = 0; i < 8; i = i + 1)
+					begin
+						z3[i] = z2[(2 * i) + 1] && z2[2 * i];
+						c3[3 * i+:3] = (z2[(2 * i) + 1] ? {1'b1, c2[2 * (2 * i)+:2]} : {1'b0, c2[2 * ((2 * i) + 1)+:2]});
+					end
 			end
-			if (x[63:60] == 0) begin
-				n[2] = 1'b1;
-				x = x << 4;
+			begin : sv2v_autoblock_4
+				reg signed [31:0] i;
+				for (i = 0; i < 4; i = i + 1)
+					begin
+						z4[i] = z3[(2 * i) + 1] && z3[2 * i];
+						c4[4 * i+:4] = (z3[(2 * i) + 1] ? {1'b1, c3[3 * (2 * i)+:3]} : {1'b0, c3[3 * ((2 * i) + 1)+:3]});
+					end
 			end
-			if (x[63:62] == 0) begin
-				n[1] = 1'b1;
-				x = x << 2;
+			begin : sv2v_autoblock_5
+				reg signed [31:0] i;
+				for (i = 0; i < 2; i = i + 1)
+					begin
+						z5[i] = z4[(2 * i) + 1] && z4[2 * i];
+						c5[5 * i+:5] = (z4[(2 * i) + 1] ? {1'b1, c4[4 * (2 * i)+:4]} : {1'b0, c4[4 * ((2 * i) + 1)+:4]});
+					end
 			end
-			n[0] = !x[63];
-			upycore_clz64 = (v == 0 ? 7'd64 : {1'b0, n});
+			upycore_clz64 = (z5[1] && z5[0] ? 7'd64 : (z5[1] ? {2'b01, c5[4:0]} : {2'b00, c5[9:5]}));
 		end
 	endfunction
 	assign pow_lz = upycore_clz64(pow_n_r);
@@ -3461,7 +3713,7 @@ module upycore_fpu (
 			(* full_case, parallel_case *)
 			case (state_r)
 				6'd0:
-					if (dec_kind == 2'd2) begin
+					if (dec_direct) begin
 						state_r <= 6'd1;
 						mul_run <= dec_mul;
 					end
@@ -3474,6 +3726,22 @@ module upycore_fpu (
 						t0_r <= UPY_F64_ONE;
 						t1_r <= a_abs;
 					end
+				6'd25:
+					(* full_case, parallel_case *)
+					case (pw_kind)
+						2'd3: begin
+							state_r <= pw_next;
+							pow_neg_r <= pw_neg;
+							pow_recip_r <= pw_recip;
+							pow_n_r <= pw_n;
+							pow_n0_r <= pw_n;
+						end
+						2'd0: begin
+							res_r <= pw_result;
+							state_r <= 6'd26;
+						end
+						default: state_r <= 6'd27;
+					endcase
 				6'd1:
 					if (u_done) begin
 						state_r <= 6'd0;
@@ -3489,12 +3757,12 @@ module upycore_fpu (
 						state_r <= 6'd4;
 					else begin
 						res_r <= (upycore_f64_eq(t0_r, UPY_F64_PZERO) ? {br[63], 63'd0} : t0_r);
-						state_r <= 6'd25;
+						state_r <= 6'd26;
 					end
 				6'd4:
 					if (u_done) begin
 						res_r <= u_res;
-						state_r <= 6'd25;
+						state_r <= 6'd26;
 					end
 				6'd5:
 					if (u_done) begin
@@ -3525,7 +3793,7 @@ module upycore_fpu (
 					end
 					else begin
 						res_r <= {ar[63] ^ br[63], 63'd0};
-						state_r <= 6'd25;
+						state_r <= 6'd26;
 					end
 				6'd12:
 					if (u_done) begin
@@ -3537,12 +3805,12 @@ module upycore_fpu (
 						state_r <= 6'd14;
 					else begin
 						res_r <= t2_r;
-						state_r <= 6'd25;
+						state_r <= 6'd26;
 					end
 				6'd14:
 					if (u_done) begin
 						res_r <= u_res;
-						state_r <= 6'd25;
+						state_r <= 6'd26;
 					end
 				6'd15: begin
 					t0_r <= t1_r;
@@ -3590,10 +3858,10 @@ module upycore_fpu (
 					end
 				6'd22:
 					if (pow_overflow)
-						state_r <= 6'd26;
+						state_r <= 6'd27;
 					else begin
 						res_r <= {t0_r[63] ^ pow_neg_r, t0_r[62:0]};
-						state_r <= 6'd25;
+						state_r <= 6'd26;
 					end
 				6'd23:
 					if (u_done) begin
@@ -3605,7 +3873,7 @@ module upycore_fpu (
 						t0_r <= u_res;
 						state_r <= 6'd22;
 					end
-				6'd25, 6'd26: state_r <= 6'd0;
+				6'd26, 6'd27: state_r <= 6'd0;
 				default: state_r <= 6'd0;
 			endcase
 	always @(*) begin
@@ -3632,8 +3900,8 @@ module upycore_fpu (
 				done_o = u_done;
 				result_o = u_res;
 			end
-			6'd25: done_o = 1'b1;
-			6'd26: exception_o = 1'b1;
+			6'd26: done_o = 1'b1;
+			6'd27: exception_o = 1'b1;
 			default:
 				;
 		endcase
@@ -3657,7 +3925,67 @@ module mpy_f32_widen (
 	assign sign = f_i[31];
 	assign exp = f_i[30:23];
 	assign frac = f_i[22:0];
-	assign sh = (frac[22] ? 5'd0 : (frac[21] ? 5'd1 : (frac[20] ? 5'd2 : (frac[19] ? 5'd3 : (frac[18] ? 5'd4 : (frac[17] ? 5'd5 : (frac[16] ? 5'd6 : (frac[15] ? 5'd7 : (frac[14] ? 5'd8 : (frac[13] ? 5'd9 : (frac[12] ? 5'd10 : (frac[11] ? 5'd11 : (frac[10] ? 5'd12 : (frac[9] ? 5'd13 : (frac[8] ? 5'd14 : (frac[7] ? 5'd15 : (frac[6] ? 5'd16 : (frac[5] ? 5'd17 : (frac[4] ? 5'd18 : (frac[3] ? 5'd19 : (frac[2] ? 5'd20 : (frac[1] ? 5'd21 : 5'd22))))))))))))))))))))));
+	function automatic [6:0] upycore_clz64;
+		input reg [63:0] v;
+		reg [31:0] z1;
+		reg [31:0] c1;
+		reg [15:0] z2;
+		reg [31:0] c2;
+		reg [7:0] z3;
+		reg [23:0] c3;
+		reg [3:0] z4;
+		reg [15:0] c4;
+		reg [1:0] z5;
+		reg [9:0] c5;
+		begin
+			begin : sv2v_autoblock_1
+				reg signed [31:0] i;
+				for (i = 0; i < 32; i = i + 1)
+					begin
+						z1[i] = !v[(2 * i) + 1] && !v[2 * i];
+						c1[i] = !v[(2 * i) + 1];
+					end
+			end
+			begin : sv2v_autoblock_2
+				reg signed [31:0] i;
+				for (i = 0; i < 16; i = i + 1)
+					begin
+						z2[i] = z1[(2 * i) + 1] && z1[2 * i];
+						c2[2 * i+:2] = (z1[(2 * i) + 1] ? {1'b1, c1[2 * i]} : {1'b0, c1[(2 * i) + 1]});
+					end
+			end
+			begin : sv2v_autoblock_3
+				reg signed [31:0] i;
+				for (i = 0; i < 8; i = i + 1)
+					begin
+						z3[i] = z2[(2 * i) + 1] && z2[2 * i];
+						c3[3 * i+:3] = (z2[(2 * i) + 1] ? {1'b1, c2[2 * (2 * i)+:2]} : {1'b0, c2[2 * ((2 * i) + 1)+:2]});
+					end
+			end
+			begin : sv2v_autoblock_4
+				reg signed [31:0] i;
+				for (i = 0; i < 4; i = i + 1)
+					begin
+						z4[i] = z3[(2 * i) + 1] && z3[2 * i];
+						c4[4 * i+:4] = (z3[(2 * i) + 1] ? {1'b1, c3[3 * (2 * i)+:3]} : {1'b0, c3[3 * ((2 * i) + 1)+:3]});
+					end
+			end
+			begin : sv2v_autoblock_5
+				reg signed [31:0] i;
+				for (i = 0; i < 2; i = i + 1)
+					begin
+						z5[i] = z4[(2 * i) + 1] && z4[2 * i];
+						c5[5 * i+:5] = (z4[(2 * i) + 1] ? {1'b1, c4[4 * (2 * i)+:4]} : {1'b0, c4[4 * ((2 * i) + 1)+:4]});
+					end
+			end
+			upycore_clz64 = (z5[1] && z5[0] ? 7'd64 : (z5[1] ? {2'b01, c5[4:0]} : {2'b00, c5[9:5]}));
+		end
+	endfunction
+	function automatic [4:0] sv2v_cast_5;
+		input reg [4:0] inp;
+		sv2v_cast_5 = inp;
+	endfunction
+	assign sh = sv2v_cast_5(upycore_clz64({frac[22:1], 42'h20000000000}));
 	assign shifted = frac << sh;
 	always @(*) begin
 		if (_sv2v_0)
@@ -3675,11 +4003,17 @@ module mpy_f32_widen (
 endmodule
 module mpy_f32_narrow (
 	d_i,
-	q_o
+	q_o,
+	jam_o,
+	jam_i,
+	sub_o
 );
 	reg _sv2v_0;
 	input wire [63:0] d_i;
 	output reg [31:0] q_o;
+	output wire [54:0] jam_o;
+	input wire [54:0] jam_i;
+	output wire sub_o;
 	wire sign;
 	wire [10:0] exp;
 	wire [51:0] frac;
@@ -3707,7 +4041,9 @@ module mpy_f32_narrow (
 			assign jam[k + 1] = (sh[k] ? {{S {1'b0}}, jam[k][54:S + 1], |jam[k][S:0]} : jam[k]);
 		end
 	endgenerate
-	assign mag = {1'b0, jam[6][24:2]} + {23'd0, jam[6][1] && (jam[6][0] || jam[6][2])};
+	assign jam_o = jam[6];
+	assign mag = {1'b0, jam_i[24:2]} + {23'd0, jam_i[1] && (jam_i[0] || jam_i[2])};
+	assign sub_o = (((exp != 11'h7ff) && !((d_i[62:0] == 63'b000000000000000000000000000000000000000000000000000000000000000) || (exp == 11'b00000000000))) && !(exp32 >= 13'sd1)) && !(sh >= 12'd53);
 	always @(*) begin
 		if (_sv2v_0)
 			;
@@ -3973,10 +4309,21 @@ module mpy_alu (
 		.stall_o(fstall),
 		.busy_o(fbusy)
 	);
+	wire [54:0] nar_jam;
+	reg [54:0] nar_jam_r;
+	wire nar_sub;
 	mpy_f32_narrow u_narrow(
 		.d_i(fres_r),
-		.q_o(fnarrow)
+		.q_o(fnarrow),
+		.jam_o(nar_jam),
+		.jam_i(nar_jam_r),
+		.sub_o(nar_sub)
 	);
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i)
+			nar_jam_r <= 1'sb0;
+		else
+			nar_jam_r <= nar_jam;
 	wire [5:0] dop;
 	wire [31:0] dxa;
 	wire [31:0] dxb;
@@ -3986,7 +4333,6 @@ module mpy_alu (
 	assign dop = (st == 4'd6 ? op : op_i);
 	assign dxa = (st == 4'd6 ? fa : a_i[31:0]);
 	assign dxb = (st == 4'd6 ? fb : b_i[31:0]);
-	localparam [2:0] mpy_alu_pkg_AE_COMPLEX = 3'd5;
 	localparam [2:0] mpy_alu_pkg_AE_NONE = 3'd0;
 	localparam [2:0] mpy_alu_pkg_AE_UNSUPPORTED = 3'd4;
 	localparam [2:0] mpy_alu_pkg_AE_ZERO_DIV = 3'd1;
@@ -4002,21 +4348,6 @@ module mpy_alu (
 		input reg [31:0] a;
 		input reg [31:0] b;
 		mpy_alu_pkg_mpy_f32_eq = (!mpy_alu_pkg_mpy_f32_nan(a) && !mpy_alu_pkg_mpy_f32_nan(b)) && ((a == b) || (mpy_alu_pkg_mpy_f32_zero(a) && mpy_alu_pkg_mpy_f32_zero(b)));
-	endfunction
-	function automatic mpy_alu_pkg_mpy_f32_integral;
-		input reg [31:0] f;
-		reg [7:0] e;
-		begin
-			e = f[30:23];
-			if (e == 8'hff)
-				mpy_alu_pkg_mpy_f32_integral = 1'b0;
-			else if (e >= 8'd150)
-				mpy_alu_pkg_mpy_f32_integral = 1'b1;
-			else if (e < 8'd127)
-				mpy_alu_pkg_mpy_f32_integral = f[30:0] == 31'd0;
-			else
-				mpy_alu_pkg_mpy_f32_integral = (f[22:0] & (23'h7fffff >> (e - 8'd127))) == 23'd0;
-		end
 	endfunction
 	function automatic mpy_alu_pkg_mpy_f32_lt;
 		input reg [31:0] a;
@@ -4049,10 +4380,7 @@ module mpy_alu (
 				if (mpy_alu_pkg_mpy_f32_zero(dxb))
 					f_err = mpy_alu_pkg_AE_ZERO_DIV;
 			mpy_alu_pkg_ALU_POW:
-				if ((mpy_alu_pkg_mpy_f32_zero(dxa) && dxb[31]) && !((dxb[30:23] == 8'hff) && (dxb[22:0] == 23'd0)))
-					f_err = mpy_alu_pkg_AE_ZERO_DIV;
-				else if (((((dxa[31] && !mpy_alu_pkg_mpy_f32_zero(dxa)) && !mpy_alu_pkg_mpy_f32_nan(dxa)) && !mpy_alu_pkg_mpy_f32_integral(dxb)) && !mpy_alu_pkg_mpy_f32_nan(dxb)) && (dxb[30:23] != 8'hff))
-					f_err = mpy_alu_pkg_AE_COMPLEX;
+				;
 			default: f_err = mpy_alu_pkg_AE_UNSUPPORTED;
 		endcase
 		f_fpu = f_err == mpy_alu_pkg_AE_NONE;
@@ -4065,6 +4393,7 @@ module mpy_alu (
 		.f_i(dxb),
 		.d_o(fb64)
 	);
+	localparam [2:0] mpy_alu_pkg_AE_COMPLEX = 3'd5;
 	localparam [2:0] mpy_alu_pkg_AE_FTOI = 3'd6;
 	localparam [2:0] mpy_alu_pkg_AE_NEG_SHIFT = 3'd3;
 	localparam [2:0] mpy_alu_pkg_AE_OVERFLOW = 3'd2;
@@ -4076,6 +4405,21 @@ module mpy_alu (
 	localparam [5:0] mpy_alu_pkg_ALU_I2F = 6'd44;
 	localparam [5:0] mpy_alu_pkg_ALU_MATMUL = 6'd30;
 	localparam [5:0] mpy_alu_pkg_ALU_POS = 6'd41;
+	function automatic mpy_alu_pkg_mpy_f32_integral;
+		input reg [31:0] f;
+		reg [7:0] e;
+		begin
+			e = f[30:23];
+			if (e == 8'hff)
+				mpy_alu_pkg_mpy_f32_integral = 1'b0;
+			else if (e >= 8'd150)
+				mpy_alu_pkg_mpy_f32_integral = 1'b1;
+			else if (e < 8'd127)
+				mpy_alu_pkg_mpy_f32_integral = f[30:0] == 31'd0;
+			else
+				mpy_alu_pkg_mpy_f32_integral = (f[22:0] & (23'h7fffff >> (e - 8'd127))) == 23'd0;
+		end
+	endfunction
 	function automatic [4:0] sv2v_cast_5;
 		input reg [4:0] inp;
 		sv2v_cast_5 = inp;
@@ -4119,40 +4463,65 @@ module mpy_alu (
 						m = m << (x - 23);
 					else
 						m = m >> (23 - x);
-					mpy_alu_pkg_mpy_f32_to_i64 = (f[31] ? ~m + 64'd1 : m);
+					mpy_alu_pkg_mpy_f32_to_i64 = m;
 				end
 			end
 		end
 	endfunction
 	function automatic [6:0] upycore_clz64;
 		input reg [63:0] v;
-		reg [63:0] x;
-		reg [5:0] n;
+		reg [31:0] z1;
+		reg [31:0] c1;
+		reg [15:0] z2;
+		reg [31:0] c2;
+		reg [7:0] z3;
+		reg [23:0] c3;
+		reg [3:0] z4;
+		reg [15:0] c4;
+		reg [1:0] z5;
+		reg [9:0] c5;
 		begin
-			x = v;
-			n = 1'sb0;
-			if (x[63:32] == 0) begin
-				n[5] = 1'b1;
-				x = x << 32;
+			begin : sv2v_autoblock_1
+				reg signed [31:0] i;
+				for (i = 0; i < 32; i = i + 1)
+					begin
+						z1[i] = !v[(2 * i) + 1] && !v[2 * i];
+						c1[i] = !v[(2 * i) + 1];
+					end
 			end
-			if (x[63:48] == 0) begin
-				n[4] = 1'b1;
-				x = x << 16;
+			begin : sv2v_autoblock_2
+				reg signed [31:0] i;
+				for (i = 0; i < 16; i = i + 1)
+					begin
+						z2[i] = z1[(2 * i) + 1] && z1[2 * i];
+						c2[2 * i+:2] = (z1[(2 * i) + 1] ? {1'b1, c1[2 * i]} : {1'b0, c1[(2 * i) + 1]});
+					end
 			end
-			if (x[63:56] == 0) begin
-				n[3] = 1'b1;
-				x = x << 8;
+			begin : sv2v_autoblock_3
+				reg signed [31:0] i;
+				for (i = 0; i < 8; i = i + 1)
+					begin
+						z3[i] = z2[(2 * i) + 1] && z2[2 * i];
+						c3[3 * i+:3] = (z2[(2 * i) + 1] ? {1'b1, c2[2 * (2 * i)+:2]} : {1'b0, c2[2 * ((2 * i) + 1)+:2]});
+					end
 			end
-			if (x[63:60] == 0) begin
-				n[2] = 1'b1;
-				x = x << 4;
+			begin : sv2v_autoblock_4
+				reg signed [31:0] i;
+				for (i = 0; i < 4; i = i + 1)
+					begin
+						z4[i] = z3[(2 * i) + 1] && z3[2 * i];
+						c4[4 * i+:4] = (z3[(2 * i) + 1] ? {1'b1, c3[3 * (2 * i)+:3]} : {1'b0, c3[3 * ((2 * i) + 1)+:3]});
+					end
 			end
-			if (x[63:62] == 0) begin
-				n[1] = 1'b1;
-				x = x << 2;
+			begin : sv2v_autoblock_5
+				reg signed [31:0] i;
+				for (i = 0; i < 2; i = i + 1)
+					begin
+						z5[i] = z4[(2 * i) + 1] && z4[2 * i];
+						c5[5 * i+:5] = (z4[(2 * i) + 1] ? {1'b1, c4[4 * (2 * i)+:4]} : {1'b0, c4[4 * ((2 * i) + 1)+:4]});
+					end
 			end
-			n[0] = !x[63];
-			upycore_clz64 = (v == 0 ? 7'd64 : {1'b0, n});
+			upycore_clz64 = (z5[1] && z5[0] ? 7'd64 : (z5[1] ? {2'b01, c5[4:0]} : {2'b00, c5[9:5]}));
 		end
 	endfunction
 	function automatic [5:0] sv2v_cast_6;
@@ -4190,7 +4559,7 @@ module mpy_alu (
 			done_o <= 1'b0;
 			case (st)
 				4'd0:
-					if (start_i) begin : sv2v_autoblock_1
+					if (start_i) begin : sv2v_autoblock_6
 						reg isf;
 						reg conv;
 						reg ok;
@@ -4221,7 +4590,7 @@ module mpy_alu (
 							res_o <= v;
 							if (!ok)
 								err_o <= mpy_alu_pkg_AE_FTOI;
-							st <= 4'd7;
+							st <= 4'd12;
 						end
 						else if (op_i >= mpy_alu_pkg_ALU_NEG) begin
 							if (a_flt_i) begin
@@ -4257,6 +4626,8 @@ module mpy_alu (
 							rkind_o <= mpy_alu_pkg_AK_FLOAT;
 							if (conv)
 								st <= 4'd8;
+							else if (op_i == mpy_alu_pkg_ALU_POW)
+								st <= 4'd11;
 							else begin
 								err_o <= f_err;
 								st <= (f_fpu ? 4'd4 : 4'd7);
@@ -4346,16 +4717,42 @@ module mpy_alu (
 						res_o <= {63'd0, f_cmp};
 						st <= 4'd7;
 					end
+					else if (op == mpy_alu_pkg_ALU_POW)
+						st <= 4'd11;
 					else begin
 						err_o <= f_err;
 						st <= (f_fpu ? 4'd4 : 4'd7);
 					end
 				end
-				4'd5: begin
+				4'd5:
+					if (nar_sub)
+						st <= 4'd10;
+					else begin
+						res_o <= {32'd0, fnarrow};
+						st <= 4'd0;
+						done_o <= 1'b1;
+					end
+				4'd12: begin
+					if (fa[31])
+						res_o <= ~res_o + 64'd1;
+					st <= 4'd7;
+				end
+				4'd10: begin
 					res_o <= {32'd0, fnarrow};
 					st <= 4'd0;
 					done_o <= 1'b1;
 				end
+				4'd11:
+					if ((mpy_alu_pkg_mpy_f32_zero(fa) && fb[31]) && !((fb[30:23] == 8'hff) && (fb[22:0] == 23'd0))) begin
+						err_o <= mpy_alu_pkg_AE_ZERO_DIV;
+						st <= 4'd7;
+					end
+					else if (((((fa[31] && !mpy_alu_pkg_mpy_f32_zero(fa)) && !mpy_alu_pkg_mpy_f32_nan(fa)) && !mpy_alu_pkg_mpy_f32_integral(fb)) && !mpy_alu_pkg_mpy_f32_nan(fb)) && (fb[30:23] != 8'hff)) begin
+						err_o <= mpy_alu_pkg_AE_COMPLEX;
+						st <= 4'd7;
+					end
+					else
+						st <= 4'd4;
 				4'd7: begin
 					if (((rkind_o == mpy_alu_pkg_AK_INT) && (err_o == mpy_alu_pkg_AE_NONE)) && (op != mpy_alu_pkg_ALU_F2I)) begin
 						res_o <= ires;
@@ -4403,20 +4800,26 @@ module upycore_umod_seq (
 			nonexistent_module_BPC_must_be_1_2_or_4 bad_bpc();
 		end
 	endgenerate
-	function automatic signed [5:0] sv2v_cast_6_signed;
-		input reg signed [5:0] inp;
-		sv2v_cast_6_signed = inp;
-	endfunction
 	function automatic [5:0] clz32;
 		input reg [31:0] v;
+		reg [31:0] x;
+		reg [4:0] n;
 		begin
-			clz32 = 6'd32;
-			begin : sv2v_autoblock_1
-				reg signed [31:0] i;
-				for (i = 0; i < 32; i = i + 1)
-					if (v[i])
-						clz32 = sv2v_cast_6_signed(31 - i);
-			end
+			x = v;
+			n[4] = x[31:16] == 16'd0;
+			if (n[4])
+				x = {x[15:0], 16'd0};
+			n[3] = x[31:24] == 8'd0;
+			if (n[3])
+				x = {x[23:0], 8'd0};
+			n[2] = x[31:28] == 4'd0;
+			if (n[2])
+				x = {x[27:0], 4'd0};
+			n[1] = x[31:30] == 2'd0;
+			if (n[1])
+				x = {x[29:0], 2'd0};
+			n[0] = !x[31];
+			clz32 = (v == 32'd0 ? 6'd32 : {1'b0, n});
 		end
 	endfunction
 	reg [31:0] d_r;
@@ -4442,7 +4845,7 @@ module upycore_umod_seq (
 	assign kr = (k + sv2v_cast_7_signed(BPC - 1)) & ~sv2v_cast_7_signed(BPC - 1);
 	reg [31:0] r_nx;
 	reg [31:0] q_nx;
-	always @(*) begin : sv2v_autoblock_2
+	always @(*) begin : sv2v_autoblock_1
 		reg [32:0] t;
 		reg [33:0] t4;
 		reg [33:0] dif2;
@@ -4459,7 +4862,7 @@ module upycore_umod_seq (
 			dif2 = {1'b0, t} - {2'b00, d_r};
 			r_nx = (dif2[33] ? t[31:0] : dif2[31:0]);
 		end
-		else begin : sv2v_autoblock_3
+		else begin : sv2v_autoblock_2
 			reg signed [31:0] j;
 			for (j = 0; j < (BPC / 2); j = j + 1)
 				begin
@@ -4729,16 +5132,26 @@ module mpy_decode (
 	reg known;
 	reg [6:0] mapped;
 	reg signed [63:0] acc;
-	reg cont;
+	reg signed [63:0] cand;
 	reg [7:0] bv;
 	reg [14:0] raw15;
-	function automatic [63:0] sv2v_cast_64;
-		input reg [63:0] inp;
-		sv2v_cast_64 = inp;
+	reg [6:0] vc;
+	reg [6:0] vf;
+	reg is_var;
+	reg is_off;
+	reg has_extra;
+	reg [3:0] len_pre;
+	function automatic signed [6:0] sv2v_cast_7_signed;
+		input reg signed [6:0] inp;
+		sv2v_cast_7_signed = inp;
 	endfunction
 	function automatic [3:0] sv2v_cast_4;
 		input reg [3:0] inp;
 		sv2v_cast_4 = inp;
+	endfunction
+	function automatic [63:0] sv2v_cast_64;
+		input reg [63:0] inp;
+		sv2v_cast_64 = inp;
 	endfunction
 	function automatic [31:0] sv2v_cast_32;
 		input reg [31:0] inp;
@@ -4760,9 +5173,9 @@ module mpy_decode (
 		known = 1'b0;
 		mapped = 7'd0;
 		acc = 64'sd0;
-		cont = 1'b0;
-		bv = 8'h00;
-		raw15 = 15'h0000;
+		cand = 64'sd0;
+		bv = bytes_i[15:8];
+		raw15 = {bytes_i[23:16], bv[6:0]};
 		decoded_valid_o = 1'b0;
 		illegal_o = 1'b0;
 		truncated_o = 1'b0;
@@ -4775,86 +5188,81 @@ module mpy_decode (
 		arg_o = 32'sd0;
 		extra_valid_o = 1'b0;
 		extra_o = 8'h00;
+		is_var = (fmt == FMT_QSTR) || (fmt == FMT_VARUINT);
+		is_off = fmt == FMT_OFFSET;
+		has_extra = (op & EXTRA_MASK) == 8'h00;
+		begin : sv2v_autoblock_1
+			reg [31:0] k;
+			for (k = 0; k < 7; k = k + 1)
+				vc[k] = bytes_i[(8 * (k + 1)) + 7];
+		end
+		begin : sv2v_autoblock_2
+			reg [31:0] k;
+			for (k = 0; k < 7; k = k + 1)
+				vf[k] = !vc[k] && &(vc | ~sv2v_cast_7_signed((1 << k) - 1));
+		end
+		len_pre = 4'd1;
+		if (is_var) begin
+			len_pre = 4'd0;
+			begin : sv2v_autoblock_3
+				reg [31:0] k;
+				for (k = 0; k < 7; k = k + 1)
+					if (vf[k])
+						len_pre = len_pre | sv2v_cast_4(k + 2);
+			end
+		end
+		else if (is_off)
+			len_pre = (bv[7] ? 4'd3 : 4'd2);
+		len_b = len_pre + {3'd0, has_extra};
+		trunc = (is_var && &vc) || (len_b > nwin);
 		if (instr_valid_i) begin
 			opcode_o = op;
 			format_o = fmt;
-			if (nwin == 4'd0)
-				trunc = 1'b1;
-			else if ((fmt == FMT_QSTR) || (fmt == FMT_VARUINT)) begin
-				if (nwin < 4'd2)
-					trunc = 1'b1;
-				else begin
-					cont = 1'b1;
-					begin : sv2v_autoblock_1
-						reg [31:0] k;
-						for (k = 0; k < 7; k = k + 1)
-							if (cont && !trunc) begin
-								if ((k + 1) >= {28'b0000000000000000000000000000, nwin}) begin
-									trunc = 1'b1;
-									cont = 1'b0;
-								end
-								else begin
-									bv = bytes_i[8 * (k + 1)+:8];
-									if (k == 0) begin
-										acc = sv2v_cast_64(bv[6:0]);
-										if ((op == BC_LOAD_CONST_SMALL_INT) && bv[6])
-											acc[63:7] = {57 {1'b1}};
-									end
-									else
-										acc = (acc << 7) | sv2v_cast_64(bv[6:0]);
-									cont = bv[7];
-									len_b = sv2v_cast_4(k + 2);
-								end
+			if (is_var) begin
+				begin : sv2v_autoblock_4
+					reg [31:0] k;
+					for (k = 0; k < 7; k = k + 1)
+						begin
+							cand = ((op == BC_LOAD_CONST_SMALL_INT) && bytes_i[14] ? -64'sd1 : 64'sd0);
+							begin : sv2v_autoblock_5
+								reg [31:0] j;
+								for (j = 0; j <= k; j = j + 1)
+									cand = (cand << 7) | sv2v_cast_64(bytes_i[8 * (j + 1)+:7]);
 							end
-					end
-					if (cont)
-						trunc = 1'b1;
+							if (vf[k])
+								acc = acc | cand;
+						end
 				end
-				if (!trunc) begin
-					arg_ok = 1'b1;
-					arg = acc[31:0];
-					if (op == BC_LOAD_CONST_SMALL_INT)
-						overflow = acc[63:31] != {33 {acc[31]}};
+				arg_ok = 1'b1;
+				arg = acc[31:0];
+				if (op == BC_LOAD_CONST_SMALL_INT)
+					overflow = acc[63:31] != {33 {acc[31]}};
+				else
+					overflow = acc[63:32] != 32'h00000000;
+			end
+			else if (is_off) begin
+				arg_ok = 1'b1;
+				if (!bv[7]) begin
+					if (offset_is_signed(op))
+						arg = $signed({25'b0000000000000000000000000, bv[6:0]}) - 32'sd64;
 					else
-						overflow = acc[63:32] != 32'h00000000;
+						arg = $signed({25'b0000000000000000000000000, bv[6:0]});
+				end
+				else if (offset_is_signed(op))
+					arg = $signed({17'b00000000000000000, raw15}) - 32'sd16384;
+				else
+					arg = $signed({17'b00000000000000000, raw15});
+			end
+			if (has_extra) begin
+				extra_ok = 1'b1;
+				begin : sv2v_autoblock_6
+					reg [31:0] l;
+					for (l = 1; l < 8; l = l + 1)
+						if (len_pre == sv2v_cast_4(l))
+							extra_b = extra_b | bytes_i[8 * l+:8];
 				end
 			end
-			else if (fmt == FMT_OFFSET) begin
-				if (nwin < 4'd2)
-					trunc = 1'b1;
-				else begin
-					bv = bytes_i[15:8];
-					if (!bv[7]) begin
-						len_b = 4'd2;
-						arg_ok = 1'b1;
-						if (offset_is_signed(op))
-							arg = $signed({25'b0000000000000000000000000, bv[6:0]}) - 32'sd64;
-						else
-							arg = $signed({25'b0000000000000000000000000, bv[6:0]});
-					end
-					else if (nwin < 4'd3)
-						trunc = 1'b1;
-					else begin
-						raw15 = {bytes_i[23:16], bv[6:0]};
-						len_b = 4'd3;
-						arg_ok = 1'b1;
-						if (offset_is_signed(op))
-							arg = $signed({17'b00000000000000000, raw15}) - 32'sd16384;
-						else
-							arg = $signed({17'b00000000000000000, raw15});
-					end
-				end
-			end
-			if (!trunc && ((op & EXTRA_MASK) == 8'h00)) begin
-				if (len_b >= nwin)
-					trunc = 1'b1;
-				else begin
-					extra_b = bytes_i[8 * len_b+:8];
-					extra_ok = 1'b1;
-					len_b = len_b + 4'd1;
-				end
-			end
-			if (!trunc && (fmt == FMT_BYTE)) begin
+			if (fmt == FMT_BYTE) begin
 				if ((op >= BC_SMALL_INT_BASE) && (op < (BC_SMALL_INT_BASE + SMALL_INT_NUM))) begin
 					arg_ok = 1'b1;
 					arg = ($signed({24'b000000000000000000000000, op}) - 32'sd112) - sv2v_cast_32(SMALL_INT_EXCESS);
@@ -5717,10 +6125,17 @@ module mpy_core (
 			first = ge & ~{ge[32:0], 1'b0};
 			r = (ge[33] ? 32'd0 : (x + (x >> 1)) | 32'd1);
 			begin : sv2v_autoblock_3
-				reg signed [31:0] i;
-				for (i = 0; i < 34; i = i + 1)
-					if (first[i])
-						r = r | t[(33 - i) * 32+:32];
+				reg signed [31:0] b;
+				for (b = 0; b < 32; b = b + 1)
+					begin : sv2v_autoblock_4
+						reg [33:0] col;
+						begin : sv2v_autoblock_5
+							reg signed [31:0] i;
+							for (i = 0; i < 34; i = i + 1)
+								col[i] = t[((33 - i) * 32) + b];
+						end
+						r[b] = r[b] | (|(first & col));
+					end
 			end
 			next_alloc = r;
 		end
@@ -5965,7 +6380,7 @@ module mpy_core (
 		if (_sv2v_0)
 			;
 		lc_dirty_any = 1'b0;
-		begin : sv2v_autoblock_4
+		begin : sv2v_autoblock_6
 			reg signed [31:0] k;
 			for (k = 0; k < 8; k = k + 1)
 				if ((k < cfg_lc_n) && lc_dirty[k])
@@ -6361,7 +6776,7 @@ module mpy_core (
 		else
 			mpy_region_of = MPY_REGION_NONE;
 	endfunction
-	assign f_req_o = fe_req && !((mpy_region_of(f_addr_o) == MPY_REGION_SRAM) && !ca_idle_i);
+	assign f_req_o = fe_req && !((mpy_region_of(fe_base) == MPY_REGION_SRAM) && !ca_idle_i);
 	wire [31:0] f_off;
 	wire [63:0] d_bytes;
 	wire [3:0] d_n;
@@ -6408,6 +6823,51 @@ module mpy_core (
 		.extra_o(d_ext)
 	);
 	wire [31:0] ftop;
+	reg [11:0] c_geo_r;
+	reg [11:0] gr_geo_r;
+	function automatic [11:0] sv2v_cast_12;
+		input reg [11:0] inp;
+		sv2v_cast_12 = inp;
+	endfunction
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i)
+			c_geo_r <= 12'd17;
+		else
+			c_geo_r <= (12'd17 + sv2v_cast_12(c_nst)) + (12'd3 * sv2v_cast_12(c_nexc));
+	reg [31:0] se_mask;
+	reg [1:0] bc_k;
+	reg [31:0] hp_room_r;
+	reg [31:0] hp_free_r;
+	reg hp_neg_r;
+	reg hp_neg2_r;
+	reg hp_big_r;
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i) begin
+			hp_room_r <= 1'sb0;
+			hp_neg_r <= 1'b0;
+			hp_free_r <= 1'sb0;
+			hp_neg2_r <= 1'b0;
+			hp_big_r <= 1'b0;
+		end
+		else begin
+			hp_room_r <= (spill_hp - fbase) >> 2;
+			hp_neg_r <= spill_hp < fbase;
+			hp_free_r <= hp_room_r - {23'd0, stack_prefix_words};
+			hp_neg2_r <= hp_neg_r || (hp_room_r < {23'd0, stack_prefix_words});
+			hp_big_r <= (hp_room_r - {23'd0, stack_prefix_words}) >= 32'd8192;
+		end
+	reg bin_num_r;
+	reg bin_cx_r;
+	reg [17:0] srd_o;
+	reg lc_hit_r;
+	reg call_fit_r;
+	reg call_ring_r;
+	reg call_big_r;
+	reg yf_fast_r;
+	reg [2:0] lc_way_r;
+	reg [7:0] lf_ix;
+	reg [15:0] bl_base;
+	reg ur_le;
 	function automatic [8:0] sv2v_cast_9;
 		input reg [8:0] inp;
 		sv2v_cast_9 = inp;
@@ -6426,13 +6886,40 @@ module mpy_core (
 	endfunction
 	assign stk_off = sv2v_cast_10(stack_prefix_words) + sv2v_cast_10(sp);
 	assign stk_top = fbase + {20'd0, stk_off, 2'b00};
+	function automatic [12:0] sv2v_cast_13;
+		input reg [12:0] inp;
+		sv2v_cast_13 = inp;
+	endfunction
+	function automatic over_hp;
+		input reg [31:0] words;
+		over_hp = hp_neg2_r || (!hp_big_r && ((sv2v_cast_13(sp) + sv2v_cast_13(words[11:0])) > hp_free_r[12:0]));
+	endfunction
 	function automatic [31:0] loc_ptr;
 		input reg [7:0] idx;
 		loc_ptr = (local_base + 32'h00000044) + {22'd0, idx, 2'b00};
 	endfunction
+	reg [7:0] nargs_r;
+	always @(posedge clk_i) nargs_r <= ab_pe - ab_lo;
+	reg [31:0] xb_r;
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i)
+			xb_r <= 1'sb0;
+		else if ((((st == 10'd156) && m_ack_i) && (wpend == 3'd0)) && (fl_i == 32'd16))
+			xb_r <= (fbase + 32'h00000044) + {22'd0, m_rdata_i[13:6], 2'b00};
+		else
+			xb_r <= (fbase + 32'h00000044) + ({24'd0, nloc} << 2);
 	function automatic [31:0] sv2v_cast_32;
 		input reg [31:0] inp;
 		sv2v_cast_32 = inp;
+	endfunction
+	function automatic [31:0] exc_ptr_f;
+		input reg [4:0] slot;
+		exc_ptr_f = xb_r + (32'd12 * sv2v_cast_32(slot));
+	endfunction
+	function automatic [31:0] exc_ptr_k;
+		input reg [4:0] slot;
+		input reg [1:0] k;
+		exc_ptr_k = xb_r + sv2v_cast_32((10'd12 * sv2v_cast_10(slot)) + {6'd0, k, 2'b00});
 	endfunction
 	function automatic [31:0] exc_ptr;
 		input reg [31:0] base;
@@ -6464,7 +6951,7 @@ module mpy_core (
 		begin
 			m = lc_match(idx);
 			lc_hit_way = 3'd0;
-			begin : sv2v_autoblock_5
+			begin : sv2v_autoblock_7
 				reg signed [31:0] k;
 				for (k = 0; k < 8; k = k + 1)
 					if (m[k])
@@ -6483,7 +6970,7 @@ module mpy_core (
 		begin
 			best = 3'd0;
 			any_inv = 1'b0;
-			begin : sv2v_autoblock_6
+			begin : sv2v_autoblock_8
 				reg signed [31:0] k;
 				for (k = 0; k < 8; k = k + 1)
 					if (((k < cfg_lc_n) && !lc_v[k]) && !any_inv) begin
@@ -6491,15 +6978,15 @@ module mpy_core (
 						any_inv = 1'b1;
 					end
 			end
-			if (!any_inv) begin : sv2v_autoblock_7
+			if (!any_inv) begin : sv2v_autoblock_9
 				reg [2:0] w1 [0:3];
 				reg [2:0] w2 [0:1];
 				reg e1 [0:3];
 				reg e2 [0:1];
-				begin : sv2v_autoblock_8
+				begin : sv2v_autoblock_10
 					reg signed [31:0] p;
 					for (p = 0; p < 4; p = p + 1)
-						begin : sv2v_autoblock_9
+						begin : sv2v_autoblock_11
 							reg el;
 							reg er;
 							el = ((2 * p) == 0) || ((2 * p) < cfg_lc_n);
@@ -6508,7 +6995,7 @@ module mpy_core (
 							e1[p] = el || er;
 						end
 				end
-				begin : sv2v_autoblock_10
+				begin : sv2v_autoblock_12
 					reg signed [31:0] p;
 					for (p = 0; p < 2; p = p + 1)
 						begin
@@ -6581,7 +7068,7 @@ module mpy_core (
 			hit = lc_is_hit(idx);
 			p = lc_pick(idx);
 			w = (hit ? lc_hit_way(idx) : p);
-			begin : sv2v_autoblock_11
+			begin : sv2v_autoblock_13
 				reg signed [31:0] k;
 				for (k = 0; k < 8; k = k + 1)
 					ev[k] = (lc_v[k] && lc_dirty[k]) && (lc_ix[k] != idx);
@@ -6664,7 +7151,7 @@ module mpy_core (
 		input reg [MPY_ENTRY_WIDTH - 1:0] entry;
 		mpy_is_rf_link = (mpy_entry_tag(entry) == MPY_TAG_CONTROL) && (entry[3:0] == MPY_CTL_RF_LINK);
 	endfunction
-	always @(*) begin : sv2v_autoblock_12
+	always @(*) begin : sv2v_autoblock_14
 		reg signed [31:0] k;
 		if (_sv2v_0)
 			;
@@ -6678,11 +7165,15 @@ module mpy_core (
 	endfunction
 	assign resident_reals = (has_link ? sv2v_cast_16(sp) - 16'd1 : sv2v_cast_16(sp));
 	assign sd_nl = spilled_reals + sv2v_cast_16(sp);
-	assign sd_l = (spilled_reals + sv2v_cast_16(sp)) - 16'd1;
+	assign sd_l = spilled_reals + {9'd0, sp - 7'd1};
 	assign stk_depth = (has_link ? sd_l : sd_nl);
 	function automatic stk_hit;
 		input reg [15:0] g;
-		stk_hit = (g >= spilled_reals) && (has_link ? g < sd_l : g < sd_nl);
+		reg [16:0] d;
+		begin
+			d = {1'b0, g} - {1'b0, spilled_reals};
+			stk_hit = (!d[16] && (d[15:7] == 9'd0)) && (d[6:0] < resident_reals[6:0]);
+		end
 	endfunction
 	function automatic [6:0] sv2v_cast_7;
 		input reg [6:0] inp;
@@ -6997,13 +7488,11 @@ module mpy_core (
 			gosub(target, back);
 	endtask
 	task automatic go_next;
-		if ((fe_avail != 6'd0) && !ca_fault_i) begin
+		begin
 			dq_bytes <= d_bytes;
 			dq_n <= d_n;
 			st <= 10'd132;
 		end
-		else
-			st <= 10'd147;
 	endtask
 	localparam signed [31:0] MPY_RF_DEPTH = 16;
 	function automatic signed [6:0] sv2v_cast_7_signed;
@@ -7485,13 +7974,13 @@ module mpy_core (
 		input reg [2:0] inp;
 		sv2v_cast_3 = inp;
 	endfunction
-	function automatic [11:0] sv2v_cast_12;
-		input reg [11:0] inp;
-		sv2v_cast_12 = inp;
-	endfunction
 	function automatic [5:0] sv2v_cast_6;
 		input reg [5:0] inp;
 		sv2v_cast_6 = inp;
+	endfunction
+	function automatic signed [9:0] sv2v_cast_10_signed;
+		input reg signed [9:0] inp;
+		sv2v_cast_10_signed = inp;
 	endfunction
 	function automatic [7:0] sv2v_cast_8;
 		input reg [7:0] inp;
@@ -7500,6 +7989,10 @@ module mpy_core (
 	function automatic signed [5:0] sv2v_cast_6_signed;
 		input reg signed [5:0] inp;
 		sv2v_cast_6_signed = inp;
+	endfunction
+	function automatic [17:0] sv2v_cast_18;
+		input reg [17:0] inp;
+		sv2v_cast_18 = inp;
 	endfunction
 	always @(posedge clk_i or negedge rst_n_i) begin : seq
 		reg [31:0] v0;
@@ -7528,7 +8021,7 @@ module mpy_core (
 			wfault_addr <= 32'd0;
 			bl_n <= 8'd0;
 			bl_k <= 3'd0;
-			begin : sv2v_autoblock_13
+			begin : sv2v_autoblock_15
 				reg signed [31:0] k;
 				for (k = 0; k < WQ; k = k + 1)
 					wfifo[k] <= 32'd0;
@@ -7586,7 +8079,7 @@ module mpy_core (
 			scr_i <= 4'd0;
 			scr_storing <= 1'b0;
 			scr_gosub_p <= 1'b0;
-			begin : sv2v_autoblock_14
+			begin : sv2v_autoblock_16
 				reg signed [31:0] k;
 				for (k = 0; k < 8; k = k + 1)
 					begin
@@ -7644,7 +8137,7 @@ module mpy_core (
 			ss_put_value <= VNULL;
 			ss_i <= 0;
 			ss_back <= 10'd147;
-			begin : sv2v_autoblock_15
+			begin : sv2v_autoblock_17
 				reg signed [31:0] k;
 				for (k = 0; k < 8; k = k + 1)
 					t[k] <= VNULL;
@@ -7666,17 +8159,17 @@ module mpy_core (
 			cv_pos_g <= 16'd0;
 			cv_fun_g <= 16'd0;
 			ab_q <= VNULL;
-			begin : sv2v_autoblock_16
+			begin : sv2v_autoblock_18
 				reg signed [31:0] k;
 				for (k = 0; k < 4; k = k + 1)
 					ab_s[k] <= VNULL;
 			end
-			begin : sv2v_autoblock_17
+			begin : sv2v_autoblock_19
 				reg signed [31:0] k;
 				for (k = 0; k < MPY_RF_DEPTH; k = k + 1)
 					rf[k] <= VNULL;
 			end
-			begin : sv2v_autoblock_18
+			begin : sv2v_autoblock_20
 				reg signed [31:0] k;
 				for (k = 0; k < 8; k = k + 1)
 					begin
@@ -8134,12 +8627,12 @@ module mpy_core (
 					end
 					10'd113: begin
 						v0 = (noframe ? ABI_FRAME_BASE : stk_top);
-						v3 = sv2v_cast_32((12'd17 + sv2v_cast_12(c_nst)) + (12'd3 * sv2v_cast_12(c_nexc)));
+						v3 = sv2v_cast_32(c_geo_r);
 						v1 = (noframe ? ABI_FRAME_BASE + (v3 << 2) : fbase + {18'd0, sv2v_cast_12(stk_off) + v3[11:0], 2'b00});
 						v2 = ab_pe - ab_lo;
 						c_fast <= (((!ab_chunked && (ab_nkw == 8'd0)) && (c_nkwo == 8'd0)) && ((v2 + c_ndef) >= c_npos)) && ((v2 <= c_npos) || (c_scope & ABI_SCOPE_VARARGS));
 						x3 <= v0;
-						if (v1 > spill_hp)
+						if ((noframe ? (ABI_FRAME_BASE + (v3 << 2)) > spill_hp : over_hp(v3)))
 							raise_msg(ABI_MSG_RECURSION);
 						else if (noframe)
 							st <= 10'd120;
@@ -8174,7 +8667,7 @@ module mpy_core (
 						aux <= VNULL;
 						aux2 <= VNULL;
 						aux3 <= VNULL;
-						begin : sv2v_autoblock_19
+						begin : sv2v_autoblock_21
 							reg signed [31:0] k;
 							for (k = 0; k < MPY_RF_DEPTH; k = k + 1)
 								rf[k] <= VNULL;
@@ -8857,18 +9350,20 @@ module mpy_core (
 						end
 						else if (soft_pt && evt_q)
 							st <= 10'd811;
-						else if (fe_avail != 6'd0) begin
+						else if (fe_fault && (fe_fault_addr[31:2] == pc[31:2]))
+							fetch_fault;
+						else begin
 							dq_bytes <= d_bytes;
 							dq_n <= d_n;
 							st <= 10'd132;
 						end
-						else if (fe_fault && (fe_fault_addr[31:2] == pc[31:2]))
-							fetch_fault;
 					10'd132:
 						if ((ca_fault_i || (sp >= sv2v_cast_7_signed(RF_SPILL_AT))) || (has_link && (sp <= sv2v_cast_7_signed(RF_RELOAD_AT))))
 							st <= 10'd147;
 						else if (d_trunc) begin
-							if (dq_n == 4'd8)
+							if (dq_n == 4'd0)
+								st <= 10'd147;
+							else if (dq_n == 4'd8)
 								halt(ABI_HALT_BAD_OPCODE, pc);
 							else if (fe_fault)
 								fetch_fault;
@@ -8881,14 +9376,29 @@ module mpy_core (
 							op <= d_op;
 							arg <= d_arg;
 							ext <= d_ext;
+							lf_ix <= (d_op[7:4] == 4'h2 ? d_arg[7:0] : {4'd0, d_op[3:0]});
+							lc_hit_r <= lc_is_hit({4'd0, dq_bytes[3:0]});
+							lc_way_r <= lc_hit_way({4'd0, dq_bytes[3:0]});
 							op_pc <= pc;
 							pc <= pc + d_len;
 							soft_pt <= 1'b0;
+							scr_id <= SCR_NONE;
 							extv <= d_extv;
 							nops <= nops + 32'd1;
 							trace <= 1'b1;
-							st <= 10'd139;
+							st <= (((((dq_bytes[7:0] >= 8'h24) && (dq_bytes[7:0] <= 8'h29)) || (dq_bytes[7:0] == 8'h34)) || (dq_bytes[7:0] == 8'h36)) || (dq_bytes[7:0] == 8'h68) ? 10'd818 : 10'd139);
 						end
+					10'd818: begin
+						call_fit_r <= sv2v_cast_16((sv2v_cast_10(arg[7:0]) + {1'b0, arg[15:8], 1'b0}) + (op == 8'h36 ? 10'd2 : 10'd1)) <= resident_reals;
+						call_ring_r <= ((sv2v_cast_10(arg[7:0]) + {1'b0, arg[15:8], 1'b0}) + (op == 8'h36 ? 10'd2 : 10'd1)) <= sv2v_cast_10_signed(MPY_RF_DEPTH);
+						call_big_r <= (sv2v_cast_10(arg[7:0]) + {1'b0, arg[15:8], 1'b0}) > 10'd224;
+						yf_fast_r <= ((inj == VNONE) && (rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))] == VNONE)) && (tg(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))]) == ABI_TAG_OBJECT);
+						if (((op != 8'h34) && (op != 8'h36)) && (op != 8'h68)) begin
+							lc_hit_r <= lc_is_hit(lf_ix);
+							lc_way_r <= lc_hit_way(lf_ix);
+						end
+						st <= 10'd139;
+					end
 					10'd139: begin
 						jt <= jt_c;
 						if (aalu_pend && !aalu_pass(op)) begin
@@ -8898,9 +9408,9 @@ module mpy_core (
 							end
 						end
 						else if (((op >= 8'hb0) && (op < 8'hc0)) || (op == 8'h24)) begin
-							vi = (op == 8'h24 ? arg[7:0] : op - 8'hb0);
-							if (lc_is_hit(vi)) begin
-								vs0 = {4'd0, lc_hit_way(vi)};
+							vi = lf_ix;
+							if (lc_hit_r) begin
+								vs0 = {4'd0, lc_way_r};
 								if ((lc_d[vs0[2:0]] == VNULL) && !(fflags & FF_FW))
 									raise_msg(ABI_MSG_LOCAL_UNBOUND);
 								else begin
@@ -8915,7 +9425,7 @@ module mpy_core (
 							end
 						end
 						else if (((op >= 8'hc0) && (op < 8'hd0)) || (op == 8'h26)) begin
-							vi = (op == 8'h26 ? arg[7:0] : op - 8'hc0);
+							vi = lf_ix;
 							if ((cfg_lc_n != 4'd0) && cfg_lc_wb) begin
 								sp <= sp - 7'd1;
 								lc_fill(vi, rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))], 1'b1, 1'b1, 10'd147);
@@ -8929,8 +9439,8 @@ module mpy_core (
 						end
 						else if ((((op == 8'h25) || (op == 8'h27)) || (op == 8'h29)) || (op == 8'h28)) begin
 							vi = arg[7:0];
-							if (lc_is_hit(vi)) begin
-								vs0 = {4'd0, lc_hit_way(vi)};
+							if (lc_hit_r) begin
+								vs0 = {4'd0, lc_way_r};
 								lc_note(vs0[2:0]);
 								if ((lc_d[vs0[2:0]] == VNULL) && ((op == 8'h28) || !(fflags & FF_FW)))
 									raise_msg(ABI_MSG_LOCAL_UNBOUND);
@@ -8971,6 +9481,8 @@ module mpy_core (
 						else if ((op >= 8'hd7) && (op < 8'hfa)) begin
 							n_o <= op - 8'hd7;
 							st <= 10'd32;
+							bin_num_r <= numlike(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))]) && numlike(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]);
+							bin_cx_r <= (((tg(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))]) == ABI_TAG_COMPLEX) || (tg(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]) == ABI_TAG_COMPLEX)) && cx_operand(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))])) && cx_operand(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]);
 						end
 						else
 							case (op)
@@ -9183,7 +9695,7 @@ module mpy_core (
 									v0 = {24'd0, arg[7:0]};
 									v1 = {24'd0, arg[15:8]};
 									v2 = (v0 + (v1 << 1)) + (op == 8'h36 ? 32'd2 : 32'd1);
-									if (v2 <= sv2v_cast_32(resident_reals)) begin
+									if (call_fit_r) begin
 										rf_reload_miss <= 1'b0;
 										vs0 = sv2v_cast_7((sp - sv2v_cast_7(v0)) - sv2v_cast_7(2 * v1));
 										vs1 = vs0 - (op == 8'h36 ? 7'd2 : 7'd1);
@@ -9205,11 +9717,11 @@ module mpy_core (
 										crk <= ABI_RK_PUSH;
 										wr(ab_ptr(8'd0), rf[rf_base[3:0] + sv2v_cast_4(vs1)], 10'd599);
 									end
-									else if ((has_link && !rf_reload_miss) && (v2 <= MPY_RF_DEPTH)) begin
-										rf_resume <= 10'd139;
+									else if ((has_link && !rf_reload_miss) && call_ring_r) begin
+										rf_resume <= 10'd818;
 										st <= 10'd566;
 									end
-									else if ((v0 + (v1 << 1)) > 32'd224)
+									else if (call_big_r)
 										raise_err(ABI_ERR_STAR_ARGS, VNULL, VNULL);
 									else begin
 										rf_reload_miss <= 1'b0;
@@ -9247,7 +9759,7 @@ module mpy_core (
 										st <= 10'd193;
 								8'h68: begin
 									fflags <= fflags & ~FF_YFAST;
-									if (((inj == VNONE) && (rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))] == VNONE)) && (tg(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))]) == ABI_TAG_OBJECT))
+									if (yf_fast_r)
 										rd(adr(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))]), 10'd197);
 									else begin
 										aux <= inj;
@@ -10020,7 +10532,7 @@ module mpy_core (
 					end
 					10'd586:
 						if ((xsp != 5'd0) && (sw_k != 2'd3)) begin
-							v0 = exc_ptr(fbase, xsp - 5'd1) + {28'd0, sw_k, 2'b00};
+							v0 = xb_r + sv2v_cast_32((10'd12 * sv2v_cast_10(xsp - 5'd1)) + {6'd0, sw_k, 2'b00});
 							case (sw_k)
 								2'd0:
 									wr(v0, {4'd0, xh}, 10'd586);
@@ -10047,20 +10559,20 @@ module mpy_core (
 								ret;
 							end
 							else begin
-								rd(exc_ptr(fbase, xsp - 5'd2), 10'd587);
+								rd(exc_ptr_f(xsp - 5'd2), 10'd587);
 								xsp <= xsp - 5'd1;
 								sw_k <= 2'd1;
 							end
 						end
 						else if (sw_k == 2'd1) begin
 							xh <= md;
-							rd(aoff(exc_ptr(fbase, xsp - 5'd1), 4), 10'd587);
+							rd(exc_ptr_k(xsp - 5'd1, 2'd1), 10'd587);
 							sw_k <= 2'd2;
 						end
 						else if (sw_k == 2'd2) begin
 							xv <= md[15:0];
 							xf <= md[31];
-							rd(aoff(exc_ptr(fbase, xsp - 5'd1), 8), 10'd587);
+							rd(exc_ptr_k(xsp - 5'd1, 2'd2), 10'd587);
 							sw_k <= 2'd3;
 						end
 						else begin
@@ -10086,18 +10598,18 @@ module mpy_core (
 						if (xsp == 5'd0)
 							ret;
 						else if (sw_k == 2'd0) begin
-							rd(exc_ptr(fbase, xsp - 5'd1), 10'd589);
+							rd(exc_ptr_f(xsp - 5'd1), 10'd589);
 							sw_k <= 2'd1;
 						end
 						else if (sw_k == 2'd1) begin
 							xh <= md;
-							rd(aoff(exc_ptr(fbase, xsp - 5'd1), 4), 10'd589);
+							rd(exc_ptr_k(xsp - 5'd1, 2'd1), 10'd589);
 							sw_k <= 2'd2;
 						end
 						else if (sw_k == 2'd2) begin
 							xv <= md[15:0];
 							xf <= md[31];
-							rd(aoff(exc_ptr(fbase, xsp - 5'd1), 8), 10'd589);
+							rd(exc_ptr_k(xsp - 5'd1, 2'd2), 10'd589);
 							sw_k <= 2'd3;
 						end
 						else begin
@@ -10106,7 +10618,7 @@ module mpy_core (
 						end
 					10'd590:
 						if (sw_k == 2'd0) begin
-							rd(aoff(exc_ptr(fbase, sw_i[4:0]), 8), 10'd590);
+							rd(exc_ptr_k(sw_i[4:0], 2'd2), 10'd590);
 							sw_k <= 2'd1;
 						end
 						else if (mv != VNULL) begin
@@ -10118,7 +10630,7 @@ module mpy_core (
 						else if (sw_i == 32'd0)
 							raise_msg(ABI_MSG_NO_ACTIVE_EXC);
 						else begin
-							rd(aoff(exc_ptr(fbase, sw_i[4:0] - 5'd1), 8), 10'd590);
+							rd(exc_ptr_k(sw_i[4:0] - 5'd1, 2'd2), 10'd590);
 							sw_i <= sw_i - 32'd1;
 						end
 					10'd591:
@@ -10373,7 +10885,7 @@ module mpy_core (
 						if ((scr_id != SCR_NONE) && (scr_id != SCR_IT))
 							scr_go_store(scr_id, 10'd771);
 						else begin
-							begin : sv2v_autoblock_20
+							begin : sv2v_autoblock_22
 								reg signed [31:0] k;
 								for (k = 0; k < 4; k = k + 1)
 									sV[k] <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6((sp - 7'd4) + sv2v_cast_7_signed(k)))];
@@ -10484,6 +10996,7 @@ module mpy_core (
 						st <= 10'd580;
 					end
 					10'd66: begin
+						bl_base <= stk_depth - arg[15:0];
 						v0 = (arg < 32'd4 ? 32'd4 : arg);
 						wb_v[0] <= vint(arg);
 						wb_v[1] <= vint(v0);
@@ -10501,8 +11014,8 @@ module mpy_core (
 							st <= 10'd580;
 						end
 						else begin
-							v0 = (sv2v_cast_32(stk_depth) - arg) + gi;
-							if (stk_hit(v0[15:0])) begin
+							v0 = {16'd0, bl_base + gi[15:0]};
+							if (sv2v_cast_16(arg - gi) <= resident_reals) begin
 								wr((adr(t[0]) + 12) + (4 * gi), stk_val(v0[15:0]), 10'd67);
 								gi <= gi + 32'd1;
 							end
@@ -11215,11 +11728,11 @@ module mpy_core (
 							st <= 10'd140;
 						else if (v0 == ABI_BINOP_IN)
 							st <= 10'd243;
-						else if (((((tg(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))]) == ABI_TAG_COMPLEX) || (tg(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]) == ABI_TAG_COMPLEX)) && cx_operand(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))])) && cx_operand(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))])) && ((((((v0 == ABI_BINOP_ADD) || (v0 == ABI_BINOP_INPLACE_ADD)) || (v0 == ABI_BINOP_SUBTRACT)) || (v0 == ABI_BINOP_INPLACE_SUBTRACT)) || (v0 == ABI_BINOP_MULTIPLY)) || (v0 == ABI_BINOP_INPLACE_MULTIPLY))) begin
+						else if (bin_cx_r && ((((((v0 == ABI_BINOP_ADD) || (v0 == ABI_BINOP_INPLACE_ADD)) || (v0 == ABI_BINOP_SUBTRACT)) || (v0 == ABI_BINOP_INPLACE_SUBTRACT)) || (v0 == ABI_BINOP_MULTIPLY)) || (v0 == ABI_BINOP_INPLACE_MULTIPLY))) begin
 							cx_op <= ((v0 == ABI_BINOP_ADD) || (v0 == ABI_BINOP_INPLACE_ADD) ? CX_ADD : ((v0 == ABI_BINOP_SUBTRACT) || (v0 == ABI_BINOP_INPLACE_SUBTRACT) ? CX_SUB : CX_MUL));
 							cx_start(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))], rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]);
 						end
-						else if ((numlike(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))]) && numlike(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))])) && ((v0 <= ABI_BINOP_NOT_EQUAL) || ((v0 >= ABI_BINOP_INPLACE_OR) && (v0 <= ABI_BINOP_POWER)))) begin
+						else if (bin_num_r && ((v0 <= ABI_BINOP_NOT_EQUAL) || ((v0 >= ABI_BINOP_INPLACE_OR) && (v0 <= ABI_BINOP_POWER)))) begin
 							alu_op <= ((v0 >= ABI_BINOP_INPLACE_OR) && (v0 < ABI_BINOP_OR) ? sv2v_cast_6(v0 + 32'd13) : sv2v_cast_6(v0));
 							if ((tg(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))]) != ABI_TAG_INT64) && (tg(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]) != ABI_TAG_INT64)) begin
 								na_f <= tg(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))]) == ABI_TAG_FLOAT;
@@ -11911,7 +12424,7 @@ module mpy_core (
 							rd(ab_ptr(ab_lo), 10'd672);
 					10'd672: begin
 						ab_q <= mv;
-						v0 = sv2v_cast_32(ab_pe - ab_lo);
+						v0 = {24'd0, nargs_r};
 						v1 = mv[31:0];
 						case (nid)
 							ABI_N_LEN:
@@ -13178,7 +13691,7 @@ module mpy_core (
 						else
 							rd(x3 + x0, 10'd380);
 					10'd380: begin
-						begin : sv2v_autoblock_21
+						begin : sv2v_autoblock_23
 							reg signed [31:0] k;
 							for (k = 0; k < 4; k = k + 1)
 								gi[k] <= ((md[8 * k+:8] == x4[7:0]) && ({x0[31:2], sv2v_cast_2_signed(k)} >= x1)) && ({x0[31:2], sv2v_cast_2_signed(k)} < x2);
@@ -13227,6 +13740,12 @@ module mpy_core (
 						end
 						else
 							rd(x2 + x4, 10'd368);
+					10'd817: begin
+						v1 = {24'd0, byte_of(t[2][31:0], bc_k)};
+						v2 = {24'd0, byte_of(md, bc_k)};
+						t[7] <= vint(v1 - v2);
+						st <= 10'd774;
+					end
 					10'd368: begin
 						t[2] <= vint(md);
 						rd(x3 + x4, 10'd369);
@@ -13234,17 +13753,15 @@ module mpy_core (
 					10'd369: begin
 						v0 = gi - x4;
 						vs0 = 7'd4;
-						begin : sv2v_autoblock_22
+						begin : sv2v_autoblock_24
 							reg signed [31:0] k;
 							for (k = 3; k >= 0; k = k - 1)
 								if ((k < v0) && (t[2][8 * k+:8] != md[8 * k+:8]))
 									vs0 = sv2v_cast_7_signed(k);
 						end
 						if (vs0 != 7'd4) begin
-							v1 = {24'd0, byte_of(t[2][31:0], vs0[1:0])};
-							v2 = {24'd0, byte_of(md, vs0[1:0])};
-							t[7] <= vint(v1 - v2);
-							st <= 10'd774;
+							bc_k <= vs0[1:0];
+							st <= 10'd817;
 						end
 						else begin
 							x4 <= x4 + 32'd4;
@@ -13432,14 +13949,18 @@ module mpy_core (
 						rd(aoff(x4, 20), 10'd186);
 					end
 					10'd186: begin
+						gr_geo_r <= (12'd17 + sv2v_cast_12((md[20:16] == 0 ? 7'd0 : x1[22:16]))) + (12'd3 * sv2v_cast_12(md[20:16]));
+						st <= 10'd815;
+					end
+					10'd815: begin
 						v0 = (noframe ? ABI_FRAME_BASE : stk_top);
-						v3 = sv2v_cast_32((12'd17 + sv2v_cast_12((md[20:16] == 0 ? 7'd0 : x1[22:16]))) + (12'd3 * sv2v_cast_12(md[20:16])));
+						v3 = sv2v_cast_32(gr_geo_r);
 						v1 = (noframe ? ABI_FRAME_BASE + (v3 << 2) : fbase + {18'd0, sv2v_cast_12(stk_off) + v3[11:0], 2'b00});
 						if ((x1[6:0] == 7'd0) && (t[1] != VNONE)) begin
 							fflags <= fflags & ~FF_YFAST;
 							raise_msg(ABI_MSG_GEN_SEND);
 						end
-						else if (v1 > spill_hp) begin
+						else if ((noframe ? (ABI_FRAME_BASE + (v3 << 2)) > spill_hp : over_hp(v3))) begin
 							fflags <= fflags & ~FF_YFAST;
 							raise_msg(ABI_MSG_RECURSION);
 						end
@@ -13958,11 +14479,12 @@ module mpy_core (
 							rd(sA[2] + sA[4], 10'd497);
 					10'd497: begin
 						sA[5] <= md;
+						v0 = sA[0] - sA[4];
+						se_mask <= (v0 >= 32'd4 ? 32'hffffffff : (v0[1:0] == 2'd3 ? 32'h00ffffff : (v0[1:0] == 2'd2 ? 32'h0000ffff : (v0[1:0] == 2'd1 ? 32'h000000ff : 32'd0))));
 						rd(sA[3] + sA[4], 10'd498);
 					end
 					10'd498: begin
-						v0 = sA[0] - sA[4];
-						v1 = (v0 >= 32'd4 ? 32'hffffffff : (32'd1 << (v0 << 3)) - 32'd1);
+						v1 = se_mask;
 						if (((sA[5] ^ md) & v1) != 32'd0) begin
 							se_eq <= 1'b0;
 							ret;
@@ -14287,8 +14809,10 @@ module mpy_core (
 					end
 					10'd769: begin
 						sA[0] <= next_alloc(sA[0]);
-						alloc(next_alloc(sA[0]) << (lk_set ? 0 : 1), 10'd447);
+						st <= 10'd814;
 					end
+					10'd814:
+						alloc(sA[0] << (lk_set ? 0 : 1), 10'd447);
 					10'd447: begin
 						sA[1] <= al_a;
 						sA[2] <= 32'd0;
@@ -14850,7 +15374,7 @@ module mpy_core (
 						end
 						else if (sw_i <= sv2v_cast_32(spill_ntag)) begin
 							v3 = 32'd0;
-							begin : sv2v_autoblock_23
+							begin : sv2v_autoblock_25
 								reg signed [31:0] k;
 								for (k = 0; k < 8; k = k + 1)
 									begin
@@ -14912,9 +15436,9 @@ module mpy_core (
 							spill_words <= (32'd1 + sv2v_cast_32((v0[5:0] + 6'd7) >> 3)) + v0;
 							reload_top <= spill_addr == spill_hp;
 							if (((v0 < MPY_RF_CHUNK_MIN) || (v0 > MPY_RF_CHUNK_MAX)) || (v2 > MPY_RF_DEPTH)) begin
-								if (rf_resume == 10'd139) begin
+								if (rf_resume == 10'd818) begin
 									rf_reload_miss <= 1'b1;
-									st <= 10'd139;
+									st <= 10'd818;
 								end
 								else
 									halt(ABI_HALT_INTERNAL, 32'h00005f01);
@@ -14947,11 +15471,15 @@ module mpy_core (
 						end
 					10'd570:
 						rd(srd_addr, 10'd571);
+					10'd819:
+						rd(srd_addr + {12'd0, srd_o, 2'b00}, 10'd572);
 					10'd571: begin
 						v0 = sv2v_cast_32(mpy_rf_chunk_count(mt, md));
 						v1 = mpy_rf_chunk_prev(md);
-						if ((v0 != 32'd0) && (srd_off < v0[15:0]))
-							rd(((srd_addr + 32'd4) + (sv2v_cast_32((v0[5:0] + 6'd7) >> 3) << 2)) + (((v0 - 32'd1) - sv2v_cast_32(srd_off)) << 2), 10'd572);
+						if ((v0 != 32'd0) && (srd_off < v0[15:0])) begin
+							srd_o <= (18'd1 + sv2v_cast_18((v0[5:0] + 6'd7) >> 3)) + sv2v_cast_18((v0 - 32'd1) - sv2v_cast_32(srd_off));
+							st <= 10'd819;
+						end
 						else if ((v1 == 32'd0) || (srd_hops == spilled_reals)) begin
 							srd_v <= VNULL;
 							ret;
@@ -15019,7 +15547,7 @@ module mpy_core (
 					10'd577:
 						if (gi == x1)
 							st <= 10'd579;
-						else if (stk_hit(x2[15:0] + gi[15:0])) begin
+						else if (sv2v_cast_16((x3 - (b0 ? 32'd2 : 32'd1)) - gi) <= resident_reals) begin
 							wr(ab_ptr(sv2v_cast_8(32 + gi)), stk_val(x2[15:0] + gi[15:0]), 10'd577);
 							gi <= gi + 32'd1;
 						end
@@ -15067,8 +15595,12 @@ module mpy_core (
 							sp <= sp - 7'd1;
 							drop_left <= drop_left - 16'd1;
 						end
-					10'd545:
-						if (stk_depth <= ur_target) begin
+					10'd545: begin
+						ur_le <= stk_depth <= ur_target;
+						st <= 10'd816;
+					end
+					10'd816:
+						if (ur_le) begin
 							if (sp >= sv2v_cast_7_signed(14)) begin
 								rf_resume <= 10'd545;
 								st <= 10'd563;
@@ -15084,8 +15616,10 @@ module mpy_core (
 							rf_resume <= 10'd545;
 							st <= 10'd566;
 						end
-						else if (sp != 7'd0)
+						else if (sp != 7'd0) begin
 							sp <= sp - 7'd1;
+							st <= 10'd545;
+						end
 						else
 							st <= 10'd147;
 					default:
