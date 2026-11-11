@@ -72,6 +72,15 @@ class Layout(unittest.TestCase):
         gx0, _, gx1, _ = self.rect(self.place[-1])
         self.assertTrue(ax + aw < gx0 and gx1 < bx)
 
+    def test_route_blockages_stop_short_of_the_pins(self):
+        (ax, _, aw, _), (bx, _, bw, _) = pm.route_blocks(self.blocks, 15.0)
+        left_pins = max(self.rect(p)[2] for p in self.mem[:8])
+        right_pins = min(self.rect(p)[0] for p in self.mem[8:16])
+        self.assertEqual(ax, 0)
+        self.assertAlmostEqual(bx + bw, self.die_w, places=2)
+        self.assertTrue(0 < left_pins - (ax + aw) <= 10)
+        self.assertTrue(0 < bx - right_pins <= 10)
+
     def test_die_size(self):
         self.assertLess(self.die_w * self.die_h, 31e6)
         self.assertLess(self.die_w, 10000)

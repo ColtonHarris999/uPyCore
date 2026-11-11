@@ -19,7 +19,10 @@ channel; a bank is one quadrant (bank 0 bottom left, 1 bottom right, 2 top
 left, 3 top right). Standard cells are kept out of everything but the
 channel, and the chip's I/O pins sit on the top edge across the channel
 only, clk_i in the middle: left to Hammer they fill a whole die edge and
-pull the logic out along the macros. The channel gets --logic-area / --util
+pull the logic out along the macros. Signal routing on met1 to met3 is
+blocked outside the channel too: the router otherwise takes nets whose
+pins are 1 mm apart at a channel edge on an 8 mm met1 detour through the
+gaps between stacked macros and round the die margin (-15 ns at 12 ns). The channel gets --logic-area / --util
 of room (default 45% full), 100 um from the die edge.
 
     python3 ~/upycore/upycore/synth/hammer/place_macros.py [design_folder]
@@ -148,6 +151,14 @@ def layout(bank, gc, args):
             [(snap(x, SITE_W), y, snap(w, SITE_W), h) for x, y, w, h in blocks])
 
 
+def route_blocks(blocks, inset: float):
+    """The place blockages, pulled `inset` back from the channel, for routing."""
+    out = []
+    for x, y, w, h in blocks:
+        out.append((x, y, round(w - inset, 3), h) if x == 0 else (round(x + inset, 3), y, round(w - inset, 3), h))
+    return out
+
+
 def top_ports(path: Path) -> list[str]:
     """Port bits of mpy_soc, from the sv2v file (numeric ranges), clk_i first."""
     text = path.read_text()
@@ -218,6 +229,11 @@ def main() -> int:
         print(f"  {p:45s} x {x:10.2f}  y {y:8.2f}  {o}")
     for x, y, w, h in blocks:
         print(f"  no standard cells in x {x:.2f}..{x + w:.2f}, y {y:.2f}..{y + h:.2f}")
+    # Keep signal routes out of the macro columns (stay clear of the macro
+    # pins on the channel side).
+    rblocks = route_blocks(blocks, 15.0) if split else []
+    for x, y, w, h in rblocks:
+        print(f"  no met1-met3 routing in x {x:.2f}..{x + w:.2f}, y {y:.2f}..{y + h:.2f}")
     if args.dry_run:
         return 0
 
@@ -244,6 +260,9 @@ def main() -> int:
     for i, (x, y, w, h) in enumerate(blocks):
         pcs.append({"path": f"{TOP}/mpy_blk{i}", "type": "obstruction", "obs_types": ["place"],
                     "x": x, "y": y, "width": w, "height": h})
+    for i, (x, y, w, h) in enumerate(rblocks):
+        pcs.append({"path": f"{TOP}/mpy_blk_route{i}", "type": "obstruction", "obs_types": ["route"],
+                    "layers": ["met1", "met2", "met3"], "x": x, "y": y, "width": w, "height": h})
     if pins:
         for k in [k for k in doc if k.startswith("vlsi.inputs.pin")]:
             del doc[k]

@@ -363,6 +363,11 @@ channel between them, on a die of about 9.7 x 3.0 mm:
 - Two placement blockages (`obstruction` constraints) cover everything
   outside the channel. Without them the placer puts cells in the die margin
   and in the 22 um gaps between stacked macros, millimetres from the logic.
+- Two routing blockages on met1 to met3 cover the same area, stopping
+  5 um inside the macros' pin edges. Without them the router sent a dozen
+  nets, each with both pins at a channel edge about 1 mm apart, on 8 to
+  9 mm met1 detours along the gaps between stacked macros and round the
+  die margin; those nets alone cost 15 ns in the first 12 ns runs.
 - The chip's 231 I/O pins get explicit met2 locations on the top edge,
   across the channel only, with `clk_i` in the middle. The class default
   spreads them along a whole die edge, which here runs over the macros.
