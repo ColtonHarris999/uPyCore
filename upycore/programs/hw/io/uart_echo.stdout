@@ -1,0 +1,5 @@
+UART(0, baudrate= True , bits=8, parity=None, stop=1)
+idle read None 0
+any 12 line b'hello world\n'
+wrote 12
+txdone True rest None

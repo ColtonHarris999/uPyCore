@@ -76,6 +76,18 @@ def main() -> int:
     ap.add_argument("--out", type=Path, help="output folder inside the repository (default build/sta/<top>)")
     ap.add_argument("--groups", type=int, default=60, help="register groups to list")
     ap.add_argument("--compare", nargs=2, type=Path, metavar=("BASE", "NEW"))
+    ap.add_argument("--rtl", nargs="+", help="files (from the repository root) instead of mpy_synth.TOPS[top]")
+    ap.add_argument("--inc", action="append", default=[], help="extra include directory")
+    ap.add_argument("--param", action="append", default=[], help="top parameter NAME=VALUE (slang -G)")
+    ap.add_argument("--module", help="the top module when it differs from the top name")
+    ap.add_argument("--no-fsm", action="store_true",
+                    help="keep state machines as the RTL writes them (synth -nofsm): Yosys's FSM "
+                         "recoding responds to unrelated netlist changes, so gate G3 compares "
+                         "both trees this way")
+    ap.add_argument("--techmap-async", action="store_true",
+                    help="drop $print cells (initial $display) and techmap once more after "
+                         "async2sync (word-level cells it leaves); for the I/O island with "
+                         "no2usb; off for the gated tops")
     args = ap.parse_args()
     if args.compare:
         compare(*args.compare)
@@ -89,14 +101,36 @@ def main() -> int:
     for f in ("sram_stub.sv", "ffbox.v", "ffmap.v", "noarst.v", "map.abc"):
         shutil.copy(HERE / f, out / f)
     shutil.copy(args.lib, out / "tt.lib")
-    files = " ".join((f"{rel}/sram_stub.sv" if f == m.SRAM_MODEL else f"upycore/rtl/{f}") for f in m.TOPS[args.top])
+    def src(f: str) -> str:
+        if Path(f).name == m.SRAM_MODEL:
+            return f"{rel}/sram_stub.sv"
+        return f if "/" in f else f"upycore/rtl/{f}"
+    rtl = list(args.rtl or m.TOPS[args.top])
+    incs = list(args.inc) if args.rtl else list(m.INCDIRS.get(args.top, [])) + list(args.inc)
+    if "iocore/rtl/iocore_top.sv" in rtl and "mpy_soc.sv" in rtl and os.environ.get("STA_ISLAND") != "1":
+        # The I/O island runs on its own clock and is timed in its own run
+        # (iocore/tools/island_measure.py). Here it is a stub whose pins are
+        # flops, as the SRAM macros are, so the hart-domain run sees the
+        # bridge's FIFOs and nothing behind them. STA_ISLAND=1 keeps it.
+        rtl = [f for f in rtl if not f.startswith(("vendor/", "iocore/rtl/"))]
+        rtl.insert(rtl.index("mpy_soc.sv"), "iocore/rtl/sta/iocore_top_stub.sv")
+        incs = [d for d in incs if not d.startswith("vendor/")]
+    files = " ".join(src(f) for f in rtl)
+    module = args.module or args.top
+    inc = " ".join(f"-I {d}" for d in ["upycore/rtl", *incs])
+    params = " ".join(f"-G {p}" for p in args.param)
     lines = [
-        f"read_slang -j 1 --single-unit --top {args.top} -DSYNTHESIS -I upycore/rtl {files}",
+        f"read_slang -j 1 --single-unit --top {module} -DSYNTHESIS {inc} {params} {files}",
         f"read_verilog -lib {rel}/ffbox.v",
-        f"hierarchy -check -top {args.top}",
-        f"synth -flatten -noshare -noabc -top {args.top}",
+        f"hierarchy -check -top {module}",
+        *(["delete t:$print", "opt_clean"] if args.techmap_async else []),
+        f"synth -flatten -noshare -noabc{' -nofsm' if args.no_fsm else ''} -top {module}",
+        # Flatten's scope annotations carry no logic; one survives for a
+        # module with unconnected inout ports (the island stub's USB pads).
+        "delete t:$scopeinfo",
         f"techmap -map {rel}/noarst.v",
         "async2sync",
+        *(["techmap"] if args.techmap_async else []),
         "dffunmap",
         f"techmap -map {rel}/ffmap.v",
         "opt_clean",

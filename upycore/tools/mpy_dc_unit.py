@@ -6,6 +6,11 @@ The RTL shares localparams and functions through file-scope `include of
 (the Yosys flow uses slang --single-unit for the same reason). This script
 concatenates a top's sources from mpy_synth.TOPS, inlines every `include,
 and defines SYNTHESIS, so DC reads a single file with no search path.
+mpy_soc includes the I/O island (CVE2 and iocore/rtl, entries with a '/'
+are paths from the repository root, includes found through
+mpy_synth.INCDIRS); an `include the search does not find is kept as it is
+(CVE2's custom-PMP branch, which SYNTHESIS does not enable). CVE2's clock
+gate is the sky130 ICG cell (UNIT_SUBST).
 
 Usage::
 
@@ -21,19 +26,40 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from mpy_synth import ROOT, RTL, TOPS  # noqa: E402
+from mpy_synth import INCDIRS, ROOT, RTL, TOPS  # noqa: E402
 
 INCLUDE_RE = re.compile(r'^\s*`include\s+"([^"]+)"')
 
+# Sources the ASIC unit takes from elsewhere: CVE2's behavioral clock gate
+# becomes the library's ICG cell, so the tool maps no latch of its own.
+UNIT_SUBST = {"vendor/cve2/rtl/cve2_clock_gate.sv": "iocore/rtl/asic/cve2_clock_gate.sv"}
 
-def _inline(path: Path, seen_stack: list[Path]) -> list[str]:
+
+def _src(name: str) -> Path:
+    # TOPS entries with a '/' are paths from the repository root (the I/O
+    # island and CVE2); the rest are in upycore/rtl.
+    return ROOT / name if "/" in name else RTL / name
+
+
+def _find_include(name: str, path: Path, incdirs: list[Path]) -> Path | None:
+    for d in [path.parent, RTL, *incdirs]:
+        if (d / name).is_file():
+            return d / name
+    return None
+
+
+def _inline(path: Path, seen_stack: list[Path], incdirs: list[Path] | None = None) -> list[str]:
+    incdirs = incdirs or []
     if path in seen_stack:
         raise SystemExit(f"include cycle: {' -> '.join(p.name for p in seen_stack + [path])}")
     out = [f"// ---- begin {path.name} ----\n"]
     for line in path.read_text().splitlines(keepends=True):
         m = INCLUDE_RE.match(line)
-        if m:
-            out += _inline(RTL / m.group(1), seen_stack + [path])
+        inc = _find_include(m.group(1), path, incdirs) if m else None
+        if inc is not None:
+            out += _inline(inc, seen_stack + [path], incdirs)
+        elif m and path.is_relative_to(RTL):
+            raise SystemExit(f"{path}: cannot find `include \"{m.group(1)}\"")
         else:
             out.append(line)
     if out[-1] and not out[-1].endswith("\n"):
@@ -54,9 +80,10 @@ def write_unit(top: str, out_dir: Path, skip: tuple[str, ...] = (), name: str | 
     ]
     if skip:
         lines.append(f"// Not in this file: {', '.join(skip)}\n")
+    incdirs = [ROOT / d for d in INCDIRS.get(top, [])]
     for src in TOPS[top]:
         if src not in skip:
-            lines += _inline(RTL / src, [])
+            lines += _inline(_src(UNIT_SUBST.get(src, src)), [], incdirs)
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / f"{name or top}.sv"
     out.write_text("".join(lines))

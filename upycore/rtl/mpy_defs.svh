@@ -135,6 +135,7 @@ localparam int MPY_FLASH_IDX_W     = MPY_MEM_WORD_AW;
 // Boot stream in SPI NAND (upycore/docs/mpy_boot.md): magic, image word
 // count, then groups of one packed tag word and eight image words.
 localparam logic [31:0] MPY_BOOT_MAGIC = 32'h4259_5055; // "UPYB"
+localparam logic [31:0] MPY_IOCB_MAGIC = 32'h4243_4F49; // "IOCB": the I/O core's boot section
 localparam int MPY_MMIO_WORDS      = 1024;
 localparam int MPY_SIM_WORDS       = 64;
 

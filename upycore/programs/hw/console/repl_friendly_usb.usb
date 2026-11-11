@@ -1,0 +1,39 @@
+# repl_friendly.uart for the USB host (tb_usb_host's text/wait/sleep).
+# The friendly REPL (shared/runtime/pyexec.c pyexec_friendly_repl and
+# shared/readline/readline.c in MicroPython v1.29.0) on the UART console.
+wait Type "help()" for more information.\r\n>>>\x20
+# an expression: __repl_print__
+text 1 + 2\r
+wait 3\r\n>>>\x20
+# a compound statement: "... " with auto-indent; backspace removes the
+# indent (4 spaces), and the empty line ends the statement
+text for i in range(3):\r
+wait ...\x20\x20\x20\x20\x20
+text print(i * i)\r
+wait ...\x20\x20\x20\x20\x20
+text \x08\r
+wait 4\r\n>>>\x20
+# an exception: the traceback on stdout, then the prompt
+text 1 // 0\r
+wait >>>\x20
+# Ctrl-C while a command runs (armed only then): KeyboardInterrupt
+text while True:\r
+wait ...\x20\x20\x20\x20\x20
+text pass\r
+wait ...\x20\x20\x20\x20\x20
+text \x08\r
+sleep 400000
+text \x03
+wait KeyboardInterrupt
+wait >>>\x20
+# Ctrl-C at the prompt cancels the line
+text abc\x03
+wait >>>\x20
+# Ctrl-B: the banner again
+text \x02
+wait Type "help()" for more information.\r\n>>>\x20
+# Ctrl-D: soft reboot, and the friendly REPL again
+text \x04
+wait MPY: soft reboot\r\n
+wait Type "help()" for more information.\r\n>>>\x20
+finish

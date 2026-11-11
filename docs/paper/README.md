@@ -29,3 +29,65 @@ Needs a TeX distribution with `tikz`, `booktabs`, `hyperref`, `listings`,
 - Link the living opcode matrix (`pycore/docs/bytecode_support.md`) rather than
   duplicating support status that churns weekly.
 - Remaining work lives in `planning/README.md` (open plans), not in these notes.
+
+## Benchmark comparison figures
+
+Run from the repository root with the pinned submodules, Verilator, and
+Matplotlib 3.7 or newer installed. Set the projection period from the timing analysis for
+the design being reported. For example, the mapped Sky130 HD TT estimate for
+the core RTL in `676d273` was 11.775 ns.
+
+```bash
+make mpy-cross sim
+python3 upycore/tools/shortlist_bench.py \
+  --out build/paper-shortlist \
+  --compare upycore/docs/benchmarks/shortlist/kernels.json
+python3 upycore/tools/perf_inventory.py \
+  --only bm_pidigits --points 100x100 --bigint --out build/paper-pidigits
+python3 upycore/tools/paper_benchmark_plot.py build/paper-shortlist/results.json \
+  --pidigits build/paper-pidigits/results.json --clock-ns 11.775 \
+  --out-dir build/paper-figures
+```
+
+The commands measure the benchmark run callable with CA and AALU enabled at
+N=100, M=100. Use `make oracle-mpz` to check Pi digits against the pinned
+MicroPython MPZ oracle. The inventory runner uses CPython for Pi digits when
+the MPZ oracle is unavailable. The shortlist comparison checks source and
+harness identity and result callbacks, whose correctness coverage varies by
+kernel.
+
+`core_qstr` needs a note wherever it is reported. It times `str()` of a
+non-interned string, which MicroPython answers with a search of the interned
+strings (`qstr_find_strn`) and a copy; µPyCore returns the argument itself
+(the CPython behaviour, a documented difference from the oracle:
+`upycore/docs/known_limitations.md`), so it does neither. Its ratios against
+the boards (29x to 52x) are not a like-for-like comparison. Quote summary
+speedups with and without it: on `45c8947` at the estimated 10.332 ns, the
+geometric mean over the board/kernel pairs (Pystone excluded, Pi digits
+included; the table of November 2026 with PyBD SF6 in place of Pyboard v1.1)
+is 3.87x with it and 3.22x without (per clock, at each board's stock clock:
+6.35x and 5.31x).
+
+The script writes 600 dpi PNGs sized for single- and double-column figures.
+Pystone reports throughput for 300 iterations. The suite plots the remaining
+15 kernels as grouped bars in two panels with a shared linear runtime axis.
+An empty bar slot indicates a missing timing. The speedup
+summary takes the arithmetic mean of the individual board-runtime-to-µPyCore
+runtime ratios on each board's subset of non-Pystone kernels with published
+timings. The figure shows each board's coverage and weights each eligible kernel
+equally. The script prints the paired mean runtimes and the mean speedup.
+
+[benchmark-board-ms.csv](benchmark-board-ms.csv) carries forward (sources, raw numbers and what was verified: [sources.md](sources.md)) the published
+board comparison at the precision recorded in the prior benchmark reports.
+Empty cells indicate unavailable matched timings. The Pyboard and PyBD columns use the
+baseline scores from the cited comparisons converted to milliseconds using
+each workload's normalization count. Firmware versions and measurement
+conditions vary across sources. µPyCore time is RTL cycles multiplied by the
+supplied clock period. State the timing model in the paper caption and identify
+the µPyCore values as projected.
+
+- [Original Pico measurements](https://forums.raspberrypi.com/viewtopic.php?p=2259682)
+- [Stock Pico 2 Arm and RISC-V measurements](https://forums.raspberrypi.com/viewtopic.php?p=2267212)
+- [Pyboard v1.0 standard VM measurements](https://github.com/micropython/micropython/pull/18571)
+- [PyBD SF6 baseline measurements](https://github.com/micropython/micropython/pull/7688)
+- [ESP32-C3 runtimes (MicroPython discussion #10516)](https://github.com/micropython/micropython/discussions/10516)

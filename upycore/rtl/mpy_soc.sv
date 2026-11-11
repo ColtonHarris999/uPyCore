@@ -25,7 +25,15 @@
 // to the simulator-control page (ABI_SIM_BASE) are answered here: a store to
 // SIM_STDOUT or SIM_STDERR emits the low byte on the console port, a store to
 // SIM_HALT stops the core's clock-enable view through halt_o, and a load of
-// SIM_CYCLES returns the cycle counter. Everything else goes to mpy_mem.
+// SIM_CYCLES returns the cycle counter. Core accesses to the I/O bridge's
+// registers in the MMIO window (MPY_MMIO_BASE, mpy_iobr) are answered here
+// the same way. Everything else goes to mpy_mem, which answers any other
+// MMIO address (misaligned, or outside the bridge's registers) with a bus
+// fault.
+//
+// The I/O island (iocore_top: the I/O core, its SRAMs and peripherals) runs
+// on io_clk_i, independent of clk_i; every signal between the two goes
+// through mpy_iobr's dual-clock FIFOs (upycore/docs/mpy_io_core.md).
 module mpy_soc #(
     parameter int SRAM_LATENCY = MPY_SRAM_LATENCY,
     parameter bit CA_TYPE_CACHE = 0,
@@ -36,7 +44,7 @@ module mpy_soc #(
     input  logic        clk_i,
     input  logic        rst_n_i,
 
-    output logic        con_valid_o,
+    output logic        con_valid_o,      // simulator-page console (the sim strap only)
     output logic        con_err_o,
     output logic [7:0]  con_byte_o,
 
@@ -59,7 +67,30 @@ module mpy_soc #(
     output logic        nand_mosi_o,
     input  logic        nand_miso_i,
     output logic        boot_done_o,
-    output logic        boot_err_o
+    output logic        boot_err_o,
+
+    // The I/O island: its clock, the console strap (0 sim, 1 UART, 2 USB),
+    // and its pins.
+    input  logic        io_clk_i,
+    input  logic [1:0]  console_sel_i,
+    input  logic        uart0_rxd_i,
+    output logic        uart0_txd_o,
+    output logic [15:0] gpio_o,
+    output logic [15:0] gpio_oe_o,
+    output logic [15:0] gpio_pu_o,
+    output logic [15:0] gpio_pd_o,
+    input  logic [15:0] gpio_i,
+    output logic        adc_start_o,
+    output logic [3:0]  adc_chan_o,
+    input  logic        adc_done_i,
+    input  logic [11:0] adc_code_i,
+    // USB (the I/O core's no2usb SIE): its own 48 MHz clock and the pads.
+    input  logic        usb_clk_i,
+    inout  wire         usb_dp_io,
+    inout  wire         usb_dn_io,
+    output logic        usb_pu_o,
+    output logic        ioc_dbg_valid_o,
+    output logic [7:0]  ioc_dbg_byte_o
 );
 
     // core <-> port
@@ -115,6 +146,7 @@ module mpy_soc #(
     logic [31:0] am_addr, am_wdata;
     logic [3:0]  am_wtag;
     logic        core_halted;
+    logic        io_evt_pend;     // mpy_iobr: an enabled event is pending (a flop)
     logic [3:0]  core_hcode;
     logic [31:0] core_hval, core_cycles;
 
@@ -143,13 +175,32 @@ module mpy_soc #(
     // block reset below is a flop output, never a gate: the boot loader
     // starts after the SRAM clear, the collector after a good boot, and
     // the core and accelerator once the collector's table is clear.
+    //
+    // pwr_n is the power-on reset. por_n, the hart's reset, is a flop too:
+    // low at power-on, and for 32 clocks on a system reset (machine.reset,
+    // machine.soft_reset, the I/O core's watchdog: mpy_iobr's sys_reset_o).
+    // A system reset restarts everything on por_n (the SRAM clear, the
+    // boot, the collector, the core); the I/O island, the bridge's FIFOs,
+    // the reset cause and the keep word are on pwr_n and carry on, as a
+    // separate I/O chip would.
     logic [1:0]  por_q;
-    logic        por_n, boot_rst_n, gc_rst_n;
+    logic        pwr_n, por_n, boot_rst_n, gc_rst_n;
+    logic        sys_req;
+    logic [4:0]  sys_hold;
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) por_q <= 2'b00;
         else          por_q <= {por_q[0], 1'b1};
     end
-    assign por_n = por_q[1];
+    assign pwr_n = por_q[1];
+    always_ff @(posedge clk_i or negedge pwr_n) begin
+        if (!pwr_n) begin
+            por_n <= 1'b0; sys_hold <= 5'd0;
+        end else begin
+            if (sys_req) sys_hold <= 5'd31;
+            else if (sys_hold != 5'd0) sys_hold <= sys_hold - 5'd1;
+            por_n <= !sys_req && sys_hold == 5'd0;
+        end
+    end
 
     // image_words and requested_pool hold once boot_done rises, so the
     // check taken the cycle after is final; the collector (and so the core)
@@ -178,10 +229,14 @@ module mpy_soc #(
     end
     assign boot_done_o = sys_rst_n;
 
+    logic        ioc_we, ioc_stall, ioc_loaded, ioc_ld_idle;
+    logic [48:0] ioc_data;
+
     mpy_boot u_boot (
         .clk_i, .rst_n_i(boot_rst_n),
         .sck_o(nand_sck_o), .cs_n_o(nand_cs_n_o), .mosi_o(nand_mosi_o), .miso_i(nand_miso_i),
         .ld_we_o(ld_we), .ld_idx_o(ld_idx), .ld_wdata_o(ld_wdata), .ld_wtag_o(ld_wtag),
+        .ioc_we_o(ioc_we), .ioc_data_o(ioc_data), .ioc_stall_i(ioc_stall), .ioc_loaded_o(ioc_loaded),
         .image_words_o(image_words), .pool_bytes_o(requested_pool),
         .done_o(boot_done), .err_o(boot_error)
     );
@@ -226,6 +281,7 @@ module mpy_soc #(
         .sl_response_ready_o(sl_response_ready),
         .ca_dst_o(ca_dst), .ca_src_o(ca_src), .ca_n_o(ca_n), .ca_idle_i(ca_idle),
         .ca_fault_i(ca_fault), .ca_fault_reason_i(ca_fault_reason), .ca_fault_addr_i(ca_fault_addr),
+        .evt_pend_i(io_evt_pend),
         .halted_o(core_halted), .halt_code_o(core_hcode), .halt_value_o(core_hval),
         .cycles_o(core_cycles), .ops_o,
         .trace_o, .trace_pc_o, .trace_op_o, .trace_sp_o
@@ -288,7 +344,11 @@ module mpy_soc #(
     mpy_mem #(
         .NP(4),
         .FLASH_WAIT_STATES(FLASH_WAIT_STATES),
-        .SRAM_LATENCY(SRAM_LATENCY)
+        .SRAM_LATENCY(SRAM_LATENCY),
+        // The core and its fetch queue register the word themselves (md,
+        // the queue), so their answers skip mpy_mem's output flops: one
+        // cycle less on every load.
+        .EARLY(4'b0110)
     ) u_mem (
         .clk_i, .rst_n_i(por_n), .image_words_i(image_words),
         .req_i(m_req), .we_i(m_we), .tag_we_i(m_tag_we), .be_i(m_be),
@@ -299,9 +359,20 @@ module mpy_soc #(
         .init_done_o(mem_ready)
     );
 
-    // Sim-page decode for core requests.
-    logic c_sim;
-    assign c_sim = (mpy_region_of(c_addr) == MPY_REGION_SIM);
+    // Local-page decode for core requests: the simulator page, or one of
+    // the I/O bridge's registers (word aligned, implemented offset). Both
+    // are compares on c_addr's upper bits; the simulator-page compare is
+    // SAT-proven equal to mpy_region_of(c_addr) == MPY_REGION_SIM
+    // (upycore/docs/mpy_io_core.md, Verification). k_sim and p_sim below
+    // mean "a local page" (sim page or bridge); k_io and p_io pick the
+    // bridge.
+    logic c_sim, c_io, c_simpage;
+    assign c_simpage = (c_addr[31:8] == MPY_SIM_BASE[31:8]);
+    assign c_io = (c_addr[31:12] == MPY_MMIO_BASE[31:12]) && (c_addr[1:0] == 2'b00) &&
+                  ((c_addr[11:6] == 6'd0 && c_addr[5:2] <= 4'd13) ||    // 0x000-0x034 registers
+                   (c_addr[11:7] == 5'b10000) ||                        // 0x800-0x87C page (I/O core writes)
+                   (c_addr[11:5] == 7'b1100000));                       // 0xC00-0xC1C page (hart writes)
+    assign c_sim = c_simpage || c_io;
 
     // The core's port. The core posts stores and pipelines loads, and takes
     // acks in order. A request mpy_mem (or the sim page) does not take in
@@ -312,63 +383,112 @@ module mpy_soc #(
     // A simulator-page access is answered here; it is taken (sim_go) only
     // when none of the core's memory accesses is still waiting for its ack
     // (c_out counts those), so the acks stay in order.
-    logic        k_we, k_tag_we, k_sim;
+    logic        k_we, k_tag_we, k_sim, k_io;
+    logic        p_io, io_acc, io_stall;
+    logic [31:0] io_rdata;
     logic [3:0]  k_be, k_wtag;
     logic [31:0] k_addr, k_wdata;
     logic [2:0]  c_out;
     assign p_req = c_pend || c_req;
     assign p_sim = c_pend ? k_sim : c_sim;
+    assign p_io  = c_pend ? k_io : c_io;
     assign p_we = c_pend ? k_we : c_we;
     assign p_tag_we = c_pend ? k_tag_we : c_tag_we;
     assign p_be = c_pend ? k_be : c_be;
     assign p_wtag = c_pend ? k_wtag : c_wtag;
     assign p_addr = c_pend ? k_addr : c_addr;
     assign p_wdata = c_pend ? k_wdata : c_wdata;
-    assign sim_go = p_req && p_sim && c_out == 3'd0;
+    // A local access waits for the core's earlier memory acks (c_out), and
+    // for room in the bridge's FIFOs (io_stall, a flop). p_sim comes last
+    // into the AND: it is the late input.
+    assign sim_go = (p_req && !io_stall && c_out == 3'd0) && p_sim;
+    assign io_acc = sim_go && p_io;
     assign p_taken = m_gnt[P_CORE] || sim_go;
     always_ff @(posedge clk_i or negedge por_n) begin
         if (!por_n) begin
             c_pend <= 1'b0; c_out <= 3'd0;
-            k_we <= 1'b0; k_tag_we <= 1'b0; k_sim <= 1'b0;
+            k_we <= 1'b0; k_tag_we <= 1'b0; k_sim <= 1'b0; k_io <= 1'b0;
             k_be <= 4'd0; k_wtag <= 4'd0; k_addr <= 32'd0; k_wdata <= 32'd0;
         end else begin
             if (c_pend) begin
                 if (p_taken) c_pend <= 1'b0;
             end else if (c_req && !p_taken) begin
                 c_pend <= 1'b1;
-                k_we <= c_we; k_tag_we <= c_tag_we; k_sim <= c_sim;
+                k_we <= c_we; k_tag_we <= c_tag_we; k_sim <= c_sim; k_io <= c_io;
                 k_be <= c_be; k_wtag <= c_wtag; k_addr <= c_addr; k_wdata <= c_wdata;
             end
             c_out <= c_out + (m_gnt[P_CORE] ? 3'd1 : 3'd0) - (m_ack[P_CORE] ? 3'd1 : 3'd0);
         end
     end
 
-    logic        sim_ack;
+    logic        sim_ack, con_valid_r;
     logic [31:0] sim_rdata;
+    // Console. With the uart or usb strap, SIM_STDOUT and SIM_STDERR stores
+    // go to the bridge's CON FIFO (the I/O core sends them on), not to the
+    // con_* port; the next local access waits while CON has no room
+    // (io_stall), as print waits on a slow UART. The firmware stores exactly
+    // as before, so the hart's cycles are the same in every mode. The push is
+    // the simulator page's own console flops (con_valid_r, con_err_o,
+    // con_byte_o) a clock later, so no new logic hangs on the skid's nets;
+    // the con_* port is gated instead.
+    logic [1:0] con_sel_q, con_mode;
+    logic       con_redir;
+    always_ff @(posedge clk_i or negedge por_n) begin
+        if (!por_n) begin con_sel_q <= 2'd0; con_mode <= 2'd0; end
+        else begin con_sel_q <= console_sel_i; con_mode <= con_sel_q; end
+    end
+    assign con_redir = con_mode != 2'd0;
+    assign con_valid_o = con_valid_r && !con_redir;
+
+    // Bridge accesses. The skid's p_* nets feed only these flops (one load
+    // each); mpy_iobr works on the registered access a clock later, and the
+    // answer goes out through the simulator page's answer flops on the clock
+    // after that. io_stall (mpy_iobr's flop) is high on the clock after a
+    // bridge access, so no other local access is taken while one is in
+    // flight and the acks stay in order (a memory access granted then is
+    // answered later still).
+    logic        io_q_v, io_q_we;
+    logic [9:0]  io_q_off;
+    logic [31:0] io_q_wdata;
+    always_ff @(posedge clk_i or negedge por_n) begin
+        if (!por_n) begin
+            io_q_v <= 1'b0; io_q_we <= 1'b0; io_q_off <= '0; io_q_wdata <= '0;
+        end else begin
+            io_q_v <= io_acc;
+            io_q_we <= p_we;
+            io_q_off <= p_addr[11:2];
+            io_q_wdata <= p_wdata;
+        end
+    end
     logic        sim_halt;
     logic [31:0] sim_halt_val;
 
     always_ff @(posedge clk_i or negedge por_n) begin
         if (!por_n) begin
             sim_ack <= 1'b0; sim_rdata <= 32'd0;
-            con_valid_o <= 1'b0; con_err_o <= 1'b0; con_byte_o <= 8'd0;
+            con_valid_r <= 1'b0; con_err_o <= 1'b0; con_byte_o <= 8'd0;
             sim_halt <= 1'b0; sim_halt_val <= 32'd0;
         end else begin
             sim_ack <= 1'b0;
-            con_valid_o <= 1'b0;
+            con_valid_r <= 1'b0;
             if (sim_go) begin
-                sim_ack <= 1'b1;
+                // A bridge access is answered on the next clock (below).
+                sim_ack <= !p_io;
                 sim_rdata <= 32'd0;
                 if (p_we) begin
                     case ((p_addr - ABI_SIM_BASE) >> 2)
-                        32'(ABI_SIM_STDOUT): begin con_valid_o <= 1'b1; con_err_o <= 1'b0; con_byte_o <= p_wdata[7:0]; end
-                        32'(ABI_SIM_STDERR): begin con_valid_o <= 1'b1; con_err_o <= 1'b1; con_byte_o <= p_wdata[7:0]; end
+                        32'(ABI_SIM_STDOUT): begin con_valid_r <= 1'b1; con_err_o <= 1'b0; con_byte_o <= p_wdata[7:0]; end
+                        32'(ABI_SIM_STDERR): begin con_valid_r <= 1'b1; con_err_o <= 1'b1; con_byte_o <= p_wdata[7:0]; end
                         32'(ABI_SIM_HALT): begin sim_halt <= 1'b1; sim_halt_val <= p_wdata; end
                         default: ;
                     endcase
                 end else if (((p_addr - ABI_SIM_BASE) >> 2) == 32'(ABI_SIM_CYCLES)) begin
                     sim_rdata <= core_cycles;
                 end
+            end
+            if (io_q_v) begin
+                sim_ack <= 1'b1;
+                sim_rdata <= io_rdata;     // mpy_iobr answers a store with 0
             end
         end
     end
@@ -385,7 +505,12 @@ module mpy_soc #(
     assign c_want = p_req && !p_sim;
     assign g_want = g_pend || gm_req;
 
-    assign m_req     = {am_req, f_req && sys_rst_n, c_want && !ca_busy, g_want};
+    // A bridge access is answered two clocks after it is taken (io_q_v,
+    // then sim_ack). The core's memory answers come straight from the SRAM
+    // cycle (mpy_mem EARLY), so a load granted in the clock between would
+    // be answered in the same clock as the bridge access and one of the
+    // two acks would be lost: no core grant while io_q_v (a flop).
+    assign m_req     = {am_req, f_req && sys_rst_n, c_want && !ca_busy && !io_q_v, g_want};
     assign m_we      = {am_we, 1'b0, p_we, gm_we};
     assign m_tag_we  = {am_we, 1'b0, p_tag_we, gm_tag_we};
     assign m_be      = {4'hF, 4'hF, p_be, 4'hF};
@@ -410,6 +535,84 @@ module mpy_soc #(
     assign c_rtag = sim_ack ? 4'd0 : m_rtag[P_CORE];
     assign c_fault = !sim_ack && m_fault[P_CORE];
     assign c_fault_reason = m_fault_reason[P_CORE];
+
+    // ---- the I/O bridge and island ----
+    // io_clk's own power-on reset: rst_n_i through two io_clk flops.
+    logic [1:0] io_por_q;
+    logic       io_por_n;
+    always_ff @(posedge io_clk_i or negedge rst_n_i) begin
+        if (!rst_n_i) io_por_q <= 2'b00;
+        else          io_por_q <= {io_por_q[0], 1'b1};
+    end
+    assign io_por_n = io_por_q[1];
+
+    // The I/O core leaves reset once boot has loaded its section and the
+    // LD FIFO has drained (IOC_CTRL bit 0). With no section it stays in
+    // reset.
+    logic ioc_run;
+    always_ff @(posedge clk_i or negedge pwr_n) begin
+        if (!pwr_n) ioc_run <= 1'b0;
+        else if (boot_done && ioc_loaded && ioc_ld_idle && !ioc_we) ioc_run <= 1'b1;
+    end
+
+    logic        b_cmd_pop, b_cmd_empty, b_rsp_push, b_rsp_full, b_evt_push, b_evt_full;
+    logic        b_con_pop, b_con_empty, b_conrx_push, b_conrx_full, b_upd_push, b_upd_full;
+    logic        b_dn_pop, b_dn_empty, b_ld_pop, b_ld_empty;
+    logic [31:0] b_cmd_data, b_rsp_data;
+    logic [5:0]  b_cmd_level;
+    logic [15:0] b_evt_data;
+    logic [8:0]  b_con_data;
+    logic [6:0]  b_con_level;
+    logic [7:0]  b_conrx_data;
+    logic [36:0] b_upd_data;
+    logic [34:0] b_dn_data;
+    logic [48:0] b_ld_data;
+    logic [31:0] b_us_gray, b_ms_gray;
+    logic        b_wdt_toggle;
+
+    mpy_iobr u_iobr (
+        .clk_i, .rst_n_i(pwr_n), .hart_rst_n_i(por_n), .sys_reset_o(sys_req), .wdt_toggle_i(b_wdt_toggle),
+        .acc_i(io_q_v), .we_i(io_q_we), .off_i(io_q_off), .wdata_i(io_q_wdata),
+        .rdata_o(io_rdata), .acc_now_i(io_acc), .stall_o(io_stall),
+        .con_push_i(con_valid_r && con_redir), .con_data_i({con_err_o, con_byte_o}),
+        .con_mode_i(con_mode),
+        .evt_pend_o(io_evt_pend),
+        // A system reset boots again: the I/O core's section is not loaded
+        // a second time into an island that is running.
+        .ld_push_i(ioc_we && !ioc_run), .ld_data_i(ioc_data), .ld_idle_o(ioc_ld_idle),
+        .run_i(ioc_run), .loaded_i(ioc_loaded),
+        .io_clk_i, .io_rst_n_i(io_por_n), .us_gray_i(b_us_gray), .ms_gray_i(b_ms_gray),
+        .cmd_pop_i(b_cmd_pop), .cmd_data_o(b_cmd_data), .cmd_empty_o(b_cmd_empty), .cmd_level_o(b_cmd_level),
+        .rsp_push_i(b_rsp_push), .rsp_data_i(b_rsp_data), .rsp_full_o(b_rsp_full),
+        .evt_push_i(b_evt_push), .evt_data_i(b_evt_data), .evt_full_o(b_evt_full),
+        .con_pop_i(b_con_pop), .con_data_o(b_con_data), .con_empty_o(b_con_empty), .con_level_o(b_con_level),
+        .conrx_push_i(b_conrx_push), .conrx_data_i(b_conrx_data), .conrx_full_o(b_conrx_full),
+        .upd_push_i(b_upd_push), .upd_data_i(b_upd_data), .upd_full_o(b_upd_full),
+        .dn_pop_i(b_dn_pop), .dn_data_o(b_dn_data), .dn_empty_o(b_dn_empty),
+        .ld_pop_i(b_ld_pop), .ld_data_o(b_ld_data), .ld_empty_o(b_ld_empty)
+    );
+    // mpy_boot's stream waits while LD could not take a word (the stall
+    // flop also covers CMD, CON and DN, which are idle during boot).
+    assign ioc_stall = io_stall;
+
+    iocore_top u_ioc (
+        .io_clk_i, .io_rst_n_i(io_por_n), .run_i(ioc_run), .con_mode_i(console_sel_i),
+        .ld_valid_i(!b_ld_empty), .ld_data_i(b_ld_data), .ld_pop_o(b_ld_pop),
+        .cmd_pop_o(b_cmd_pop), .cmd_data_i(b_cmd_data), .cmd_empty_i(b_cmd_empty), .cmd_level_i(b_cmd_level),
+        .rsp_push_o(b_rsp_push), .rsp_data_o(b_rsp_data), .rsp_full_i(b_rsp_full),
+        .evt_push_o(b_evt_push), .evt_data_o(b_evt_data), .evt_full_i(b_evt_full),
+        .con_pop_o(b_con_pop), .con_data_i(b_con_data), .con_empty_i(b_con_empty), .con_level_i(b_con_level),
+        .conrx_push_o(b_conrx_push), .conrx_data_o(b_conrx_data), .conrx_full_i(b_conrx_full),
+        .upd_push_o(b_upd_push), .upd_data_o(b_upd_data), .upd_full_i(b_upd_full),
+        .dn_pop_o(b_dn_pop), .dn_data_i(b_dn_data), .dn_empty_i(b_dn_empty),
+        .uart_rxd_i(uart0_rxd_i), .uart_txd_o(uart0_txd_o),
+        .gpio_o, .gpio_oe_o, .gpio_pu_o, .gpio_pd_o, .gpio_i,
+        .us_gray_o(b_us_gray), .ms_gray_o(b_ms_gray),
+        .adc_start_o, .adc_chan_o, .adc_done_i, .adc_code_i, .wdt_toggle_o(b_wdt_toggle),
+        .usb_clk_i, .usb_dp_io, .usb_dn_io, .usb_pu_o,
+        .dbg_valid_o(ioc_dbg_valid_o), .dbg_byte_o(ioc_dbg_byte_o), .halt_o(), .halt_value_o(),
+        .sleep_o()
+    );
 
     assign halted_o = core_halted || sim_halt;
     assign halt_code_o = core_halted ? core_hcode : ABI_HALT_SYSEXIT;

@@ -53,38 +53,56 @@ function automatic logic [10:0] upycore_f64_exp_eff(input logic [63:0] v);
 endfunction
 
 // ---------------------------------------------------------------------------
-// Leading-zero counts (priority encoders; the last assignment wins)
+// Leading-zero counts
 // ---------------------------------------------------------------------------
 function automatic logic [6:0] upycore_clz64(input logic [63:0] v);
-    logic [63:0] x;
-    logic [5:0] n;
+    // A tree: each level joins two blocks (the upper block's count, or the
+    // block size plus the lower one's when the upper is zero), so the count
+    // is six selects deep. The binary search this replaces tested 32, 16,
+    // 8, 4 and 2 bits of a value it shifted in between, and led the
+    // divider's and the power unit's normalize paths (state_r ->
+    // s1_exp_a_r at 14.0 ns). SAT-proven equal. Each level is its own
+    // vector, written once: one wide array updated in place made the
+    // simulation model 2.5 times slower.
+    logic [31:0] z1; logic [31:0]  c1;     // 32 blocks of 2, count 1 bit
+    logic [15:0] z2; logic [31:0]  c2;     // 16 blocks of 4, count 2 bits
+    logic [7:0]  z3; logic [23:0]  c3;     //  8 blocks of 8, count 3 bits
+    logic [3:0]  z4; logic [15:0]  c4;     //  4 blocks of 16, count 4 bits
+    logic [1:0]  z5; logic [9:0]   c5;     //  2 blocks of 32, count 5 bits
     begin
-        // Balanced binary search: six fixed-width zero tests, rather than
-        // a 64-way priority chain. The zero case is kept separate.
-        x = v;
-        n = '0;
-        if (x[63:32] == 0) begin n[5] = 1'b1; x = x << 32; end
-        if (x[63:48] == 0) begin n[4] = 1'b1; x = x << 16; end
-        if (x[63:56] == 0) begin n[3] = 1'b1; x = x << 8; end
-        if (x[63:60] == 0) begin n[2] = 1'b1; x = x << 4; end
-        if (x[63:62] == 0) begin n[1] = 1'b1; x = x << 2; end
-        n[0] = !x[63];
-        upycore_clz64 = (v == 0) ? 7'd64 : {1'b0, n};
+        for (int i = 0; i < 32; i++) begin
+            z1[i] = !v[2*i+1] && !v[2*i];
+            c1[i] = !v[2*i+1];
+        end
+        for (int i = 0; i < 16; i++) begin
+            z2[i] = z1[2*i+1] && z1[2*i];
+            c2[2*i +: 2] = z1[2*i+1] ? {1'b1, c1[2*i]} : {1'b0, c1[2*i+1]};
+        end
+        for (int i = 0; i < 8; i++) begin
+            z3[i] = z2[2*i+1] && z2[2*i];
+            c3[3*i +: 3] = z2[2*i+1] ? {1'b1, c2[2*(2*i) +: 2]} : {1'b0, c2[2*(2*i+1) +: 2]};
+        end
+        for (int i = 0; i < 4; i++) begin
+            z4[i] = z3[2*i+1] && z3[2*i];
+            c4[4*i +: 4] = z3[2*i+1] ? {1'b1, c3[3*(2*i) +: 3]} : {1'b0, c3[3*(2*i+1) +: 3]};
+        end
+        for (int i = 0; i < 2; i++) begin
+            z5[i] = z4[2*i+1] && z4[2*i];
+            c5[5*i +: 5] = z4[2*i+1] ? {1'b1, c4[4*(2*i) +: 4]} : {1'b0, c4[4*(2*i+1) +: 4]};
+        end
+        upycore_clz64 = (z5[1] && z5[0]) ? 7'd64 :
+                        z5[1] ? {2'b01, c5[4:0]} : {2'b00, c5[9:5]};
     end
 endfunction
 
+// A set bit below the significand makes the all-zero count saturate at
+// the significand width while keeping the same balanced encoder.
 function automatic logic [5:0] upycore_clz53(input logic [52:0] v);
-    upycore_clz53 = 6'd53;
-    for (int i = 0; i < 53; i++) begin
-        if (v[i]) upycore_clz53 = 6'(52 - i);
-    end
+    return 6'(upycore_clz64({v, 11'h400}));
 endfunction
 
 function automatic logic [5:0] upycore_clz56(input logic [55:0] v);
-    upycore_clz56 = 6'd56;
-    for (int i = 0; i < 56; i++) begin
-        if (v[i]) upycore_clz56 = 6'(55 - i);
-    end
+    return 6'(upycore_clz64({v, 8'h80}));
 endfunction
 
 // ---------------------------------------------------------------------------
@@ -116,7 +134,7 @@ function automatic logic [55:0] upycore_f64_denorm(
         if (sh > 14'sd55) begin
             upycore_f64_denorm = {55'd0, |ext};
         end else begin
-            lost_mask = (56'd1 << sh[5:0]) - 56'd1;
+            for (int i = 0; i < 56; i++) lost_mask[i] = (6'(i) < sh[5:0]);   // (1 << sh) - 1
             upycore_f64_denorm = ext >> sh[5:0];
             upycore_f64_denorm[0] = upycore_f64_denorm[0] | (|(ext & lost_mask));
         end
@@ -179,7 +197,7 @@ function automatic logic [63:0] upycore_f64_pack_round(
                 if (sh > 14'sd55) begin
                     shifted = {55'd0, |ext};
                 end else begin
-                    lost_mask = (56'd1 << sh[5:0]) - 56'd1;
+                    for (int i = 0; i < 56; i++) lost_mask[i] = (6'(i) < sh[5:0]);   // (1 << sh) - 1
                     shifted = ext >> sh[5:0];
                     shifted[0] = shifted[0] | (|(ext & lost_mask));
                 end

@@ -8,7 +8,9 @@ cd "$(dirname "$0")/../../.."
 SV2V=${SV2V:-sv2v}
 tmp=$(mktemp -d)
 # mpy_soc leaves out the SRAM stand-in: the class flow reads BaseJump's
-# bsg_mem_1rw_sync_mask_write_bit and swaps it for the fakeram macro.
+# bsg_mem_1rw_sync_mask_write_bit and swaps it for the fakeram macros. It
+# includes the I/O island (CVE2 and iocore/rtl), with CVE2's clock gate as
+# the sky130 ICG cell (mpy_dc_unit.UNIT_SUBST).
 for top in mpy_alu mpy_decode mpy_core mpy_soc; do
     python3 -c "import sys; sys.path.insert(0, 'upycore/tools')
 from pathlib import Path; from mpy_dc_unit import write_unit; from mpy_synth import SRAM_MODEL

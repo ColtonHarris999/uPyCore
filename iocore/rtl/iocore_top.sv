@@ -1,0 +1,449 @@
+// The I/O island: the I/O core (iocore_cpu), its code and data SRAMs, its
+// bus, and its peripherals. Everything here runs on io_clk_i.
+// Spec: upycore/docs/mpy_io_core.md (memory map, registers).
+//
+// Memory map (I/O core view):
+//   0x0000_0000  code SRAM, CODE_WORDS words. The instruction port only; a
+//                data access faults. Vectors at 0, reset at 0x80.
+//   0x0001_0000  data SRAM, DATA_WORDS words. .rodata, .data, .bss, stack.
+//   0x8000_0000  SYS: id, debug byte, halt, interrupt controller
+//   0x8000_1000  timer (iocore_timer)
+//   0x8000_2000  UART0 (iocore_uart)
+//   0x8000_3000  the bridge to the hart (iocore_bridge; FIFOs in mpy_iobr)
+//   0x8000_4000  GPIO (iocore_gpio)
+//   0x8000_5000  PWM (iocore_pwm)       0x8000_6000  SPI (iocore_spi)
+//   0x8000_7000  I2C (iocore_i2c)       0x8000_8000  WDT (iocore_wdt)
+//   0x8000_9000  ADC (iocore_adc)       0x8000_A000  pin mux (iocore_pinmux)
+//   0x8001_0000  USB SIE registers      0x8002_0000  USB RX buffer (2 KB)
+//   0x8003_0000  USB TX buffer (2 KB)   (iocore_usb, on usb_clk)
+// The six blocks are the epic branch's, each fed its old offset (0x200,
+// 0x300, 0x400, 0x500, 0x800, 0x900) plus the low byte of the address.
+// Anything else answers with an error (a load or store access fault).
+//
+// Both SRAMs are one-port macros (bsg_mem_1rw_sync_mask_write_bit, which
+// the synthesis flow swaps for fakeram). While run_i is low the core is in
+// reset and the load port (ld_*) writes them; mpy_boot drives it from the
+// boot stream's IOCB section (upycore/docs/mpy_boot.md).
+module iocore_top #(
+    parameter int CORE = 0,               // iocore_cpu: 0 CVE2, 1 Hazard3
+    parameter int MUL = 0,
+    parameter int CODE_WORDS = 4096,      // 16 KB
+    parameter int DATA_WORDS = 1920,      // 7.5 KB
+    parameter logic [15:0] US_DIV_RESET = 16'd49,
+    parameter logic [15:0] BAUD_RESET = 16'd0,
+    parameter int NPINS = 16,
+    parameter int IOCLK_HZ = 50_000_000   // SYS FREQ; +IO_CLK_HZ (or the bench's +IO_CLK_NS) overrides it in simulation
+) (
+    input  logic        io_clk_i,
+    input  logic        io_rst_n_i,       // power-on reset, synchronized to io_clk_i
+    input  logic        run_i,            // release the core (synchronized here)
+    input  logic [1:0]  con_mode_i,       // the console strap (a pin; synchronized here)
+
+    input  logic        ld_valid_i,
+    input  logic [48:0] ld_data_i,        // {1 data SRAM / 0 code SRAM, word index, word}
+    output logic        ld_pop_o,
+
+    // The bridge FIFOs' io_clk ends (mpy_iobr).
+    output logic        cmd_pop_o,
+    input  logic [31:0] cmd_data_i,
+    input  logic        cmd_empty_i,
+    input  logic [5:0]  cmd_level_i,
+    output logic        rsp_push_o,
+    output logic [31:0] rsp_data_o,
+    input  logic        rsp_full_i,
+    output logic        evt_push_o,
+    output logic [15:0] evt_data_o,
+    input  logic        evt_full_i,
+    output logic        con_pop_o,
+    input  logic [8:0]  con_data_i,
+    input  logic        con_empty_i,
+    input  logic [6:0]  con_level_i,
+    output logic        conrx_push_o,
+    output logic [7:0]  conrx_data_o,
+    input  logic        conrx_full_i,
+    output logic        upd_push_o,
+    output logic [36:0] upd_data_o,
+    input  logic        upd_full_i,
+    output logic        dn_pop_o,
+    input  logic [34:0] dn_data_i,
+    input  logic        dn_empty_i,
+
+    input  logic        uart_rxd_i,
+    output logic        uart_txd_o,
+
+    // The pads (after the pin mux): output, output enable, pulls, input.
+    output logic [NPINS-1:0] gpio_o,
+    output logic [NPINS-1:0] gpio_oe_o,
+    output logic [NPINS-1:0] gpio_pu_o,
+    output logic [NPINS-1:0] gpio_pd_o,
+    input  logic [NPINS-1:0] gpio_i,
+
+    // The ADC converter (a model on the bench).
+    output logic        adc_start_o,
+    output logic [3:0]  adc_chan_o,
+    input  logic        adc_done_i,
+    input  logic [11:0] adc_code_i,
+    // The watchdog's reset request: a toggle per expiry (the hart side
+    // synchronizes it).
+    output logic        wdt_toggle_o,
+
+    // USB: the SIE's 48 MHz clock and the D+/D- pads (iocore_usb).
+    input  logic        usb_clk_i,
+    inout  wire         usb_dp_io,
+    inout  wire         usb_dn_io,
+    output logic        usb_pu_o,
+
+    // The timer's microsecond and millisecond counts in gray code, from
+    // flops, for mpy_iobr's tick crossing (one bit changes per count).
+    output logic [31:0] us_gray_o,
+    output logic [31:0] ms_gray_o,
+
+    // Simulation and bring-up: a store to SYS DEBUG / HALT.
+    output logic        dbg_valid_o,
+    output logic [7:0]  dbg_byte_o,
+    output logic        halt_o,
+    output logic [31:0] halt_value_o,
+    output logic        sleep_o
+);
+    localparam int CAW = $clog2(CODE_WORDS);
+    localparam int DAW = $clog2(DATA_WORDS);
+    localparam logic [31:0] ID = 32'h494F_4301;   // "IOC", version 1
+
+    // ---- core reset: run_i through two flops ----
+    // In simulation the flops start released, so the first clock of
+    // io_rst_n_i or of run_i low is a falling edge on core_rst_n: CVE2's
+    // registers sit behind its own clock gate and see only the async reset.
+    logic [1:0] run_q;
+    logic       core_rst_n;
+`ifndef SYNTHESIS
+    initial run_q = 2'b11;
+`endif
+    always_ff @(posedge io_clk_i or negedge io_rst_n_i) begin
+        if (!io_rst_n_i) run_q <= 2'b00;
+        else             run_q <= {run_q[0], run_i};
+    end
+    assign core_rst_n = run_q[1];
+
+    // ---- core ----
+    logic        i_req, i_gnt, i_rvalid, i_err;
+    logic [31:0] i_addr, i_rdata;
+    logic        d_req, d_gnt, d_rvalid, d_we, d_err;
+    logic [3:0]  d_be;
+    logic [31:0] d_addr, d_wdata, d_rdata;
+    logic        irq_timer, irq_ext;
+
+    iocore_cpu #(.CORE(CORE), .MUL(MUL)) u_cpu (
+        .clk_i(io_clk_i), .rst_n_i(core_rst_n),
+        .i_req_o(i_req), .i_gnt_i(i_gnt), .i_addr_o(i_addr),
+        .i_rvalid_i(i_rvalid), .i_rdata_i(i_rdata), .i_err_i(i_err),
+        .d_req_o(d_req), .d_gnt_i(d_gnt), .d_we_o(d_we), .d_be_o(d_be), .d_addr_o(d_addr),
+        .d_wdata_o(d_wdata), .d_rvalid_i(d_rvalid), .d_rdata_i(d_rdata), .d_err_i(d_err),
+        .irq_timer_i(irq_timer), .irq_ext_i(irq_ext), .core_sleep_o(sleep_o)
+    );
+
+    // ---- load port ----
+    logic        ld_we, ld_data;
+    logic [15:0] ld_idx_i;
+    logic [31:0] ld_wdata_i;
+    assign ld_we      = ld_valid_i;
+    assign ld_pop_o   = ld_valid_i;
+    assign ld_data    = ld_data_i[48];
+    assign ld_idx_i   = ld_data_i[47:32];
+    assign ld_wdata_i = ld_data_i[31:0];
+
+    // ---- code SRAM: instruction port, load port ----
+    logic           c_v, c_w;
+    logic [CAW-1:0] c_a;
+    logic [31:0]    c_d, c_q;
+    logic           i_bad;
+    assign i_bad = (i_addr >= 32'(CODE_WORDS * 4));
+    assign i_gnt = i_req && core_rst_n;
+    assign c_v = ld_we ? !ld_data : (i_req && i_gnt && !i_bad);
+    assign c_w = ld_we;
+    assign c_a = ld_we ? CAW'(ld_idx_i) : i_addr[CAW+1:2];
+    assign c_d = ld_wdata_i;
+    bsg_mem_1rw_sync_mask_write_bit #(.width_p(32), .els_p(CODE_WORDS)) u_code (
+        .clk_i(io_clk_i), .reset_i(1'b0), .data_i(c_d), .addr_i(c_a), .v_i(c_v),
+        .w_mask_i(32'hFFFF_FFFF), .w_i(c_w), .data_o(c_q)
+    );
+    always_ff @(posedge io_clk_i or negedge core_rst_n) begin
+        if (!core_rst_n) begin
+            i_rvalid <= 1'b0; i_err <= 1'b0;
+        end else begin
+            i_rvalid <= i_req && i_gnt;
+            i_err    <= i_req && i_gnt && i_bad;
+        end
+    end
+    assign i_rdata = c_q;
+
+    // ---- data port decode ----
+    localparam logic [3:0] R_NONE = 4'd0, R_DATA = 4'd1, R_SYS = 4'd2, R_TIMER = 4'd3,
+                           R_UART = 4'd4, R_BRIDGE = 4'd5, R_GPIO = 4'd6, R_PWM = 4'd7,
+                           R_SPI = 4'd8, R_I2C = 4'd9, R_WDT = 4'd10, R_ADC = 4'd11, R_MUX = 4'd12,
+                           R_USB = 4'd13, R_USB_RX = 4'd14, R_USB_TX = 4'd15;
+    function automatic logic [3:0] region(input logic [31:0] a);
+        if (a >= 32'h0001_0000 && a < 32'h0001_0000 + 32'(DATA_WORDS * 4)) return R_DATA;
+        if (a[31:12] == 20'h80000) return R_SYS;
+        if (a[31:12] == 20'h80001) return R_TIMER;
+        if (a[31:12] == 20'h80002) return R_UART;
+        if (a[31:12] == 20'h80003) return R_BRIDGE;
+        if (a[31:12] == 20'h80004) return R_GPIO;
+        if (a[31:12] == 20'h80005) return R_PWM;
+        if (a[31:12] == 20'h80006) return R_SPI;
+        if (a[31:12] == 20'h80007) return R_I2C;
+        if (a[31:12] == 20'h80008) return R_WDT;
+        if (a[31:12] == 20'h80009) return R_ADC;
+        if (a[31:12] == 20'h8000A) return R_MUX;
+        if (a[31:14] == 18'(32'h8001_0000 >> 14)) return R_USB;
+        if (a[31:11] == 21'(32'h8002_0000 >> 11)) return R_USB_RX;
+        if (a[31:11] == 21'(32'h8003_0000 >> 11)) return R_USB_TX;
+        return R_NONE;
+    endfunction
+
+    logic [3:0]  rgn, sel_q;
+    logic        take, uart_ready, br_ready;
+    logic [31:0] rdata_q, timer_rdata, uart_rdata, sys_rdata, br_rdata, gpio_rdata;
+    logic [31:0] pwm_rdata, spi_rdata, i2c_rdata, wdt_rdata, adc_rdata, mux_rdata;
+    logic        uart_irq, br_irq, gpio_irq, spi_irq, i2c_irq;
+    logic [7:0]  off;
+    // Peripheral registers are words; a byte or halfword access to one is
+    // an error, so firmware cannot store half a register.
+    logic        bad_size;
+
+    assign rgn = region(d_addr);
+    assign off = d_addr[7:0];
+    assign bad_size = (rgn != R_DATA) && (d_be != 4'hF || d_addr[1:0] != 2'b00);
+    // Accesses to the six blocks ported from the epic branch (PWM to pin
+    // mux) reach them a clock later, from flops (pw_*), and answer a clock
+    // after that: their write logic is deep (the I2C controller's command
+    // start, the watchdog's kick and count), and from the core's address
+    // it was the island's longest path. No data access is granted while
+    // one is in the stage, so the answers stay in order (the core waits
+    // for each rvalid anyway).
+    logic        pw_v, pw_we;
+    logic [3:0]  pw_rgn;
+    logic [7:0]  pw_off;
+    logic [31:0] pw_wdata;
+    logic        ep_take;
+    logic        usb_busy, usb_done, usb_take, usb_irq;
+    logic [31:0] usb_rdata;
+    assign d_gnt = d_req && !pw_v && !usb_busy && ((rgn != R_UART || uart_ready) && (rgn != R_BRIDGE || br_ready)
+                                      || bad_size);
+    assign take  = d_req && d_gnt;
+    assign ep_take = take && !bad_size && rgn >= R_PWM && rgn <= R_MUX;
+    // A USB access answers when the bridge has carried it to usb_clk and
+    // back (iocore_usb); no data access is granted meanwhile.
+    assign usb_take = take && !bad_size && rgn >= R_USB;
+    always_ff @(posedge io_clk_i or negedge core_rst_n) begin
+        if (!core_rst_n) begin
+            pw_v <= 1'b0; pw_we <= 1'b0; pw_rgn <= R_NONE; pw_off <= 8'h0; pw_wdata <= 32'h0;
+        end else begin
+            pw_v <= ep_take;
+            pw_we <= d_we; pw_rgn <= rgn; pw_off <= off; pw_wdata <= d_wdata;
+        end
+    end
+    function automatic logic ep_req(input logic [3:0] r);
+        return pw_v && pw_rgn == r;
+    endfunction
+
+    // ---- data SRAM ----
+    logic           m_v, m_w;
+    logic [DAW-1:0] m_a;
+    logic [31:0]    m_d, m_mask, m_q;
+    always_comb begin
+        if (ld_we) begin
+            m_v = ld_data; m_w = 1'b1; m_a = DAW'(ld_idx_i); m_d = ld_wdata_i; m_mask = '1;
+        end else begin
+            m_v = take && rgn == R_DATA; m_w = d_we; m_a = d_addr[DAW+1:2]; m_d = d_wdata;
+            m_mask = {{8{d_be[3]}}, {8{d_be[2]}}, {8{d_be[1]}}, {8{d_be[0]}}};
+        end
+    end
+    bsg_mem_1rw_sync_mask_write_bit #(.width_p(32), .els_p(DATA_WORDS)) u_data (
+        .clk_i(io_clk_i), .reset_i(1'b0), .data_i(m_d), .addr_i(m_a), .v_i(m_v),
+        .w_mask_i(m_mask), .w_i(m_w), .data_o(m_q)
+    );
+
+    // ---- SYS block: id, debug, halt, interrupt controller ----
+    localparam logic [7:0] S_ID = 8'h00, S_DEBUG = 8'h04, S_HALT = 8'h08, S_IRQ_PEND = 8'h0C,
+                           S_IRQ_EN = 8'h10, S_SCRATCH = 8'h14, S_FREQ = 8'h18, S_CON_MODE = 8'h1C;
+    logic [1:0] cm_s1, cm_s2;
+    always_ff @(posedge io_clk_i or negedge io_rst_n_i) begin
+        if (!io_rst_n_i) begin cm_s1 <= 2'd0; cm_s2 <= 2'd0; end
+        else begin cm_s1 <= con_mode_i; cm_s2 <= cm_s1; end
+    end
+    logic [31:0] freq;
+`ifdef SYNTHESIS
+    assign freq = 32'(IOCLK_HZ);
+`else
+    int unsigned sim_hz;
+    initial begin
+        real ns;
+        if (!$value$plusargs("IO_CLK_HZ=%d", sim_hz)) begin
+            if ($value$plusargs("IO_CLK_NS=%f", ns)) sim_hz = int'(1.0e9 / ns);
+            else sim_hz = IOCLK_HZ;
+        end
+    end
+    assign freq = sim_hz;
+`endif
+    localparam int NIRQ = 8;
+    logic [NIRQ-1:0] irq_src, irq_en_r;
+    logic [31:0]     scratch_r;
+    logic            sys_sel, timer_sel, uart_sel, br_sel, gpio_sel;
+    assign sys_sel   = take && !bad_size && rgn == R_SYS;
+    assign timer_sel = take && !bad_size && rgn == R_TIMER;
+    assign uart_sel  = take && !bad_size && rgn == R_UART;
+    assign br_sel    = take && !bad_size && rgn == R_BRIDGE;
+    assign gpio_sel  = take && !bad_size && rgn == R_GPIO;
+
+    // Sources: 0 UART0, 1 bridge, 2 GPIO, 3 SPI, 4 I2C, 5 USB.
+    assign irq_src = {{(NIRQ-6){1'b0}}, usb_irq, i2c_irq, spi_irq, gpio_irq, br_irq, uart_irq};
+    assign irq_ext = |(irq_src & irq_en_r);
+
+    always_comb begin
+        case (off)
+            S_ID:       sys_rdata = ID;
+            S_IRQ_PEND: sys_rdata = 32'(irq_src);
+            S_IRQ_EN:   sys_rdata = 32'(irq_en_r);
+            S_SCRATCH:  sys_rdata = scratch_r;
+            S_FREQ:     sys_rdata = freq;
+            S_CON_MODE: sys_rdata = {30'h0, cm_s2};
+            default:    sys_rdata = 32'h0;
+        endcase
+    end
+
+    always_ff @(posedge io_clk_i or negedge core_rst_n) begin
+        if (!core_rst_n) begin
+            irq_en_r <= '0; scratch_r <= 32'h0;
+            dbg_valid_o <= 1'b0; dbg_byte_o <= 8'h0; halt_o <= 1'b0; halt_value_o <= 32'h0;
+        end else begin
+            dbg_valid_o <= 1'b0;
+            if (sys_sel && d_we) begin
+                case (off)
+                    S_DEBUG:   begin dbg_valid_o <= 1'b1; dbg_byte_o <= d_wdata[7:0]; end
+                    S_HALT:    begin halt_o <= 1'b1; halt_value_o <= d_wdata; end
+                    S_IRQ_EN:  irq_en_r <= d_wdata[NIRQ-1:0];
+                    S_SCRATCH: scratch_r <= d_wdata;
+                    default: ;
+                endcase
+            end
+        end
+    end
+
+    logic [31:0] us_bin, ms_bin;
+    logic        ms_tick;
+    iocore_timer #(.US_DIV_RESET(US_DIV_RESET)) u_timer (
+        .clk_i(io_clk_i), .rst_n_i(core_rst_n),
+        .sel_i(timer_sel), .we_i(d_we), .off_i(off), .wdata_i(d_wdata), .rdata_o(timer_rdata),
+        .irq_o(irq_timer), .us_tick_o(), .ms_tick_o(ms_tick), .us_o(us_bin), .ms_o(ms_bin)
+    );
+    always_ff @(posedge io_clk_i or negedge core_rst_n) begin
+        if (!core_rst_n) begin
+            us_gray_o <= 32'h0; ms_gray_o <= 32'h0;
+        end else begin
+            us_gray_o <= us_bin ^ (us_bin >> 1);
+            ms_gray_o <= ms_bin ^ (ms_bin >> 1);
+        end
+    end
+
+    logic [NPINS-1:0] g_out, g_oe;
+    iocore_gpio #(.NPINS(NPINS)) u_gpio (
+        .clk_i(io_clk_i), .rst_n_i(core_rst_n),
+        .sel_i(gpio_sel), .we_i(d_we), .off_i(off), .wdata_i(d_wdata), .rdata_o(gpio_rdata),
+        .irq_o(gpio_irq),
+        .out_o(g_out), .oe_o(g_oe), .pu_o(gpio_pu_o), .pd_o(gpio_pd_o), .in_i(gpio_i),
+        .level_o(), .hit_o()
+    );
+
+    // ---- the epic branch's blocks, each at its old offset ----
+    logic [3:0]  pwm;
+    logic        spi_sck, spi_mosi, spi_miso, scl_low, sda_low, scl_in, sda_in, uart_rxd_mux, uart_txd;
+    logic        wdt_reset;
+    iocore_pwm u_pwm (.clk_i(io_clk_i), .rst_n_i(core_rst_n), .req_i(ep_req(R_PWM)),
+        .we_i(pw_we), .off_i({4'h2, pw_off}), .wdata_i(pw_wdata), .rdata_o(pwm_rdata), .pwm_o(pwm), .wrap_o());
+    iocore_spi u_spi (.clk_i(io_clk_i), .rst_n_i(core_rst_n), .req_i(ep_req(R_SPI)),
+        .we_i(pw_we), .off_i({4'h3, pw_off}), .wdata_i(pw_wdata), .rdata_o(spi_rdata),
+        .sck_o(spi_sck), .mosi_o(spi_mosi), .miso_i(spi_miso), .irq_o(spi_irq));
+    iocore_i2c u_i2c (.clk_i(io_clk_i), .rst_n_i(core_rst_n), .req_i(ep_req(R_I2C)),
+        .we_i(pw_we), .off_i({4'h4, pw_off}), .wdata_i(pw_wdata), .rdata_o(i2c_rdata),
+        .scl_low_o(scl_low), .sda_low_o(sda_low), .scl_i(scl_in), .sda_i(sda_in), .irq_o(i2c_irq));
+    iocore_wdt u_wdt (.clk_i(io_clk_i), .rst_n_i(core_rst_n), .req_i(ep_req(R_WDT)),
+        .we_i(pw_we), .off_i({4'h5, pw_off}), .wdata_i(pw_wdata), .rdata_o(wdt_rdata),
+        .tick_i(ms_tick), .wdt_reset_o(wdt_reset));
+    iocore_adc u_adc (.clk_i(io_clk_i), .rst_n_i(core_rst_n), .req_i(ep_req(R_ADC)),
+        .we_i(pw_we), .off_i({4'h8, pw_off}), .wdata_i(pw_wdata), .rdata_o(adc_rdata),
+        .adc_start_o, .adc_chan_o, .adc_done_i, .adc_code_i);
+    iocore_pinmux u_mux (.clk_i(io_clk_i), .rst_n_i(core_rst_n), .req_i(ep_req(R_MUX)),
+        .we_i(pw_we), .off_i({4'h9, pw_off}), .wdata_i(pw_wdata), .rdata_o(mux_rdata),
+        .gpio_out_i(g_out), .gpio_oe_i(g_oe), .pwm_i(pwm), .spi_sck_i(spi_sck), .spi_mosi_i(spi_mosi),
+        .i2c_scl_low_i(scl_low), .i2c_sda_low_i(sda_low), .uart_txd_i(uart_txd),
+        .uart_rxd_pin_i(uart_rxd_i), .spi_miso_o(spi_miso), .i2c_scl_o(scl_in), .i2c_sda_o(sda_in),
+        .uart_rxd_o(uart_rxd_mux), .pad_out_o(gpio_o), .pad_oe_o(gpio_oe_o), .pad_in_i(gpio_i));
+    assign uart_txd_o = uart_txd;
+    // The watchdog's expiry survives the core's reset: a toggle on io_rst_n.
+    always_ff @(posedge io_clk_i or negedge io_rst_n_i) begin
+        if (!io_rst_n_i) wdt_toggle_o <= 1'b0;
+        else if (wdt_reset) wdt_toggle_o <= !wdt_toggle_o;
+    end
+
+    iocore_uart #(.BAUD_RESET(BAUD_RESET)) u_uart (
+        .clk_i(io_clk_i), .rst_n_i(core_rst_n),
+        .sel_i(uart_sel), .we_i(d_we), .off_i(off), .wdata_i(d_wdata),
+        .ready_o(uart_ready), .rdata_o(uart_rdata),
+        .rxd_i(uart_rxd_mux), .txd_o(uart_txd), .irq_o(uart_irq), .rx_byte_o()
+    );
+
+    iocore_bridge u_bridge (
+        .clk_i(io_clk_i), .rst_n_i(core_rst_n),
+        .sel_i(br_sel), .we_i(d_we), .off_i(d_addr[11:0]), .wdata_i(d_wdata),
+        .ready_o(br_ready), .rdata_o(br_rdata), .irq_o(br_irq),
+        .cmd_pop_o, .cmd_data_i, .cmd_empty_i, .cmd_level_i,
+        .rsp_push_o, .rsp_data_o, .rsp_full_i,
+        .evt_push_o, .evt_data_o, .evt_full_i,
+        .con_pop_o, .con_data_i, .con_empty_i, .con_level_i,
+        .conrx_push_o, .conrx_data_o, .conrx_full_i,
+        .upd_push_o, .upd_data_o, .upd_full_i,
+        .dn_pop_o, .dn_data_i, .dn_empty_i
+    );
+
+    // ---- USB ----
+    iocore_usb u_usb (
+        .io_clk_i, .rst_n_i(core_rst_n), .req_i(usb_take),
+        .kind_i(rgn == R_USB ? 2'd0 : rgn == R_USB_RX ? 2'd1 : 2'd2), .we_i(d_we),
+        .addr_i(d_addr[13:2]), .wdata_i(d_wdata), .busy_o(usb_busy), .done_o(usb_done),
+        .rdata_o(usb_rdata), .irq_o(usb_irq),
+        .usb_clk_i, .usb_dp_io, .usb_dn_io, .usb_pu_o
+    );
+
+    // ---- responses: the clock after the take ----
+    always_ff @(posedge io_clk_i or negedge core_rst_n) begin
+        if (!core_rst_n) begin
+            d_rvalid <= 1'b0; d_err <= 1'b0; sel_q <= R_NONE; rdata_q <= 32'h0;
+        end else begin
+            // A ported block answers from the stage, a clock later.
+            d_rvalid <= (take && !ep_take && !usb_take) || pw_v || usb_done;
+            d_err    <= take && (rgn == R_NONE || bad_size);
+            sel_q    <= pw_v ? pw_rgn : usb_done ? R_USB : rgn;
+            if (usb_done) rdata_q <= usb_rdata;
+            else if (pw_v) begin
+                case (pw_rgn)
+                    R_PWM:   rdata_q <= pwm_rdata;
+                    R_SPI:   rdata_q <= spi_rdata;
+                    R_I2C:   rdata_q <= i2c_rdata;
+                    R_WDT:   rdata_q <= wdt_rdata;
+                    R_ADC:   rdata_q <= adc_rdata;
+                    default: rdata_q <= mux_rdata;
+                endcase
+            end else begin
+                case (rgn)
+                    R_SYS:   rdata_q <= sys_rdata;
+                    R_TIMER: rdata_q <= timer_rdata;
+                    R_UART:  rdata_q <= uart_rdata;
+                    R_BRIDGE: rdata_q <= br_rdata;
+                    R_GPIO:  rdata_q <= gpio_rdata;
+                    default: rdata_q <= 32'h0;
+                endcase
+            end
+        end
+    end
+    assign d_rdata = (sel_q == R_DATA) ? m_q : rdata_q;
+endmodule

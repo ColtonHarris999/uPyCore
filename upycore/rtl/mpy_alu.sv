@@ -81,7 +81,8 @@ package mpy_alu_pkg;
         end
     endfunction
 
-    // binary32 -> int64 toward zero. ok = 0 for NaN, inf, and |f| >= 2**63.
+    // binary32 -> |int64| toward zero (the caller negates for a negative
+    // f, in its own cycle). ok = 0 for NaN, inf, and |f| >= 2**63.
     function automatic logic [63:0] mpy_f32_to_i64(input logic [31:0] f, output logic ok);
         logic [7:0]  e;
         logic [63:0] m;
@@ -100,7 +101,7 @@ package mpy_alu_pkg;
                     m = {40'd0, 1'b1, f[22:0]};
                     if (x >= 23) m = m << (x - 23);
                     else m = m >> (23 - x);
-                    mpy_f32_to_i64 = f[31] ? (~m + 64'd1) : m;
+                    mpy_f32_to_i64 = m;
                 end
             end
         end
@@ -174,14 +175,9 @@ module mpy_f32_widen (
     assign sign = f_i[31];
     assign exp  = f_i[30:23];
     assign frac = f_i[22:0];
-    assign sh = frac[22] ? 5'd0  : frac[21] ? 5'd1  : frac[20] ? 5'd2  :
-                frac[19] ? 5'd3  : frac[18] ? 5'd4  : frac[17] ? 5'd5  :
-                frac[16] ? 5'd6  : frac[15] ? 5'd7  : frac[14] ? 5'd8  :
-                frac[13] ? 5'd9  : frac[12] ? 5'd10 : frac[11] ? 5'd11 :
-                frac[10] ? 5'd12 : frac[9]  ? 5'd13 : frac[8]  ? 5'd14 :
-                frac[7]  ? 5'd15 : frac[6]  ? 5'd16 : frac[5]  ? 5'd17 :
-                frac[4]  ? 5'd18 : frac[3]  ? 5'd19 : frac[2]  ? 5'd20 :
-                frac[1]  ? 5'd21 : 5'd22;
+    // Leading zeros of frac[22:1] (22 when they are all zero), as the
+    // shared tree; the 22-step priority select was st -> fb64_r at 10.2 ns.
+    assign sh = 5'(upycore_clz64({frac[22:1], 1'b1, 41'd0}));
     assign shifted = frac << sh;
 
     always_comb begin
@@ -203,7 +199,15 @@ endmodule
 // reads them, so the fraction was added after it had already been used.
 module mpy_f32_narrow (
     input  logic [63:0] d_i,
-    output logic [31:0] q_o
+    output logic [31:0] q_o,
+    // A subnormal result takes two steps: the sticky shift's output goes
+    // out (jam_o), the caller registers it and gives it back (jam_i) for
+    // the rounding add, and sub_o says the result is that case. (Shift,
+    // add and the result select in one step were fres_r -> alu_res at
+    // 11.6 ns.) Every other result does not use jam_i.
+    output logic [54:0] jam_o,
+    input  logic [54:0] jam_i,
+    output logic        sub_o
 );
     logic               sign;
     logic [10:0]        exp;
@@ -233,8 +237,11 @@ module mpy_f32_narrow (
         assign jam[k+1] = sh[k] ?
             { {S{1'b0}}, jam[k][54:S+1], (|jam[k][S:0]) } : jam[k];
     end
-    assign mag = {1'b0, jam[6][24:2]} +
-                 {23'd0, jam[6][1] && (jam[6][0] || jam[6][2])};
+    assign jam_o = jam[6];
+    assign mag = {1'b0, jam_i[24:2]} +
+                 {23'd0, jam_i[1] && (jam_i[0] || jam_i[2])};
+    assign sub_o = !(exp == 11'h7FF) && !(d_i[62:0] == 63'b0 || exp == 11'b0) &&
+                   !(exp32 >= 13'sd1) && !(sh >= 12'd53);
 
     always_comb begin
         if (exp == 11'h7FF) begin
@@ -275,7 +282,7 @@ module mpy_alu (
 );
     import mpy_alu_pkg::*;
 
-    typedef enum logic [3:0] { A_IDLE, A_MUL, A_DIV, A_POW, A_FPU, A_FNAR, A_FCONV, A_DONE, A_INORM, A_IROUND } astate_e;
+    typedef enum logic [3:0] { A_IDLE, A_MUL, A_DIV, A_POW, A_FPU, A_FNAR, A_FCONV, A_DONE, A_INORM, A_IROUND, A_FNAR2, A_FERR, A_F2I } astate_e;
     astate_e st;
 
     logic [5:0]  op;
@@ -381,7 +388,12 @@ module mpy_alu (
         .op_a_i(fa64_r), .op_b_i(fb64_r),
         .result_o(fres), .exception_o(fexc), .done_o(fdone), .stall_o(fstall), .busy_o(fbusy)
     );
-    mpy_f32_narrow u_narrow (.d_i(fres_r), .q_o(fnarrow));
+    logic [54:0] nar_jam, nar_jam_r;
+    logic        nar_sub;
+    mpy_f32_narrow u_narrow (.d_i(fres_r), .q_o(fnarrow), .jam_o(nar_jam), .jam_i(nar_jam_r), .sub_o(nar_sub));
+    always_ff @(posedge clk_i or negedge rst_n_i)
+        if (!rst_n_i) nar_jam_r <= '0;
+        else nar_jam_r <= nar_jam;
 
     // Float compare and issue checks. At accept they read the operands
     // directly, which is only done when both are already floats; an op
@@ -408,12 +420,7 @@ module mpy_alu (
             ALU_ADD, ALU_SUB, ALU_MUL: ;
             ALU_TDIV, ALU_FLOOR, ALU_MOD:
                 if (mpy_f32_zero(dxb)) f_err = AE_ZERO_DIV;
-            ALU_POW:
-                if (mpy_f32_zero(dxa) && dxb[31] && !(dxb[30:23] == 8'hFF && dxb[22:0] == 23'd0))
-                    f_err = AE_ZERO_DIV;
-                else if (dxa[31] && !mpy_f32_zero(dxa) && !mpy_f32_nan(dxa) &&
-                         !mpy_f32_integral(dxb) && !mpy_f32_nan(dxb) && !(dxb[30:23] == 8'hFF))
-                    f_err = AE_COMPLEX;
+            ALU_POW: ;   // checked in A_FERR
             default: f_err = AE_UNSUPPORTED;
         endcase
         f_fpu = (f_err == AE_NONE);
@@ -473,10 +480,12 @@ module mpy_alu (
                         rkind_o <= AK_FLOAT;
                         st <= A_INORM;
                     end else if (op_i == ALU_F2I) begin
+                        // Magnitude now, sign in A_F2I (shift and negate in
+                        // one cycle were na -> alu_res at 11.0 ns).
                         v = mpy_f32_to_i64(a_i[31:0], ok);
                         res_o <= v;
                         if (!ok) err_o <= AE_FTOI;
-                        st <= A_DONE;
+                        st <= A_F2I;
                     end else if (op_i >= ALU_NEG) begin
                         if (a_flt_i) begin
                             rkind_o <= AK_FLOAT;
@@ -507,6 +516,8 @@ module mpy_alu (
                         rkind_o <= AK_FLOAT;
                         if (conv) begin
                             st <= A_INORM;
+                        end else if (op_i == ALU_POW) begin
+                            st <= A_FERR;
                         end else begin
                             err_o <= f_err;
                             st <= f_fpu ? A_FPU : A_DONE;
@@ -538,8 +549,11 @@ module mpy_alu (
                     done_o <= 1'b1;
                 end
                 A_DIV: if (div_done) begin
-                    // upycore_div floors. Off the small-int range the oracle truncates.
-                    if (!small_r && rem != 64'd0 && (a[63] != b[63])) begin
+                    // The divider floors. Only the legacy long-long profile
+                    // truncates outside the small-int range.
+                    if (small_r && op == ALU_FLOOR && a == 64'h8000_0000_0000_0000 && b == 64'hffff_ffff_ffff_ffff) begin
+                        err_o <= AE_OVERFLOW;
+                    end else if (!small_r && rem != 64'd0 && (a[63] != b[63])) begin
                         res_o <= (op == ALU_FLOOR) ? quot + 64'd1 : rem - b;
                     end else begin
                         res_o <= (op == ALU_FLOOR) ? quot : rem;
@@ -588,15 +602,39 @@ module mpy_alu (
                         rkind_o <= AK_BOOL;
                         res_o <= {63'd0, f_cmp};
                         st <= A_DONE;
+                    end else if (op == ALU_POW) begin
+                        st <= A_FERR;
                     end else begin
                         err_o <= f_err;
                         st <= f_fpu ? A_FPU : A_DONE;
                     end
                 end
-                A_FNAR: begin
+                // A subnormal binary32 result waits one cycle for nar_jam_r.
+                A_FNAR: if (nar_sub) st <= A_FNAR2;
+                else begin
                     res_o <= {32'd0, fnarrow};
                     st <= A_IDLE;
                     done_o <= 1'b1;
+                end
+                A_F2I: begin
+                    if (fa[31]) res_o <= ~res_o + 64'd1;
+                    st <= A_DONE;
+                end
+                A_FNAR2: begin
+                    res_o <= {32'd0, fnarrow};
+                    st <= A_IDLE;
+                    done_o <= 1'b1;
+                end
+                // float **: the domain errors, from the operand flops (one
+                // cycle per float power; in the dispatch cycle the test sat
+                // in front of the state select, st -> st at 11.4 ns).
+                A_FERR: begin
+                    if (mpy_f32_zero(fa) && fb[31] && !(fb[30:23] == 8'hFF && fb[22:0] == 23'd0)) begin
+                        err_o <= AE_ZERO_DIV; st <= A_DONE;
+                    end else if (fa[31] && !mpy_f32_zero(fa) && !mpy_f32_nan(fa) &&
+                                 !mpy_f32_integral(fb) && !mpy_f32_nan(fb) && !(fb[30:23] == 8'hFF)) begin
+                        err_o <= AE_COMPLEX; st <= A_DONE;
+                    end else st <= A_FPU;
                 end
                 A_DONE: begin
                     // Integer one-cycle ops: the unit sees the latched operands now.
@@ -604,6 +642,11 @@ module mpy_alu (
                         res_o <= ires;
                         if (op <= ALU_NE) begin
                             rkind_o <= AK_BOOL;
+                        end else if (small_r && (op == ALU_LSHIFT || op == ALU_RSHIFT) &&
+                                     b[63:31] != {33{b[31]}}) begin
+                            // Only the MPZ profile sets small_r with a
+                            // shift count beyond the signed machine word.
+                            err_o <= AE_OVERFLOW;
                         end else if (iverr) begin
                             err_o <= AE_NEG_SHIFT;
                         end else if (iovf) begin

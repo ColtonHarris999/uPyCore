@@ -1,0 +1,37 @@
+# The friendly REPL (shared/runtime/pyexec.c pyexec_friendly_repl and
+# shared/readline/readline.c in MicroPython v1.29.0) on the UART console.
+expect Type "help()" for more information.\r\n>>>\x20
+# an expression: __repl_print__
+send 1 + 2\r
+expect 3\r\n>>>\x20
+# a compound statement: "... " with auto-indent; backspace removes the
+# indent (4 spaces), and the empty line ends the statement
+send for i in range(3):\r
+expect ...\x20\x20\x20\x20\x20
+send print(i * i)\r
+expect ...\x20\x20\x20\x20\x20
+send \x08\r
+expect 4\r\n>>>\x20
+# an exception: the traceback on stdout, then the prompt
+send 1 // 0\r
+expect >>>\x20
+# Ctrl-C while a command runs (armed only then): KeyboardInterrupt
+send while True:\r
+expect ...\x20\x20\x20\x20\x20
+send pass\r
+expect ...\x20\x20\x20\x20\x20
+send \x08\r
+wait 400000
+send \x03
+expect KeyboardInterrupt
+expect >>>\x20
+# Ctrl-C at the prompt cancels the line
+send abc\x03
+expect >>>\x20
+# Ctrl-B: the banner again
+send \x02
+expect Type "help()" for more information.\r\n>>>\x20
+# Ctrl-D: soft reboot, and the friendly REPL again
+send \x04
+expect MPY: soft reboot\r\n
+expect Type "help()" for more information.\r\n>>>\x20

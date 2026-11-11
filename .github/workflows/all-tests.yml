@@ -16,10 +16,11 @@ on:
 permissions:
   contents: read
 
-# A title or body edit must not cancel the run a push just started.
+# A new push supersedes stale main runs. PR title and body edits must not
+# cancel the run a push just started.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' && (github.event.action != 'edited' || github.event.changes.base.ref.from) }}
+  cancel-in-progress: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && (github.event.action != 'edited' || github.event.changes.base.ref.from)) }}
 
 jobs:
   # Host checks. No Verilator. The uPy2 byte compare lives here too.
@@ -64,17 +65,17 @@ jobs:
           submodules: true
 
       - name: Oracle toolchain
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-i686-linux-gnu libc6-i386 patch
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-i686-linux-gnu libc6-dev-i386-cross libc6-i386 patch
 
       - name: Build the oracle and check every golden
-        run: make oracle-variant check-goldens
+        run: make oracle-variant oracle-mpz check-goldens
 
   # Hardware tests, one job per area of upycore/programs/hw_tests.toml.
   # Each job verilates once, then runs the area from mpy-cross and from uPy2.
   # The compiler area calls compile/exec/eval on the hart, so that job is
   # allowed a longer timeout. `make test-compiler` is the host uPy2 suite.
   hardware:
-    name: ${{ matrix.area }}
+    name: ${{ matrix.area }}${{ matrix.shard && format(' {0}', matrix.shard) || '' }}
     if: github.event.action != 'edited' || github.event.changes.base.ref.from
     runs-on: ubuntu-latest
     timeout-minutes: ${{ matrix.area == 'compiler' && 360 || 60 }}
@@ -97,14 +98,28 @@ jobs:
           - memory
           - gc
           - generators
-          - compiler
+          - io
+          - irq
+          - system
+          - console
+          - usb
+        # The compiler area runs the uPy2 compiler on the hart (tens to
+        # hundreds of millions of cycles per program), so it is split over
+        # three runners, balanced by upycore/programs/hw_test_cycles.json.
+        include:
+          - area: compiler
+            shard: 1/3
+          - area: compiler
+            shard: 2/3
+          - area: compiler
+            shard: 3/3
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
 
-      - name: Run ${{ matrix.area }}
-        run: make docker-test-hw-${{ matrix.area }}
+      - name: Run ${{ matrix.area }}${{ matrix.shard && format(' {0}', matrix.shard) || '' }}
+        run: make docker-test-hw-${{ matrix.area }} HW_SHARD=${{ matrix.shard }}
 
   # Keep this job id/name so existing branch protection on "all-tests" still
   # matches. It is a gate over the area jobs, not one suite run.

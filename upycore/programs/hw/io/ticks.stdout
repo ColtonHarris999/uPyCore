@@ -1,0 +1,11 @@
+2 -2
+5 -5
+0 True
+True
+OverflowError: ticks interval overflow
+OverflowError: ticks interval overflow
+OverflowError: ticks interval overflow
+us forward True
+cpu forward True
+ms True
+range True True True

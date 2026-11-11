@@ -32,12 +32,37 @@ BUILD = ROOT / "build" / "unit"
 ORACLE_SRC = ROOT / "build" / "oracle" / "src"
 
 sys.path.insert(0, str(ROOT / "upycore" / "tools"))
+sys.path.insert(0, str(ROOT / "iocore" / "tools"))
 import mpy_synth  # noqa: E402  (ALU_FILES: the ALU's RTL list)
+import iocore_files  # noqa: E402  (the I/O island's file lists)
 
 FLAGS = [
     "--binary", "--timing", "-Wno-fatal", "-Wno-WIDTH", "-Wno-UNUSED",
     "-Wno-CASEINCOMPLETE", "-Wno-BLKSEQ", "-Wno-TIMESCALEMOD",
 ]
+# Vendored cores (CVE2, Hazard3) lint differently from our RTL.
+IOCORE_FLAGS = ["-Wno-lint", "-Wno-style", "-Wno-MULTIDRIVEN", "-Wno-UNOPTFLAT", "--timescale", "1ns/1ps"]
+
+
+def _iocore_fw(app: str) -> None:
+    """Build an I/O core firmware image (make -C iocore/sw APP=...)."""
+
+    r = subprocess.run(["make", "-s", "-C", str(ROOT / "iocore" / "sw"), f"APP={app}"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError(f"iocore firmware {app} failed:\n" + r.stdout[-2000:] + r.stderr[-2000:])
+
+
+def _iocore_app(app: str, *extra: str) -> Callable[[Path], list[str]]:
+    def args(work: Path) -> list[str]:
+        _iocore_fw(app)
+        d = ROOT / "build" / "iocore" / app
+        out = [f"+CODE={d / 'code.hex'}", f"+DATA={d / 'data.hex'}"]
+        exp = ROOT / "iocore" / "tb" / "expect" / f"{app}.txt"
+        if exp.exists():
+            out.append(f"+EXPECT={exp}")
+        return out + list(extra)
+    return args
 
 
 def _decode_args(work: Path) -> list[str]:
@@ -75,6 +100,29 @@ class Bench:
     top: str | None = None
     parameters: dict[str, int] = field(default_factory=dict)
     cpp: list[str] = field(default_factory=list)
+    # Paths with a '/' are from the repository root (rtl and tb entries).
+    tb: str | None = None
+    incdirs: list[str] = field(default_factory=list)
+    flags: list[str] = field(default_factory=list)
+
+
+def _model_args(flag: str) -> Callable[[Path], list[str]]:
+    def args(work: Path) -> list[str]:
+        r = subprocess.run([sys.executable, str(ROOT / "iocore" / "tools" / "iocore_periph_model.py"), flag],
+                           capture_output=True, text=True, check=True)
+        return r.stdout.split()
+    return args
+
+
+def _iocore_block(name: str, rtl: list[str], passed: str, args: Callable[[Path], list[str]] | None = None) -> "Bench":
+    # One of the I/O core's peripherals (iocore/tb/tb_iocore_<name>.sv).
+    return Bench(f"iocore_{name}", rtl, passed, args or (lambda work: []), top=f"tb_iocore_{name}",
+                 tb=f"iocore/tb/tb_iocore_{name}.sv", flags=IOCORE_FLAGS)
+
+
+def _island(core: str) -> tuple[list[str], list[str]]:
+    files, inc = iocore_files.island(core)
+    return files + ["iocore/tb/tb_uart_line.sv"], inc
 
 
 BENCHES = [
@@ -110,6 +158,23 @@ BENCHES = [
           _periph_args),
     Bench("mpy_value", ["mpy_regfile.sv", "bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv"], r"^MPY value encoding: ok"),
     Bench("upycore_umod_seq", ["upycore_umod_seq.sv"], r"^PASS upycore_umod_seq "),
+    Bench("mpy_iobr", ["mpy_async_fifo.sv", "mpy_iobr.sv"], r"^PASS mpy_iobr ",
+          flags=["--timescale", "1ns/1ps"]),
+    _iocore_block("pwm", ["iocore/rtl/iocore_pwm.sv", "iocore/rtl/iocore_pinmux.sv"], r"^PASS: iocore pwm",
+                  _model_args("--pwm-plusargs")),
+    _iocore_block("spi", ["iocore/rtl/iocore_spi.sv", "iocore/tb/tb_spi_flash.sv"], r"^PASS: iocore spi"),
+    _iocore_block("i2c", ["iocore/rtl/iocore_i2c.sv", "iocore/tb/tb_i2c_target.sv"], r"^PASS: iocore i2c"),
+    _iocore_block("adc", ["iocore/rtl/iocore_adc.sv", "iocore/tb/tb_adc_model.sv"], r"^PASS: iocore adc",
+                  _model_args("--adc-plusargs")),
+    _iocore_block("wdt", ["iocore/rtl/iocore_wdt.sv"], r"^PASS: iocore wdt", _model_args("--wdt-plusargs")),
+    Bench("iocore_usb", list(iocore_files.USB_RTL), r"^PASS tb_iocore_usb ", top="tb_iocore_usb",
+          tb="iocore/tb/tb_iocore_usb.sv", incdirs=list(iocore_files.USB_INCDIRS), flags=IOCORE_FLAGS),
+    Bench("iocore_cve2", _island("cve2")[0], r"^PASS tb_iocore ", _iocore_app("hello", "+UART_IN=AB"),
+          top="tb_iocore", tb="iocore/tb/tb_iocore.sv", incdirs=_island("cve2")[1],
+          parameters={"CORE": 0}, flags=IOCORE_FLAGS),
+    Bench("iocore_hazard3", _island("hazard3")[0], r"^PASS tb_iocore ", _iocore_app("hello", "+UART_IN=AB"),
+          top="tb_iocore", tb="iocore/tb/tb_iocore.sv", incdirs=_island("hazard3")[1],
+          parameters={"CORE": 1}, flags=IOCORE_FLAGS),
     Bench("upycore_fp_subnormal", ["upycore_fp_add.sv", "upycore_umul_seq.sv", "upycore_fp_mul.sv",
                                    "upycore_udiv_seq.sv", "upycore_fp_divrem.sv"],
           r"^PASS upycore_fp_subnormal "),
@@ -120,8 +185,12 @@ def run_bench(b: Bench) -> tuple[bool, str]:
     work = BUILD / b.name
     work.mkdir(parents=True, exist_ok=True)
     top = b.top or f"tb_{b.name}"
-    cmd = [os.environ.get("VERILATOR", "verilator"), *FLAGS, f"-I{RTL}", "--Mdir", str(work / "obj"),
-           *[str(RTL / f) for f in b.rtl], str(TB / f"{top}.sv"), "--top-module", top,
+    def path(f: str, base: Path) -> str:
+        return str(ROOT / f) if "/" in f and not f.startswith("../") else str(base / f)
+    cmd = [os.environ.get("VERILATOR", "verilator"), *FLAGS, *b.flags, f"-I{RTL}",
+           *[f"-I{ROOT / d}" for d in b.incdirs], "--Mdir", str(work / "obj"),
+           *[path(f, RTL) for f in b.rtl], path(b.tb, TB) if b.tb else str(TB / f"{top}.sv"),
+           "--top-module", top,
            *[f"-G{k}={v}" for k, v in b.parameters.items()],
            *[str(TB / f) for f in b.cpp]]
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)

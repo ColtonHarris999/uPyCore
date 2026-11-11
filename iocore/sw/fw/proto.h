@@ -1,0 +1,82 @@
+// The command protocol between the hart and the I/O core
+// (upycore/docs/mpy_io_core.md, Commands). A CMD word is a channel in bits
+// 31:24 and a payload in bits 23:0; a multi-word command states its length
+// in its first word. The hart's side is upycore/runtime/machine.py and
+// time.py; keep the numbers in step.
+#ifndef PROTO_H
+#define PROTO_H
+
+#define CH_SYS        0x01   // 23:16 op
+#define   SYS_OP_PING 0x01   //   RSP: the protocol version
+#define   SYS_OP_FREQ 0x02   //   RSP: io_clk in Hz
+#define   SYS_OP_UID  0x03   //   RSP: the unique id, high word then low word
+#define   SYS_OP_RESET 0x04  //   before a hart reset: peripherals to their reset state; bit 0 also stops the watchdog. RSP: 0
+#define CH_ECHO       0x02   // RSP: the same word
+#define CH_EVT        0x03   // raise the events in 15:0 (a bridge test)
+#define CH_PAGE       0x04   // 4:0 page word, then its value (a bridge test). RSP: the CMD word
+#define CH_DNRD       0x05   // RSP: the hart-written page word 2:0
+#define CH_KBD        0x06   // 8 armed, 7:0 the console's interrupt character
+
+#define CH_PIN_INIT   0x10   // 4:0 pin, 7:5 mode (0 IN, 1 OUT, 2 OPEN_DRAIN),
+                             // 9:8 pull (0 none, 1 up, 2 down), 10 set the value, 11 value
+#define CH_PIN_WRITE  0x11   // 4:0 pin, 8 value
+#define CH_PIN_TOGGLE 0x12   // 4:0 pin
+#define CH_PIN_IRQ    0x13   // 4:0 pin, 9:8 edges (1 rising, 2 falling, 3 both; 0 off)
+#define CH_PIN_FUNC   0x14   // 4:0 pin, 11:8 the pad function (pin mux: 0 GPIO, 1-4 PWM,
+                             // 5 SCK, 6 MOSI, 7 MISO, 8 SCL, 9 SDA, 10 UART TX, 11 UART RX)
+
+#define CH_PWM_CFG    0x40   // the next word: 31:16 prescaler, 15:0 top (all channels)
+#define CH_PWM_DUTY   0x41   // 1:0 channel; the next word: the duty compare (17 bits)
+#define CH_PWM_EN     0x42   // 3:0 channels on
+#define CH_SPI_INIT   0x50   // 0 CPOL, 1 CPHA; the next word: the half-period divider
+#define CH_SPI_XFER   0x51   // 7:0 n bytes, 8 answer the bytes read; then ceil(n/3)
+                             // words of bytes to send. RSP: ceil(n/3) words read (with 8)
+#define CH_SPI_DEINIT 0x52
+#define CH_I2C_INIT   0x60   // the next words: the quarter-bit divider, the timeout in clocks
+#define CH_I2C_XFER   0x61   // 6:0 address, 7 read, 15:8 n bytes, 16 START, 17 STOP,
+                             // 18 NACK the last byte read; a write's ceil(n/3) words follow.
+                             // RSP: status (0, -19 ENODEV, -110 ETIMEDOUT, or for a write
+                             // n - bytes acked), then a read's ceil(n/3) words
+#define CH_I2C_DEINIT 0x62
+#define CH_ADC_READ   0x70   // 3:0 channel. RSP: the code, left-aligned to 16 bits
+#define CH_WDT_START  0x80   // the next word: the timeout in ms
+#define CH_WDT_FEED   0x81
+
+#define CH_UART_INIT  0x20   // 3:0 id; the next word is the baud rate. RSP: the baud rate set
+#define CH_UART_TX1   0x21   // one to three bytes, byte 0 in bits 7:0
+#define CH_UART_TX2   0x22
+#define CH_UART_TX3   0x23
+#define CH_UART_RX    0x28   // 7:0 at most this many bytes. RSP: count k, then ceil(k/4)
+                             // words of four bytes (byte 0 in bits 7:0; unused bytes 0)
+#define CH_UART_DEINIT 0x29
+#define CH_UART_IRQ   0x2A   // 15:0 the triggers to raise UART0_RX for (UIRQ_*)
+#define   UIRQ_TXIDLE 0x20   //   the TX ring and the line are idle after sending
+#define   UIRQ_RXIDLE 0x40   //   bytes arrived, then two character times without one
+
+#define CH_TIMER_INIT 0x30   // 1:0 id, 2 periodic, 3 raise TIMER on each expiration;
+                             // the next word is the period in µs
+#define CH_TIMER_DEINIT 0x31 // 1:0 id
+
+#define PROTO_VERSION 6
+
+// Event bits (the hart's EVT, set with BR_EVT).
+#define EV_SOFT    (1u << 0)   // micropython.schedule (the hart sets it itself)
+#define EV_KBD     (1u << 1)   // the console's interrupt character
+#define EV_UART0   (1u << 2)   // UART.irq triggers
+#define EV_TIMER   (1u << 3)   // a timer with a callback expired
+#define EV_PIN     (1u << 4)   // a pin edge with Pin.irq armed
+
+// State page words (I/O core writes, hart reads): BR_UP(i).
+#define PG_VERSION 0     // 0x494F_00vv: protocol version vv
+#define PG_PIN_IN  1     // pin levels
+#define PG_PIN_FLAGS 2   // two bits per pin: the edges seen since PIN_IRQ (1 rise, 2 fall)
+#define PG_MS      3     // the timer's ms count (hardware: mpy_iobr's tick crossing)
+#define PG_US      4     // the timer's µs count (hardware)
+#define PG_CYCLES  5     // io_clk cycles, updated each ms
+#define PG_UART0   6     // 15:0 RX bytes waiting, 27:16 TX ring free, 31 TX busy
+#define PG_SEQ     7     // CMD words the I/O core has finished
+#define PG_TIMER0  8     // 8-11: expirations of timer 0-3
+#define NTIMERS    4
+#define PG_PIN_CNT 12    // 12-15: an 8-bit count of armed edges per pin, four pins a word
+#define PG_UART0_EV 16   // 7:0 RXIDLE count, 15:8 TXIDLE count, 23:16 the last triggers
+#endif

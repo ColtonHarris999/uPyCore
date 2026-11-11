@@ -45,6 +45,14 @@ ALU_FILES = [
     "mpy_alu.sv",
 ]
 
+# The I/O island (iocore/tools/iocore_files.py): CVE2 and the island's RTL.
+# Entries with a '/' are paths from the repository root.
+sys.path.insert(0, str(ROOT / "iocore" / "tools"))
+import iocore_files  # noqa: E402
+
+_ISLAND, ISLAND_INCDIRS = iocore_files.island("cve2")
+ISLAND_FILES = [f for f in _ISLAND if not f.endswith("bsg_mem_1rw_sync_mask_write_bit.sv")]
+
 # Each top is one slang --single-unit so file-scope includes share one $unit.
 TOPS: dict[str, list[str]] = {
     "mpy_decode": ["mpy_decode.sv"],
@@ -69,8 +77,12 @@ TOPS: dict[str, list[str]] = {
     "mpy_core": ALU_FILES + ["upycore_umod_seq.sv", "mpy_decode.sv", "mpy_fetch.sv", "mpy_core.sv"],
     "mpy_soc": ALU_FILES
     + ["upycore_umod_seq.sv", "mpy_decode.sv", "mpy_fetch.sv", "mpy_core.sv", "mpy_gc.sv", "mpy_ca.sv", "mpy_hash.sv", "mpy_key_equal.sv", "mpy_map_engine.sv", "mpy_bulk.sv", "mpy_hash_slot.sv", "mpy_rehash_stream.sv", "mpy_bytecopy.sv", "mpy_shortlist.sv", "mpy_collection.sv",
-       "bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv", "mpy_boot.sv", "mpy_soc.sv"],
+       "bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv", "mpy_boot.sv", "mpy_async_fifo.sv",
+       "mpy_iobr.sv"] + ISLAND_FILES + ["mpy_soc.sv"],
+    "mpy_iobr": ["mpy_async_fifo.sv", "mpy_iobr.sv"],
 }
+# Include directories a top needs beyond upycore/rtl (from the repository root).
+INCDIRS: dict[str, list[str]] = {"mpy_soc": ISLAND_INCDIRS}
 
 # mpy_core and everything under it (upycore/synth/hammer/converted/mpy_core.v).
 CORE_FILES = TOPS["mpy_core"]
@@ -88,6 +100,19 @@ SRAM_MACROS = SRAM_BLOCKS * SRAM_MACROS_PER_BLOCK   # mpy_mem's g_mac[0..31]
 # word, mpy_abi.GC_TABLE_BYTES / 16 blocks), the same wrapper and hook.
 GC_SRAM_MACRO = {"name": "fakeram_d600_w64", "family": "1rw", "depth": 600, "width": 64,
                  "mask": True, "mux": 1, "vt": ""}
+# The I/O island's code (16 KB) and data (7.5 KB) SRAMs: the same wrapper,
+# 4096 x 32 and 1920 x 32 (iocore_top's CODE_WORDS and DATA_WORDS).
+IOCORE_CODE_SRAM_MACRO = {"name": "fakeram_d4096_w32", "family": "1rw", "depth": 4096, "width": 32,
+                          "mask": True, "mux": 1, "vt": ""}
+IOCORE_DATA_SRAM_MACRO = {"name": "fakeram_d1920_w32", "family": "1rw", "depth": 1920, "width": 32,
+                          "mask": True, "mux": 1, "vt": ""}
+# The USB SIE's nine 256 x 16 RAMs (endpoint buffers and status; the
+# microcode ROM is logic): BaseJump's bsg_mem_1r1w_sync_mask_write_bit,
+# one read and one write port on usb_clk (iocore/rtl/usb/ice40_cells.sv).
+USB_SRAM_MACRO = {"name": "fakeram_d256_w16", "family": "1r1w", "depth": 256, "width": 16,
+                  "mask": True, "mux": 1, "vt": ""}
+USB_SRAM_BLOCKS = 9
+USB_SRAM_MODEL = "iocore/rtl/usb/bsg_mem_1r1w_sync_mask_write_bit.sv"
 
 # Gate mapping the SRAM blocks as flops is a long memory job (the class
 # flow uses macros instead), so mem and soc stay elaborate-only here.
@@ -117,7 +142,7 @@ def _yosys() -> str:
 def _files(top: str) -> list[Path]:
     if top not in TOPS:
         raise SynthError(f"unknown top {top!r}; choose from: {', '.join(TOPS)}")
-    paths = [RTL / name for name in TOPS[top]]
+    paths = [(ROOT / name if "/" in name else RTL / name) for name in TOPS[top]]
     missing = [p for p in paths if not p.is_file()]
     if missing:
         raise SynthError("missing RTL:\n  " + "\n  ".join(str(p) for p in missing))
@@ -140,7 +165,7 @@ def _write_script(
         # SYNTHESIS strips sim-only $readmemh / plusargs / giant initial loops.
         "read_slang --single-unit --top {top} -DSYNTHESIS -I {inc}{extra} {srcs}".format(
             top=top,
-            inc=RTL.as_posix(),
+            inc=" -I ".join([RTL.as_posix(), *[(ROOT / d).as_posix() for d in INCDIRS.get(top, [])]]),
             extra=extra,
             srcs=" ".join(p.as_posix() for p in sources),
         ),

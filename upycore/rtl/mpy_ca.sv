@@ -143,7 +143,8 @@ module mpy_ca #(
     assign take    = rq_v && gnt_i;
     assign ld_ok   = !rq_v || gnt_i;
     assign ld_wr   = ld_ok && act && wn != 32'd0 && fc != '0;
-    assign ld_rd   = ld_ok && act && !ld_wr && rn != 32'd0 && 32'(rpend) + 32'(fc) < BUF;
+    // !ld_wr, without the grant in it (ld_wr is ld_ok and the rest).
+    assign ld_rd   = ld_ok && act && !(act && wn != 32'd0 && fc != '0) && rn != 32'd0 && 32'(rpend) + 32'(fc) < BUF;
     assign last_wr = take && rq_we && wn == 32'd0;
     assign flt     = ack_i && fault_i && !fault_o;
     assign rd_ack  = ack_i && !fault_i && !fault_o && !if_we[0];
@@ -155,12 +156,13 @@ module mpy_ca #(
     assign cmd_ready_o = 32'(cnt) < QDEPTH;
     assign idle_o = (cnt == '0) && (if_n == '0) && !rq_v;
 
+    logic [2*QDEPTH-1:0] chk_hit;   // one OR over every range test
     always_comb begin
-        chk_busy_o = 1'b0;
         for (int k = 0; k < QDEPTH; k++) begin
-            if (qv[k] && chk_addr_i >= dlo[k] && chk_addr_i < dhi[k]) chk_busy_o = 1'b1;
-            if (qv[k] && chk_we_i && chk_addr_i >= slo[k] && chk_addr_i < shi[k]) chk_busy_o = 1'b1;
+            chk_hit[2*k]   = qv[k] && chk_addr_i >= dlo[k] && chk_addr_i < dhi[k];
+            chk_hit[2*k+1] = qv[k] && chk_we_i && chk_addr_i >= slo[k] && chk_addr_i < shi[k];
         end
+        chk_busy_o = |chk_hit;
     end
 
     always_ff @(posedge clk_i or negedge rst_n_i) begin

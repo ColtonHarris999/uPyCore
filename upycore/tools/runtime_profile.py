@@ -33,15 +33,15 @@ def state_names():
 def build_profiler(out,jobs):
     target=out/'sim-profile';target.mkdir(parents=True,exist_ok=True)
     exe=target/'Vtb_mpy_soc'
-    sources=[b.ROOT/p for p in b.RTL+b.RTL_INCLUDES]+[b.ROOT/'upycore/tb/mpy_profile.svh']
+    sources=[b.ROOT/p for p in b.ISLAND_RTL+b.RTL+b.RTL_INCLUDES]+[b.ROOT/'upycore/tb/mpy_profile.svh']
     fingerprint=hashlib.sha256((''.join(sha(p) for p in sources)+os.environ.get('VERILATOR','verilator')).encode()).hexdigest()
     stamp=target/'fingerprint'
     if not exe.exists() or not stamp.exists() or stamp.read_text()!=fingerprint:
         cmd=[os.environ.get('VERILATOR','verilator'),'-sv','--binary','--timing','--timescale','1ns/1ps','-O3',
              '--x-assign','fast','--x-initial','fast','-DMPY_PROFILE',f'+incdir+{b.ROOT / "upycore/rtl"}',
-             '-y',str(b.ROOT/'upycore/rtl'),'--top-module','tb_mpy_soc','--Mdir',str(target),
+             '-y',str(b.ROOT/'upycore/rtl'),*[f'+incdir+{b.ROOT / d}' for d in b.ISLAND_INCDIRS],'--top-module','tb_mpy_soc','--Mdir',str(target),
              '-Wno-fatal','-Wno-WIDTH','-Wno-UNUSED','-Wno-CASEINCOMPLETE','-Wno-BLKSEQ','-Wno-TIMESCALEMOD',
-             '-j',str(jobs)]+[str(p) for p in sources if p.suffix=='.sv']
+             '-Wno-lint','-Wno-style','-Wno-MULTIDRIVEN','-Wno-UNOPTFLAT','-j',str(jobs)]+[str(p) for p in sources if p.suffix in ('.sv','.v')]
         r=subprocess.run(cmd,cwd=b.ROOT,capture_output=True,text=True)
         (out/'build-profile.log').write_text(r.stdout+r.stderr)
         if r.returncode:raise RuntimeError((r.stdout+r.stderr)[-6000:])
@@ -105,7 +105,8 @@ def lut_for(image,work):
     functions={'0':'<frame-transition-or-unknown>'};lut=[0]*131072
     for i,(addr,name) in enumerate(m['rc'].items(),1):
         if i>=2048:raise ValueError('profiler function capacity')
-        functions[str(i)]=name
+        # Two functions can share a name (methods of two classes): keep both rows.
+        functions[str(i)]=name if name not in functions.values() else f'{name}@{addr}'
         group=SPECIFIC.get(name.split(':',1)[-1],0) if name.startswith('_fw:') else 0
         lut[int(addr,16)//4]=i+(group<<16)+(int(name.startswith('_fw:'))<<24)
     path=work/'profile.lut.hex';path.write_text(''.join(f'{v:08x}\n' for v in lut))
@@ -122,7 +123,7 @@ def lut_for(image,work):
     return path,functions
 
 def parse_profile(path,functions,states):
-    out={'functions':{},'groups':{},'reasons':{},'group_reasons':{},'states':{},'events':{},'opcode_pc_counts':{}}
+    out={'functions':{},'groups':{},'reasons':{},'group_reasons':{},'states':{},'events':{},'opcode_pc_counts':{},'opcodes':{}}
     for line in path.read_text().splitlines():
         parts=line.split();kind=parts[0];v=parts[1:]
         if kind=='META':out['start'],out['stop'],out['cycles'],out['tick_reads'],out['ancestry_warnings']=map(int,v)
@@ -133,6 +134,7 @@ def parse_profile(path,functions,states):
         elif kind=='CROSS':out['group_reasons'][f'{GROUPS[int(v[0])]} / {REASONS[int(v[1])]}']=int(v[2])
         elif kind=='STATE':out['states'][states[int(v[0])]]=int(v[1])
         elif kind=='EVENT':out['events'][v[0]]=int(v[1])
+        elif kind=='OPCODE':out['opcodes'][('fw' if int(v[0]) else 'user')+f':{int(v[1]):02x}']={'count':int(v[2]),'cycles':int(v[3])}
         elif kind=='PC':out['opcode_pc_counts'][hex(int(v[0]))]=int(v[1])
     if out.get('tick_reads')!=2:raise ValueError('kernel must read _ticks exactly twice')
     if out.get('stop',0)-out.get('start',0)!=out.get('cycles'):raise ValueError('profile interval mismatch')
@@ -156,7 +158,7 @@ def run_one(case,out,profiler,before,max_cycles,timeout,flags):
         if r.exit_code:raise RuntimeError(f'{name} {label}: {r.halt}: {r.stderr!r}')
         lines=r.stdout.decode().splitlines();times=[x for x in lines if x.startswith('CYCLES ')]
         checks=[x for x in lines if x.startswith('RESULT ')]
-        if len(times)!=1 or checks!=[expected]:raise RuntimeError(f'{name} bad result: {lines}')
+        if len(times)!=1 or len(checks)!=1 or (expected is not None and checks!=[expected]):raise RuntimeError(f'{name} bad result: {lines}')
         return {'cycles':int(times[0].split()[1]),'total_cycles':r.cycles,'ops':r.ops,'gc':r.gc,'result':checks[0]}
     # Sequential runs share precisely the same linked image and output prefix.
     if before:row['reference']=run(before,'reference',[])
@@ -214,7 +216,7 @@ def run_project_suite(args,out,profiler):
 def main():
     ap=argparse.ArgumentParser(description=__doc__);ap.add_argument('--out',type=Path,default=b.ROOT/'build/runtime-profile')
     ap.add_argument('--completion-probes',action='store_true');ap.add_argument('--bytes-probe',action='store_true');ap.add_argument('--resume',action='store_true');ap.add_argument('--project-suite',action='store_true');ap.add_argument('--before',type=Path);ap.add_argument('--micro',action='store_true');ap.add_argument('--loops',type=int,default=8)
-    ap.add_argument('--lengths',default=','.join(map(str,LENGTHS)));ap.add_argument('--cases',default='misc_aes,bm_fannkuch')
+    ap.add_argument('--lengths',default=','.join(map(str,LENGTHS)));ap.add_argument('--cases',default='misc_aes,bm_fannkuch');ap.add_argument('--suite',action='store_true',help='--cases are perf_bench kernels under the shortlist_bench.py harness')
     ap.add_argument('--workers',type=int,default=2);ap.add_argument('--jobs',type=int,default=2);ap.add_argument('--max-cycles',type=int,default=400_000_000)
     ap.add_argument('--timeout',type=int,default=1800);ap.add_argument('--ca',type=int,choices=[0,1],default=1)
     ap.add_argument('--aalu',type=int,choices=[0,1],default=1);args=ap.parse_args()
@@ -250,6 +252,15 @@ def main():
                     with contextlib.redirect_stdout(ref):exec(compile(source,name,'exec'),{'bench_ticks':lambda:0})
                     expected=next(line for line in ref.getvalue().splitlines() if line.startswith('RESULT '))
                     cases.append((name,source,expected,None))
+    elif args.suite:
+        # Any perf_bench kernel, wrapped as shortlist_bench.py and
+        # perf_inventory.py wrap it (the harness's names do not collide with
+        # a kernel's globals). The result is not checked here: compare the
+        # RESULT lines with a shortlist_bench.py run of the same tree.
+        from perf_inventory import HARNESS
+        for name in args.cases.split(','):
+            p=b.ROOT/'vendor/micropython/tests/perf_bench'/f'{name}.py'
+            cases.append((name,p.read_text()+HARNESS.format(n=100,m=100),None,sha(p)))
     else:
         for name in args.cases.split(','):
             if name not in ['misc_aes','bm_fannkuch']:raise ValueError('Only collision-checked AES/Fannkuch sources supported')

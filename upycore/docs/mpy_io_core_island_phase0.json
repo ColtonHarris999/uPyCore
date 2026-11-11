@@ -1,0 +1,90 @@
+[
+ {
+  "core": "cve2",
+  "mul": 0,
+  "top": "iocore_cpu",
+  "area_um2": 87177.36,
+  "cells": 10286,
+  "flops": 1415,
+  "seq_area_um2": 35425.2,
+  "worst_ns": 18.078,
+  "sta_head": "worst endpoint 18.078 ns  (g_cve2.u_core.u_cve2_core.if_stage_i.prefetch_buffer_i.fifo_i.rdata_q[9])  endpoints 1514"
+ },
+ {
+  "core": "cve2",
+  "mul": 1,
+  "top": "iocore_cpu",
+  "area_um2": 99327.7632,
+  "cells": 11867,
+  "flops": 1419,
+  "seq_area_um2": 35551.5,
+  "worst_ns": 17.973,
+  "sta_head": "worst endpoint 17.973 ns  (g_cve2.u_core.u_cve2_core.if_stage_i.prefetch_buffer_i.fifo_i.rdata_q[9])  endpoints 1518"
+ },
+ {
+  "core": "hazard3",
+  "mul": 0,
+  "top": "iocore_cpu",
+  "area_um2": 72189.2352,
+  "cells": 8354,
+  "flops": 1201,
+  "seq_area_um2": 32374.1,
+  "worst_ns": 18.073,
+  "sta_head": "worst endpoint 18.073 ns  (g_hazard3.u_core.core.x_rs1_select_regs_xm_mw[2])  endpoints 1306"
+ },
+ {
+  "core": "hazard3",
+  "mul": 1,
+  "top": "iocore_cpu",
+  "area_um2": 90679.4688,
+  "cells": 10838,
+  "flops": 1266,
+  "seq_area_um2": 34274.1,
+  "worst_ns": 17.939,
+  "sta_head": "worst endpoint 17.939 ns  (g_hazard3.u_core.core.x_rs1_select_regs_xm_mw[2])  endpoints 1371"
+ },
+ {
+  "core": "cve2",
+  "mul": 0,
+  "top": "iocore_top",
+  "area_um2": 116017.52,
+  "cells": 12898,
+  "flops": 2072,
+  "seq_area_um2": 53209.3,
+  "worst_ns": 18.209,
+  "sta_head": "worst endpoint 18.209 ns  (u_cpu.g_cve2.u_core.u_cve2_core.if_stage_i.prefetch_buffer_i.fifo_i.rdata_q[9])  endpoints 2274"
+ },
+ {
+  "core": "cve2",
+  "mul": 1,
+  "top": "iocore_top",
+  "area_um2": 127399.6864,
+  "cells": 14463,
+  "flops": 2076,
+  "seq_area_um2": 53235.6,
+  "worst_ns": 18.092,
+  "sta_head": "worst endpoint 18.092 ns  (u_cpu.g_cve2.u_core.u_cve2_core.if_stage_i.prefetch_buffer_i.fifo_i.rdata_q[9])  endpoints 2278"
+ },
+ {
+  "core": "hazard3",
+  "mul": 0,
+  "top": "iocore_top",
+  "area_um2": 100517.6544,
+  "cells": 10619,
+  "flops": 1857,
+  "seq_area_um2": 50068.3,
+  "worst_ns": 18.073,
+  "sta_head": "worst endpoint 18.073 ns  (u_cpu.g_hazard3.u_core.core.x_rs1_select_regs_xm_mw[2])  endpoints 2062"
+ },
+ {
+  "core": "hazard3",
+  "mul": 1,
+  "top": "iocore_top",
+  "area_um2": 119138.0128,
+  "cells": 13161,
+  "flops": 1922,
+  "seq_area_um2": 51968.3,
+  "worst_ns": 17.939,
+  "sta_head": "worst endpoint 17.939 ns  (u_cpu.g_hazard3.u_core.core.x_rs1_select_regs_xm_mw[2])  endpoints 2127"
+ }
+]

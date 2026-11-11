@@ -1,0 +1,17 @@
+benchmark,label,Pico RP2040,Pico 2 Arm,Pico 2 RISC-V,ESP32-C3,Pyboard v1.0,PyBD SF6
+bm_chaos,Chaos,223.7,114.6,182.9,136.8,140.1,130.7
+bm_fannkuch,Fannkuch,106.4,61.7,70.4,62.1,82.3,59.2
+bm_fft,FFT,,,,311.4,329.5,423.1
+bm_float,Float,102.0,,,63.1,43.8,42.1
+bm_hexiom,Hexiom,283.4,,,194.6,218.6,200.9
+bm_nqueens,N-Queens,433.8,211.3,237.8,210.5,243.2,175.2
+bm_pidigits,Pi digits (MPZ),,,,74.5,98.0,67.7
+bm_wordcount,Wordcount,251.3,110.1,160.4,,168.9,
+core_locals,Instance attributes,312.5,136.5,175.8,,198.6,
+core_qstr,Interned strings,29.2,18.5,19.0,33.0,19.6,
+core_str,Strings,322.6,190.5,199.8,,232.0,
+core_yield_from,Generator delegation,109.8,52.3,52.9,74.4,56.2,
+misc_aes,AES,103.2,,,64.0,78.5,60.3
+misc_mandel,Mandelbrot,231.3,,,153.9,126.3,99.1
+misc_pystone,Pystone,211.6,117.0,145.7,128.7,126.1,120.7
+misc_raytrace,Raytrace,206.5,,,122.7,138.5,124.7

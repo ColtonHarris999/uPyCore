@@ -1,0 +1,16 @@
+Pin(0, mode=OUT) Pin(8, mode=IN)
+low 0 0
+on 1
+off 0
+toggle 1
+call 0 1 0
+high 1
+low 0
+pull_up 1 1
+pull_down 0
+od released 1
+od low 0
+od released 1
+bus [0, 1, 0, 1, 0, 1, 0, 1]
+ValueError: invalid pin
+ValueError: invalid pin mode: 7

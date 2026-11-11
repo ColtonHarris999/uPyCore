@@ -8,6 +8,10 @@ integer pr_frame_fn[PR_WORDS], pr_frame_parent[PR_WORDS], pr_frame_group[PR_WORD
 longint unsigned pr_self[PR_FUNCS],pr_incl[PR_FUNCS],pr_entries[PR_FUNCS];
 longint unsigned pr_group[16],pr_reason[12],pr_cross[16][12],pr_state[PR_STATES];
 longint unsigned pr_pc[524288];
+// Per opcode, user and firmware frames apart: instructions retired, and
+// the cycles from one instruction's S_EXEC entry to the next one's.
+longint unsigned pr_opn[2][256],pr_opc[2][256];
+integer pr_op_now=-1,pr_op_fw=0;
 longint unsigned pr_total=0,pr_last=0,pr_start=0,pr_stop=0;
 longint unsigned pr_bload=0,pr_bstore=0,pr_commands=0,pr_queue=0,pr_allocs=0,pr_alloc_words=0,pr_collections=0;
 integer pr_fd=0,pr_ticks=0,pr_pending=0,pr_last_fb=-1,pr_last_rc=-1,pr_last_fp=-1;
@@ -33,6 +37,8 @@ task automatic pr_dump();
         for(integer k=0;k<12;k++) $fwrite(pr_fd,"REASON %0d %0d\n",k,pr_reason[k]);
         for(integer k=0;k<PR_STATES;k++) if(pr_state[k]!=0) $fwrite(pr_fd,"STATE %0d %0d\n",k,pr_state[k]);
         for(integer k=0;k<524288;k++) if(pr_pc[k]!=0) $fwrite(pr_fd,"PC %0d %0d\n",k,pr_pc[k]);
+        for(integer k=0;k<256;k++) for(integer j=0;j<2;j++) if(pr_opn[j][k]!=0 || pr_opc[j][k]!=0)
+            $fwrite(pr_fd,"OPCODE %0d %0d %0d %0d\n",j,k,pr_opn[j][k],pr_opc[j][k]);
         $fwrite(pr_fd,"EVENT bytearray_load_fallback %0d\nEVENT bytearray_store_fallback %0d\nEVENT copy_commands %0d\nEVENT copy_admission_wait %0d\nEVENT allocation_requests %0d\nEVENT allocated_words_requested %0d\nEVENT collection_requests %0d\n",pr_bload,pr_bstore,pr_commands,pr_queue,pr_allocs,pr_alloc_words,pr_collections);
         $fclose(pr_fd);pr_done=1;
     end
@@ -114,6 +120,8 @@ always @(posedge clk) if(pr_fd!=0 && !pr_done && rst_n && boot_done) begin : pro
         else if((pr_stateflags[eff]&16)!=0)reason=9;
         pr_total++;pr_self[fid]++;pr_group[gid]++;pr_reason[reason]++;pr_cross[gid][reason]++;pr_state[int'(u_soc.u_core.st)]++;
         if(trace && trace_pc<524288)pr_pc[trace_pc]++;
+        if(trace) begin pr_op_now=int'(trace_op);pr_op_fw=entry[24] ? 1 : 0;pr_opn[pr_op_fw][pr_op_now]++;end
+        if(pr_op_now>=0)pr_opc[pr_op_fw][pr_op_now]++;
         if(u_soc.u_core.st==u_soc.u_core.S_LS_FB && u_soc.u_core.t[0][35:32]==10 && u_soc.u_core.t[0][1:0]==3)begin pr_bload++;pr_pending=2;end
         if(u_soc.u_core.st==u_soc.u_core.S_SS_FB && u_soc.u_core.t[0][35:32]==10 && u_soc.u_core.t[0][1:0]==3)begin pr_bstore++;pr_pending=3;end
         if(u_soc.u_core.st==u_soc.u_core.S_CF_SW)pr_entries[(pr_lut[u_soc.u_core.c_rc>>2]&65535)]++;

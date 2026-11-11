@@ -14,7 +14,7 @@ CROSS="${ORACLE_CROSS_COMPILE:-i686-linux-gnu-}"
 JOBS="${JOBS:-$(nproc)}"
 
 usage() {
-    echo "usage: build.sh {prepare|mpy-cross|variant|header|smoke}" >&2
+    echo "usage: build.sh {prepare|mpy-cross|variant|mpz|header|smoke}" >&2
     exit 2
 }
 
@@ -62,6 +62,13 @@ build_mpy_cross() {
 
 build_variant() {
     prepare
+    profile=${1:-longlong}
+    variant_build="build-$VARIANT_NAME"
+    mpz=0
+    if [ "$profile" = mpz ]; then
+        variant_build="$variant_build-mpz"
+        mpz=1
+    fi
     if ! command -v "${CROSS}gcc" >/dev/null 2>&1; then
         echo "missing ${CROSS}gcc (the pin's i686 unix recipe)" >&2
         exit 1
@@ -70,13 +77,17 @@ build_variant() {
     # when the variant or the port patch changes.
     variant_id=$(cat "$VARIANT/mpconfigvariant.h" "$VARIANT/mpconfigvariant.mk" "$VARIANT/unix-port.patch" "$VARIANT/stdio.c" | sha256sum | awk '{print $1}')
     variant_stamp="$ROOT/build/oracle/variant.stamp"
+    if [ "$mpz" -eq 1 ]; then
+        variant_stamp="$ROOT/build/oracle/variant-mpz.stamp"
+    fi
     mkdir -p "$ROOT/build/oracle"
     if [ ! -f "$variant_stamp" ] || [ "$(cat "$variant_stamp")" != "$variant_id" ]; then
-        rm -rf "$WORK/ports/unix/build-$VARIANT_NAME"
+        rm -rf "$WORK/ports/unix/$variant_build"
         printf '%s\n' "$variant_id" > "$variant_stamp"
     fi
     make -C "$WORK/ports/unix" -j"$JOBS" \
         VARIANT_DIR="$VARIANT" \
+        BUILD="$variant_build" UPYCORE_ORACLE_MPZ="$mpz" \
         CROSS_COMPILE="$CROSS"
 }
 
@@ -90,6 +101,9 @@ case "$cmd" in
         ;;
     variant)
         build_variant
+        ;;
+    mpz)
+        build_variant mpz
         ;;
     header)
         build_mpy_cross

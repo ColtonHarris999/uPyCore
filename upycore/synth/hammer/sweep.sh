@@ -19,11 +19,14 @@
 # upycore_par_p20 for `par` (prefix set by PREFIX). Each run takes a Genus or
 # Innovus license and several cores, so start three or four at a time.
 #
-# The whole chip with its 33 SRAM macros (32 of main memory, the GC table): TOP=mpy_soc sweep.sh start 20 15
+# The whole chip with its 44 SRAM macros (32 of main memory, the GC table,
+# the I/O island's code and data, the USB SIE's nine): TOP=mpy_soc sweep.sh start 20 15
 # (folders upycore_soc_p20, or upycore_socpar_p20 with `par`) runs `make sram`
 # first, with the core from converted/mpy_core.v. SOC_RTL=converted takes the
 # whole chip from converted/mpy_soc.v instead. status then also counts the
-# macros in each netlist (want 33: 32 x d4096_w36, 1 x d600_w64).
+# macros in each netlist (want 44: 32 x d4096_w36, 1 x d600_w64, 1 x d4096_w32,
+# 1 x d1920_w32, 9 x d256_w16). place_macros.py places the 33 memory and GC
+# macros only; the island's 11 are left to Innovus (see the README).
 # With `par`, place_macros.py places the macros, keeps standard cells in the
 # channel between them, puts the I/O pins on the channel's top edge and sets
 # the die size (DIE is ignored).
@@ -41,6 +44,7 @@
 # STALE_OK=1 runs anyway: only for an RTL change outside the converted files
 # the run reads (TOP=mpy_soc without SOC_RTL=converted reads mpy_core.v alone;
 # the memory, GC and SoC modules come straight from the RTL).
+# io_clk (the I/O island) is 20 ns in every folder; IO_PERIOD=<ns> changes it.
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../../.." && pwd)
@@ -84,7 +88,7 @@ launch() {  # launch <prefix> <steps> <periods>...
             continue
         fi
         python3 "$here/make_hammer_design.py" "$TEMPLATE" "$d" --top "$TOP" \
-            --period "$p" "${src[@]}" ${DESIGN_ARGS:-} --force > /dev/null
+            --period "$p" --io-period "${IO_PERIOD:-20}" "${src[@]}" ${DESIGN_ARGS:-} --force > /dev/null
         (cd "$d" && { nohup bash -c "$steps" > syn.out 2>&1 & echo $! > syn.pid; })
         echo "started $steps at $p ns in $d (log: $d/syn.out)"
     done
@@ -101,7 +105,7 @@ state_of() {  # running, done or failed; done means the file $2 exists
 }
 
 if [ "$TOP" = mpy_soc ]; then
-    sram_macro=$(cd "$repo" && python3 -c "import sys; sys.path.insert(0, 'upycore/tools'); from mpy_synth import SRAM_MACRO, GC_SRAM_MACRO; print(SRAM_MACRO['name'], GC_SRAM_MACRO['name'])")
+    sram_macro=$(cd "$repo" && python3 -c "import sys; sys.path.insert(0, 'upycore/tools'); from mpy_synth import SRAM_MACRO, GC_SRAM_MACRO, IOCORE_CODE_SRAM_MACRO, IOCORE_DATA_SRAM_MACRO, USB_SRAM_MACRO; print(SRAM_MACRO['name'], GC_SRAM_MACRO['name'], IOCORE_CODE_SRAM_MACRO['name'], IOCORE_DATA_SRAM_MACRO['name'], USB_SRAM_MACRO['name'])")
     syn_prefix=${PREFIX:-upycore_soc}
     par_prefix=${PREFIX:-upycore_socpar}
     if [ "$SOC_RTL" = converted ]; then

@@ -185,10 +185,29 @@ clock at the same period so its flops are timed.
   Boot selects the active subset after subtracting the image from shared
   SRAM.
 - `mpy_soc`: the whole chip, with the four 128 KiB SRAM banks as 32
-  `fakeram_d4096_w36` macros, the GC table as a `fakeram_d600_w64` macro
-  and the SPI NAND boot loader. The script
-  sets up the SRAM macros; run `make sram` before `make syn`, and add the
-  macro placements. See
+  `fakeram_d4096_w36` macros (eight per bank), the GC table as a `fakeram_d600_w64` macro,
+  the SPI NAND boot loader, and the I/O island
+  ([`../../docs/mpy_io_core.md`](../../docs/mpy_io_core.md)) with its
+  16 KB code and 7.5 KB data SRAMs as `fakeram_d4096_w32` and
+  `fakeram_d1920_w32` macros, and its USB SIE's nine 256 × 16 RAMs
+  (endpoint buffers and status) as one-read-one-write `fakeram_d256_w16`
+  macros behind BaseJump's `bsg_mem_1r1w_sync_mask_write_bit` (44
+  macros in all; check that the class `bsg_fakeram` generator takes the
+  `1r1w` family, which the uPyCore macros so far have not needed). The script sets up the
+  SRAM macros; run `make sram` before `make syn`, and add the macro
+  placements. The island runs on its own clock: `constraints.tcl` gets
+  `io_clk` on `io_clk_i` (`--io-period`, default 20 ns), asynchronous to
+  `core_clk`, every path between the two bounded by `set_max_delay` to
+  the faster period (each ends in a two-flop synchronizer or is a
+  dual-clock FIFO's memory behind a gray pointer), the island's pads
+  timed against `io_clk`, and the UART RX pin and the console strap,
+  which are synchronized first, not timed. The USB SIE adds `usb_clk` on
+  `usb_clk_i` (`--usb-period`, 48 MHz), asynchronous: its bridge to
+  `io_clk` is bounded like the other crossings, D+ and D- in are not
+  timed (sampled through the PHY's flops), their drive is timed against
+  `usb_clk`. CVE2's clock gate is the
+  `sky130_fd_sc_hd__dlclkp_1` cell in the generated file
+  (`iocore/rtl/asic/cve2_clock_gate.sv`), so Genus maps no latch. See
   [`../../docs/mpy_boot.md`](../../docs/mpy_boot.md#ee-477-hammer-flow).
   If Genus rejects the SystemVerilog that `--core-v` writes for the
   rest of the chip, use the whole chip converted instead:
@@ -212,8 +231,10 @@ python3 upycore/synth/hammer/make_hammer_design.py \
 ```
 
 After an RTL change, regenerate the files with `convert_rtl.sh` on a
-machine where sv2v runs, and commit them. Where sv2v runs on the lab
-machine itself, `--sv2v <binary>` converts while building the folder.
+machine where sv2v runs, and commit them. Update `converted/RTL_STAMP`
+to the source RTL commit used for the conversion. The `mpy_soc` view
+includes the I/O island. Where sv2v runs on the lab machine itself,
+`--sv2v <binary>` converts while building the folder.
 The converted files also read cleanly in Yosys's own Verilog parser.
 
 ## Power from simulated activity
@@ -341,13 +362,19 @@ each `upycore_soc_p<period>` folder (`upycore_socpar_p<period>` with `par`) gets
 background job runs `make sram` and then `make syn`. `DIE="w h"` sets the
 die (default 4000 x 3000 um) and `SOC_RTL=converted` takes the chip from
 `converted/mpy_soc.v`. `TOP=mpy_soc sweep.sh status` adds the macro count
-of each netlist (it must be 33: 32 of main memory and the GC table) and the
+of each netlist (it must be 44: 32 of main memory, the GC table, the I/O
+island's code and data SRAMs and the USB SIE's nine) and the
 macro footprints from their LEFs.
 
 `TOP=mpy_soc sweep.sh par 15` places and routes the whole chip. Between
 `make sram` and `make syn` it runs `place_macros.py`, which reads the LEFs,
-places the 33 macros as `hardmacro` constraints and sets the die (DIE is
-ignored). A 4096-word macro is 3.95 x 0.16 mm with every signal pin on one
+places the 33 memory and GC macros as `hardmacro` constraints and sets the
+die (DIE is ignored). It does not place the I/O island's 11 macros yet (the
+4096 x 32 code SRAM, the 1920 x 32 data SRAM, the USB SIE's nine 256 x 16):
+they came with the I/O core (main) after this floorplan was written, and
+the 4096-word code SRAM is probably as long as a main-memory macro, so it may
+not fit the logic channel. Check them in `sweep.sh floorplan` before a full
+run. A 4096-word macro is 3.95 x 0.16 mm with every signal pin on one
 short edge. `python3 place_macros.py <folder> --dry-run` prints
 the layout without writing it.
 

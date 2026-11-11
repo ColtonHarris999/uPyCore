@@ -21,7 +21,12 @@ FROZEN_MANIFEST :=
 # wildcard. Its object path follows that absolute directory.
 $(shell mkdir -p "$(BUILD)/$(VARIANT_DIR)")
 
+ifeq ($(UPYCORE_ORACLE_MPZ),1)
+MPY_TOOL_FLAGS = -mlongint-impl mpz
+CFLAGS_EXTRA += -DUPYCORE_ORACLE_MPZ
+else
 MPY_TOOL_FLAGS = -mlongint-impl longlong
+endif
 
 # The common variant header lives next to the stock unix variants, not
 # next to this directory.

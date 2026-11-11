@@ -247,6 +247,7 @@ class ModuleInfo:
 
 class Image:
     def __init__(self) -> None:
+        self.bigint = False
         self.words: list[int] = [0] * (abi.IMAGE_DATA_BASE // 4)
         self.tags: dict[int, int] = {}
         self.qstrs: list[str] = list(abi.core_qstr_order())
@@ -392,7 +393,18 @@ def encode_const(img: Image, value: object) -> tuple[int, int]:
         if -(1 << 31) <= value < (1 << 31):
             return (T["INT"], value & 0xFFFFFFFF)
         if not -(1 << 63) <= value < (1 << 63):
-            raise LinkError(f"integer const {value} outside signed 64-bit")
+            if not img.bigint:
+                raise LinkError(f"integer const {value} outside signed 64-bit")
+            magnitude = abs(value)
+            limbs = []
+            while magnitude:
+                limbs.append((T["INT"], magnitude & ((1 << 30) - 1)))
+                magnitude >>= 30
+            count = -len(limbs) if value < 0 else len(limbs)
+            return (T["OBJECT"], img.emit_words([
+                (T["INT"], abi.OB["BIGINT"]), type_val(img, "int"),
+                (T["INT"], count & 0xffffffff), *limbs,
+            ]))
         u = value & ((1 << 64) - 1)
         return emit_box(img, "INT64", u & 0xFFFFFFFF, u >> 32)
     if isinstance(value, FloatConst):
@@ -578,17 +590,17 @@ def link(main: Path, modules: list[tuple[str, Path, bool]], fw: Path, out: Path,
 
     def load(path: Path, name: str, firmware: bool = False, package: bool = False) -> ModuleInfo:
         data = path.read_bytes()
-        mpy = read_mpy(data, str(path), catalog, numeric=True)
+        mpy = read_mpy(data, str(path), catalog, numeric=True, bigint=img.bigint)
         return ModuleInfo(name=name, mpy=mpy, source_file=mpy.qstrs[0], firmware=firmware, package=package)
 
     try:
         fw_mod = load(fw, "_fw", firmware=True)
+        fw_names = eval_firmware_body(fw_mod, catalog)
+        img.bigint = "_int_overflow" in fw_names
         main_mod = load(main, main_name)
         user_mods = [load(p, name, package=pkg) for name, p, pkg in modules]
     except MpyError as exc:
         raise LinkError(str(exc)) from exc
-
-    fw_names = eval_firmware_body(fw_mod, catalog)
 
     # Fixed singletons first so consts can refer to them.
     img.symbols["empty_tuple"] = img.emit_words([(T["INT"], 0)])
@@ -664,7 +676,14 @@ def link(main: Path, modules: list[tuple[str, Path, bool]], fw: Path, out: Path,
             type_methods[tname][meth] = val
 
     natives: dict[str, tuple[int, int]] = {}
+    # The board I/O natives exist only in images with the board I/O
+    # firmware (its _io module), so every other image is unchanged.
+    io_fw = any(name.startswith("mod__io__") for name in fw_names)
     for nname in abi.NATIVES:
+        if nname in abi.IO_NATIVES and not io_fw:
+            continue
+        if not img.bigint and nname in ("_limb_mac", "_limb_new"):
+            continue
         fb = NULL
         short = nname.split(".")[-1]
         fb_name = "_" + nname.replace(".", "__") + "_fb" if "." in nname else "_" + short.lstrip("_") + "_fb"
@@ -752,6 +771,9 @@ def link(main: Path, modules: list[tuple[str, Path, bool]], fw: Path, out: Path,
         builtins.append((img.qval("__build_class__"), fw_items["__build_class__"]))
     if "__import__" in fw_items:
         builtins.append((img.qval("__import__"), fw_items["__import__"]))
+    # Only REPL images have it (upycore/firmware/io/repl.py).
+    if "__repl_print__" in fw_items:
+        builtins.append((img.qval("__repl_print__"), fw_items["__repl_print__"]))
     builtins.append((img.qval("__name__"), img.qval("builtins")))
     builtins.append((img.qval("NotImplemented"), (T["OBJECT"], img.symbols["notimpl"])))
     builtins.append((img.qval("Ellipsis"), (T["OBJECT"], img.symbols["ellipsis"])))
@@ -769,6 +791,11 @@ def link(main: Path, modules: list[tuple[str, Path, bool]], fw: Path, out: Path,
             hooks.append(fw_items[h])
         else:
             hooks.append(NULL)
+    # Optional hooks at the end that the firmware does not define are not
+    # emitted: the core never calls them (an image without the board I/O
+    # firmware never raises an event), and the table stays as it was.
+    while len(hooks) > 1 and abi.HOOKS[len(hooks) - 1] in abi.OPTIONAL_HOOKS and hooks[-1] == NULL:
+        hooks.pop()
     hooks_addr = img.emit_words(hooks)
     if hooks[abi.HOOK_ID["_boot"]] == NULL:
         raise LinkError("firmware has no _boot")
@@ -811,6 +838,7 @@ def link(main: Path, modules: list[tuple[str, Path, bool]], fw: Path, out: Path,
     img.set(4 * hdr["FW_MODULE"], fw_mod.md_addr)
     img.set(4 * hdr["POOL_BYTES"], heap_capacity)
     img.set(4 * hdr["IMAGE_BYTES"], img.here())
+    img.set(4 * hdr["FLAGS"], abi.IMAGE_FLAG_BIGINT if img.bigint else 0)
 
     out.parent.mkdir(parents=True, exist_ok=True)
     nwords = len(img.words)

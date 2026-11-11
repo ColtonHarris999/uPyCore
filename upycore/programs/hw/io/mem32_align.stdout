@@ -1,0 +1,6 @@
+<32-bit memory>
+ValueError: address 40000002 is not aligned to 4 bytes
+ValueError: address 40000001 is not aligned to 4 bytes
+ValueError: address 20000000 is not in the I/O window
+ValueError: address 40001000 is not in the I/O window
+0

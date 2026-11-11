@@ -629,33 +629,58 @@ module upycore_div (
 	reg [15:0] nsteps;
 	function automatic [6:0] upycore_clz64;
 		input reg [63:0] v;
-		reg [63:0] x;
-		reg [5:0] n;
+		reg [31:0] z1;
+		reg [31:0] c1;
+		reg [15:0] z2;
+		reg [31:0] c2;
+		reg [7:0] z3;
+		reg [23:0] c3;
+		reg [3:0] z4;
+		reg [15:0] c4;
+		reg [1:0] z5;
+		reg [9:0] c5;
 		begin
-			x = v;
-			n = 1'sb0;
-			if (x[63:32] == 0) begin
-				n[5] = 1'b1;
-				x = x << 32;
+			begin : sv2v_autoblock_1
+				reg signed [31:0] i;
+				for (i = 0; i < 32; i = i + 1)
+					begin
+						z1[i] = !v[(2 * i) + 1] && !v[2 * i];
+						c1[i] = !v[(2 * i) + 1];
+					end
 			end
-			if (x[63:48] == 0) begin
-				n[4] = 1'b1;
-				x = x << 16;
+			begin : sv2v_autoblock_2
+				reg signed [31:0] i;
+				for (i = 0; i < 16; i = i + 1)
+					begin
+						z2[i] = z1[(2 * i) + 1] && z1[2 * i];
+						c2[2 * i+:2] = (z1[(2 * i) + 1] ? {1'b1, c1[2 * i]} : {1'b0, c1[(2 * i) + 1]});
+					end
 			end
-			if (x[63:56] == 0) begin
-				n[3] = 1'b1;
-				x = x << 8;
+			begin : sv2v_autoblock_3
+				reg signed [31:0] i;
+				for (i = 0; i < 8; i = i + 1)
+					begin
+						z3[i] = z2[(2 * i) + 1] && z2[2 * i];
+						c3[3 * i+:3] = (z2[(2 * i) + 1] ? {1'b1, c2[2 * (2 * i)+:2]} : {1'b0, c2[2 * ((2 * i) + 1)+:2]});
+					end
 			end
-			if (x[63:60] == 0) begin
-				n[2] = 1'b1;
-				x = x << 4;
+			begin : sv2v_autoblock_4
+				reg signed [31:0] i;
+				for (i = 0; i < 4; i = i + 1)
+					begin
+						z4[i] = z3[(2 * i) + 1] && z3[2 * i];
+						c4[4 * i+:4] = (z3[(2 * i) + 1] ? {1'b1, c3[3 * (2 * i)+:3]} : {1'b0, c3[3 * ((2 * i) + 1)+:3]});
+					end
 			end
-			if (x[63:62] == 0) begin
-				n[1] = 1'b1;
-				x = x << 2;
+			begin : sv2v_autoblock_5
+				reg signed [31:0] i;
+				for (i = 0; i < 2; i = i + 1)
+					begin
+						z5[i] = z4[(2 * i) + 1] && z4[2 * i];
+						c5[5 * i+:5] = (z4[(2 * i) + 1] ? {1'b1, c4[4 * (2 * i)+:4]} : {1'b0, c4[4 * ((2 * i) + 1)+:4]});
+					end
 			end
-			n[0] = !x[63];
-			upycore_clz64 = (v == 0 ? 7'd64 : {1'b0, n});
+			upycore_clz64 = (z5[1] && z5[0] ? 7'd64 : (z5[1] ? {2'b01, c5[4:0]} : {2'b00, c5[9:5]}));
 		end
 	endfunction
 	assign lz_a = upycore_clz64(a_mag_r);
@@ -828,33 +853,58 @@ module upycore_ipow (
 	assign overflow = mul_hi_i != {64 {mul_lo_i[63]}};
 	function automatic [6:0] upycore_clz64;
 		input reg [63:0] v;
-		reg [63:0] x;
-		reg [5:0] n;
+		reg [31:0] z1;
+		reg [31:0] c1;
+		reg [15:0] z2;
+		reg [31:0] c2;
+		reg [7:0] z3;
+		reg [23:0] c3;
+		reg [3:0] z4;
+		reg [15:0] c4;
+		reg [1:0] z5;
+		reg [9:0] c5;
 		begin
-			x = v;
-			n = 1'sb0;
-			if (x[63:32] == 0) begin
-				n[5] = 1'b1;
-				x = x << 32;
+			begin : sv2v_autoblock_1
+				reg signed [31:0] i;
+				for (i = 0; i < 32; i = i + 1)
+					begin
+						z1[i] = !v[(2 * i) + 1] && !v[2 * i];
+						c1[i] = !v[(2 * i) + 1];
+					end
 			end
-			if (x[63:48] == 0) begin
-				n[4] = 1'b1;
-				x = x << 16;
+			begin : sv2v_autoblock_2
+				reg signed [31:0] i;
+				for (i = 0; i < 16; i = i + 1)
+					begin
+						z2[i] = z1[(2 * i) + 1] && z1[2 * i];
+						c2[2 * i+:2] = (z1[(2 * i) + 1] ? {1'b1, c1[2 * i]} : {1'b0, c1[(2 * i) + 1]});
+					end
 			end
-			if (x[63:56] == 0) begin
-				n[3] = 1'b1;
-				x = x << 8;
+			begin : sv2v_autoblock_3
+				reg signed [31:0] i;
+				for (i = 0; i < 8; i = i + 1)
+					begin
+						z3[i] = z2[(2 * i) + 1] && z2[2 * i];
+						c3[3 * i+:3] = (z2[(2 * i) + 1] ? {1'b1, c2[2 * (2 * i)+:2]} : {1'b0, c2[2 * ((2 * i) + 1)+:2]});
+					end
 			end
-			if (x[63:60] == 0) begin
-				n[2] = 1'b1;
-				x = x << 4;
+			begin : sv2v_autoblock_4
+				reg signed [31:0] i;
+				for (i = 0; i < 4; i = i + 1)
+					begin
+						z4[i] = z3[(2 * i) + 1] && z3[2 * i];
+						c4[4 * i+:4] = (z3[(2 * i) + 1] ? {1'b1, c3[3 * (2 * i)+:3]} : {1'b0, c3[3 * ((2 * i) + 1)+:3]});
+					end
 			end
-			if (x[63:62] == 0) begin
-				n[1] = 1'b1;
-				x = x << 2;
+			begin : sv2v_autoblock_5
+				reg signed [31:0] i;
+				for (i = 0; i < 2; i = i + 1)
+					begin
+						z5[i] = z4[(2 * i) + 1] && z4[2 * i];
+						c5[5 * i+:5] = (z4[(2 * i) + 1] ? {1'b1, c4[4 * (2 * i)+:4]} : {1'b0, c4[4 * ((2 * i) + 1)+:4]});
+					end
 			end
-			n[0] = !x[63];
-			upycore_clz64 = (v == 0 ? 7'd64 : {1'b0, n});
+			upycore_clz64 = (z5[1] && z5[0] ? 7'd64 : (z5[1] ? {2'b01, c5[4:0]} : {2'b00, c5[9:5]}));
 		end
 	endfunction
 	assign lz = upycore_clz64(bits_r);
@@ -967,7 +1017,11 @@ module upycore_fp_add (
 	reg s1_sign_big_r;
 	reg s1_sign_small_r;
 	reg [10:0] s1_exp_big_r;
-	reg [10:0] s1_exp_small_r;
+	reg [5:0] s1_shift_r;
+	wire [10:0] exp_a;
+	wire [10:0] exp_b;
+	wire [10:0] diff_ab;
+	wire [10:0] diff_ba;
 	reg [52:0] s1_sig_big_r;
 	reg [52:0] s1_sig_small_r;
 	reg s1_special_r;
@@ -982,6 +1036,14 @@ module upycore_fp_add (
 	reg [63:0] special_val;
 	assign b_sign_eff = op_b_i[63] ^ sub_i;
 	assign a_bigger = op_a_i[62:0] >= op_b_i[62:0];
+	function automatic [10:0] upycore_f64_exp_eff;
+		input reg [63:0] v;
+		upycore_f64_exp_eff = (v[62:52] == 11'd0 ? 11'd1 : v[62:52]);
+	endfunction
+	assign exp_a = upycore_f64_exp_eff(op_a_i);
+	assign exp_b = upycore_f64_exp_eff(op_b_i);
+	assign diff_ab = exp_a - exp_b;
+	assign diff_ba = exp_b - exp_a;
 	function automatic upycore_f64_is_nan;
 		input reg [63:0] v;
 		upycore_f64_is_nan = (v[62:52] == 11'h7ff) && (v[51:0] != 52'd0);
@@ -1022,27 +1084,33 @@ module upycore_fp_add (
 	reg [56:0] s2_sum_r;
 	reg s2_special_r;
 	reg [63:0] s2_special_val_r;
-	wire [10:0] exp_diff;
 	wire [55:0] ext_big;
 	wire [55:0] ext_small;
 	reg [55:0] aligned;
 	reg [55:0] lost_mask;
 	reg sticky;
 	reg [56:0] sum;
-	assign exp_diff = s1_exp_big_r - s1_exp_small_r;
 	assign ext_big = {s1_sig_big_r, 3'b000};
 	assign ext_small = {s1_sig_small_r, 3'b000};
+	function automatic signed [5:0] sv2v_cast_6_signed;
+		input reg signed [5:0] inp;
+		sv2v_cast_6_signed = inp;
+	endfunction
 	always @(*) begin
 		if (_sv2v_0)
 			;
 		lost_mask = 1'sb0;
 		sticky = 1'b0;
-		if (exp_diff > 11'd55)
+		if (s1_shift_r > 6'd55)
 			aligned = {55'd0, |ext_small};
 		else begin
-			lost_mask = (56'd1 << exp_diff[5:0]) - 56'd1;
+			begin : sv2v_autoblock_1
+				reg signed [31:0] i;
+				for (i = 0; i < 56; i = i + 1)
+					lost_mask[i] = sv2v_cast_6_signed(i) < s1_shift_r;
+			end
 			sticky = |(ext_small & lost_mask);
-			aligned = ext_small >> exp_diff[5:0];
+			aligned = ext_small >> s1_shift_r;
 			aligned[0] = aligned[0] | sticky;
 		end
 		if (s1_sign_big_r == s1_sign_small_r)
@@ -1068,29 +1136,73 @@ module upycore_fp_add (
 	reg n_g;
 	reg n_r;
 	reg n_s;
-	function automatic signed [5:0] sv2v_cast_6_signed;
-		input reg signed [5:0] inp;
-		sv2v_cast_6_signed = inp;
-	endfunction
-	function automatic [5:0] upycore_clz56;
-		input reg [55:0] v;
+	function automatic [6:0] upycore_clz64;
+		input reg [63:0] v;
+		reg [31:0] z1;
+		reg [31:0] c1;
+		reg [15:0] z2;
+		reg [31:0] c2;
+		reg [7:0] z3;
+		reg [23:0] c3;
+		reg [3:0] z4;
+		reg [15:0] c4;
+		reg [1:0] z5;
+		reg [9:0] c5;
 		begin
-			upycore_clz56 = 6'd56;
-			begin : sv2v_autoblock_1
+			begin : sv2v_autoblock_2
 				reg signed [31:0] i;
-				for (i = 0; i < 56; i = i + 1)
-					if (v[i])
-						upycore_clz56 = sv2v_cast_6_signed(55 - i);
+				for (i = 0; i < 32; i = i + 1)
+					begin
+						z1[i] = !v[(2 * i) + 1] && !v[2 * i];
+						c1[i] = !v[(2 * i) + 1];
+					end
 			end
+			begin : sv2v_autoblock_3
+				reg signed [31:0] i;
+				for (i = 0; i < 16; i = i + 1)
+					begin
+						z2[i] = z1[(2 * i) + 1] && z1[2 * i];
+						c2[2 * i+:2] = (z1[(2 * i) + 1] ? {1'b1, c1[2 * i]} : {1'b0, c1[(2 * i) + 1]});
+					end
+			end
+			begin : sv2v_autoblock_4
+				reg signed [31:0] i;
+				for (i = 0; i < 8; i = i + 1)
+					begin
+						z3[i] = z2[(2 * i) + 1] && z2[2 * i];
+						c3[3 * i+:3] = (z2[(2 * i) + 1] ? {1'b1, c2[2 * (2 * i)+:2]} : {1'b0, c2[2 * ((2 * i) + 1)+:2]});
+					end
+			end
+			begin : sv2v_autoblock_5
+				reg signed [31:0] i;
+				for (i = 0; i < 4; i = i + 1)
+					begin
+						z4[i] = z3[(2 * i) + 1] && z3[2 * i];
+						c4[4 * i+:4] = (z3[(2 * i) + 1] ? {1'b1, c3[3 * (2 * i)+:3]} : {1'b0, c3[3 * ((2 * i) + 1)+:3]});
+					end
+			end
+			begin : sv2v_autoblock_6
+				reg signed [31:0] i;
+				for (i = 0; i < 2; i = i + 1)
+					begin
+						z5[i] = z4[(2 * i) + 1] && z4[2 * i];
+						c5[5 * i+:5] = (z4[(2 * i) + 1] ? {1'b1, c4[4 * (2 * i)+:4]} : {1'b0, c4[4 * ((2 * i) + 1)+:4]});
+					end
+			end
+			upycore_clz64 = (z5[1] && z5[0] ? 7'd64 : (z5[1] ? {2'b01, c5[4:0]} : {2'b00, c5[9:5]}));
 		end
-	endfunction
-	function automatic [13:0] sv2v_cast_14;
-		input reg [13:0] inp;
-		sv2v_cast_14 = inp;
 	endfunction
 	function automatic [5:0] sv2v_cast_6;
 		input reg [5:0] inp;
 		sv2v_cast_6 = inp;
+	endfunction
+	function automatic [5:0] upycore_clz56;
+		input reg [55:0] v;
+		upycore_clz56 = sv2v_cast_6(upycore_clz64({v, 8'h80}));
+	endfunction
+	function automatic [13:0] sv2v_cast_14;
+		input reg [13:0] inp;
+		sv2v_cast_14 = inp;
 	endfunction
 	always @(*) begin
 		if (_sv2v_0)
@@ -1116,10 +1228,6 @@ module upycore_fp_add (
 		if (s2_sum_r == 57'd0)
 			n_sign = s2_both_neg_r;
 	end
-	function automatic [10:0] upycore_f64_exp_eff;
-		input reg [63:0] v;
-		upycore_f64_exp_eff = (v[62:52] == 11'd0 ? 11'd1 : v[62:52]);
-	endfunction
 	function automatic [52:0] upycore_f64_sig;
 		input reg [63:0] v;
 		upycore_f64_sig = {v[62:52] != 11'd0, v[51:0]};
@@ -1132,7 +1240,7 @@ module upycore_fp_add (
 			s1_sign_big_r <= 1'b0;
 			s1_sign_small_r <= 1'b0;
 			s1_exp_big_r <= 1'sb0;
-			s1_exp_small_r <= 1'sb0;
+			s1_shift_r <= 1'sb0;
 			s1_sig_big_r <= 1'sb0;
 			s1_sig_small_r <= 1'sb0;
 			s1_special_r <= 1'b0;
@@ -1162,16 +1270,16 @@ module upycore_fp_add (
 			if (a_bigger) begin
 				s1_sign_big_r <= op_a_i[63];
 				s1_sign_small_r <= b_sign_eff;
-				s1_exp_big_r <= upycore_f64_exp_eff(op_a_i);
-				s1_exp_small_r <= upycore_f64_exp_eff(op_b_i);
+				s1_exp_big_r <= exp_a;
+				s1_shift_r <= (diff_ab > 11'd55 ? 6'd56 : diff_ab[5:0]);
 				s1_sig_big_r <= upycore_f64_sig(op_a_i);
 				s1_sig_small_r <= upycore_f64_sig(op_b_i);
 			end
 			else begin
 				s1_sign_big_r <= b_sign_eff;
 				s1_sign_small_r <= op_a_i[63];
-				s1_exp_big_r <= upycore_f64_exp_eff(op_b_i);
-				s1_exp_small_r <= upycore_f64_exp_eff(op_a_i);
+				s1_exp_big_r <= exp_b;
+				s1_shift_r <= (diff_ba > 11'd55 ? 6'd56 : diff_ba[5:0]);
 				s1_sig_big_r <= upycore_f64_sig(op_b_i);
 				s1_sig_small_r <= upycore_f64_sig(op_a_i);
 			end
@@ -1211,7 +1319,11 @@ module upycore_fp_add (
 			if (sh > 14'sd55)
 				upycore_f64_denorm = {55'd0, |ext};
 			else begin
-				lost_mask = (56'd1 << sh[5:0]) - 56'd1;
+				begin : sv2v_autoblock_7
+					reg signed [31:0] i;
+					for (i = 0; i < 56; i = i + 1)
+						lost_mask[i] = sv2v_cast_6_signed(i) < sh[5:0];
+				end
 				upycore_f64_denorm = ext >> sh[5:0];
 				upycore_f64_denorm[0] = upycore_f64_denorm[0] | (|(ext & lost_mask));
 			end
@@ -1338,21 +1450,69 @@ module upycore_fp_mul (
 	endfunction
 	assign sig_a = upycore_f64_sig(op_a_i);
 	assign sig_b = upycore_f64_sig(op_b_i);
-	function automatic signed [5:0] sv2v_cast_6_signed;
-		input reg signed [5:0] inp;
-		sv2v_cast_6_signed = inp;
+	function automatic [6:0] upycore_clz64;
+		input reg [63:0] v;
+		reg [31:0] z1;
+		reg [31:0] c1;
+		reg [15:0] z2;
+		reg [31:0] c2;
+		reg [7:0] z3;
+		reg [23:0] c3;
+		reg [3:0] z4;
+		reg [15:0] c4;
+		reg [1:0] z5;
+		reg [9:0] c5;
+		begin
+			begin : sv2v_autoblock_1
+				reg signed [31:0] i;
+				for (i = 0; i < 32; i = i + 1)
+					begin
+						z1[i] = !v[(2 * i) + 1] && !v[2 * i];
+						c1[i] = !v[(2 * i) + 1];
+					end
+			end
+			begin : sv2v_autoblock_2
+				reg signed [31:0] i;
+				for (i = 0; i < 16; i = i + 1)
+					begin
+						z2[i] = z1[(2 * i) + 1] && z1[2 * i];
+						c2[2 * i+:2] = (z1[(2 * i) + 1] ? {1'b1, c1[2 * i]} : {1'b0, c1[(2 * i) + 1]});
+					end
+			end
+			begin : sv2v_autoblock_3
+				reg signed [31:0] i;
+				for (i = 0; i < 8; i = i + 1)
+					begin
+						z3[i] = z2[(2 * i) + 1] && z2[2 * i];
+						c3[3 * i+:3] = (z2[(2 * i) + 1] ? {1'b1, c2[2 * (2 * i)+:2]} : {1'b0, c2[2 * ((2 * i) + 1)+:2]});
+					end
+			end
+			begin : sv2v_autoblock_4
+				reg signed [31:0] i;
+				for (i = 0; i < 4; i = i + 1)
+					begin
+						z4[i] = z3[(2 * i) + 1] && z3[2 * i];
+						c4[4 * i+:4] = (z3[(2 * i) + 1] ? {1'b1, c3[3 * (2 * i)+:3]} : {1'b0, c3[3 * ((2 * i) + 1)+:3]});
+					end
+			end
+			begin : sv2v_autoblock_5
+				reg signed [31:0] i;
+				for (i = 0; i < 2; i = i + 1)
+					begin
+						z5[i] = z4[(2 * i) + 1] && z4[2 * i];
+						c5[5 * i+:5] = (z4[(2 * i) + 1] ? {1'b1, c4[4 * (2 * i)+:4]} : {1'b0, c4[4 * ((2 * i) + 1)+:4]});
+					end
+			end
+			upycore_clz64 = (z5[1] && z5[0] ? 7'd64 : (z5[1] ? {2'b01, c5[4:0]} : {2'b00, c5[9:5]}));
+		end
+	endfunction
+	function automatic [5:0] sv2v_cast_6;
+		input reg [5:0] inp;
+		sv2v_cast_6 = inp;
 	endfunction
 	function automatic [5:0] upycore_clz53;
 		input reg [52:0] v;
-		begin
-			upycore_clz53 = 6'd53;
-			begin : sv2v_autoblock_1
-				reg signed [31:0] i;
-				for (i = 0; i < 53; i = i + 1)
-					if (v[i])
-						upycore_clz53 = sv2v_cast_6_signed(52 - i);
-			end
-		end
+		upycore_clz53 = sv2v_cast_6(upycore_clz64({v, 11'h400}));
 	endfunction
 	assign lz_a = upycore_clz53(sig_a);
 	assign lz_b = upycore_clz53(sig_b);
@@ -1476,6 +1636,10 @@ module upycore_fp_mul (
 	reg [55:0] dn_r;
 	wire [55:0] r_ext;
 	assign r_ext = {r_sig, r_g, r_r, r_s};
+	function automatic signed [5:0] sv2v_cast_6_signed;
+		input reg signed [5:0] inp;
+		sv2v_cast_6_signed = inp;
+	endfunction
 	function automatic [55:0] upycore_f64_denorm;
 		input reg [55:0] ext;
 		input reg signed [13:0] exp_s;
@@ -1486,7 +1650,11 @@ module upycore_fp_mul (
 			if (sh > 14'sd55)
 				upycore_f64_denorm = {55'd0, |ext};
 			else begin
-				lost_mask = (56'd1 << sh[5:0]) - 56'd1;
+				begin : sv2v_autoblock_6
+					reg signed [31:0] i;
+					for (i = 0; i < 56; i = i + 1)
+						lost_mask[i] = sv2v_cast_6_signed(i) < sh[5:0];
+				end
 				upycore_f64_denorm = ext >> sh[5:0];
 				upycore_f64_denorm[0] = upycore_f64_denorm[0] | (|(ext & lost_mask));
 			end
@@ -1604,21 +1772,69 @@ module upycore_fp_divrem (
 	endfunction
 	assign sig_a = upycore_f64_sig(op_a_i);
 	assign sig_b = upycore_f64_sig(op_b_i);
-	function automatic signed [5:0] sv2v_cast_6_signed;
-		input reg signed [5:0] inp;
-		sv2v_cast_6_signed = inp;
+	function automatic [6:0] upycore_clz64;
+		input reg [63:0] v;
+		reg [31:0] z1;
+		reg [31:0] c1;
+		reg [15:0] z2;
+		reg [31:0] c2;
+		reg [7:0] z3;
+		reg [23:0] c3;
+		reg [3:0] z4;
+		reg [15:0] c4;
+		reg [1:0] z5;
+		reg [9:0] c5;
+		begin
+			begin : sv2v_autoblock_1
+				reg signed [31:0] i;
+				for (i = 0; i < 32; i = i + 1)
+					begin
+						z1[i] = !v[(2 * i) + 1] && !v[2 * i];
+						c1[i] = !v[(2 * i) + 1];
+					end
+			end
+			begin : sv2v_autoblock_2
+				reg signed [31:0] i;
+				for (i = 0; i < 16; i = i + 1)
+					begin
+						z2[i] = z1[(2 * i) + 1] && z1[2 * i];
+						c2[2 * i+:2] = (z1[(2 * i) + 1] ? {1'b1, c1[2 * i]} : {1'b0, c1[(2 * i) + 1]});
+					end
+			end
+			begin : sv2v_autoblock_3
+				reg signed [31:0] i;
+				for (i = 0; i < 8; i = i + 1)
+					begin
+						z3[i] = z2[(2 * i) + 1] && z2[2 * i];
+						c3[3 * i+:3] = (z2[(2 * i) + 1] ? {1'b1, c2[2 * (2 * i)+:2]} : {1'b0, c2[2 * ((2 * i) + 1)+:2]});
+					end
+			end
+			begin : sv2v_autoblock_4
+				reg signed [31:0] i;
+				for (i = 0; i < 4; i = i + 1)
+					begin
+						z4[i] = z3[(2 * i) + 1] && z3[2 * i];
+						c4[4 * i+:4] = (z3[(2 * i) + 1] ? {1'b1, c3[3 * (2 * i)+:3]} : {1'b0, c3[3 * ((2 * i) + 1)+:3]});
+					end
+			end
+			begin : sv2v_autoblock_5
+				reg signed [31:0] i;
+				for (i = 0; i < 2; i = i + 1)
+					begin
+						z5[i] = z4[(2 * i) + 1] && z4[2 * i];
+						c5[5 * i+:5] = (z4[(2 * i) + 1] ? {1'b1, c4[4 * (2 * i)+:4]} : {1'b0, c4[4 * ((2 * i) + 1)+:4]});
+					end
+			end
+			upycore_clz64 = (z5[1] && z5[0] ? 7'd64 : (z5[1] ? {2'b01, c5[4:0]} : {2'b00, c5[9:5]}));
+		end
+	endfunction
+	function automatic [5:0] sv2v_cast_6;
+		input reg [5:0] inp;
+		sv2v_cast_6 = inp;
 	endfunction
 	function automatic [5:0] upycore_clz53;
 		input reg [52:0] v;
-		begin
-			upycore_clz53 = 6'd53;
-			begin : sv2v_autoblock_1
-				reg signed [31:0] i;
-				for (i = 0; i < 53; i = i + 1)
-					if (v[i])
-						upycore_clz53 = sv2v_cast_6_signed(52 - i);
-			end
-		end
+		upycore_clz53 = sv2v_cast_6(upycore_clz64({v, 11'h400}));
 	endfunction
 	assign lz_a = upycore_clz53(sig_a);
 	assign lz_b = upycore_clz53(sig_b);
@@ -1745,7 +1961,10 @@ module upycore_fp_divrem (
 	reg r_g;
 	reg r_r;
 	reg r_s;
-	reg [5:0] rem_lz;
+	reg mod_norm_r;
+	wire pack_result;
+	reg [5:0] rem_lz_r;
+	reg [52:0] mod_rem_r;
 	reg p_valid_r;
 	reg p_special_r;
 	reg p_sign_r;
@@ -1755,6 +1974,7 @@ module upycore_fp_divrem (
 	reg [63:0] p_special_val_r;
 	reg signed [13:0] p_exp_r;
 	reg [52:0] p_sig_r;
+	assign pack_result = ((core_done && !s2_fmod_r) || fin_r) || mod_norm_r;
 	assign core_start = (start_i && !fin_r) && (((s1_valid_r && !s1_special_r) && !fmod_small) || core_busy);
 	upycore_udiv_seq #(
 		.DW(56),
@@ -1803,6 +2023,9 @@ module upycore_fp_divrem (
 			s2_exp_r <= 1'sb0;
 			s2_special_r <= 1'b0;
 			s2_special_val_r <= 1'sb0;
+			mod_norm_r <= 1'b0;
+			rem_lz_r <= 1'sb0;
+			mod_rem_r <= 1'sb0;
 			p_valid_r <= 1'b0;
 			p_special_r <= 1'b0;
 			p_sign_r <= 1'b0;
@@ -1817,10 +2040,16 @@ module upycore_fp_divrem (
 			s1_valid_r <= 1'b0;
 			fin_r <= 1'b0;
 			p_valid_r <= 1'b0;
+			mod_norm_r <= 1'b0;
 		end
 		else begin
-			p_valid_r <= core_done || fin_r;
-			if (core_done || fin_r) begin
+			mod_norm_r <= core_done && s2_fmod_r;
+			if (core_done && s2_fmod_r) begin
+				rem_lz_r <= upycore_clz53(rem[52:0]);
+				mod_rem_r <= rem[52:0];
+			end
+			p_valid_r <= pack_result;
+			if (pack_result) begin
 				p_special_r <= s2_special_r;
 				p_special_val_r <= s2_special_val_r;
 				p_sign_r <= s2_sign_r;
@@ -1856,10 +2085,9 @@ module upycore_fp_divrem (
 	always @(*) begin
 		if (_sv2v_0)
 			;
-		rem_lz = upycore_clz53(rem[52:0]);
 		if (s2_fmod_r) begin
-			r_exp = s2_exp_r - $signed(sv2v_cast_14(rem_lz));
-			r_sig = rem[52:0] << rem_lz;
+			r_exp = s2_exp_r - $signed(sv2v_cast_14(rem_lz_r));
+			r_sig = mod_rem_r << rem_lz_r;
 			r_g = 1'b0;
 			r_r = 1'b0;
 			r_s = 1'b0;
@@ -1901,6 +2129,10 @@ module upycore_fp_divrem (
 	reg [55:0] dn_r;
 	wire [55:0] p_ext;
 	assign p_ext = {p_sig_r, p_g_r, p_r_r, p_s_r};
+	function automatic signed [5:0] sv2v_cast_6_signed;
+		input reg signed [5:0] inp;
+		sv2v_cast_6_signed = inp;
+	endfunction
 	function automatic [55:0] upycore_f64_denorm;
 		input reg [55:0] ext;
 		input reg signed [13:0] exp_s;
@@ -1911,7 +2143,11 @@ module upycore_fp_divrem (
 			if (sh > 14'sd55)
 				upycore_f64_denorm = {55'd0, |ext};
 			else begin
-				lost_mask = (56'd1 << sh[5:0]) - 56'd1;
+				begin : sv2v_autoblock_6
+					reg signed [31:0] i;
+					for (i = 0; i < 56; i = i + 1)
+						lost_mask[i] = sv2v_cast_6_signed(i) < sh[5:0];
+				end
 				upycore_f64_denorm = ext >> sh[5:0];
 				upycore_f64_denorm[0] = upycore_f64_denorm[0] | (|(ext & lost_mask));
 			end
@@ -1969,7 +2205,7 @@ module upycore_fp_divrem (
 		end
 	assign result_o = o_res_r;
 	assign done_o = o_valid_r;
-	assign busy_o = (((((s1_valid_r | core_busy) | core_done) | fin_r) | p_valid_r) | dn_pend_r) | o_valid_r;
+	assign busy_o = ((((((s1_valid_r | core_busy) | core_done) | fin_r) | mod_norm_r) | p_valid_r) | dn_pend_r) | o_valid_r;
 	initial _sv2v_0 = 0;
 endmodule
 module upycore_fp_pow (
@@ -2013,9 +2249,13 @@ module upycore_fp_pow (
 	localparam signed [31:0] QW = 53 + LMW;
 	localparam signed [31:0] PW = 92;
 	localparam [52:0] FOUR_THIRDS = 53'h15555555555555;
-	reg [3:0] state_r;
+	reg [4:0] state_r;
 	reg done_r;
 	reg rz_r;
+	reg [52:0] x_sig_r;
+	reg [52:0] y_sig_r;
+	reg [10:0] x_exp_r;
+	reg [10:0] y_exp_r;
 	reg [52:0] mx_r;
 	reg signed [12:0] ex_r;
 	reg [52:0] my_r;
@@ -2045,79 +2285,86 @@ module upycore_fp_pow (
 	reg [FW:0] z_r;
 	reg [87:0] f_r;
 	reg [63:0] result_r;
-	wire [52:0] x_sig;
-	wire [52:0] y_sig;
 	wire [5:0] x_lz;
 	wire [5:0] y_lz;
-	wire [10:0] x_exp;
-	wire [10:0] y_exp;
-	function automatic [52:0] upycore_f64_sig;
+	function automatic [6:0] upycore_clz64;
 		input reg [63:0] v;
-		upycore_f64_sig = {v[62:52] != 11'd0, v[51:0]};
+		reg [31:0] z1;
+		reg [31:0] c1;
+		reg [15:0] z2;
+		reg [31:0] c2;
+		reg [7:0] z3;
+		reg [23:0] c3;
+		reg [3:0] z4;
+		reg [15:0] c4;
+		reg [1:0] z5;
+		reg [9:0] c5;
+		begin
+			begin : sv2v_autoblock_1
+				reg signed [31:0] i;
+				for (i = 0; i < 32; i = i + 1)
+					begin
+						z1[i] = !v[(2 * i) + 1] && !v[2 * i];
+						c1[i] = !v[(2 * i) + 1];
+					end
+			end
+			begin : sv2v_autoblock_2
+				reg signed [31:0] i;
+				for (i = 0; i < 16; i = i + 1)
+					begin
+						z2[i] = z1[(2 * i) + 1] && z1[2 * i];
+						c2[2 * i+:2] = (z1[(2 * i) + 1] ? {1'b1, c1[2 * i]} : {1'b0, c1[(2 * i) + 1]});
+					end
+			end
+			begin : sv2v_autoblock_3
+				reg signed [31:0] i;
+				for (i = 0; i < 8; i = i + 1)
+					begin
+						z3[i] = z2[(2 * i) + 1] && z2[2 * i];
+						c3[3 * i+:3] = (z2[(2 * i) + 1] ? {1'b1, c2[2 * (2 * i)+:2]} : {1'b0, c2[2 * ((2 * i) + 1)+:2]});
+					end
+			end
+			begin : sv2v_autoblock_4
+				reg signed [31:0] i;
+				for (i = 0; i < 4; i = i + 1)
+					begin
+						z4[i] = z3[(2 * i) + 1] && z3[2 * i];
+						c4[4 * i+:4] = (z3[(2 * i) + 1] ? {1'b1, c3[3 * (2 * i)+:3]} : {1'b0, c3[3 * ((2 * i) + 1)+:3]});
+					end
+			end
+			begin : sv2v_autoblock_5
+				reg signed [31:0] i;
+				for (i = 0; i < 2; i = i + 1)
+					begin
+						z5[i] = z4[(2 * i) + 1] && z4[2 * i];
+						c5[5 * i+:5] = (z4[(2 * i) + 1] ? {1'b1, c4[4 * (2 * i)+:4]} : {1'b0, c4[4 * ((2 * i) + 1)+:4]});
+					end
+			end
+			upycore_clz64 = (z5[1] && z5[0] ? 7'd64 : (z5[1] ? {2'b01, c5[4:0]} : {2'b00, c5[9:5]}));
+		end
 	endfunction
-	assign x_sig = upycore_f64_sig(op_x_i);
-	assign y_sig = upycore_f64_sig(op_y_i);
-	function automatic signed [5:0] sv2v_cast_6_signed;
-		input reg signed [5:0] inp;
-		sv2v_cast_6_signed = inp;
+	function automatic [5:0] sv2v_cast_6;
+		input reg [5:0] inp;
+		sv2v_cast_6 = inp;
 	endfunction
 	function automatic [5:0] upycore_clz53;
 		input reg [52:0] v;
-		begin
-			upycore_clz53 = 6'd53;
-			begin : sv2v_autoblock_1
-				reg signed [31:0] i;
-				for (i = 0; i < 53; i = i + 1)
-					if (v[i])
-						upycore_clz53 = sv2v_cast_6_signed(52 - i);
-			end
-		end
+		upycore_clz53 = sv2v_cast_6(upycore_clz64({v, 11'h400}));
 	endfunction
-	assign x_lz = upycore_clz53(x_sig);
-	assign y_lz = upycore_clz53(y_sig);
-	function automatic [10:0] upycore_f64_exp_eff;
-		input reg [63:0] v;
-		upycore_f64_exp_eff = (v[62:52] == 11'd0 ? 11'd1 : v[62:52]);
-	endfunction
-	assign x_exp = upycore_f64_exp_eff(op_x_i);
-	assign y_exp = upycore_f64_exp_eff(op_y_i);
+	assign x_lz = upycore_clz53(x_sig_r);
+	assign y_lz = upycore_clz53(y_sig_r);
 	wire halve;
 	wire signed [89:0] r_red;
-	wire [87:0] r_mag;
-	reg [7:0] r_clz;
+	reg [87:0] r_mag_r;
+	wire [7:0] r_clz;
 	wire [7:0] j0_sel;
-	wire [52:0] r_delta;
 	assign halve = mx_r > FOUR_THIRDS;
-	function automatic [53:0] sv2v_cast_54;
-		input reg [53:0] inp;
-		sv2v_cast_54 = inp;
+	assign r_red = (halve ? $signed({{(WW - FW) - 1 {1'b1}}, 1'b1, mx_r, {35 {1'b0}}}) : $signed({{WW - FW {1'b0}}, mx_r[51:0], {36 {1'b0}}}));
+	function automatic [7:0] sv2v_cast_8;
+		input reg [7:0] inp;
+		sv2v_cast_8 = inp;
 	endfunction
-	function automatic [52:0] sv2v_cast_53;
-		input reg [52:0] inp;
-		sv2v_cast_53 = inp;
-	endfunction
-	assign r_delta = sv2v_cast_53((54'd1 << 53) - sv2v_cast_54(mx_r));
-	assign r_red = (halve ? -$signed({{WW - FW {1'b0}}, r_delta, {35 {1'b0}}}) : $signed({{WW - FW {1'b0}}, mx_r[51:0], {36 {1'b0}}}));
-	function automatic signed [87:0] sv2v_cast_88_signed;
-		input reg signed [87:0] inp;
-		sv2v_cast_88_signed = inp;
-	endfunction
-	assign r_mag = (r_r[89] ? sv2v_cast_88_signed(-r_r) : r_r[87:0]);
-	function automatic signed [7:0] sv2v_cast_8_signed;
-		input reg signed [7:0] inp;
-		sv2v_cast_8_signed = inp;
-	endfunction
-	always @(*) begin
-		if (_sv2v_0)
-			;
-		r_clz = sv2v_cast_8_signed(FW);
-		begin : sv2v_autoblock_2
-			reg signed [31:0] b;
-			for (b = 0; b < FW; b = b + 1)
-				if (r_mag[b])
-					r_clz = sv2v_cast_8_signed(87 - b);
-		end
-	end
+	assign r_clz = (|r_mag_r[87-:64] ? sv2v_cast_8(upycore_clz64(r_mag_r[87-:64])) : 8'd64 + sv2v_cast_8(upycore_clz64({r_mag_r[23:0], 1'b1, {39 {1'b0}}})));
 	assign j0_sel = (r_clz < 8'd2 ? 8'd2 : r_clz);
 	wire d_pos;
 	wire d_neg;
@@ -2131,6 +2378,10 @@ module upycore_fp_pow (
 	assign d_neg = r_r[89] && (r_r[88:87] != 2'b11);
 	wire signed [89:0] w_sh_full;
 	assign w_sh_full = r_r >>> j_r[6:0];
+	function automatic signed [7:0] sv2v_cast_8_signed;
+		input reg signed [7:0] inp;
+		sv2v_cast_8_signed = inp;
+	endfunction
 	assign w_sh = (j_r >= sv2v_cast_8_signed(WW) ? $signed({WW {r_r[89]}}) : w_sh_full);
 	assign z_sh = z_r >> i_r;
 	always @(*) begin
@@ -2160,15 +2411,15 @@ module upycore_fp_pow (
 			;
 		(* full_case, parallel_case *)
 		case (state_r)
-			4'd3: begin
+			5'd5: begin
 				pf_k = j0_r;
 				pf_sh = 7'd0;
 			end
-			4'd4: begin
+			5'd6: begin
 				pf_k = j_r + 8'd1;
 				pf_sh = i_r + 7'd1;
 			end
-			4'd11: begin
+			5'd13: begin
 				pf_k = 8'd1;
 				pf_sh = 7'd1;
 			end
@@ -2461,12 +2712,8 @@ module upycore_fp_pow (
 	assign pf_pos = upycore_pow_rom(1'b0, pf_k) >> pf_sh;
 	assign pf_neg = upycore_pow_rom(1'b1, pf_k) >> pf_sh;
 	reg signed [LW:0] v_sum;
-	reg [6:0] lmag_clz;
+	wire [6:0] lmag_clz;
 	wire [100:0] lmag_norm;
-	function automatic signed [6:0] sv2v_cast_7_signed;
-		input reg signed [6:0] inp;
-		sv2v_cast_7_signed = inp;
-	endfunction
 	always @(*) begin
 		if (_sv2v_0)
 			;
@@ -2476,16 +2723,10 @@ module upycore_fp_pow (
 			v_sum = $signed({{89 {e_r[12]}}, e_r}) <<< FW;
 			v_sum = v_sum + ($signed({{11 {acc_r[90]}}, acc_r}) >>> j0_r);
 		end
-		lmag_clz = sv2v_cast_7_signed(LW);
-		begin : sv2v_autoblock_3
-			reg signed [31:0] b;
-			for (b = 0; b < LW; b = b + 1)
-				if (lmag_r[b])
-					lmag_clz = sv2v_cast_7_signed(100 - b);
-		end
 	end
+	assign lmag_clz = (|lmag_r[100-:64] ? upycore_clz64(lmag_r[100-:64]) : 7'd64 + upycore_clz64({lmag_r[36:0], 1'b1, {26 {1'b0}}}));
 	assign lmag_norm = lmag_r << lz_r;
-	assign mul_start_o = state_r == 4'd9;
+	assign mul_start_o = state_r == 5'd11;
 	assign mul_a_o = lm_r;
 	assign mul_b_o = my_r;
 	assign q_prod = mul_product_i;
@@ -2524,43 +2765,25 @@ module upycore_fp_pow (
 			pexp_r <= 1'sb0;
 		else
 			pexp_r <= $signed({i_int_r[12], i_int_r}) + 14'sd1023;
+	wire [55:0] pk_ext;
+	reg [55:0] pk_ext_r;
+	reg signed [13:0] pk_exp_r;
+	assign pk_ext = {z_r[FW:36], z_r[35], z_r[34], |z_r[33:0]};
 	wire [63:0] pack_res;
 	localparam [63:0] UPY_F64_PINF = 64'h7ff0000000000000;
-	function automatic [63:0] upycore_f64_pack_round;
+	function automatic [63:0] upycore_f64_round_pack;
 		input reg sign;
-		input reg signed [13:0] exp_s;
-		input reg [52:0] sig;
-		input reg g;
-		input reg r;
-		input reg s;
-		reg [55:0] ext;
-		reg [55:0] shifted;
-		reg [55:0] lost_mask;
-		reg signed [13:0] sh;
-		reg signed [13:0] exp_eff;
+		input reg signed [13:0] exp_eff_i;
+		input reg [55:0] shifted;
 		reg inc;
 		reg [53:0] sig_r;
+		reg signed [13:0] exp_eff;
 		reg [10:0] e_field;
 		begin
-			ext = {sig, g, r, s};
-			if (ext == 56'd0)
-				upycore_f64_pack_round = {sign, 63'd0};
+			exp_eff = exp_eff_i;
+			if (shifted == 56'd0)
+				upycore_f64_round_pack = {sign, 63'd0};
 			else begin
-				if (exp_s <= 14'sd0) begin
-					sh = 14'sd1 - exp_s;
-					if (sh > 14'sd55)
-						shifted = {55'd0, |ext};
-					else begin
-						lost_mask = (56'd1 << sh[5:0]) - 56'd1;
-						shifted = ext >> sh[5:0];
-						shifted[0] = shifted[0] | (|(ext & lost_mask));
-					end
-					exp_eff = 14'sd1;
-				end
-				else begin
-					shifted = ext;
-					exp_eff = exp_s;
-				end
 				inc = shifted[2] & ((shifted[1] | shifted[0]) | shifted[3]);
 				sig_r = {1'b0, shifted[55:3]} + {53'd0, inc};
 				if (sig_r[53]) begin
@@ -2568,19 +2791,59 @@ module upycore_fp_pow (
 					exp_eff = exp_eff + 14'sd1;
 				end
 				if (exp_eff >= 14'sd2047)
-					upycore_f64_pack_round = {sign, UPY_F64_PINF[62:0]};
+					upycore_f64_round_pack = {sign, UPY_F64_PINF[62:0]};
 				else begin
 					e_field = (sig_r[52] ? exp_eff[10:0] : 11'd0);
-					upycore_f64_pack_round = {sign, e_field, sig_r[51:0]};
+					upycore_f64_round_pack = {sign, e_field, sig_r[51:0]};
 				end
 			end
 		end
 	endfunction
-	assign pack_res = upycore_f64_pack_round(1'b0, pexp_r, z_r[FW:36], z_r[35], z_r[34], |z_r[33:0]);
+	assign pack_res = upycore_f64_round_pack(1'b0, pk_exp_r, pk_ext_r);
 	localparam [63:0] UPY_F64_PZERO = 64'h0000000000000000;
+	function automatic signed [5:0] sv2v_cast_6_signed;
+		input reg signed [5:0] inp;
+		sv2v_cast_6_signed = inp;
+	endfunction
+	function automatic [55:0] upycore_f64_denorm;
+		input reg [55:0] ext;
+		input reg signed [13:0] exp_s;
+		reg signed [13:0] sh;
+		reg [55:0] lost_mask;
+		begin
+			sh = 14'sd1 - exp_s;
+			if (sh > 14'sd55)
+				upycore_f64_denorm = {55'd0, |ext};
+			else begin
+				begin : sv2v_autoblock_6
+					reg signed [31:0] i;
+					for (i = 0; i < 56; i = i + 1)
+						lost_mask[i] = sv2v_cast_6_signed(i) < sh[5:0];
+				end
+				upycore_f64_denorm = ext >> sh[5:0];
+				upycore_f64_denorm[0] = upycore_f64_denorm[0] | (|(ext & lost_mask));
+			end
+		end
+	endfunction
+	function automatic [10:0] upycore_f64_exp_eff;
+		input reg [63:0] v;
+		upycore_f64_exp_eff = (v[62:52] == 11'd0 ? 11'd1 : v[62:52]);
+	endfunction
+	function automatic [52:0] upycore_f64_sig;
+		input reg [63:0] v;
+		upycore_f64_sig = {v[62:52] != 11'd0, v[51:0]};
+	endfunction
 	function automatic [12:0] sv2v_cast_13;
 		input reg [12:0] inp;
 		sv2v_cast_13 = inp;
+	endfunction
+	function automatic signed [87:0] sv2v_cast_88_signed;
+		input reg signed [87:0] inp;
+		sv2v_cast_88_signed = inp;
+	endfunction
+	function automatic signed [6:0] sv2v_cast_7_signed;
+		input reg signed [6:0] inp;
+		sv2v_cast_7_signed = inp;
 	endfunction
 	function automatic signed [100:0] sv2v_cast_4587C_signed;
 		input reg signed [100:0] inp;
@@ -2592,8 +2855,15 @@ module upycore_fp_pow (
 	endfunction
 	always @(posedge clk_i or negedge rst_n_i)
 		if (!rst_n_i) begin
-			state_r <= 4'd0;
+			state_r <= 5'd0;
 			done_r <= 1'b0;
+			pk_ext_r <= 1'sb0;
+			pk_exp_r <= 1'sb0;
+			x_sig_r <= 1'sb0;
+			y_sig_r <= 1'sb0;
+			x_exp_r <= 1'sb0;
+			y_exp_r <= 1'sb0;
+			r_mag_r <= 1'sb0;
 			mx_r <= 1'sb0;
 			ex_r <= 1'sb0;
 			my_r <= 1'sb0;
@@ -2625,40 +2895,51 @@ module upycore_fp_pow (
 		end
 		else begin
 			done_r <= 1'b0;
-			if ((state_r != 4'd0) && !start_i)
-				state_r <= 4'd0;
+			if ((state_r != 5'd0) && !start_i)
+				state_r <= 5'd0;
 			else
 				(* full_case, parallel_case *)
 				case (state_r)
-					4'd0:
+					5'd0:
 						if (start_i && !done_r) begin
-							mx_r <= x_sig << x_lz;
-							ex_r <= (sv2v_cast_13(x_exp) - sv2v_cast_13(x_lz)) - 13'sd1023;
-							my_r <= y_sig << y_lz;
-							ey_r <= (sv2v_cast_13(y_exp) - sv2v_cast_13(y_lz)) - 13'sd1023;
+							x_sig_r <= upycore_f64_sig(op_x_i);
+							y_sig_r <= upycore_f64_sig(op_y_i);
+							x_exp_r <= upycore_f64_exp_eff(op_x_i);
+							y_exp_r <= upycore_f64_exp_eff(op_y_i);
 							ysign_r <= op_y_i[63];
-							state_r <= 4'd1;
+							state_r <= 5'd1;
 						end
-					4'd1: begin
+					5'd1: begin
+						mx_r <= x_sig_r << x_lz;
+						ex_r <= (sv2v_cast_13(x_exp_r) - sv2v_cast_13(x_lz)) - 13'sd1023;
+						my_r <= y_sig_r << y_lz;
+						ey_r <= (sv2v_cast_13(y_exp_r) - sv2v_cast_13(y_lz)) - 13'sd1023;
+						state_r <= 5'd2;
+					end
+					5'd2: begin
 						r_r <= r_red;
 						e_r <= (halve ? ex_r + 13'sd1 : ex_r);
 						acc_r <= 1'sb0;
-						state_r <= 4'd2;
+						state_r <= 5'd3;
 					end
-					4'd2: begin
+					5'd3: begin
+						r_mag_r <= (r_r[89] ? sv2v_cast_88_signed(-r_r) : r_r[87:0]);
+						state_r <= 5'd4;
+					end
+					5'd4: begin
 						j0_r <= j0_sel;
-						rz_r <= r_mag == {88 {1'sb0}};
-						state_r <= 4'd3;
+						rz_r <= r_mag_r == {88 {1'sb0}};
+						state_r <= 5'd5;
 					end
-					4'd3: begin
+					5'd5: begin
 						r_r <= -r_r <<< j0_r;
 						j_r <= j0_r;
 						i_r <= 1'sb0;
 						cpos_r <= pf_pos;
 						cneg_r <= pf_neg;
-						state_r <= (rz_r ? 4'd5 : 4'd4);
+						state_r <= (rz_r ? 5'd7 : 5'd6);
 					end
-					4'd4: begin
+					5'd6: begin
 						r_r <= w_next;
 						acc_r <= acc_next;
 						j_r <= j_r + 8'd1;
@@ -2666,45 +2947,45 @@ module upycore_fp_pow (
 						cpos_r <= pf_pos;
 						cneg_r <= pf_neg;
 						if (i_r == sv2v_cast_7_signed(79))
-							state_r <= 4'd5;
+							state_r <= 5'd7;
 					end
-					4'd5: begin
+					5'd7: begin
 						v_r <= v_sum;
 						lscale_r <= (e_r == 13'sd0 ? j0_r : 8'd0);
-						state_r <= 4'd6;
+						state_r <= 5'd8;
 					end
-					4'd6: begin
+					5'd8: begin
 						lsign_r <= v_r[LW];
 						lmag_r <= sv2v_cast_4587C_signed((v_r[LW] ? -v_r : v_r));
-						state_r <= 4'd7;
+						state_r <= 5'd9;
 					end
-					4'd7: begin
+					5'd9: begin
 						lz_r <= lmag_clz;
-						state_r <= 4'd8;
+						state_r <= 5'd10;
 					end
-					4'd8: begin
+					5'd10: begin
 						lm_r <= lmag_norm[100:LW - LMW];
 						el_r <= ((sv2v_cast_13_signed(LW - LMW) - sv2v_cast_13(lz_r)) - sv2v_cast_13_signed(FW)) - sv2v_cast_13(lscale_r);
 						psign_r <= ysign_r ^ lsign_r;
-						state_r <= 4'd9;
+						state_r <= 5'd11;
 					end
-					4'd9:
+					5'd11:
 						if (mul_done)
-							state_r <= 4'd10;
-					4'd10: begin
+							state_r <= 5'd12;
+					5'd12: begin
 						pfix_r <= q_shifted[91:0];
 						huge_r <= p_huge;
-						state_r <= 4'd11;
+						state_r <= 5'd13;
 					end
-					4'd11: begin
+					5'd13: begin
 						i_int_r <= pfix_s[PW:FP];
 						f_r <= {pfix_s[79:0], {FW - FP {1'b0}}};
 						z_r <= {1'b1, {FW {1'b0}}};
 						i_r <= 7'd1;
 						cpos_r <= pf_pos;
-						state_r <= (huge_r ? 4'd13 : 4'd12);
+						state_r <= (huge_r ? 5'd15 : 5'd14);
 					end
-					4'd12: begin
+					5'd14: begin
 						if (exp_take) begin
 							f_r <= f_r - exp_c;
 							z_r <= z_r + z_sh;
@@ -2712,22 +2993,27 @@ module upycore_fp_pow (
 						i_r <= i_r + 7'd1;
 						cpos_r <= pf_pos;
 						if (i_r == sv2v_cast_7_signed(NEXP))
-							state_r <= 4'd13;
+							state_r <= 5'd15;
 					end
-					4'd13: begin
+					5'd15: begin
+						pk_ext_r <= (pexp_r > 14'sd0 ? pk_ext : upycore_f64_denorm(pk_ext, pexp_r));
+						pk_exp_r <= (pexp_r > 14'sd0 ? pexp_r : 14'sd1);
+						state_r <= 5'd16;
+					end
+					5'd16: begin
 						if (huge_r)
 							result_r <= (psign_r ? UPY_F64_PZERO : UPY_F64_PINF);
 						else
 							result_r <= pack_res;
 						done_r <= 1'b1;
-						state_r <= 4'd0;
+						state_r <= 5'd0;
 					end
-					default: state_r <= 4'd0;
+					default: state_r <= 5'd0;
 				endcase
 		end
 	assign result_o = result_r;
 	assign done_o = done_r;
-	assign busy_o = state_r != 4'd0;
+	assign busy_o = state_r != 5'd0;
 	initial _sv2v_0 = 0;
 endmodule
 module upycore_fpu (
@@ -3007,12 +3293,14 @@ module upycore_fpu (
 	assign b_sig = {12'h001, br[51:0]};
 	assign b_trunc_ok = (br[62:52] != 11'h7ff) && ((br[62:52] < 11'd1023) || (b_uexp < 11'd63));
 	assign b_trunc_abs = (!b_trunc_ok || (br[62:52] < 11'd1023) ? 64'd0 : (b_uexp < 11'd52 ? b_sig >> (11'd52 - b_uexp) : b_sig << (b_uexp - 11'd52)));
-	function automatic signed [63:0] sv2v_cast_64_signed;
-		input reg signed [63:0] inp;
-		sv2v_cast_64_signed = inp;
-	endfunction
-	assign pow_n_small = b_trunc_abs <= sv2v_cast_64_signed(POW_CHAIN_MAX);
+	localparam [63:0] POW_LIM = $realtobits(real'(POW_CHAIN_MAX + 1));
+	assign pow_n_small = br[62:0] < POW_LIM[62:0];
+	wire dec_direct;
 	localparam [4:0] UPY_ALU_ADD = 5'd0;
+	localparam [4:0] UPY_ALU_MUL = 5'd2;
+	localparam [4:0] UPY_ALU_SUB = 5'd1;
+	localparam [4:0] UPY_ALU_TRUE_DIV = 5'd4;
+	assign dec_direct = (((op_i == UPY_ALU_ADD) || (op_i == UPY_ALU_SUB)) || (op_i == UPY_ALU_MUL)) || ((op_i == UPY_ALU_TRUE_DIV) && !b_zero);
 	localparam [4:0] UPY_ALU_EQ = 5'd16;
 	localparam [4:0] UPY_ALU_FLOOR_DIV = 5'd3;
 	localparam [4:0] UPY_ALU_GE = 5'd21;
@@ -3020,18 +3308,12 @@ module upycore_fpu (
 	localparam [4:0] UPY_ALU_LE = 5'd19;
 	localparam [4:0] UPY_ALU_LT = 5'd18;
 	localparam [4:0] UPY_ALU_MOD = 5'd5;
-	localparam [4:0] UPY_ALU_MUL = 5'd2;
 	localparam [4:0] UPY_ALU_NE = 5'd17;
 	localparam [4:0] UPY_ALU_NEG = 5'd12;
 	localparam [4:0] UPY_ALU_NOT = 5'd15;
 	localparam [4:0] UPY_ALU_PASS = 5'd22;
 	localparam [4:0] UPY_ALU_POS = 5'd13;
 	localparam [4:0] UPY_ALU_POWER = 5'd6;
-	localparam [4:0] UPY_ALU_SUB = 5'd1;
-	localparam [4:0] UPY_ALU_TRUE_DIV = 5'd4;
-	localparam [63:0] UPY_F64_HALF = 64'h3fe0000000000000;
-	localparam [63:0] UPY_F64_NONE = 64'hbff0000000000000;
-	localparam [63:0] UPY_F64_PINF = 64'h7ff0000000000000;
 	function automatic upycore_f64_compare_op;
 		input reg [4:0] op;
 		input reg [63:0] a;
@@ -3087,53 +3369,8 @@ module upycore_fpu (
 				dec_next = 6'd5;
 			end
 			UPY_ALU_POWER: begin
-				dec_kind = 2'd0;
-				if (b_zero)
-					dec_result = UPY_F64_ONE;
-				else if (a_nan)
-					dec_result = ar;
-				else if (b_nan)
-					dec_result = (ar == UPY_F64_ONE ? UPY_F64_ONE : br);
-				else if (b_inf) begin
-					if (a_abs_one)
-						dec_result = UPY_F64_ONE;
-					else if (b_gt0 == a_abs_gt_one)
-						dec_result = UPY_F64_PINF;
-					else
-						dec_result = UPY_F64_PZERO;
-				end
-				else if (a_inf) begin
-					if (b_gt0)
-						dec_result = (b_odd ? ar : a_abs);
-					else
-						dec_result = (b_odd ? {ar[63], 63'd0} : UPY_F64_PZERO);
-				end
-				else if (a_zero) begin
-					if (b_lt0)
-						dec_kind = 2'd1;
-					else
-						dec_result = (b_odd ? ar : UPY_F64_PZERO);
-				end
-				else if (!b_int && ar[63])
-					dec_kind = 2'd1;
-				else if (a_abs_one)
-					dec_result = (ar[63] && b_odd ? UPY_F64_NONE : UPY_F64_ONE);
-				else if (br == UPY_F64_HALF) begin
-					dec_kind = 2'd3;
-					dec_next = 6'd24;
-				end
-				else if ((b_int && b_trunc_ok) && pow_n_small) begin
-					dec_kind = 2'd3;
-					dec_next = 6'd15;
-					dec_pow_neg = ar[63] && b_odd;
-					dec_pow_recip = b_lt0;
-					dec_pow_n = b_trunc_abs;
-				end
-				else begin
-					dec_kind = 2'd3;
-					dec_next = 6'd23;
-					dec_pow_neg = ar[63] && b_odd;
-				end
+				dec_kind = 2'd3;
+				dec_next = 6'd25;
 			end
 			UPY_ALU_NEG: begin
 				dec_kind = 2'd0;
@@ -3154,6 +3391,91 @@ module upycore_fpu (
 			default: dec_kind = 2'd1;
 		endcase
 	end
+	reg pf_int_r;
+	reg pf_odd_r;
+	reg pf_tok_r;
+	reg pf_small_r;
+	reg [63:0] pf_n_r;
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i) begin
+			pf_int_r <= 1'b0;
+			pf_odd_r <= 1'b0;
+			pf_tok_r <= 1'b0;
+			pf_small_r <= 1'b0;
+			pf_n_r <= 1'sb0;
+		end
+		else begin
+			pf_int_r <= b_int;
+			pf_odd_r <= b_odd;
+			pf_tok_r <= b_trunc_ok;
+			pf_small_r <= pow_n_small;
+			pf_n_r <= b_trunc_abs;
+		end
+	reg [1:0] pw_kind;
+	reg [63:0] pw_result;
+	reg [63:0] pw_n;
+	reg [5:0] pw_next;
+	reg pw_neg;
+	reg pw_recip;
+	localparam [63:0] UPY_F64_HALF = 64'h3fe0000000000000;
+	localparam [63:0] UPY_F64_NONE = 64'hbff0000000000000;
+	localparam [63:0] UPY_F64_PINF = 64'h7ff0000000000000;
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		pw_result = 1'sb0;
+		pw_next = 6'd0;
+		pw_neg = 1'b0;
+		pw_recip = 1'b0;
+		pw_n = 1'sb0;
+		pw_kind = 2'd0;
+		if (b_zero)
+			pw_result = UPY_F64_ONE;
+		else if (a_nan)
+			pw_result = ar;
+		else if (b_nan)
+			pw_result = (ar == UPY_F64_ONE ? UPY_F64_ONE : br);
+		else if (b_inf) begin
+			if (a_abs_one)
+				pw_result = UPY_F64_ONE;
+			else if (b_gt0 == a_abs_gt_one)
+				pw_result = UPY_F64_PINF;
+			else
+				pw_result = UPY_F64_PZERO;
+		end
+		else if (a_inf) begin
+			if (b_gt0)
+				pw_result = (pf_odd_r ? ar : a_abs);
+			else
+				pw_result = (pf_odd_r ? {ar[63], 63'd0} : UPY_F64_PZERO);
+		end
+		else if (a_zero) begin
+			if (b_lt0)
+				pw_kind = 2'd1;
+			else
+				pw_result = (pf_odd_r ? ar : UPY_F64_PZERO);
+		end
+		else if (!pf_int_r && ar[63])
+			pw_kind = 2'd1;
+		else if (a_abs_one)
+			pw_result = (ar[63] && pf_odd_r ? UPY_F64_NONE : UPY_F64_ONE);
+		else if (br == UPY_F64_HALF) begin
+			pw_kind = 2'd3;
+			pw_next = 6'd24;
+		end
+		else if ((pf_int_r && pf_tok_r) && pf_small_r) begin
+			pw_kind = 2'd3;
+			pw_next = 6'd15;
+			pw_neg = ar[63] && pf_odd_r;
+			pw_recip = b_lt0;
+			pw_n = pf_n_r;
+		end
+		else begin
+			pw_kind = 2'd3;
+			pw_next = 6'd23;
+			pw_neg = ar[63] && pf_odd_r;
+		end
+	end
 	always @(*) begin
 		if (_sv2v_0)
 			;
@@ -3169,7 +3491,7 @@ module upycore_fpu (
 		(* full_case, parallel_case *)
 		case (state_r)
 			6'd0:
-				if (start_i && (dec_kind == 2'd2)) begin
+				if (start_i && dec_direct) begin
 					u_add_start = !dec_mul && !dec_div;
 					u_sub = dec_sub;
 					u_mul_start = dec_mul;
@@ -3307,33 +3629,58 @@ module upycore_fpu (
 	assign pow_overflow = upycore_f64_is_inf(t0_r);
 	function automatic [6:0] upycore_clz64;
 		input reg [63:0] v;
-		reg [63:0] x;
-		reg [5:0] n;
+		reg [31:0] z1;
+		reg [31:0] c1;
+		reg [15:0] z2;
+		reg [31:0] c2;
+		reg [7:0] z3;
+		reg [23:0] c3;
+		reg [3:0] z4;
+		reg [15:0] c4;
+		reg [1:0] z5;
+		reg [9:0] c5;
 		begin
-			x = v;
-			n = 1'sb0;
-			if (x[63:32] == 0) begin
-				n[5] = 1'b1;
-				x = x << 32;
+			begin : sv2v_autoblock_1
+				reg signed [31:0] i;
+				for (i = 0; i < 32; i = i + 1)
+					begin
+						z1[i] = !v[(2 * i) + 1] && !v[2 * i];
+						c1[i] = !v[(2 * i) + 1];
+					end
 			end
-			if (x[63:48] == 0) begin
-				n[4] = 1'b1;
-				x = x << 16;
+			begin : sv2v_autoblock_2
+				reg signed [31:0] i;
+				for (i = 0; i < 16; i = i + 1)
+					begin
+						z2[i] = z1[(2 * i) + 1] && z1[2 * i];
+						c2[2 * i+:2] = (z1[(2 * i) + 1] ? {1'b1, c1[2 * i]} : {1'b0, c1[(2 * i) + 1]});
+					end
 			end
-			if (x[63:56] == 0) begin
-				n[3] = 1'b1;
-				x = x << 8;
+			begin : sv2v_autoblock_3
+				reg signed [31:0] i;
+				for (i = 0; i < 8; i = i + 1)
+					begin
+						z3[i] = z2[(2 * i) + 1] && z2[2 * i];
+						c3[3 * i+:3] = (z2[(2 * i) + 1] ? {1'b1, c2[2 * (2 * i)+:2]} : {1'b0, c2[2 * ((2 * i) + 1)+:2]});
+					end
 			end
-			if (x[63:60] == 0) begin
-				n[2] = 1'b1;
-				x = x << 4;
+			begin : sv2v_autoblock_4
+				reg signed [31:0] i;
+				for (i = 0; i < 4; i = i + 1)
+					begin
+						z4[i] = z3[(2 * i) + 1] && z3[2 * i];
+						c4[4 * i+:4] = (z3[(2 * i) + 1] ? {1'b1, c3[3 * (2 * i)+:3]} : {1'b0, c3[3 * ((2 * i) + 1)+:3]});
+					end
 			end
-			if (x[63:62] == 0) begin
-				n[1] = 1'b1;
-				x = x << 2;
+			begin : sv2v_autoblock_5
+				reg signed [31:0] i;
+				for (i = 0; i < 2; i = i + 1)
+					begin
+						z5[i] = z4[(2 * i) + 1] && z4[2 * i];
+						c5[5 * i+:5] = (z4[(2 * i) + 1] ? {1'b1, c4[4 * (2 * i)+:4]} : {1'b0, c4[4 * ((2 * i) + 1)+:4]});
+					end
 			end
-			n[0] = !x[63];
-			upycore_clz64 = (v == 0 ? 7'd64 : {1'b0, n});
+			upycore_clz64 = (z5[1] && z5[0] ? 7'd64 : (z5[1] ? {2'b01, c5[4:0]} : {2'b00, c5[9:5]}));
 		end
 	endfunction
 	assign pow_lz = upycore_clz64(pow_n_r);
@@ -3366,7 +3713,7 @@ module upycore_fpu (
 			(* full_case, parallel_case *)
 			case (state_r)
 				6'd0:
-					if (dec_kind == 2'd2) begin
+					if (dec_direct) begin
 						state_r <= 6'd1;
 						mul_run <= dec_mul;
 					end
@@ -3379,6 +3726,22 @@ module upycore_fpu (
 						t0_r <= UPY_F64_ONE;
 						t1_r <= a_abs;
 					end
+				6'd25:
+					(* full_case, parallel_case *)
+					case (pw_kind)
+						2'd3: begin
+							state_r <= pw_next;
+							pow_neg_r <= pw_neg;
+							pow_recip_r <= pw_recip;
+							pow_n_r <= pw_n;
+							pow_n0_r <= pw_n;
+						end
+						2'd0: begin
+							res_r <= pw_result;
+							state_r <= 6'd26;
+						end
+						default: state_r <= 6'd27;
+					endcase
 				6'd1:
 					if (u_done) begin
 						state_r <= 6'd0;
@@ -3394,12 +3757,12 @@ module upycore_fpu (
 						state_r <= 6'd4;
 					else begin
 						res_r <= (upycore_f64_eq(t0_r, UPY_F64_PZERO) ? {br[63], 63'd0} : t0_r);
-						state_r <= 6'd25;
+						state_r <= 6'd26;
 					end
 				6'd4:
 					if (u_done) begin
 						res_r <= u_res;
-						state_r <= 6'd25;
+						state_r <= 6'd26;
 					end
 				6'd5:
 					if (u_done) begin
@@ -3430,7 +3793,7 @@ module upycore_fpu (
 					end
 					else begin
 						res_r <= {ar[63] ^ br[63], 63'd0};
-						state_r <= 6'd25;
+						state_r <= 6'd26;
 					end
 				6'd12:
 					if (u_done) begin
@@ -3442,12 +3805,12 @@ module upycore_fpu (
 						state_r <= 6'd14;
 					else begin
 						res_r <= t2_r;
-						state_r <= 6'd25;
+						state_r <= 6'd26;
 					end
 				6'd14:
 					if (u_done) begin
 						res_r <= u_res;
-						state_r <= 6'd25;
+						state_r <= 6'd26;
 					end
 				6'd15: begin
 					t0_r <= t1_r;
@@ -3495,10 +3858,10 @@ module upycore_fpu (
 					end
 				6'd22:
 					if (pow_overflow)
-						state_r <= 6'd26;
+						state_r <= 6'd27;
 					else begin
 						res_r <= {t0_r[63] ^ pow_neg_r, t0_r[62:0]};
-						state_r <= 6'd25;
+						state_r <= 6'd26;
 					end
 				6'd23:
 					if (u_done) begin
@@ -3510,7 +3873,7 @@ module upycore_fpu (
 						t0_r <= u_res;
 						state_r <= 6'd22;
 					end
-				6'd25, 6'd26: state_r <= 6'd0;
+				6'd26, 6'd27: state_r <= 6'd0;
 				default: state_r <= 6'd0;
 			endcase
 	always @(*) begin
@@ -3537,8 +3900,8 @@ module upycore_fpu (
 				done_o = u_done;
 				result_o = u_res;
 			end
-			6'd25: done_o = 1'b1;
-			6'd26: exception_o = 1'b1;
+			6'd26: done_o = 1'b1;
+			6'd27: exception_o = 1'b1;
 			default:
 				;
 		endcase
@@ -3562,7 +3925,67 @@ module mpy_f32_widen (
 	assign sign = f_i[31];
 	assign exp = f_i[30:23];
 	assign frac = f_i[22:0];
-	assign sh = (frac[22] ? 5'd0 : (frac[21] ? 5'd1 : (frac[20] ? 5'd2 : (frac[19] ? 5'd3 : (frac[18] ? 5'd4 : (frac[17] ? 5'd5 : (frac[16] ? 5'd6 : (frac[15] ? 5'd7 : (frac[14] ? 5'd8 : (frac[13] ? 5'd9 : (frac[12] ? 5'd10 : (frac[11] ? 5'd11 : (frac[10] ? 5'd12 : (frac[9] ? 5'd13 : (frac[8] ? 5'd14 : (frac[7] ? 5'd15 : (frac[6] ? 5'd16 : (frac[5] ? 5'd17 : (frac[4] ? 5'd18 : (frac[3] ? 5'd19 : (frac[2] ? 5'd20 : (frac[1] ? 5'd21 : 5'd22))))))))))))))))))))));
+	function automatic [6:0] upycore_clz64;
+		input reg [63:0] v;
+		reg [31:0] z1;
+		reg [31:0] c1;
+		reg [15:0] z2;
+		reg [31:0] c2;
+		reg [7:0] z3;
+		reg [23:0] c3;
+		reg [3:0] z4;
+		reg [15:0] c4;
+		reg [1:0] z5;
+		reg [9:0] c5;
+		begin
+			begin : sv2v_autoblock_1
+				reg signed [31:0] i;
+				for (i = 0; i < 32; i = i + 1)
+					begin
+						z1[i] = !v[(2 * i) + 1] && !v[2 * i];
+						c1[i] = !v[(2 * i) + 1];
+					end
+			end
+			begin : sv2v_autoblock_2
+				reg signed [31:0] i;
+				for (i = 0; i < 16; i = i + 1)
+					begin
+						z2[i] = z1[(2 * i) + 1] && z1[2 * i];
+						c2[2 * i+:2] = (z1[(2 * i) + 1] ? {1'b1, c1[2 * i]} : {1'b0, c1[(2 * i) + 1]});
+					end
+			end
+			begin : sv2v_autoblock_3
+				reg signed [31:0] i;
+				for (i = 0; i < 8; i = i + 1)
+					begin
+						z3[i] = z2[(2 * i) + 1] && z2[2 * i];
+						c3[3 * i+:3] = (z2[(2 * i) + 1] ? {1'b1, c2[2 * (2 * i)+:2]} : {1'b0, c2[2 * ((2 * i) + 1)+:2]});
+					end
+			end
+			begin : sv2v_autoblock_4
+				reg signed [31:0] i;
+				for (i = 0; i < 4; i = i + 1)
+					begin
+						z4[i] = z3[(2 * i) + 1] && z3[2 * i];
+						c4[4 * i+:4] = (z3[(2 * i) + 1] ? {1'b1, c3[3 * (2 * i)+:3]} : {1'b0, c3[3 * ((2 * i) + 1)+:3]});
+					end
+			end
+			begin : sv2v_autoblock_5
+				reg signed [31:0] i;
+				for (i = 0; i < 2; i = i + 1)
+					begin
+						z5[i] = z4[(2 * i) + 1] && z4[2 * i];
+						c5[5 * i+:5] = (z4[(2 * i) + 1] ? {1'b1, c4[4 * (2 * i)+:4]} : {1'b0, c4[4 * ((2 * i) + 1)+:4]});
+					end
+			end
+			upycore_clz64 = (z5[1] && z5[0] ? 7'd64 : (z5[1] ? {2'b01, c5[4:0]} : {2'b00, c5[9:5]}));
+		end
+	endfunction
+	function automatic [4:0] sv2v_cast_5;
+		input reg [4:0] inp;
+		sv2v_cast_5 = inp;
+	endfunction
+	assign sh = sv2v_cast_5(upycore_clz64({frac[22:1], 42'h20000000000}));
 	assign shifted = frac << sh;
 	always @(*) begin
 		if (_sv2v_0)
@@ -3580,11 +4003,17 @@ module mpy_f32_widen (
 endmodule
 module mpy_f32_narrow (
 	d_i,
-	q_o
+	q_o,
+	jam_o,
+	jam_i,
+	sub_o
 );
 	reg _sv2v_0;
 	input wire [63:0] d_i;
 	output reg [31:0] q_o;
+	output wire [54:0] jam_o;
+	input wire [54:0] jam_i;
+	output wire sub_o;
 	wire sign;
 	wire [10:0] exp;
 	wire [51:0] frac;
@@ -3612,7 +4041,9 @@ module mpy_f32_narrow (
 			assign jam[k + 1] = (sh[k] ? {{S {1'b0}}, jam[k][54:S + 1], |jam[k][S:0]} : jam[k]);
 		end
 	endgenerate
-	assign mag = {1'b0, jam[6][24:2]} + {23'd0, jam[6][1] && (jam[6][0] || jam[6][2])};
+	assign jam_o = jam[6];
+	assign mag = {1'b0, jam_i[24:2]} + {23'd0, jam_i[1] && (jam_i[0] || jam_i[2])};
+	assign sub_o = (((exp != 11'h7ff) && !((d_i[62:0] == 63'b000000000000000000000000000000000000000000000000000000000000000) || (exp == 11'b00000000000))) && !(exp32 >= 13'sd1)) && !(sh >= 12'd53);
 	always @(*) begin
 		if (_sv2v_0)
 			;
@@ -3878,10 +4309,21 @@ module mpy_alu (
 		.stall_o(fstall),
 		.busy_o(fbusy)
 	);
+	wire [54:0] nar_jam;
+	reg [54:0] nar_jam_r;
+	wire nar_sub;
 	mpy_f32_narrow u_narrow(
 		.d_i(fres_r),
-		.q_o(fnarrow)
+		.q_o(fnarrow),
+		.jam_o(nar_jam),
+		.jam_i(nar_jam_r),
+		.sub_o(nar_sub)
 	);
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i)
+			nar_jam_r <= 1'sb0;
+		else
+			nar_jam_r <= nar_jam;
 	wire [5:0] dop;
 	wire [31:0] dxa;
 	wire [31:0] dxb;
@@ -3891,7 +4333,6 @@ module mpy_alu (
 	assign dop = (st == 4'd6 ? op : op_i);
 	assign dxa = (st == 4'd6 ? fa : a_i[31:0]);
 	assign dxb = (st == 4'd6 ? fb : b_i[31:0]);
-	localparam [2:0] mpy_alu_pkg_AE_COMPLEX = 3'd5;
 	localparam [2:0] mpy_alu_pkg_AE_NONE = 3'd0;
 	localparam [2:0] mpy_alu_pkg_AE_UNSUPPORTED = 3'd4;
 	localparam [2:0] mpy_alu_pkg_AE_ZERO_DIV = 3'd1;
@@ -3907,21 +4348,6 @@ module mpy_alu (
 		input reg [31:0] a;
 		input reg [31:0] b;
 		mpy_alu_pkg_mpy_f32_eq = (!mpy_alu_pkg_mpy_f32_nan(a) && !mpy_alu_pkg_mpy_f32_nan(b)) && ((a == b) || (mpy_alu_pkg_mpy_f32_zero(a) && mpy_alu_pkg_mpy_f32_zero(b)));
-	endfunction
-	function automatic mpy_alu_pkg_mpy_f32_integral;
-		input reg [31:0] f;
-		reg [7:0] e;
-		begin
-			e = f[30:23];
-			if (e == 8'hff)
-				mpy_alu_pkg_mpy_f32_integral = 1'b0;
-			else if (e >= 8'd150)
-				mpy_alu_pkg_mpy_f32_integral = 1'b1;
-			else if (e < 8'd127)
-				mpy_alu_pkg_mpy_f32_integral = f[30:0] == 31'd0;
-			else
-				mpy_alu_pkg_mpy_f32_integral = (f[22:0] & (23'h7fffff >> (e - 8'd127))) == 23'd0;
-		end
 	endfunction
 	function automatic mpy_alu_pkg_mpy_f32_lt;
 		input reg [31:0] a;
@@ -3954,10 +4380,7 @@ module mpy_alu (
 				if (mpy_alu_pkg_mpy_f32_zero(dxb))
 					f_err = mpy_alu_pkg_AE_ZERO_DIV;
 			mpy_alu_pkg_ALU_POW:
-				if ((mpy_alu_pkg_mpy_f32_zero(dxa) && dxb[31]) && !((dxb[30:23] == 8'hff) && (dxb[22:0] == 23'd0)))
-					f_err = mpy_alu_pkg_AE_ZERO_DIV;
-				else if (((((dxa[31] && !mpy_alu_pkg_mpy_f32_zero(dxa)) && !mpy_alu_pkg_mpy_f32_nan(dxa)) && !mpy_alu_pkg_mpy_f32_integral(dxb)) && !mpy_alu_pkg_mpy_f32_nan(dxb)) && (dxb[30:23] != 8'hff))
-					f_err = mpy_alu_pkg_AE_COMPLEX;
+				;
 			default: f_err = mpy_alu_pkg_AE_UNSUPPORTED;
 		endcase
 		f_fpu = f_err == mpy_alu_pkg_AE_NONE;
@@ -3970,6 +4393,7 @@ module mpy_alu (
 		.f_i(dxb),
 		.d_o(fb64)
 	);
+	localparam [2:0] mpy_alu_pkg_AE_COMPLEX = 3'd5;
 	localparam [2:0] mpy_alu_pkg_AE_FTOI = 3'd6;
 	localparam [2:0] mpy_alu_pkg_AE_NEG_SHIFT = 3'd3;
 	localparam [2:0] mpy_alu_pkg_AE_OVERFLOW = 3'd2;
@@ -3981,6 +4405,21 @@ module mpy_alu (
 	localparam [5:0] mpy_alu_pkg_ALU_I2F = 6'd44;
 	localparam [5:0] mpy_alu_pkg_ALU_MATMUL = 6'd30;
 	localparam [5:0] mpy_alu_pkg_ALU_POS = 6'd41;
+	function automatic mpy_alu_pkg_mpy_f32_integral;
+		input reg [31:0] f;
+		reg [7:0] e;
+		begin
+			e = f[30:23];
+			if (e == 8'hff)
+				mpy_alu_pkg_mpy_f32_integral = 1'b0;
+			else if (e >= 8'd150)
+				mpy_alu_pkg_mpy_f32_integral = 1'b1;
+			else if (e < 8'd127)
+				mpy_alu_pkg_mpy_f32_integral = f[30:0] == 31'd0;
+			else
+				mpy_alu_pkg_mpy_f32_integral = (f[22:0] & (23'h7fffff >> (e - 8'd127))) == 23'd0;
+		end
+	endfunction
 	function automatic [4:0] sv2v_cast_5;
 		input reg [4:0] inp;
 		sv2v_cast_5 = inp;
@@ -4024,40 +4463,65 @@ module mpy_alu (
 						m = m << (x - 23);
 					else
 						m = m >> (23 - x);
-					mpy_alu_pkg_mpy_f32_to_i64 = (f[31] ? ~m + 64'd1 : m);
+					mpy_alu_pkg_mpy_f32_to_i64 = m;
 				end
 			end
 		end
 	endfunction
 	function automatic [6:0] upycore_clz64;
 		input reg [63:0] v;
-		reg [63:0] x;
-		reg [5:0] n;
+		reg [31:0] z1;
+		reg [31:0] c1;
+		reg [15:0] z2;
+		reg [31:0] c2;
+		reg [7:0] z3;
+		reg [23:0] c3;
+		reg [3:0] z4;
+		reg [15:0] c4;
+		reg [1:0] z5;
+		reg [9:0] c5;
 		begin
-			x = v;
-			n = 1'sb0;
-			if (x[63:32] == 0) begin
-				n[5] = 1'b1;
-				x = x << 32;
+			begin : sv2v_autoblock_1
+				reg signed [31:0] i;
+				for (i = 0; i < 32; i = i + 1)
+					begin
+						z1[i] = !v[(2 * i) + 1] && !v[2 * i];
+						c1[i] = !v[(2 * i) + 1];
+					end
 			end
-			if (x[63:48] == 0) begin
-				n[4] = 1'b1;
-				x = x << 16;
+			begin : sv2v_autoblock_2
+				reg signed [31:0] i;
+				for (i = 0; i < 16; i = i + 1)
+					begin
+						z2[i] = z1[(2 * i) + 1] && z1[2 * i];
+						c2[2 * i+:2] = (z1[(2 * i) + 1] ? {1'b1, c1[2 * i]} : {1'b0, c1[(2 * i) + 1]});
+					end
 			end
-			if (x[63:56] == 0) begin
-				n[3] = 1'b1;
-				x = x << 8;
+			begin : sv2v_autoblock_3
+				reg signed [31:0] i;
+				for (i = 0; i < 8; i = i + 1)
+					begin
+						z3[i] = z2[(2 * i) + 1] && z2[2 * i];
+						c3[3 * i+:3] = (z2[(2 * i) + 1] ? {1'b1, c2[2 * (2 * i)+:2]} : {1'b0, c2[2 * ((2 * i) + 1)+:2]});
+					end
 			end
-			if (x[63:60] == 0) begin
-				n[2] = 1'b1;
-				x = x << 4;
+			begin : sv2v_autoblock_4
+				reg signed [31:0] i;
+				for (i = 0; i < 4; i = i + 1)
+					begin
+						z4[i] = z3[(2 * i) + 1] && z3[2 * i];
+						c4[4 * i+:4] = (z3[(2 * i) + 1] ? {1'b1, c3[3 * (2 * i)+:3]} : {1'b0, c3[3 * ((2 * i) + 1)+:3]});
+					end
 			end
-			if (x[63:62] == 0) begin
-				n[1] = 1'b1;
-				x = x << 2;
+			begin : sv2v_autoblock_5
+				reg signed [31:0] i;
+				for (i = 0; i < 2; i = i + 1)
+					begin
+						z5[i] = z4[(2 * i) + 1] && z4[2 * i];
+						c5[5 * i+:5] = (z4[(2 * i) + 1] ? {1'b1, c4[4 * (2 * i)+:4]} : {1'b0, c4[4 * ((2 * i) + 1)+:4]});
+					end
 			end
-			n[0] = !x[63];
-			upycore_clz64 = (v == 0 ? 7'd64 : {1'b0, n});
+			upycore_clz64 = (z5[1] && z5[0] ? 7'd64 : (z5[1] ? {2'b01, c5[4:0]} : {2'b00, c5[9:5]}));
 		end
 	endfunction
 	function automatic [5:0] sv2v_cast_6;
@@ -4095,7 +4559,7 @@ module mpy_alu (
 			done_o <= 1'b0;
 			case (st)
 				4'd0:
-					if (start_i) begin : sv2v_autoblock_1
+					if (start_i) begin : sv2v_autoblock_6
 						reg isf;
 						reg conv;
 						reg ok;
@@ -4126,7 +4590,7 @@ module mpy_alu (
 							res_o <= v;
 							if (!ok)
 								err_o <= mpy_alu_pkg_AE_FTOI;
-							st <= 4'd7;
+							st <= 4'd12;
 						end
 						else if (op_i >= mpy_alu_pkg_ALU_NEG) begin
 							if (a_flt_i) begin
@@ -4162,6 +4626,8 @@ module mpy_alu (
 							rkind_o <= mpy_alu_pkg_AK_FLOAT;
 							if (conv)
 								st <= 4'd8;
+							else if (op_i == mpy_alu_pkg_ALU_POW)
+								st <= 4'd11;
 							else begin
 								err_o <= f_err;
 								st <= (f_fpu ? 4'd4 : 4'd7);
@@ -4195,7 +4661,9 @@ module mpy_alu (
 					end
 				4'd2:
 					if (div_done) begin
-						if ((!small_r && (rem != 64'd0)) && (a[63] != b[63]))
+						if (((small_r && (op == mpy_alu_pkg_ALU_FLOOR)) && (a == 64'h8000000000000000)) && (b == 64'hffffffffffffffff))
+							err_o <= mpy_alu_pkg_AE_OVERFLOW;
+						else if ((!small_r && (rem != 64'd0)) && (a[63] != b[63]))
 							res_o <= (op == mpy_alu_pkg_ALU_FLOOR ? quot + 64'd1 : rem - b);
 						else
 							res_o <= (op == mpy_alu_pkg_ALU_FLOOR ? quot : rem);
@@ -4249,21 +4717,49 @@ module mpy_alu (
 						res_o <= {63'd0, f_cmp};
 						st <= 4'd7;
 					end
+					else if (op == mpy_alu_pkg_ALU_POW)
+						st <= 4'd11;
 					else begin
 						err_o <= f_err;
 						st <= (f_fpu ? 4'd4 : 4'd7);
 					end
 				end
-				4'd5: begin
+				4'd5:
+					if (nar_sub)
+						st <= 4'd10;
+					else begin
+						res_o <= {32'd0, fnarrow};
+						st <= 4'd0;
+						done_o <= 1'b1;
+					end
+				4'd12: begin
+					if (fa[31])
+						res_o <= ~res_o + 64'd1;
+					st <= 4'd7;
+				end
+				4'd10: begin
 					res_o <= {32'd0, fnarrow};
 					st <= 4'd0;
 					done_o <= 1'b1;
 				end
+				4'd11:
+					if ((mpy_alu_pkg_mpy_f32_zero(fa) && fb[31]) && !((fb[30:23] == 8'hff) && (fb[22:0] == 23'd0))) begin
+						err_o <= mpy_alu_pkg_AE_ZERO_DIV;
+						st <= 4'd7;
+					end
+					else if (((((fa[31] && !mpy_alu_pkg_mpy_f32_zero(fa)) && !mpy_alu_pkg_mpy_f32_nan(fa)) && !mpy_alu_pkg_mpy_f32_integral(fb)) && !mpy_alu_pkg_mpy_f32_nan(fb)) && (fb[30:23] != 8'hff)) begin
+						err_o <= mpy_alu_pkg_AE_COMPLEX;
+						st <= 4'd7;
+					end
+					else
+						st <= 4'd4;
 				4'd7: begin
 					if (((rkind_o == mpy_alu_pkg_AK_INT) && (err_o == mpy_alu_pkg_AE_NONE)) && (op != mpy_alu_pkg_ALU_F2I)) begin
 						res_o <= ires;
 						if (op <= mpy_alu_pkg_ALU_NE)
 							rkind_o <= mpy_alu_pkg_AK_BOOL;
+						else if ((small_r && ((op == mpy_alu_pkg_ALU_LSHIFT) || (op == mpy_alu_pkg_ALU_RSHIFT))) && (b[63:31] != {33 {b[31]}}))
+							err_o <= mpy_alu_pkg_AE_OVERFLOW;
 						else if (iverr)
 							err_o <= mpy_alu_pkg_AE_NEG_SHIFT;
 						else if (iovf)
@@ -4304,20 +4800,26 @@ module upycore_umod_seq (
 			nonexistent_module_BPC_must_be_1_2_or_4 bad_bpc();
 		end
 	endgenerate
-	function automatic signed [5:0] sv2v_cast_6_signed;
-		input reg signed [5:0] inp;
-		sv2v_cast_6_signed = inp;
-	endfunction
 	function automatic [5:0] clz32;
 		input reg [31:0] v;
+		reg [31:0] x;
+		reg [4:0] n;
 		begin
-			clz32 = 6'd32;
-			begin : sv2v_autoblock_1
-				reg signed [31:0] i;
-				for (i = 0; i < 32; i = i + 1)
-					if (v[i])
-						clz32 = sv2v_cast_6_signed(31 - i);
-			end
+			x = v;
+			n[4] = x[31:16] == 16'd0;
+			if (n[4])
+				x = {x[15:0], 16'd0};
+			n[3] = x[31:24] == 8'd0;
+			if (n[3])
+				x = {x[23:0], 8'd0};
+			n[2] = x[31:28] == 4'd0;
+			if (n[2])
+				x = {x[27:0], 4'd0};
+			n[1] = x[31:30] == 2'd0;
+			if (n[1])
+				x = {x[29:0], 2'd0};
+			n[0] = !x[31];
+			clz32 = (v == 32'd0 ? 6'd32 : {1'b0, n});
 		end
 	endfunction
 	reg [31:0] d_r;
@@ -4343,7 +4845,7 @@ module upycore_umod_seq (
 	assign kr = (k + sv2v_cast_7_signed(BPC - 1)) & ~sv2v_cast_7_signed(BPC - 1);
 	reg [31:0] r_nx;
 	reg [31:0] q_nx;
-	always @(*) begin : sv2v_autoblock_2
+	always @(*) begin : sv2v_autoblock_1
 		reg [32:0] t;
 		reg [33:0] t4;
 		reg [33:0] dif2;
@@ -4360,7 +4862,7 @@ module upycore_umod_seq (
 			dif2 = {1'b0, t} - {2'b00, d_r};
 			r_nx = (dif2[33] ? t[31:0] : dif2[31:0]);
 		end
-		else begin : sv2v_autoblock_3
+		else begin : sv2v_autoblock_2
 			reg signed [31:0] j;
 			for (j = 0; j < (BPC / 2); j = j + 1)
 				begin
@@ -4630,16 +5132,26 @@ module mpy_decode (
 	reg known;
 	reg [6:0] mapped;
 	reg signed [63:0] acc;
-	reg cont;
+	reg signed [63:0] cand;
 	reg [7:0] bv;
 	reg [14:0] raw15;
-	function automatic [63:0] sv2v_cast_64;
-		input reg [63:0] inp;
-		sv2v_cast_64 = inp;
+	reg [6:0] vc;
+	reg [6:0] vf;
+	reg is_var;
+	reg is_off;
+	reg has_extra;
+	reg [3:0] len_pre;
+	function automatic signed [6:0] sv2v_cast_7_signed;
+		input reg signed [6:0] inp;
+		sv2v_cast_7_signed = inp;
 	endfunction
 	function automatic [3:0] sv2v_cast_4;
 		input reg [3:0] inp;
 		sv2v_cast_4 = inp;
+	endfunction
+	function automatic [63:0] sv2v_cast_64;
+		input reg [63:0] inp;
+		sv2v_cast_64 = inp;
 	endfunction
 	function automatic [31:0] sv2v_cast_32;
 		input reg [31:0] inp;
@@ -4661,9 +5173,9 @@ module mpy_decode (
 		known = 1'b0;
 		mapped = 7'd0;
 		acc = 64'sd0;
-		cont = 1'b0;
-		bv = 8'h00;
-		raw15 = 15'h0000;
+		cand = 64'sd0;
+		bv = bytes_i[15:8];
+		raw15 = {bytes_i[23:16], bv[6:0]};
 		decoded_valid_o = 1'b0;
 		illegal_o = 1'b0;
 		truncated_o = 1'b0;
@@ -4676,86 +5188,81 @@ module mpy_decode (
 		arg_o = 32'sd0;
 		extra_valid_o = 1'b0;
 		extra_o = 8'h00;
+		is_var = (fmt == FMT_QSTR) || (fmt == FMT_VARUINT);
+		is_off = fmt == FMT_OFFSET;
+		has_extra = (op & EXTRA_MASK) == 8'h00;
+		begin : sv2v_autoblock_1
+			reg [31:0] k;
+			for (k = 0; k < 7; k = k + 1)
+				vc[k] = bytes_i[(8 * (k + 1)) + 7];
+		end
+		begin : sv2v_autoblock_2
+			reg [31:0] k;
+			for (k = 0; k < 7; k = k + 1)
+				vf[k] = !vc[k] && &(vc | ~sv2v_cast_7_signed((1 << k) - 1));
+		end
+		len_pre = 4'd1;
+		if (is_var) begin
+			len_pre = 4'd0;
+			begin : sv2v_autoblock_3
+				reg [31:0] k;
+				for (k = 0; k < 7; k = k + 1)
+					if (vf[k])
+						len_pre = len_pre | sv2v_cast_4(k + 2);
+			end
+		end
+		else if (is_off)
+			len_pre = (bv[7] ? 4'd3 : 4'd2);
+		len_b = len_pre + {3'd0, has_extra};
+		trunc = (is_var && &vc) || (len_b > nwin);
 		if (instr_valid_i) begin
 			opcode_o = op;
 			format_o = fmt;
-			if (nwin == 4'd0)
-				trunc = 1'b1;
-			else if ((fmt == FMT_QSTR) || (fmt == FMT_VARUINT)) begin
-				if (nwin < 4'd2)
-					trunc = 1'b1;
-				else begin
-					cont = 1'b1;
-					begin : sv2v_autoblock_1
-						reg [31:0] k;
-						for (k = 0; k < 7; k = k + 1)
-							if (cont && !trunc) begin
-								if ((k + 1) >= {28'b0000000000000000000000000000, nwin}) begin
-									trunc = 1'b1;
-									cont = 1'b0;
-								end
-								else begin
-									bv = bytes_i[8 * (k + 1)+:8];
-									if (k == 0) begin
-										acc = sv2v_cast_64(bv[6:0]);
-										if ((op == BC_LOAD_CONST_SMALL_INT) && bv[6])
-											acc[63:7] = {57 {1'b1}};
-									end
-									else
-										acc = (acc << 7) | sv2v_cast_64(bv[6:0]);
-									cont = bv[7];
-									len_b = sv2v_cast_4(k + 2);
-								end
+			if (is_var) begin
+				begin : sv2v_autoblock_4
+					reg [31:0] k;
+					for (k = 0; k < 7; k = k + 1)
+						begin
+							cand = ((op == BC_LOAD_CONST_SMALL_INT) && bytes_i[14] ? -64'sd1 : 64'sd0);
+							begin : sv2v_autoblock_5
+								reg [31:0] j;
+								for (j = 0; j <= k; j = j + 1)
+									cand = (cand << 7) | sv2v_cast_64(bytes_i[8 * (j + 1)+:7]);
 							end
-					end
-					if (cont)
-						trunc = 1'b1;
+							if (vf[k])
+								acc = acc | cand;
+						end
 				end
-				if (!trunc) begin
-					arg_ok = 1'b1;
-					arg = acc[31:0];
-					if (op == BC_LOAD_CONST_SMALL_INT)
-						overflow = acc[63:31] != {33 {acc[31]}};
+				arg_ok = 1'b1;
+				arg = acc[31:0];
+				if (op == BC_LOAD_CONST_SMALL_INT)
+					overflow = acc[63:31] != {33 {acc[31]}};
+				else
+					overflow = acc[63:32] != 32'h00000000;
+			end
+			else if (is_off) begin
+				arg_ok = 1'b1;
+				if (!bv[7]) begin
+					if (offset_is_signed(op))
+						arg = $signed({25'b0000000000000000000000000, bv[6:0]}) - 32'sd64;
 					else
-						overflow = acc[63:32] != 32'h00000000;
+						arg = $signed({25'b0000000000000000000000000, bv[6:0]});
+				end
+				else if (offset_is_signed(op))
+					arg = $signed({17'b00000000000000000, raw15}) - 32'sd16384;
+				else
+					arg = $signed({17'b00000000000000000, raw15});
+			end
+			if (has_extra) begin
+				extra_ok = 1'b1;
+				begin : sv2v_autoblock_6
+					reg [31:0] l;
+					for (l = 1; l < 8; l = l + 1)
+						if (len_pre == sv2v_cast_4(l))
+							extra_b = extra_b | bytes_i[8 * l+:8];
 				end
 			end
-			else if (fmt == FMT_OFFSET) begin
-				if (nwin < 4'd2)
-					trunc = 1'b1;
-				else begin
-					bv = bytes_i[15:8];
-					if (!bv[7]) begin
-						len_b = 4'd2;
-						arg_ok = 1'b1;
-						if (offset_is_signed(op))
-							arg = $signed({25'b0000000000000000000000000, bv[6:0]}) - 32'sd64;
-						else
-							arg = $signed({25'b0000000000000000000000000, bv[6:0]});
-					end
-					else if (nwin < 4'd3)
-						trunc = 1'b1;
-					else begin
-						raw15 = {bytes_i[23:16], bv[6:0]};
-						len_b = 4'd3;
-						arg_ok = 1'b1;
-						if (offset_is_signed(op))
-							arg = $signed({17'b00000000000000000, raw15}) - 32'sd16384;
-						else
-							arg = $signed({17'b00000000000000000, raw15});
-					end
-				end
-			end
-			if (!trunc && ((op & EXTRA_MASK) == 8'h00)) begin
-				if (len_b >= nwin)
-					trunc = 1'b1;
-				else begin
-					extra_b = bytes_i[8 * len_b+:8];
-					extra_ok = 1'b1;
-					len_b = len_b + 4'd1;
-				end
-			end
-			if (!trunc && (fmt == FMT_BYTE)) begin
+			if (fmt == FMT_BYTE) begin
 				if ((op >= BC_SMALL_INT_BASE) && (op < (BC_SMALL_INT_BASE + SMALL_INT_NUM))) begin
 					arg_ok = 1'b1;
 					arg = ($signed({24'b000000000000000000000000, op}) - 32'sd112) - sv2v_cast_32(SMALL_INT_EXCESS);
@@ -5366,6 +5873,7 @@ module mpy_core (
 	ca_fault_i,
 	ca_fault_reason_i,
 	ca_fault_addr_i,
+	evt_pend_i,
 	halted_o,
 	halt_code_o,
 	halt_value_o,
@@ -5467,6 +5975,7 @@ module mpy_core (
 	input wire ca_fault_i;
 	input wire [3:0] ca_fault_reason_i;
 	input wire [31:0] ca_fault_addr_i;
+	input wire evt_pend_i;
 	output wire halted_o;
 	output wire [3:0] halt_code_o;
 	output wire [31:0] halt_value_o;
@@ -5616,10 +6125,17 @@ module mpy_core (
 			first = ge & ~{ge[32:0], 1'b0};
 			r = (ge[33] ? 32'd0 : (x + (x >> 1)) | 32'd1);
 			begin : sv2v_autoblock_3
-				reg signed [31:0] i;
-				for (i = 0; i < 34; i = i + 1)
-					if (first[i])
-						r = r | t[(33 - i) * 32+:32];
+				reg signed [31:0] b;
+				for (b = 0; b < 32; b = b + 1)
+					begin : sv2v_autoblock_4
+						reg [33:0] col;
+						begin : sv2v_autoblock_5
+							reg signed [31:0] i;
+							for (i = 0; i < 34; i = i + 1)
+								col[i] = t[((33 - i) * 32) + b];
+						end
+						r[b] = r[b] | (|(first & col));
+					end
 			end
 			next_alloc = r;
 		end
@@ -5750,8 +6266,8 @@ module mpy_core (
 	localparam [0:0] SL_REFERENCE = (SHORTLIST_MODE == 1) || (CA_EN == 0);
 	reg [$clog2(SHORTLIST_MAX + 1) - 1:0] ss_i;
 	reg [9:0] ss_back;
-	assign sl_valid_o = st == 10'd733;
-	assign sl_response_ready_o = st == 10'd734;
+	assign sl_valid_o = st == 10'd800;
+	assign sl_response_ready_o = st == 10'd801;
 	assign sl_src_o = ss_src;
 	assign sl_dst_o = ss_dst;
 	assign sl_n_o = ss_n;
@@ -5772,6 +6288,7 @@ module mpy_core (
 	reg [31:0] h_msgs;
 	reg [31:0] h_chars;
 	reg [31:0] h_empty;
+	reg h_bigint;
 	reg [31:0] h_nq;
 	reg [31:0] h_qext;
 	reg [31:0] h_qextn;
@@ -5784,6 +6301,7 @@ module mpy_core (
 	reg [35:0] ty_stop;
 	reg [35:0] ty_mem;
 	reg [35:0] ty_slice;
+	reg [35:0] ty_str;
 	reg [31:0] fbase;
 	reg [31:0] fprev;
 	reg [31:0] rc;
@@ -5793,6 +6311,11 @@ module mpy_core (
 	reg [31:0] cbase;
 	reg [6:0] sp;
 	reg [7:0] nloc;
+	reg locals_in_image;
+	reg [8:0] stack_prefix_words;
+	reg [16:0] local_image_word;
+	reg [31:0] local_base;
+	reg gen_direct_locals;
 	reg [5:0] rf_base;
 	reg [15:0] spilled_reals;
 	reg [31:0] spill_hp;
@@ -5815,7 +6338,7 @@ module mpy_core (
 	reg noframe;
 	reg rf_pend;
 	wire rf_icpt;
-	assign rf_icpt = ((((((((((((((rf_pend && (st != 10'd2)) && (st != 10'd120)) && (st != 10'd528)) && (st != 10'd76)) && (st != 10'd82)) && (st != 10'd81)) && (st != 10'd313)) && (st != 10'd696)) && (st != 10'd710)) && (st != 10'd506)) && (st != 10'd507)) && (st != 10'd508)) && (st != 10'd509)) && (st != 10'd510)) && (st != 10'd511);
+	assign rf_icpt = ((((((((((((((rf_pend && (st != 10'd2)) && (st != 10'd156)) && (st != 10'd585)) && (st != 10'd112)) && (st != 10'd118)) && (st != 10'd117)) && (st != 10'd359)) && (st != 10'd766)) && (st != 10'd777)) && (st != 10'd563)) && (st != 10'd564)) && (st != 10'd565)) && (st != 10'd566)) && (st != 10'd567)) && (st != 10'd568);
 	reg [35:0] rf_pend_v;
 	reg [9:0] rf_resume;
 	reg [31:0] spill_addr;
@@ -5857,7 +6380,7 @@ module mpy_core (
 		if (_sv2v_0)
 			;
 		lc_dirty_any = 1'b0;
-		begin : sv2v_autoblock_4
+		begin : sv2v_autoblock_6
 			reg signed [31:0] k;
 			for (k = 0; k < 8; k = k + 1)
 				if ((k < cfg_lc_n) && lc_dirty[k])
@@ -5909,6 +6432,12 @@ module mpy_core (
 	reg [31:0] hval;
 	reg [31:0] cyc;
 	reg [31:0] nops;
+	reg evt_q;
+	reg soft_pt;
+	reg hl_r;
+	reg hl_skip;
+	reg [14:0] hl_cnt;
+	reg [31:0] wfe_n;
 	reg trace;
 	localparam signed [31:0] FE_QD = 3;
 	localparam signed [31:0] FE_OW = 4;
@@ -5925,6 +6454,30 @@ module mpy_core (
 	reg [31:0] x2;
 	reg [31:0] x3;
 	reg [31:0] x4;
+	reg [31:0] limb_factor;
+	reg [31:0] limb_carry;
+	reg [31:0] limb_offset;
+	reg [63:0] limb_product;
+	wire [63:0] limb_sum;
+	assign limb_sum = limb_product + sx64(limb_offset);
+	reg bi_inline;
+	reg bi_left_neg;
+	reg bi_right_neg;
+	reg bi_swap;
+	reg bi_neg;
+	reg bi_sub;
+	reg [5:0] bi_op;
+	reg [17:0] bi_an;
+	reg [17:0] bi_bn;
+	reg [17:0] bi_i;
+	reg [17:0] bi_used;
+	reg [29:0] bi_top;
+	reg bi_low_nonzero;
+	reg [31:0] bi_cmp_l;
+	reg [31:0] bi_q;
+	reg [63:0] bi_prefix;
+	wire [31:0] bi_scalar;
+	assign bi_scalar = (tg(t[0]) == ABI_TAG_OBJECT ? t[1][31:0] : t[0][31:0]);
 	reg [7:0] i0;
 	reg [7:0] i1;
 	reg [7:0] i2;
@@ -5952,6 +6505,9 @@ module mpy_core (
 	reg [35:0] ke_b;
 	reg ke_eq;
 	reg ke_cx;
+	reg [3:0] key_tuple_len;
+	reg [3:0] key_tuple_index;
+	reg [35:0] key_tuple_item;
 	reg [1:0] lk_mode;
 	reg lk_set;
 	reg lk_found;
@@ -6220,7 +6776,7 @@ module mpy_core (
 		else
 			mpy_region_of = MPY_REGION_NONE;
 	endfunction
-	assign f_req_o = fe_req && !((mpy_region_of(f_addr_o) == MPY_REGION_SRAM) && !ca_idle_i);
+	assign f_req_o = fe_req && !((mpy_region_of(fe_base) == MPY_REGION_SRAM) && !ca_idle_i);
 	wire [31:0] f_off;
 	wire [63:0] d_bytes;
 	wire [3:0] d_n;
@@ -6267,22 +6823,103 @@ module mpy_core (
 		.extra_o(d_ext)
 	);
 	wire [31:0] ftop;
-	function automatic [31:0] sv2v_cast_32;
-		input reg [31:0] inp;
-		sv2v_cast_32 = inp;
+	reg [11:0] c_geo_r;
+	reg [11:0] gr_geo_r;
+	function automatic [11:0] sv2v_cast_12;
+		input reg [11:0] inp;
+		sv2v_cast_12 = inp;
 	endfunction
-	assign ftop = fbase + (((32'd17 + sv2v_cast_32(nloc)) + (32'd3 * {27'd0, nexc})) << 2);
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i)
+			c_geo_r <= 12'd17;
+		else
+			c_geo_r <= (12'd17 + sv2v_cast_12(c_nst)) + (12'd3 * sv2v_cast_12(c_nexc));
+	reg [31:0] se_mask;
+	reg [1:0] bc_k;
+	reg [31:0] hp_room_r;
+	reg [31:0] hp_free_r;
+	reg hp_neg_r;
+	reg hp_neg2_r;
+	reg hp_big_r;
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i) begin
+			hp_room_r <= 1'sb0;
+			hp_neg_r <= 1'b0;
+			hp_free_r <= 1'sb0;
+			hp_neg2_r <= 1'b0;
+			hp_big_r <= 1'b0;
+		end
+		else begin
+			hp_room_r <= (spill_hp - fbase) >> 2;
+			hp_neg_r <= spill_hp < fbase;
+			hp_free_r <= hp_room_r - {23'd0, stack_prefix_words};
+			hp_neg2_r <= hp_neg_r || (hp_room_r < {23'd0, stack_prefix_words});
+			hp_big_r <= (hp_room_r - {23'd0, stack_prefix_words}) >= 32'd8192;
+		end
+	reg bin_num_r;
+	reg bin_cx_r;
+	reg [17:0] srd_o;
+	reg lc_hit_r;
+	reg call_fit_r;
+	reg call_ring_r;
+	reg call_big_r;
+	reg yf_fast_r;
+	reg [2:0] lc_way_r;
+	reg [7:0] lf_ix;
+	reg [15:0] bl_base;
+	reg ur_le;
+	function automatic [8:0] sv2v_cast_9;
+		input reg [8:0] inp;
+		sv2v_cast_9 = inp;
+	endfunction
+	function automatic [8:0] frame_prefix;
+		input reg [7:0] locals;
+		input reg [4:0] exceptions;
+		frame_prefix = (9'd17 + sv2v_cast_9(locals)) + (9'd3 * sv2v_cast_9(exceptions));
+	endfunction
+	assign ftop = fbase + {21'd0, stack_prefix_words, 2'b00};
 	wire [9:0] stk_off;
 	wire [31:0] stk_top;
 	function automatic [9:0] sv2v_cast_10;
 		input reg [9:0] inp;
 		sv2v_cast_10 = inp;
 	endfunction
-	assign stk_off = ((10'd17 + sv2v_cast_10(nloc)) + (10'd3 * sv2v_cast_10(nexc))) + sv2v_cast_10(sp);
+	assign stk_off = sv2v_cast_10(stack_prefix_words) + sv2v_cast_10(sp);
 	assign stk_top = fbase + {20'd0, stk_off, 2'b00};
+	function automatic [12:0] sv2v_cast_13;
+		input reg [12:0] inp;
+		sv2v_cast_13 = inp;
+	endfunction
+	function automatic over_hp;
+		input reg [31:0] words;
+		over_hp = hp_neg2_r || (!hp_big_r && ((sv2v_cast_13(sp) + sv2v_cast_13(words[11:0])) > hp_free_r[12:0]));
+	endfunction
 	function automatic [31:0] loc_ptr;
 		input reg [7:0] idx;
-		loc_ptr = (fbase + 32'h00000044) + {22'd0, idx, 2'b00};
+		loc_ptr = (local_base + 32'h00000044) + {22'd0, idx, 2'b00};
+	endfunction
+	reg [7:0] nargs_r;
+	always @(posedge clk_i) nargs_r <= ab_pe - ab_lo;
+	reg [31:0] xb_r;
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i)
+			xb_r <= 1'sb0;
+		else if ((((st == 10'd156) && m_ack_i) && (wpend == 3'd0)) && (fl_i == 32'd16))
+			xb_r <= (fbase + 32'h00000044) + {22'd0, m_rdata_i[13:6], 2'b00};
+		else
+			xb_r <= (fbase + 32'h00000044) + ({24'd0, nloc} << 2);
+	function automatic [31:0] sv2v_cast_32;
+		input reg [31:0] inp;
+		sv2v_cast_32 = inp;
+	endfunction
+	function automatic [31:0] exc_ptr_f;
+		input reg [4:0] slot;
+		exc_ptr_f = xb_r + (32'd12 * sv2v_cast_32(slot));
+	endfunction
+	function automatic [31:0] exc_ptr_k;
+		input reg [4:0] slot;
+		input reg [1:0] k;
+		exc_ptr_k = xb_r + sv2v_cast_32((10'd12 * sv2v_cast_10(slot)) + {6'd0, k, 2'b00});
 	endfunction
 	function automatic [31:0] exc_ptr;
 		input reg [31:0] base;
@@ -6314,7 +6951,7 @@ module mpy_core (
 		begin
 			m = lc_match(idx);
 			lc_hit_way = 3'd0;
-			begin : sv2v_autoblock_5
+			begin : sv2v_autoblock_7
 				reg signed [31:0] k;
 				for (k = 0; k < 8; k = k + 1)
 					if (m[k])
@@ -6333,7 +6970,7 @@ module mpy_core (
 		begin
 			best = 3'd0;
 			any_inv = 1'b0;
-			begin : sv2v_autoblock_6
+			begin : sv2v_autoblock_8
 				reg signed [31:0] k;
 				for (k = 0; k < 8; k = k + 1)
 					if (((k < cfg_lc_n) && !lc_v[k]) && !any_inv) begin
@@ -6341,15 +6978,15 @@ module mpy_core (
 						any_inv = 1'b1;
 					end
 			end
-			if (!any_inv) begin : sv2v_autoblock_7
+			if (!any_inv) begin : sv2v_autoblock_9
 				reg [2:0] w1 [0:3];
 				reg [2:0] w2 [0:1];
 				reg e1 [0:3];
 				reg e2 [0:1];
-				begin : sv2v_autoblock_8
+				begin : sv2v_autoblock_10
 					reg signed [31:0] p;
 					for (p = 0; p < 4; p = p + 1)
-						begin : sv2v_autoblock_9
+						begin : sv2v_autoblock_11
 							reg el;
 							reg er;
 							el = ((2 * p) == 0) || ((2 * p) < cfg_lc_n);
@@ -6358,7 +6995,7 @@ module mpy_core (
 							e1[p] = el || er;
 						end
 				end
-				begin : sv2v_autoblock_10
+				begin : sv2v_autoblock_12
 					reg signed [31:0] p;
 					for (p = 0; p < 2; p = p + 1)
 						begin
@@ -6431,7 +7068,7 @@ module mpy_core (
 			hit = lc_is_hit(idx);
 			p = lc_pick(idx);
 			w = (hit ? lc_hit_way(idx) : p);
-			begin : sv2v_autoblock_11
+			begin : sv2v_autoblock_13
 				reg signed [31:0] k;
 				for (k = 0; k < 8; k = k + 1)
 					ev[k] = (lc_v[k] && lc_dirty[k]) && (lc_ix[k] != idx);
@@ -6454,7 +7091,7 @@ module mpy_core (
 				lc_ev_idx <= idx;
 				lc_ev_val <= v;
 				lc_ev_dirty <= dirty && cfg_lc_wb;
-				wr(loc_ptr(lc_ix[p]), lc_d[p], 10'd497);
+				wr(loc_ptr(lc_ix[p]), lc_d[p], 10'd554);
 			end
 		end
 	endtask
@@ -6478,8 +7115,8 @@ module mpy_core (
 			4'd1: hdr_word = {4'd0, rc};
 			4'd2: hdr_word = {4'd0, pc};
 			4'd3: hdr_word = {4'd0, op_pc};
-			4'd4: hdr_word = {4'd0, fflags, 1'b0, nloc[6:0], 3'b000, xsp, 1'b0, sp};
-			4'd5: hdr_word = {15'h0000, nexc, fcont, 4'd0, frk};
+			4'd4: hdr_word = {4'd0, fflags, 1'b0, nloc[6:0], 3'b000, xsp, locals_in_image, sp};
+			4'd5: hdr_word = {4'd0, local_image_word[16:6], nexc, fcont, local_image_word[5:2], frk};
 			4'd6: hdr_word = glb;
 			4'd7: hdr_word = loc;
 			4'd8: hdr_word = fun;
@@ -6490,7 +7127,7 @@ module mpy_core (
 			4'd13: hdr_word = {4'd0, cbase};
 			4'd14: hdr_word = gen;
 			4'd15: hdr_word = {4'd0, spill_hp};
-			32'd16: hdr_word = {6'h00, spilled_reals, nloc, rf_base};
+			32'd16: hdr_word = {4'd0, local_image_word[1:0], spilled_reals, nloc, rf_base};
 			default: hdr_word = VNULL;
 		endcase
 	endfunction
@@ -6514,7 +7151,7 @@ module mpy_core (
 		input reg [MPY_ENTRY_WIDTH - 1:0] entry;
 		mpy_is_rf_link = (mpy_entry_tag(entry) == MPY_TAG_CONTROL) && (entry[3:0] == MPY_CTL_RF_LINK);
 	endfunction
-	always @(*) begin : sv2v_autoblock_12
+	always @(*) begin : sv2v_autoblock_14
 		reg signed [31:0] k;
 		if (_sv2v_0)
 			;
@@ -6528,11 +7165,15 @@ module mpy_core (
 	endfunction
 	assign resident_reals = (has_link ? sv2v_cast_16(sp) - 16'd1 : sv2v_cast_16(sp));
 	assign sd_nl = spilled_reals + sv2v_cast_16(sp);
-	assign sd_l = (spilled_reals + sv2v_cast_16(sp)) - 16'd1;
+	assign sd_l = spilled_reals + {9'd0, sp - 7'd1};
 	assign stk_depth = (has_link ? sd_l : sd_nl);
 	function automatic stk_hit;
 		input reg [15:0] g;
-		stk_hit = (g >= spilled_reals) && (has_link ? g < sd_l : g < sd_nl);
+		reg [16:0] d;
+		begin
+			d = {1'b0, g} - {1'b0, spilled_reals};
+			stk_hit = (!d[16] && (d[15:7] == 9'd0)) && (d[6:0] < resident_reals[6:0]);
+		end
 	endfunction
 	function automatic [6:0] sv2v_cast_7;
 		input reg [6:0] inp;
@@ -6653,15 +7294,15 @@ module mpy_core (
 			if (tg(a) == ABI_TAG_COMPLEX) begin
 				bload(adr(a));
 				bl_n <= 8'd1;
-				st <= 10'd313;
+				st <= 10'd359;
 			end
 			else if (tg(b) == ABI_TAG_COMPLEX) begin
 				bload(adr(b));
 				bl_n <= 8'd3;
-				st <= 10'd313;
+				st <= 10'd359;
 			end
 			else
-				st <= 10'd314;
+				st <= 10'd360;
 		end
 	endtask
 	task automatic rc_burst;
@@ -6669,7 +7310,7 @@ module mpy_core (
 			bload(c_rc);
 			bl_n <= 8'd1;
 			bl_k <= 3'd0;
-			st <= 10'd82;
+			st <= 10'd118;
 		end
 	endtask
 	function automatic [3:0] fault_code;
@@ -6689,6 +7330,44 @@ module mpy_core (
 			m_be <= 4'b0001 << a[1:0];
 			post({a[31:2], 2'b00}, nxt);
 		end
+	endtask
+	task automatic raise_msg;
+		input reg [7:0] id;
+		begin
+			rm_id <= id;
+			rsp <= 5'd0;
+			st <= 10'd462;
+		end
+	endtask
+	localparam [1:0] ABI_MUT_BYTEARRAY = 2'd3;
+	localparam [3:0] ABI_TAG_TUPLE = 4'd9;
+	task automatic load_seq_index;
+		input reg [31:0] index;
+		if ((index[31] || (index >= md)) && is_mut(t[0], ABI_MUT_BYTEARRAY))
+			st <= 10'd324;
+		else if (index[31] || (index >= md))
+			raise_msg((tg(t[0]) == ABI_TAG_TUPLE ? ABI_MSG_TUPLE_INDEX : ABI_MSG_LIST_INDEX));
+		else if (tg(t[0]) == ABI_TAG_TUPLE)
+			rd((adr(t[0]) + 32'd4) + (index << 2), 10'd328);
+		else
+			rd(aoff(adr(t[0]), 8), 10'd325);
+	endtask
+	localparam [3:0] ABI_TAG_BYTES = 4'd13;
+	task automatic load_string_index;
+		input reg [31:0] index;
+		if (index[31] || (index >= si_len))
+			raise_msg((tg(t[0]) == ABI_TAG_BYTES ? ABI_MSG_BYTES_INDEX : ABI_MSG_STR_INDEX));
+		else
+			rd(si_addr + {index[31:2], 2'b00}, 10'd331);
+	endtask
+	task automatic store_seq_index;
+		input reg [31:0] index;
+		if ((index[31] || (index >= md)) && is_mut(t[0], ABI_MUT_BYTEARRAY))
+			st <= 10'd516;
+		else if (index[31] || (index >= md))
+			raise_msg(ABI_MSG_LIST_INDEX);
+		else
+			rd(aoff(adr(t[0]), 8), 10'd517);
 	endtask
 	localparam [31:0] MPY_CORE_SCRATCH_BYTES = 32'd512;
 	localparam [31:0] MPY_FRAME_RESERVE_BASE = MPY_SRAM_BASE;
@@ -6749,7 +7428,7 @@ module mpy_core (
 			scr_storing <= 1'b1;
 			scr_gosub_p <= 1'b0;
 			scr_ret <= back;
-			st <= 10'd696;
+			st <= 10'd766;
 		end
 	endtask
 	task automatic scr_go_load;
@@ -6762,7 +7441,7 @@ module mpy_core (
 			scr_gosub_p <= 1'b0;
 			bl_n <= 8'd0;
 			scr_ret <= back;
-			st <= 10'd696;
+			st <= 10'd766;
 		end
 	endtask
 	task automatic scr_go_store_gosub;
@@ -6776,7 +7455,7 @@ module mpy_core (
 			scr_gosub_p <= 1'b1;
 			scr_gt <= target;
 			scr_gb <= back;
-			st <= 10'd696;
+			st <= 10'd766;
 		end
 	endtask
 	task automatic scr_ensure;
@@ -6809,13 +7488,11 @@ module mpy_core (
 			gosub(target, back);
 	endtask
 	task automatic go_next;
-		if ((fe_avail != 6'd0) && !ca_fault_i) begin
+		begin
 			dq_bytes <= d_bytes;
 			dq_n <= d_n;
-			st <= 10'd96;
+			st <= 10'd132;
 		end
-		else
-			st <= 10'd111;
 	endtask
 	localparam signed [31:0] MPY_RF_DEPTH = 16;
 	function automatic signed [6:0] sv2v_cast_7_signed;
@@ -6833,21 +7510,13 @@ module mpy_core (
 			sp <= sp + 7'd1;
 		end
 	endtask
-	task automatic raise_msg;
-		input reg [7:0] id;
-		begin
-			rm_id <= id;
-			rsp <= 5'd0;
-			st <= 10'd406;
-		end
-	endtask
 	task automatic raise_val;
 		input reg [35:0] v;
 		begin
 			xc <= v;
 			rx_from <= 1'b0;
 			rsp <= 5'd0;
-			st <= 10'd387;
+			st <= 10'd442;
 		end
 	endtask
 	localparam [7:0] ABI_HOOK_RAISE = 8'd1;
@@ -6869,7 +7538,7 @@ module mpy_core (
 			hk_id <= ABI_HOOK_RAISE;
 			rsp <= 5'd0;
 			i0 <= 8'd0;
-			st <= 10'd535;
+			st <= 10'd592;
 		end
 	endtask
 	task automatic hook;
@@ -6892,7 +7561,7 @@ module mpy_core (
 			ab_chunked <= 1'b0;
 			hk_id <= id;
 			i0 <= 8'd0;
-			st <= 10'd535;
+			st <= 10'd592;
 		end
 	endtask
 	task automatic deliver;
@@ -6901,7 +7570,7 @@ module mpy_core (
 		begin
 			t[7] <= v;
 			d_rk <= rk;
-			st <= 10'd98;
+			st <= 10'd134;
 		end
 	endtask
 	task automatic wblock;
@@ -6912,7 +7581,7 @@ module mpy_core (
 			wb_a <= a;
 			wb_n <= n;
 			wb_i <= 4'd0;
-			gosub(10'd489, back);
+			gosub(10'd546, back);
 		end
 	endtask
 	task automatic lookup;
@@ -6928,7 +7597,7 @@ module mpy_core (
 			t[6] <= val;
 			lk_mode <= mode;
 			lk_set <= set;
-			gosub_scr(SCR_LK, 10'd252, back);
+			gosub_scr(SCR_LK, 10'd296, back);
 		end
 	endtask
 	task automatic alloc;
@@ -6989,12 +7658,17 @@ module mpy_core (
 	localparam [7:0] ABI_BINOP_ADD = 8'd27;
 	localparam [7:0] ABI_BINOP_EQUAL = 8'd2;
 	localparam [7:0] ABI_BINOP_EXCEPTION_MATCH = 8'd8;
+	localparam [7:0] ABI_BINOP_FLOOR_DIVIDE = 8'd31;
 	localparam [7:0] ABI_BINOP_IN = 8'd6;
 	localparam [7:0] ABI_BINOP_INPLACE_ADD = 8'd14;
 	localparam [7:0] ABI_BINOP_INPLACE_MULTIPLY = 8'd16;
 	localparam [7:0] ABI_BINOP_INPLACE_OR = 8'd9;
 	localparam [7:0] ABI_BINOP_INPLACE_SUBTRACT = 8'd15;
 	localparam [7:0] ABI_BINOP_IS = 8'd7;
+	localparam [7:0] ABI_BINOP_LESS = 8'd0;
+	localparam [7:0] ABI_BINOP_LESS_EQUAL = 8'd3;
+	localparam [7:0] ABI_BINOP_MORE = 8'd1;
+	localparam [7:0] ABI_BINOP_MORE_EQUAL = 8'd4;
 	localparam [7:0] ABI_BINOP_MULTIPLY = 8'd29;
 	localparam [7:0] ABI_BINOP_NOT_EQUAL = 8'd5;
 	localparam [7:0] ABI_BINOP_OR = 8'd22;
@@ -7038,6 +7712,7 @@ module mpy_core (
 	localparam [31:0] ABI_HDR_BUILTINS = 32'd6;
 	localparam [31:0] ABI_HDR_CHARS = 32'd11;
 	localparam [31:0] ABI_HDR_EMPTY_TUPLE = 32'd12;
+	localparam [31:0] ABI_HDR_FLAGS = 32'd15;
 	localparam [31:0] ABI_HDR_HOOKS = 32'd9;
 	localparam [31:0] ABI_HDR_MSGS = 32'd10;
 	localparam [31:0] ABI_HDR_QSTR_COUNT = 32'd3;
@@ -7054,6 +7729,8 @@ module mpy_core (
 	localparam [7:0] ABI_HOOK_IMPORT = 8'd13;
 	localparam [7:0] ABI_HOOK_IMPORT_FROM = 8'd14;
 	localparam [7:0] ABI_HOOK_IMPORT_STAR = 8'd15;
+	localparam [7:0] ABI_HOOK_INT_OVERFLOW = 8'd25;
+	localparam [7:0] ABI_HOOK_IRQ_DISPATCH = 8'd26;
 	localparam [7:0] ABI_HOOK_SETATTR = 8'd6;
 	localparam [7:0] ABI_HOOK_SETSUBSCR = 8'd8;
 	localparam [7:0] ABI_HOOK_SUBSCR = 8'd7;
@@ -7064,6 +7741,7 @@ module mpy_core (
 	localparam [7:0] ABI_HOOK_UNPACK = 8'd16;
 	localparam [7:0] ABI_HOOK_WARN = 8'd23;
 	localparam [7:0] ABI_HOOK_YFROM = 8'd10;
+	localparam signed [31:0] ABI_IMAGE_FLAG_BIGINT = 1;
 	localparam [31:0] ABI_IMAGE_MAGIC = 32'h324d5055;
 	localparam [31:0] ABI_IT_DICT = 32'd2;
 	localparam [31:0] ABI_IT_HEAPITER = 32'd6;
@@ -7075,7 +7753,6 @@ module mpy_core (
 	localparam [31:0] ABI_MD_CONSTS = 32'd1;
 	localparam [31:0] ABI_MD_QSTRS = 32'd0;
 	localparam [31:0] ABI_MD_RAW = 32'd3;
-	localparam [1:0] ABI_MUT_BYTEARRAY = 2'd3;
 	localparam [1:0] ABI_MUT_DICT = 2'd1;
 	localparam [1:0] ABI_MUT_LIST = 2'd0;
 	localparam [1:0] ABI_MUT_SET = 2'd2;
@@ -7089,6 +7766,7 @@ module mpy_core (
 	localparam [7:0] ABI_N_DATA = 8'd30;
 	localparam [7:0] ABI_N_DICT_GET = 8'd52;
 	localparam [7:0] ABI_N_FGET = 8'd32;
+	localparam [7:0] ABI_N_FIND_BYTES = 8'd60;
 	localparam [7:0] ABI_N_FLOC = 8'd33;
 	localparam [7:0] ABI_N_FTOI = 8'd25;
 	localparam [7:0] ABI_N_GC = 8'd23;
@@ -7097,11 +7775,15 @@ module mpy_core (
 	localparam [7:0] ABI_N_GRESUME = 8'd27;
 	localparam [7:0] ABI_N_HALT = 8'd5;
 	localparam [7:0] ABI_N_HASH = 8'd29;
+	localparam [7:0] ABI_N_HLOCK = 8'd62;
+	localparam [7:0] ABI_N_HUNLOCK = 8'd63;
 	localparam [7:0] ABI_N_ID = 8'd2;
 	localparam [7:0] ABI_N_INEXT = 8'd26;
 	localparam [7:0] ABI_N_ISINSTANCE = 8'd1;
 	localparam [7:0] ABI_N_LD = 8'd9;
 	localparam [7:0] ABI_N_LEN = 8'd0;
+	localparam [7:0] ABI_N_LIMB_MAC = 8'd58;
+	localparam [7:0] ABI_N_LIMB_NEW = 8'd59;
 	localparam [7:0] ABI_N_LIST_APPEND = 8'd35;
 	localparam [7:0] ABI_N_LIST_COPY = 8'd48;
 	localparam [7:0] ABI_N_LIST_INSERT = 8'd46;
@@ -7136,7 +7818,9 @@ module mpy_core (
 	localparam [7:0] ABI_N_WCOPY = 8'd17;
 	localparam [7:0] ABI_N_WCOPY_STEP = 8'd47;
 	localparam [7:0] ABI_N_WE = 8'd4;
+	localparam [7:0] ABI_N_WFE = 8'd61;
 	localparam [7:0] ABI_N_WR = 8'd3;
+	localparam [31:0] ABI_OB_BIGINT = 32'd20;
 	localparam [31:0] ABI_OB_BOUND_METHOD = 32'd7;
 	localparam [31:0] ABI_OB_BUILTIN = 32'd8;
 	localparam [31:0] ABI_OB_CELL = 32'd4;
@@ -7193,11 +7877,9 @@ module mpy_core (
 	localparam [7:0] ABI_SR_T6 = 8'd10;
 	localparam [7:0] ABI_SR_T7 = 8'd11;
 	localparam [31:0] ABI_STR_NONASCII = 32'h40000000;
-	localparam [3:0] ABI_TAG_BYTES = 4'd13;
 	localparam [3:0] ABI_TAG_CONT = 4'd15;
 	localparam [3:0] ABI_TAG_ITER = 4'd12;
 	localparam [3:0] ABI_TAG_RANGE = 4'd11;
-	localparam [3:0] ABI_TAG_TUPLE = 4'd9;
 	localparam [31:0] ABI_TF_DESC = 32'd128;
 	localparam [31:0] ABI_TF_EXC = 32'd2;
 	localparam [31:0] ABI_TF_GETATTR = 32'd256;
@@ -7292,13 +7974,13 @@ module mpy_core (
 		input reg [2:0] inp;
 		sv2v_cast_3 = inp;
 	endfunction
-	function automatic [11:0] sv2v_cast_12;
-		input reg [11:0] inp;
-		sv2v_cast_12 = inp;
-	endfunction
 	function automatic [5:0] sv2v_cast_6;
 		input reg [5:0] inp;
 		sv2v_cast_6 = inp;
+	endfunction
+	function automatic signed [9:0] sv2v_cast_10_signed;
+		input reg signed [9:0] inp;
+		sv2v_cast_10_signed = inp;
 	endfunction
 	function automatic [7:0] sv2v_cast_8;
 		input reg [7:0] inp;
@@ -7307,6 +7989,10 @@ module mpy_core (
 	function automatic signed [5:0] sv2v_cast_6_signed;
 		input reg signed [5:0] inp;
 		sv2v_cast_6_signed = inp;
+	endfunction
+	function automatic [17:0] sv2v_cast_18;
+		input reg [17:0] inp;
+		sv2v_cast_18 = inp;
 	endfunction
 	always @(posedge clk_i or negedge rst_n_i) begin : seq
 		reg [31:0] v0;
@@ -7335,7 +8021,7 @@ module mpy_core (
 			wfault_addr <= 32'd0;
 			bl_n <= 8'd0;
 			bl_k <= 3'd0;
-			begin : sv2v_autoblock_13
+			begin : sv2v_autoblock_15
 				reg signed [31:0] k;
 				for (k = 0; k < WQ; k = k + 1)
 					wfifo[k] <= 32'd0;
@@ -7347,7 +8033,7 @@ module mpy_core (
 			aalu_pend <= 1'b0;
 			aalu_ready <= 1'b0;
 			aalu_slot <= 4'd0;
-			aalu_ret <= 10'd111;
+			aalu_ret <= 10'd147;
 			mb_valid_o <= 0;
 			mb_op_o <= 0;
 			mb_set_o <= 0;
@@ -7371,6 +8057,12 @@ module mpy_core (
 			cyc <= 32'd0;
 			nops <= 32'd0;
 			trace <= 1'b0;
+			evt_q <= 1'b0;
+			soft_pt <= 1'b0;
+			hl_r <= 1'b0;
+			hl_skip <= 1'b0;
+			hl_cnt <= 15'd0;
+			wfe_n <= 32'd0;
 			fe_flush <= 1'b0;
 			h_nq <= 32'd0;
 			h_qext <= 32'd0;
@@ -7378,6 +8070,7 @@ module mpy_core (
 			qd_nxt <= 10'd0;
 			sp <= 7'd0;
 			nloc <= 8'd0;
+			stack_prefix_words <= 9'd17;
 			rf_base <= 6'd0;
 			spilled_reals <= 16'd0;
 			spill_hp <= MPY_CORE_SCRATCH_BASE;
@@ -7386,7 +8079,7 @@ module mpy_core (
 			scr_i <= 4'd0;
 			scr_storing <= 1'b0;
 			scr_gosub_p <= 1'b0;
-			begin : sv2v_autoblock_14
+			begin : sv2v_autoblock_16
 				reg signed [31:0] k;
 				for (k = 0; k < 8; k = k + 1)
 					begin
@@ -7413,11 +8106,15 @@ module mpy_core (
 			frk <= ABI_RK_HALT;
 			fbase <= ABI_FRAME_BASE;
 			fprev <= 32'd0;
+			local_base <= ABI_FRAME_BASE;
+			local_image_word <= 17'd0;
+			locals_in_image <= 1'b0;
+			gen_direct_locals <= 1'b0;
 			gen <= VNULL;
 			inj <= VNONE;
 			fl_img <= 1'b0;
 			spill_to_img <= 1'b0;
-			lc_fl_ret <= 10'd452;
+			lc_fl_ret <= 10'd508;
 			ss_store <= 0;
 			ss_native <= 0;
 			ss_reverse <= 0;
@@ -7439,8 +8136,8 @@ module mpy_core (
 			ss_length <= 0;
 			ss_put_value <= VNULL;
 			ss_i <= 0;
-			ss_back <= 10'd111;
-			begin : sv2v_autoblock_15
+			ss_back <= 10'd147;
+			begin : sv2v_autoblock_17
 				reg signed [31:0] k;
 				for (k = 0; k < 8; k = k + 1)
 					t[k] <= VNULL;
@@ -7462,17 +8159,17 @@ module mpy_core (
 			cv_pos_g <= 16'd0;
 			cv_fun_g <= 16'd0;
 			ab_q <= VNULL;
-			begin : sv2v_autoblock_16
+			begin : sv2v_autoblock_18
 				reg signed [31:0] k;
 				for (k = 0; k < 4; k = k + 1)
 					ab_s[k] <= VNULL;
 			end
-			begin : sv2v_autoblock_17
+			begin : sv2v_autoblock_19
 				reg signed [31:0] k;
 				for (k = 0; k < MPY_RF_DEPTH; k = k + 1)
 					rf[k] <= VNULL;
 			end
-			begin : sv2v_autoblock_18
+			begin : sv2v_autoblock_20
 				reg signed [31:0] k;
 				for (k = 0; k < 8; k = k + 1)
 					begin
@@ -7497,6 +8194,8 @@ module mpy_core (
 			trace <= 1'b0;
 			if (!halted)
 				cyc <= cyc + 32'd1;
+			evt_q <= evt_pend_i;
+			hl_r <= (hl_cnt != 15'd0) && !hl_skip;
 			if (sp_hold)
 				sp_hold <= 1'b0;
 			else if (sp < sp_d)
@@ -7530,7 +8229,7 @@ module mpy_core (
 					;
 				else if (sp >= sv2v_cast_7_signed(MPY_RF_DEPTH)) begin
 					rf_resume <= st;
-					st <= 10'd506;
+					st <= 10'd563;
 				end
 				else begin
 					rf[rf_base[3:0] + sv2v_cast_4(sp)] <= rf_pend_v;
@@ -7558,7 +8257,7 @@ module mpy_core (
 							else
 								st <= wret;
 						end
-					10'd696:
+					10'd766:
 						if (scr_i == scr_words(scr_cmd)) begin
 							scr_gosub_p <= 1'b0;
 							if (scr_storing)
@@ -7572,9 +8271,9 @@ module mpy_core (
 						end
 						else if (scr_storing) begin
 							if (scr_tag(scr_cmd, scr_i))
-								wr(scr_addr(scr_cmd, scr_i), sV[scr_i[2:0]], 10'd696);
+								wr(scr_addr(scr_cmd, scr_i), sV[scr_i[2:0]], 10'd766);
 							else
-								wr(scr_addr(scr_cmd, scr_i), {4'd0, sA[scr_i[2:0]]}, 10'd696);
+								wr(scr_addr(scr_cmd, scr_i), {4'd0, sA[scr_i[2:0]]}, 10'd766);
 							scr_i <= scr_i + 4'd1;
 						end
 						else begin
@@ -7595,216 +8294,239 @@ module mpy_core (
 							end
 						end
 					10'd0:
-						rd(32'd0, 10'd37);
-					10'd37:
+						rd(32'd0, 10'd69);
+					10'd69:
 						if (md != ABI_IMAGE_MAGIC)
 							halt(ABI_HALT_BAD_IMAGE, md);
 						else
-							rd(16, 10'd45);
-					10'd45: begin
+							rd(16, 10'd77);
+					10'd77: begin
 						h_qdesc <= md;
 						h_qext <= 32'd0;
 						h_qextn <= 32'd0;
-						rd(12, 10'd46);
+						rd(12, 10'd78);
 					end
-					10'd46: begin
+					10'd78: begin
 						h_nq <= md;
-						rd(24, 10'd47);
+						rd(24, 10'd79);
 					end
-					10'd47: begin
+					10'd79: begin
 						h_builtins <= md;
-						rd(36, 10'd48);
+						rd(36, 10'd80);
 					end
-					10'd48: begin
+					10'd80: begin
 						h_hooks <= md;
-						rd(40, 10'd49);
+						rd(60, 10'd81);
 					end
-					10'd49: begin
+					10'd81: begin
+						h_bigint <= (md & ABI_IMAGE_FLAG_BIGINT) != 0;
+						rd(40, 10'd83);
+					end
+					10'd83: begin
 						h_msgs <= md;
-						rd(44, 10'd50);
+						rd(44, 10'd84);
 					end
-					10'd50: begin
+					10'd84: begin
 						h_chars <= md;
-						rd(48, 10'd51);
+						rd(48, 10'd85);
 					end
-					10'd51: begin
+					10'd85: begin
 						h_empty <= md;
-						rd(TT + (4 * ABI_T_FUNCTION), 10'd52);
+						rd(TT + (4 * ABI_T_FUNCTION), 10'd86);
 					end
-					10'd52: begin
+					10'd86: begin
 						ty_fun <= mv;
-						rd(TT + (4 * ABI_T_BOUND_METHOD), 10'd53);
+						rd(TT + (4 * ABI_T_BOUND_METHOD), 10'd87);
 					end
-					10'd53: begin
+					10'd87: begin
 						ty_bm <= mv;
-						rd(TT + (4 * ABI_T_CELL), 10'd38);
+						rd(TT + (4 * ABI_T_CELL), 10'd70);
 					end
-					10'd38: begin
+					10'd70: begin
 						ty_cell <= mv;
-						rd(TT + (4 * ABI_T_OBJECT), 10'd39);
+						rd(TT + (4 * ABI_T_OBJECT), 10'd71);
 					end
-					10'd39: begin
+					10'd71: begin
 						ty_obj <= mv;
-						rd(TT + (4 * ABI_T_STOPITERATION), 10'd40);
+						rd(TT + (4 * ABI_T_STOPITERATION), 10'd72);
 					end
-					10'd40: begin
+					10'd72: begin
 						ty_stop <= mv;
-						rd(TT + (4 * ABI_T_MEMORYERROR), 10'd41);
+						rd(TT + (4 * ABI_T_MEMORYERROR), 10'd73);
 					end
-					10'd41: begin
+					10'd73: begin
 						ty_mem <= mv;
-						rd(TT + (4 * ABI_T_SLICE), 10'd42);
+						rd(TT + (4 * ABI_T_SLICE), 10'd74);
 					end
-					10'd42: begin
+					10'd74: begin
 						ty_slice <= mv;
-						rd(h_msgs + (4 * ABI_MSG_MEMORY), 10'd43);
+						rd(TT + (4 * ABI_T_STR), 10'd82);
 					end
-					10'd43: begin
+					10'd82: begin
+						ty_str <= mv;
+						rd(h_msgs + (4 * ABI_MSG_MEMORY), 10'd75);
+					end
+					10'd75: begin
 						wb_v[0] <= vint(ABI_OB_EXCEPTION);
 						wb_v[1] <= ty_mem;
 						wb_v[2] <= mv;
 						wb_v[3] <= VNULL;
 						wb_v[4] <= VNULL;
-						wblock(EMERG_ADDR, 4'd5, 10'd44);
+						wblock(EMERG_ADDR, 4'd5, 10'd76);
 					end
-					10'd44: begin
+					10'd76: begin
 						ab_lo <= 8'd32;
 						ab_pe <= 8'd32;
 						ab_nkw <= 8'd0;
 						crk <= ABI_RK_HALT;
 						hk_id <= ABI_HOOK_BOOT;
-						st <= 10'd202;
+						st <= 10'd241;
 					end
-					10'd535: begin
-						wr(ab_ptr(8'd32 + i0), ab_s[i0[1:0]], (i0 == 8'd3 ? 10'd202 : 10'd535));
+					10'd592: begin
+						wr(ab_ptr(8'd32 + i0), ab_s[i0[1:0]], (i0 == 8'd3 ? 10'd241 : 10'd592));
 						i0 <= i0 + 8'd1;
 					end
-					10'd202:
-						rd(h_hooks + (4 * hk_id), 10'd203);
-					10'd203:
+					10'd241:
+						rd(h_hooks + (4 * hk_id), 10'd242);
+					10'd242:
 						if (mv == VNULL)
 							halt(ABI_HALT_INTERNAL, {24'd0, hk_id});
 						else
-							wr(ab_ptr(8'd0), mv, 10'd60);
-					10'd60:
-						rd(ab_ptr(8'd0), 10'd536);
-					10'd536: begin
+							wr(ab_ptr(8'd0), mv, 10'd94);
+					10'd94:
+						rd(ab_ptr(8'd0), 10'd593);
+					10'd593: begin
 						ab_q <= mv;
 						if (tg(mv) != ABI_TAG_OBJECT)
-							st <= 10'd201;
+							st <= 10'd240;
 						else
-							rd(adr(mv), 10'd63);
+							rd(adr(mv), 10'd97);
 					end
-					10'd63:
+					10'd97:
 						case (md)
 							ABI_OB_FUNCTION: begin
 								c_ismod <= 1'b0;
-								st <= 10'd75;
+								st <= 10'd111;
 							end
 							ABI_OB_BOUND_METHOD:
-								rd(aoff(adr(ab_q), 12), 10'd62);
+								rd(aoff(adr(ab_q), 12), 10'd96);
 							ABI_OB_BUILTIN:
-								rd(aoff(adr(ab_q), 8), 10'd65);
+								rd(aoff(adr(ab_q), 8), 10'd99);
 							ABI_OB_TYPE:
-								rd(aoff(adr(ab_q), 28), 10'd66);
-							default: st <= 10'd201;
+								rd(aoff(adr(ab_q), 28), 10'd100);
+							default: st <= 10'd240;
 						endcase
-					10'd62:
+					10'd96:
 						if (ab_chunked)
-							st <= 10'd594;
+							st <= 10'd651;
 						else if (ab_lo <= 8'd2)
 							raise_err(ABI_ERR_STAR_ARGS, VNULL, VNULL);
 						else begin
-							wr(ab_ptr(ab_lo - 8'd1), mv, 10'd537);
+							wr(ab_ptr(ab_lo - 8'd1), mv, 10'd594);
 							ab_lo <= ab_lo - 8'd1;
 						end
-					10'd537:
-						rd(aoff(adr(ab_q), 8), 10'd61);
-					10'd61:
-						wr(ab_ptr(8'd0), mv, 10'd60);
-					10'd65: begin
+					10'd594:
+						rd(aoff(adr(ab_q), 8), 10'd95);
+					10'd95:
+						wr(ab_ptr(8'd0), mv, 10'd94);
+					10'd99: begin
 						nid <= md[7:0];
-						st <= 10'd293;
+						st <= 10'd339;
 					end
-					10'd66: begin
+					10'd100: begin
 						c_tflags <= md;
 						if (md & ABI_TF_INST)
-							st <= 10'd297;
+							st <= 10'd343;
+						else if (((ab_q == ty_str) && !ab_chunked) && (ab_nkw == 8'd0)) begin
+							if (ab_pe == ab_lo)
+								deliver({ABI_TAG_QSTR, ABI_Q_EMPTY}, crk);
+							else if (ab_pe == (ab_lo + 8'd1))
+								rd(ab_ptr(ab_lo), 10'd101);
+							else
+								st <= 10'd102;
+						end
 						else
-							rd(aoff(adr(ab_q), 32), 10'd64);
+							rd(aoff(adr(ab_q), 32), 10'd98);
 					end
-					10'd64:
+					10'd101:
+						if (strlike(mv))
+							deliver(mv, crk);
+						else
+							st <= 10'd102;
+					10'd102:
+						rd(aoff(adr(ab_q), 32), 10'd98);
+					10'd98:
 						if (mv == VNULL)
 							raise_err(ABI_ERR_CANT_CREATE, ab_q, VNULL);
 						else if (ab_lo <= 8'd2)
 							raise_err(ABI_ERR_STAR_ARGS, VNULL, VNULL);
 						else begin
 							ab_s[0] <= mv;
-							wr(ab_ptr(ab_lo - 8'd1), ab_q, 10'd538);
+							wr(ab_ptr(ab_lo - 8'd1), ab_q, 10'd595);
 							ab_lo <= ab_lo - 8'd1;
 						end
-					10'd538:
-						wr(ab_ptr(8'd0), ab_s[0], 10'd60);
-					10'd201: begin
+					10'd595:
+						wr(ab_ptr(8'd0), ab_s[0], 10'd94);
+					10'd240: begin
 						tb_src <= 1'b0;
 						tb_nz <= 1'b0;
 						tb_from <= ab_lo;
 						tb_n <= sv2v_cast_16(ab_pe - ab_lo);
-						gosub(10'd471, 10'd199);
+						gosub(10'd528, 10'd238);
 					end
-					10'd199: begin
+					10'd238: begin
 						t[0] <= tb_v;
 						tb_src <= 1'b0;
 						tb_nz <= 1'b1;
 						tb_from <= ab_pe;
 						tb_n <= {8'd0, ab_nkw[6:0], 1'b0};
-						gosub(10'd471, 10'd200);
+						gosub(10'd528, 10'd239);
 					end
-					10'd200:
+					10'd239:
 						hook(ABI_HOOK_CALL, crk, 8'd3, ab_q, t[0], tb_v, VNULL);
-					10'd297:
+					10'd343:
 						if (c_tflags & ABI_TF_EXC) begin
 							tb_src <= 1'b0;
 							tb_nz <= 1'b0;
 							tb_from <= ab_lo;
 							tb_n <= sv2v_cast_16(ab_pe - ab_lo);
-							gosub(10'd471, 10'd301);
+							gosub(10'd528, 10'd347);
 						end
 						else
-							alloc(32'd3, 10'd298);
-					10'd301: begin
+							alloc(32'd3, 10'd344);
+					10'd347: begin
 						t[0] <= tb_v;
-						alloc(32'd5, 10'd302);
+						alloc(32'd5, 10'd348);
 					end
-					10'd302: begin
+					10'd348: begin
 						wb_v[0] <= vint(ABI_OB_EXCEPTION);
 						wb_v[1] <= ab_q;
 						wb_v[2] <= t[0];
 						wb_v[3] <= VNULL;
 						wb_v[4] <= VNULL;
 						t[1] <= vobj(al_a);
-						wblock(al_a, 4'd5, 10'd299);
+						wblock(al_a, 4'd5, 10'd345);
 					end
-					10'd298: begin
+					10'd344: begin
 						wb_v[0] <= vint(ABI_OB_INSTANCE);
 						wb_v[1] <= ab_q;
 						wb_v[2] <= VNULL;
 						t[1] <= vobj(al_a);
-						wblock(al_a, 4'd3, 10'd299);
+						wblock(al_a, 4'd3, 10'd345);
 					end
-					10'd299:
+					10'd345:
 						if (scr_id != SCR_AT)
-							scr_ensure(SCR_AT, 10'd299);
+							scr_ensure(SCR_AT, 10'd345);
 						else begin
 							sV[6] <= ab_q;
 							at_ty <= 1'b1;
 							at_objd <= 1'b0;
 							at_q <= ABI_Q_INIT_D;
-							gosub(10'd20, 10'd300);
+							gosub(10'd20, 10'd346);
 						end
-					10'd300:
+					10'd346:
 						if (at_kind == 2'd1) begin
-							wr(ab_ptr(ab_lo - 8'd1), t[1], 10'd539);
+							wr(ab_ptr(ab_lo - 8'd1), t[1], 10'd596);
 							ab_lo <= ab_lo - 8'd1;
 							aux <= t[1];
 							aux2 <= vint({28'd0, crk});
@@ -7814,16 +8536,16 @@ module mpy_core (
 						end
 						else
 							deliver(t[1], crk);
-					10'd539:
-						wr(ab_ptr(8'd0), at_v, 10'd60);
-					10'd75: begin
+					10'd596:
+						wr(ab_ptr(8'd0), at_v, 10'd94);
+					10'd111: begin
 						ab_lo0 <= ab_lo;
 						bload(ha_ab8);
 						bl_n <= 8'd1;
 						bl_k <= 3'd0;
-						st <= 10'd76;
+						st <= 10'd112;
 					end
-					10'd76: begin
+					10'd112: begin
 						if ((bl_n != 8'd5) && !m_wait) begin
 							bload(ha_bl_ab);
 							bl_n <= bl_n + 8'd1;
@@ -7842,7 +8564,7 @@ module mpy_core (
 									default: begin
 										c_glob <= {m_rtag_i, m_rdata_i};
 										if (c_clos != VNULL)
-											rd(adr(c_clos), 10'd79);
+											rd(adr(c_clos), 10'd115);
 										else
 											rc_burst;
 									end
@@ -7850,25 +8572,25 @@ module mpy_core (
 							end
 						end
 					end
-					10'd79: begin
+					10'd115: begin
 						c_cn <= md[7:0];
-						st <= 10'd78;
+						st <= 10'd114;
 					end
-					10'd78:
+					10'd114:
 						if (c_cn == 8'd0)
 							rc_burst;
 						else if (ab_lo <= 8'd2)
 							raise_err(ABI_ERR_STAR_ARGS, VNULL, VNULL);
 						else
-							rd(adr(c_clos) + (4 * c_cn), 10'd80);
-					10'd80: begin
-						wr(ab_ptr(ab_lo - 8'd1), mv, 10'd78);
+							rd(adr(c_clos) + (4 * c_cn), 10'd116);
+					10'd116: begin
+						wr(ab_ptr(ab_lo - 8'd1), mv, 10'd114);
 						ab_lo <= ab_lo - 8'd1;
 						c_cn <= c_cn - 8'd1;
 					end
-					10'd83:
+					10'd119:
 						rc_burst;
-					10'd82: begin
+					10'd118: begin
 						if ((bl_n != 8'd6) && !m_wait) begin
 							bload(ha_bl_rc);
 							bl_n <= bl_n + 8'd1;
@@ -7895,7 +8617,7 @@ module mpy_core (
 									sv2v_cast_3(ABI_RC_CELLS): c_cells <= m_rdata_i;
 									sv2v_cast_3(ABI_RC_MODULE): begin
 										c_md <= m_rdata_i;
-										st <= 10'd77;
+										st <= 10'd113;
 									end
 									default:
 										;
@@ -7903,27 +8625,31 @@ module mpy_core (
 							end
 						end
 					end
-					10'd77: begin
+					10'd113: begin
 						v0 = (noframe ? ABI_FRAME_BASE : stk_top);
-						v3 = sv2v_cast_32((12'd17 + sv2v_cast_12(c_nst)) + (12'd3 * sv2v_cast_12(c_nexc)));
+						v3 = sv2v_cast_32(c_geo_r);
 						v1 = (noframe ? ABI_FRAME_BASE + (v3 << 2) : fbase + {18'd0, sv2v_cast_12(stk_off) + v3[11:0], 2'b00});
 						v2 = ab_pe - ab_lo;
 						c_fast <= (((!ab_chunked && (ab_nkw == 8'd0)) && (c_nkwo == 8'd0)) && ((v2 + c_ndef) >= c_npos)) && ((v2 <= c_npos) || (c_scope & ABI_SCOPE_VARARGS));
 						x3 <= v0;
-						if (v1 > spill_hp)
+						if ((noframe ? (ABI_FRAME_BASE + (v3 << 2)) > spill_hp : over_hp(v3)))
 							raise_msg(ABI_MSG_RECURSION);
 						else if (noframe)
-							st <= 10'd84;
+							st <= 10'd120;
 						else
-							gosub(10'd452, 10'd84);
+							gosub(10'd508, 10'd120);
 					end
-					10'd84: begin
+					10'd120: begin
 						fprev <= (noframe ? 32'd0 : fbase);
 						fbase <= x3;
 						noframe <= 1'b0;
+						local_base <= x3;
+						local_image_word <= 17'd0;
 						rc <= c_rc;
 						nloc <= c_nst;
 						nexc <= c_nexc[4:0];
+						stack_prefix_words <= frame_prefix(c_nst, c_nexc[4:0]);
+						locals_in_image <= 1'b0;
 						sp <= 7'd0;
 						rf_base <= 6'd0;
 						spilled_reals <= 16'd0;
@@ -7941,28 +8667,28 @@ module mpy_core (
 						aux <= VNULL;
 						aux2 <= VNULL;
 						aux3 <= VNULL;
-						begin : sv2v_autoblock_19
+						begin : sv2v_autoblock_21
 							reg signed [31:0] k;
 							for (k = 0; k < MPY_RF_DEPTH; k = k + 1)
 								rf[k] <= VNULL;
 						end
 						lc_inval;
-						st <= 10'd493;
+						st <= 10'd550;
 					end
-					10'd493:
+					10'd550:
 						if (i0 == nloc) begin
 							pc <= c_pc;
 							op_pc <= c_pc;
 							bload(c_md + 0);
 							bl_n <= 8'd1;
 							bl_k <= 3'd0;
-							st <= 10'd81;
+							st <= 10'd117;
 						end
 						else begin
-							wr(loc_ptr(i0), VNULL, 10'd493);
+							wr(loc_ptr(i0), VNULL, 10'd550);
 							i0 <= i0 + 8'd1;
 						end
-					10'd81: begin
+					10'd117: begin
 						if ((bl_n != 8'd2) && !m_wait) begin
 							bload(c_md + 4);
 							bl_n <= bl_n + 8'd1;
@@ -7979,25 +8705,25 @@ module mpy_core (
 								if (c_fast)
 									st <= 10'd25;
 								else
-									st <= 10'd54;
+									st <= 10'd88;
 							end
 						end
 					end
 					10'd25: begin
 						i0 <= ab_pe - ab_lo;
 						i1 <= 8'd0;
-						st <= 10'd501;
+						st <= 10'd558;
 					end
-					10'd501:
+					10'd558:
 						if ((i1 >= c_npos) || (i1 >= i0))
 							st <= 10'd26;
 						else
-							rd(ab_ptr(ab_lo + i1), 10'd541);
-					10'd541:
-						wr(loc_ptr(i1), mv, 10'd502);
-					10'd502: begin
+							rd(ab_ptr(ab_lo + i1), 10'd598);
+					10'd598:
+						wr(loc_ptr(i1), mv, 10'd559);
+					10'd559: begin
 						i1 <= i1 + 8'd1;
-						st <= 10'd501;
+						st <= 10'd558;
 					end
 					10'd26:
 						if (i0 >= c_npos)
@@ -8014,7 +8740,7 @@ module mpy_core (
 							tb_nz <= 1'b0;
 							tb_from <= ab_lo + c_npos;
 							tb_n <= ((ab_pe - ab_lo) > c_npos ? sv2v_cast_16((ab_pe - ab_lo) - c_npos) : 16'd0);
-							gosub(10'd471, 10'd31);
+							gosub(10'd528, 10'd31);
 						end
 						else
 							st <= 10'd28;
@@ -8025,7 +8751,7 @@ module mpy_core (
 						if (c_scope & ABI_SCOPE_VARKEYWORDS)
 							alloc(32'd4, 10'd29);
 						else
-							st <= 10'd72;
+							st <= 10'd108;
 					end
 					10'd29: begin
 						wb_v[0] <= vint(32'd0);
@@ -8033,43 +8759,43 @@ module mpy_core (
 						wb_v[2] <= VNULL;
 						wb_v[3] <= vint(32'd0);
 						i1 <= (c_npos + c_nkwo) + (c_scope & ABI_SCOPE_VARARGS ? 8'd1 : 8'd0);
-						wblock(al_a, 4'd4, 10'd503);
+						wblock(al_a, 4'd4, 10'd560);
 					end
-					10'd503:
-						wr(loc_ptr(i1), vmut(al_a, ABI_MUT_DICT), 10'd72);
-					10'd72:
+					10'd560:
+						wr(loc_ptr(i1), vmut(al_a, ABI_MUT_DICT), 10'd108);
+					10'd108:
 						if (c_ci == c_ncell) begin
 							fflags <= fflags & ~FF_NOTB;
 							if (fflags & FF_GEN)
-								st <= 10'd128;
+								st <= 10'd164;
 							else
-								st <= 10'd111;
+								st <= 10'd147;
 						end
 						else
-							rd(c_cells + (4 * c_ci), 10'd74);
-					10'd74: begin
+							rd(c_cells + (4 * c_ci), 10'd110);
+					10'd110: begin
 						i1 <= md[7:0];
-						rd(loc_ptr(md[7:0]), 10'd504);
+						rd(loc_ptr(md[7:0]), 10'd561);
 					end
-					10'd504: begin
+					10'd561: begin
 						t[3] <= mv;
-						alloc(32'd3, 10'd73);
+						alloc(32'd3, 10'd109);
 					end
-					10'd73: begin
+					10'd109: begin
 						wb_v[0] <= vint(ABI_OB_CELL);
 						wb_v[1] <= ty_cell;
 						wb_v[2] <= t[3];
 						c_ci <= c_ci + 32'd1;
-						wblock(al_a, 4'd3, 10'd505);
+						wblock(al_a, 4'd3, 10'd562);
 					end
-					10'd505:
-						wr(loc_ptr(i1), vobj(al_a), 10'd72);
-					10'd54:
+					10'd562:
+						wr(loc_ptr(i1), vobj(al_a), 10'd108);
+					10'd88:
 						if (ab_chunked)
-							st <= 10'd602;
+							st <= 10'd659;
 						else
-							rd(ab_ptr(8'd0), 10'd540);
-					10'd540: begin
+							rd(ab_ptr(8'd0), 10'd597);
+					10'd597: begin
 						fflags <= fflags | FF_NOTB;
 						fcont <= ABI_CONT_BIND;
 						t[2] <= mv;
@@ -8077,88 +8803,93 @@ module mpy_core (
 						tb_nz <= 1'b0;
 						tb_from <= ab_lo;
 						tb_n <= sv2v_cast_16(ab_pe - ab_lo);
-						gosub(10'd471, 10'd55);
+						gosub(10'd528, 10'd89);
 					end
-					10'd55: begin
+					10'd89: begin
 						t[0] <= tb_v;
 						tb_src <= 1'b0;
 						tb_nz <= 1'b1;
 						tb_from <= ab_pe;
 						tb_n <= {8'd0, ab_nkw[6:0], 1'b0};
-						gosub(10'd471, 10'd56);
+						gosub(10'd528, 10'd90);
 					end
-					10'd56:
+					10'd90:
 						hook(ABI_HOOK_BIND, ABI_RK_CONT, 8'd3, t[2], t[0], tb_v, VNULL);
-					10'd85: begin
+					10'd121: begin
 						c_rc <= md;
 						c_defs <= VNULL;
 						c_clos <= VNULL;
-						st <= 10'd83;
+						st <= 10'd119;
 					end
-					10'd452:
+					10'd508:
 						if (lc_dirty_any) begin
 							lc_fi <= 4'd0;
-							lc_fl_ret <= 10'd452;
-							st <= 10'd498;
+							lc_fl_ret <= 10'd508;
+							st <= 10'd555;
 						end
 						else begin
-							sw_i <= 32'd0;
+							sw_i <= (spill_to_img && locals_in_image ? 32'd2 : 32'd0);
 							sw_k <= 2'd0;
-							gosub(10'd531, 10'd453);
+							gosub(10'd588, 10'd509);
 						end
-					10'd453:
+					10'd509:
 						if (sw_i == 32'd17) begin
 							sw_i <= 32'd0;
 							sw_k <= 2'd0;
-							st <= (spill_to_img ? 10'd454 : 10'd456);
+							st <= (spill_to_img && !locals_in_image ? 10'd510 : 10'd512);
 						end
 						else begin
-							wr(fbase + (sw_i << 2), hdr_word(sw_i), 10'd453);
-							sw_i <= sw_i + 32'd1;
+							wr(fbase + (sw_i << 2), hdr_word(sw_i), 10'd509);
+							if ((spill_to_img && locals_in_image) && (sw_i == 32'd5))
+								sw_i <= 32'd9;
+							else if ((spill_to_img && locals_in_image) && (sw_i == 32'd11))
+								sw_i <= 32'd15;
+							else
+								sw_i <= sw_i + 32'd1;
 						end
-					10'd454:
+					10'd510:
 						if (sw_i == nloc) begin
 							sw_i <= 32'd0;
 							sw_k <= 2'd0;
-							st <= 10'd457;
+							st <= 10'd513;
 						end
 						else
-							rd((x4 + 32'h00000044) + (sw_i << 2), 10'd455);
-					10'd455: begin
-						wr((fbase + 32'h00000044) + (sw_i << 2), mv, 10'd454);
+							rd((x4 + 32'h00000044) + (sw_i << 2), 10'd511);
+					10'd511: begin
+						wr((fbase + 32'h00000044) + (sw_i << 2), mv, 10'd510);
 						sw_i <= sw_i + 32'd1;
 					end
-					10'd457:
+					10'd513:
 						if (sw_i == (sv2v_cast_32(xsp) * 32'd3)) begin
 							sw_i <= 32'd0;
-							st <= 10'd456;
+							st <= 10'd512;
 						end
 						else if (sw_k == 2'd0) begin
-							rd(exc_words(x4) + (sw_i << 2), 10'd457);
+							rd(exc_words(x4) + (sw_i << 2), 10'd513);
 							sw_k <= 2'd1;
 						end
 						else begin
-							wr(exc_words(fbase) + (sw_i << 2), mv, 10'd457);
+							wr(exc_words(fbase) + (sw_i << 2), mv, 10'd513);
 							sw_k <= 2'd0;
 							sw_i <= sw_i + 32'd1;
 						end
-					10'd456:
+					10'd512:
 						if (sw_i == sp)
 							ret;
 						else begin
-							wr(ftop + (sw_i << 2), rf[rf_base[3:0] + sv2v_cast_4(sw_i[6:0])], 10'd456);
+							wr(ftop + (sw_i << 2), rf[rf_base[3:0] + sv2v_cast_4(sw_i[6:0])], 10'd512);
 							sw_i <= sw_i + 32'd1;
 						end
-					10'd112: begin
+					10'd148: begin
 						fl_i <= 32'd0;
 						bl_n <= 8'd0;
 						fe_flush <= 1'b1;
 						lc_inval;
 						if (!fl_img)
 							fbase <= fl_base;
-						st <= 10'd120;
+						st <= 10'd156;
 					end
-					10'd120: begin
+					10'd156: begin
 						if ((bl_n != 8'd17) && !m_wait) begin
 							bload(ha_bl_fl);
 							bl_n <= bl_n + 8'd1;
@@ -8178,11 +8909,15 @@ module mpy_core (
 										sp <= m_rdata_i[6:0];
 										xsp <= m_rdata_i[12:8];
 										fflags <= m_rdata_i[31:24];
+										if (!fl_img)
+											locals_in_image <= m_rdata_i[7];
 									end
 									4'd5: begin
 										frk <= m_rdata_i[3:0];
 										fcont <= m_rdata_i[15:8];
 										nexc <= m_rdata_i[20:16];
+										if (!fl_img)
+											local_image_word[16:2] <= {m_rdata_i[31:21], m_rdata_i[7:4]};
 									end
 									4'd6: glb <= {m_rtag_i, m_rdata_i};
 									4'd7: loc <= {m_rtag_i, m_rdata_i};
@@ -8198,9 +8933,14 @@ module mpy_core (
 										if (fl_i == 32'd16) begin
 											rf_base <= m_rdata_i[5:0];
 											nloc <= m_rdata_i[13:6];
+											stack_prefix_words <= frame_prefix((locals_in_image ? 8'd0 : m_rdata_i[13:6]), nexc);
 											spilled_reals <= m_rdata_i[29:14];
 											exc_base <= (fl_base + 32'h00000044) + ({24'd0, m_rdata_i[13:6]} << 2);
-											stack_base <= fl_base + (((32'd17 + {24'd0, m_rdata_i[13:6]}) + (32'd3 * {27'd0, nexc})) << 2);
+											if (!fl_img) begin
+												local_image_word[1:0] <= m_rdata_i[31:30];
+												local_base <= (locals_in_image ? MPY_SRAM_BASE | {13'd0, local_image_word[16:2], m_rdata_i[31:30], 2'b00} : fl_base);
+											end
+											stack_base <= fl_base + {21'd0, frame_prefix((fl_img || !locals_in_image ? m_rdata_i[13:6] : 8'd0), nexc), 2'b00};
 										end
 								endcase
 								md <= m_rdata_i;
@@ -8209,11 +8949,15 @@ module mpy_core (
 									fl_i <= 32'd0;
 									fl_k <= 2'd0;
 									bl_n <= 8'd0;
-									if (fl_img)
-										st <= 10'd526;
+									if (fl_img && locals_in_image) begin
+										fl_img <= 1'b0;
+										st <= 10'd585;
+									end
+									else if (fl_img)
+										st <= 10'd583;
 									else begin
 										sw_k <= 2'd0;
-										gosub(10'd532, 10'd528);
+										gosub(10'd589, 10'd585);
 									end
 								end
 								else
@@ -8221,33 +8965,33 @@ module mpy_core (
 							end
 						end
 					end
-					10'd526:
+					10'd583:
 						if (fl_i == nloc) begin
 							fl_i <= 32'd0;
 							fl_k <= 2'd0;
-							st <= 10'd123;
+							st <= 10'd159;
 						end
 						else
-							rd((fl_base + 32'h00000044) + (fl_i << 2), 10'd527);
-					10'd527: begin
-						wr((fbase + 32'h00000044) + (fl_i << 2), mv, 10'd526);
+							rd((fl_base + 32'h00000044) + (fl_i << 2), 10'd584);
+					10'd584: begin
+						wr((fbase + 32'h00000044) + (fl_i << 2), mv, 10'd583);
 						fl_i <= fl_i + 32'd1;
 					end
-					10'd123:
+					10'd159:
 						if (fl_i == (sv2v_cast_32(xsp) * 32'd3)) begin
 							fl_i <= 32'd0;
 							bl_n <= 8'd0;
 							fl_img <= 1'b0;
 							sw_k <= 2'd0;
-							gosub(10'd532, 10'd528);
+							gosub(10'd589, 10'd585);
 						end
 						else
-							rd(exc_base + (fl_i << 2), 10'd122);
-					10'd122: begin
-						wr(exc_words(fbase) + (fl_i << 2), mv, 10'd123);
+							rd(exc_base + (fl_i << 2), 10'd158);
+					10'd158: begin
+						wr(exc_words(fbase) + (fl_i << 2), mv, 10'd159);
 						fl_i <= fl_i + 32'd1;
 					end
-					10'd528:
+					10'd585:
 						if (fl_i == sv2v_cast_32(sp))
 							ret;
 						else begin
@@ -8264,45 +9008,45 @@ module mpy_core (
 								end
 							end
 						end
-					10'd388:
+					10'd444:
 						if (frk == ABI_RK_HALT)
 							halt(ABI_HALT_CLEAN, 32'd0);
 						else begin
 							r_rk <= frk;
 							fl_base <= fprev;
-							gosub(10'd112, 10'd389);
+							gosub(10'd148, 10'd445);
 						end
-					10'd389: begin
+					10'd445: begin
 						d_rk <= r_rk;
-						st <= 10'd98;
+						st <= 10'd134;
 					end
-					10'd98:
+					10'd134:
 						case (d_rk)
 							ABI_RK_PUSH: begin
 								push(t[7]);
-								st <= 10'd111;
+								st <= 10'd147;
 							end
-							ABI_RK_DISCARD: st <= 10'd111;
+							ABI_RK_DISCARD: st <= 10'd147;
 							ABI_RK_PUSH_NULL: begin
 								rf[rf_base[3:0] + sv2v_cast_4(sp)] <= t[7];
 								rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp + 7'd1))] <= VNULL;
 								sp <= sp + 7'd2;
-								st <= 10'd111;
+								st <= 10'd147;
 							end
-							ABI_RK_CONT: st <= 10'd86;
+							ABI_RK_CONT: st <= 10'd122;
 							default:
 								halt(ABI_HALT_CLEAN, 32'd0);
 						endcase
-					10'd86:
+					10'd122:
 						case (fcont)
 							ABI_CONT_REDISPATCH: begin
 								op <= aux[7:0];
-								st <= 10'd103;
+								st <= 10'd139;
 							end
 							ABI_CONT_REPLACE: begin
 								rf[rf_base[3:0] + sv2v_cast_4(aux[6:0])] <= t[7];
 								pc <= op_pc;
-								st <= 10'd111;
+								st <= 10'd147;
 							end
 							ABI_CONT_INIT:
 								if (t[7] != VNONE)
@@ -8317,34 +9061,34 @@ module mpy_core (
 								x1 <= {16'd0, stk_depth};
 								sw_k <= 2'd0;
 								push(t[7]);
-								gosub(10'd529, 10'd111);
+								gosub(10'd586, 10'd147);
 							end
 							ABI_CONT_WITH_NONE: begin
 								push(VNONE);
-								st <= 10'd111;
+								st <= 10'd147;
 							end
 							ABI_CONT_WITH_UNWIND: begin
 								rf[rf_base[3:0] + sv2v_cast_4(sp)] <= aux;
 								rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp + 7'd1))] <= aux2;
 								sp <= sp + 7'd2;
-								st <= 10'd111;
+								st <= 10'd147;
 							end
 							ABI_CONT_WITH_EXC: begin
 								tr_v <= t[7];
-								gosub(10'd467, 10'd492);
+								gosub(10'd524, 10'd549);
 							end
 							ABI_CONT_UNPACK:
-								rd(adr(t[7]), 10'd481);
+								rd(adr(t[7]), 10'd538);
 							ABI_CONT_RAISE:
 								raise_val(t[7]);
 							ABI_CONT_TRUTH: begin
 								ovr <= (t[7] == VTRUE ? ABI_OVR_TRUE : ABI_OVR_FALSE);
 								pc <= op_pc;
-								st <= 10'd111;
+								st <= 10'd147;
 							end
 							ABI_CONT_WITH_TRUTH: begin
 								push((t[7] == VTRUE ? VNONE : aux));
-								st <= 10'd111;
+								st <= 10'd147;
 							end
 							ABI_CONT_WITH_ATTR: begin
 								t[0] <= aux3;
@@ -8354,41 +9098,41 @@ module mpy_core (
 									rf[rf_base[3:0] + sv2v_cast_4(sp)] <= VNULL;
 									sp <= sp + 7'd1;
 									at_q <= ABI_Q_ENTER_D;
-									gosub_scr(SCR_AT, 10'd9, 10'd465);
+									gosub_scr(SCR_AT, 10'd9, 10'd522);
 								end
 								else begin
 									at_v <= t[7];
 									at_kind <= 2'd1;
-									st <= 10'd465;
+									st <= 10'd522;
 								end
 							end
 							ABI_CONT_FOR_NEXT:
 								if (t[7] == VSTOP) begin
 									sp <= sp - 7'd4;
 									pc <= aux[31:0];
-									st <= 10'd111;
+									st <= 10'd147;
 								end
 								else begin
 									push(t[7]);
-									st <= 10'd111;
+									st <= 10'd147;
 								end
 							ABI_CONT_GETITER: begin
 								rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))] <= t[7];
 								ovr <= ABI_OVR_PYOBJ;
 								pc <= op_pc;
-								st <= 10'd111;
+								st <= 10'd147;
 							end
 							ABI_CONT_BIND:
-								rd(adr(t[7]), 10'd70);
+								rd(adr(t[7]), 10'd106);
 							ABI_CONT_YFROM:
 								if (fflags & FF_YFAST) begin
 									fflags <= fflags & ~FF_YFAST;
 									push(t[7]);
 									pc <= op_pc;
-									st <= 10'd157;
+									st <= 10'd193;
 								end
 								else
-									rd(aoff(adr(t[7]), 4), 10'd160);
+									rd(aoff(adr(t[7]), 4), 10'd196);
 							ABI_CONT_SPILL_REPLACE:
 								if (!has_link)
 									halt(ABI_HALT_INTERNAL, 32'h0000c0c0);
@@ -8397,188 +9141,190 @@ module mpy_core (
 									srd_addr <= mpy_rf_link_addr(rf[rf_base[3:0] + 4'd0]);
 									srd_off <= (spilled_reals - 16'd1) - aux[15:0];
 									srd_hops <= 16'd0;
-									st <= 10'd554;
+									st <= 10'd611;
 								end
 							default:
 								halt(ABI_HALT_INTERNAL, {24'd0, fcont});
 						endcase
-					10'd492:
+					10'd549:
 						if (tr_x) begin
 							fcont <= ABI_CONT_WITH_TRUTH;
 							hook(ABI_HOOK_TRUTH, ABI_RK_CONT, 8'd1, tr_v, VNULL, VNULL, VNULL);
 						end
 						else begin
 							push((tr_r ? VNONE : aux));
-							st <= 10'd111;
+							st <= 10'd147;
 						end
-					10'd481: begin
+					10'd538: begin
 						x1 <= md;
-						st <= 10'd480;
+						st <= 10'd537;
 					end
-					10'd480:
+					10'd537:
 						if (x1 == 32'd0)
-							st <= 10'd111;
+							st <= 10'd147;
 						else
-							rd(adr(t[7]) + (x1 << 2), 10'd482);
-					10'd482: begin
+							rd(adr(t[7]) + (x1 << 2), 10'd539);
+					10'd539: begin
 						x1 <= x1 - 32'd1;
 						push(mv);
-						st <= 10'd480;
+						st <= 10'd537;
 					end
-					10'd70: begin
+					10'd106: begin
 						x1 <= md;
 						i0 <= 8'd0;
-						st <= 10'd69;
+						st <= 10'd105;
 					end
-					10'd69:
+					10'd105:
 						if (i0 == x1[7:0])
-							rd(rc + 8, 10'd67);
+							rd(rc + 8, 10'd103);
 						else
-							rd((adr(t[7]) + 4) + (4 * i0), 10'd71);
-					10'd71: begin
-						wr(loc_ptr(i0), mv, 10'd69);
+							rd((adr(t[7]) + 4) + (4 * i0), 10'd107);
+					10'd107: begin
+						wr(loc_ptr(i0), mv, 10'd105);
 						i0 <= i0 + 8'd1;
 					end
-					10'd67: begin
+					10'd103: begin
 						c_ncell <= md[31:24];
-						rd(rc + 16, 10'd68);
+						rd(rc + 16, 10'd104);
 					end
-					10'd68: begin
+					10'd104: begin
 						c_cells <= md;
 						c_ci <= 32'd0;
 						fcont <= 8'd0;
-						st <= 10'd72;
+						st <= 10'd108;
 					end
-					10'd406:
+					10'd462:
 						if (aalu_pend) begin
 							if (aalu_go) begin
-								aalu_ret <= 10'd406;
-								st <= 10'd710;
+								aalu_ret <= 10'd462;
+								st <= 10'd777;
 							end
 						end
 						else
-							alloc(32'd5, 10'd407);
-					10'd407:
-						rd(h_msgs + (4 * rm_id), 10'd408);
-					10'd408: begin
+							alloc(32'd5, 10'd463);
+					10'd463:
+						rd(h_msgs + (4 * rm_id), 10'd464);
+					10'd464: begin
 						t[0] <= mv;
-						rd(TT + (4 * msg_type(rm_id)), 10'd409);
+						rd(TT + (4 * msg_type(rm_id)), 10'd465);
 					end
-					10'd409: begin
+					10'd465: begin
 						wb_v[0] <= vint(ABI_OB_EXCEPTION);
 						wb_v[1] <= mv;
 						wb_v[2] <= t[0];
 						wb_v[3] <= VNULL;
 						wb_v[4] <= VNULL;
 						xc <= vobj(al_a);
-						wblock(al_a, 4'd5, 10'd410);
+						wblock(al_a, 4'd5, 10'd466);
 					end
-					10'd410: begin
+					10'd466: begin
 						rx_from <= 1'b0;
 						rsp <= 5'd0;
-						st <= 10'd387;
+						st <= 10'd442;
 					end
-					10'd387:
+					10'd442:
 						if (aalu_pend) begin
 							if (aalu_go) begin
-								aalu_ret <= 10'd387;
-								st <= 10'd710;
+								aalu_ret <= 10'd442;
+								st <= 10'd777;
 							end
 						end
 						else if (((rx_from && (rx_crk == ABI_RK_CONT)) && (fcont == ABI_CONT_FOR_NEXT)) || (!rx_from && (op == 8'h4b)))
-							rd(aoff(adr(xc), 4), 10'd416);
+							rd(aoff(adr(xc), 4), 10'd472);
 						else if ((rx_from && (rx_crk == ABI_RK_CONT)) && (fcont == ABI_CONT_YFROM))
-							rd(aoff(adr(xc), 4), 10'd168);
+							rd(aoff(adr(xc), 4), 10'd204);
 						else
-							st <= 10'd418;
-					10'd416: begin
+							st <= 10'd474;
+					10'd472: begin
 						is_t <= mv;
 						is_c <= ty_stop;
-						gosub(10'd210, 10'd417);
+						gosub(10'd249, 10'd473);
 					end
-					10'd417:
+					10'd473:
 						if (is_r) begin
 							sp <= sp - 7'd4;
 							pc <= aux[31:0];
-							st <= 10'd111;
+							st <= 10'd147;
 						end
 						else
-							st <= 10'd418;
-					10'd418:
+							st <= 10'd474;
+					10'd474:
 						if ((fflags & (FF_NOTB | FF_FW)) || (!rx_from && ((op == 8'h5d) || (op == 8'h64))))
-							st <= 10'd414;
+							st <= 10'd470;
 						else
-							rd(rc + 0, 10'd419);
-					10'd419: begin
+							rd(rc + 0, 10'd475);
+					10'd475: begin
 						rx_off <= op_pc - md;
-						rd(aoff(adr(xc), 12), 10'd420);
+						rd(aoff(adr(xc), 12), 10'd476);
 					end
-					10'd420:
+					10'd476:
 						if (mv == VNULL) begin
 							al_soft <= 1'b1;
-							alloc(32'd7, 10'd425);
+							alloc(32'd7, 10'd481);
 						end
 						else begin
 							t[2] <= mv;
-							st <= 10'd421;
+							st <= 10'd477;
 						end
-					10'd425:
+					10'd481:
 						if (!al_ok) begin
 							al_soft <= 1'b0;
-							st <= 10'd414;
+							st <= 10'd470;
 						end
 						else begin
 							wb_v[0] <= vint(32'd0);
 							wb_v[1] <= vint(32'd4);
 							wb_v[2] <= {ABI_TAG_CONT, al_a + 32'd12};
 							t[2] <= vmut(al_a, ABI_MUT_LIST);
-							wblock(al_a, 4'd3, 10'd424);
+							wblock(al_a, 4'd3, 10'd480);
 						end
-					10'd424:
-						wr(aoff(adr(xc), 12), t[2], 10'd421);
-					10'd421: begin
+					10'd480:
+						wr(aoff(adr(xc), 12), t[2], 10'd477);
+					10'd477: begin
 						t[3] <= vint(rc);
 						al_soft <= 1'b1;
-						gosub_scr(SCR_LA, 10'd236, 10'd422);
+						gosub_scr(SCR_LA, 10'd280, 10'd478);
 					end
-					10'd422: begin
+					10'd478: begin
 						t[3] <= vint(rx_off);
-						gosub_scr(SCR_LA, 10'd236, 10'd423);
+						gosub_scr(SCR_LA, 10'd280, 10'd479);
 					end
-					10'd423: begin
+					10'd479: begin
 						al_soft <= 1'b0;
-						st <= 10'd414;
+						st <= 10'd470;
 					end
-					10'd414:
+					10'd470:
 						if ((xsp != 5'd0) && (xh <= op_pc)) begin
 							sw_k <= 2'd0;
-							gosub(10'd530, 10'd414);
+							gosub(10'd587, 10'd470);
 						end
-						else if (xsp != 5'd0) begin
-							pc <= xh;
-							xp <= xc;
-							drop_left <= (stk_depth > xv ? stk_depth - xv : 16'd0);
-							drop_push_en <= 1'b1;
-							drop_push_v <= xc;
-							drop_then <= 10'd111;
-							st <= 10'd523;
-						end
+						else if (xsp != 5'd0)
+							st <= 10'd443;
 						else if ((gen != VNULL) && (fprev != 32'd0)) begin
 							pc <= 32'd0;
-							st <= 10'd134;
+							st <= 10'd170;
 						end
 						else if (fprev == 32'd0)
 							halt(ABI_HALT_UNCAUGHT, xc[31:0]);
 						else begin
 							rx_crk <= frk;
 							fl_base <= fprev;
-							gosub(10'd112, 10'd415);
+							gosub(10'd148, 10'd471);
 						end
-					10'd415: begin
-						rx_from <= 1'b1;
-						st <= 10'd387;
+					10'd443: begin
+						pc <= xh;
+						xp <= xc;
+						drop_left <= (stk_depth > xv ? stk_depth - xv : 16'd0);
+						drop_push_en <= 1'b1;
+						drop_push_v <= xc;
+						drop_then <= 10'd147;
+						st <= 10'd580;
 					end
-					10'd111:
+					10'd471: begin
+						rx_from <= 1'b1;
+						st <= 10'd442;
+					end
+					10'd147:
 						if (ca_fault_i)
 							case (ca_fault_reason_i)
 								MPY_FAULT_UNALIGNED:
@@ -8588,37 +9334,41 @@ module mpy_core (
 								default:
 									halt(ABI_HALT_BUS, ca_fault_addr_i);
 							endcase
-						else if (aalu_pend && ((sp >= sv2v_cast_7_signed(RF_SPILL_AT)) || (has_link && (sp <= sv2v_cast_7_signed(RF_RELOAD_AT))))) begin
+						else if (aalu_pend && (((sp >= sv2v_cast_7_signed(RF_SPILL_AT)) || (has_link && (sp <= sv2v_cast_7_signed(RF_RELOAD_AT)))) || (soft_pt && evt_q))) begin
 							if (aalu_go) begin
-								aalu_ret <= 10'd111;
-								st <= 10'd710;
+								aalu_ret <= 10'd147;
+								st <= 10'd777;
 							end
 						end
 						else if (sp >= sv2v_cast_7_signed(RF_SPILL_AT)) begin
-							rf_resume <= 10'd111;
-							st <= 10'd506;
+							rf_resume <= 10'd147;
+							st <= 10'd563;
 						end
 						else if (has_link && (sp <= sv2v_cast_7_signed(RF_RELOAD_AT))) begin
-							rf_resume <= 10'd111;
-							st <= 10'd509;
+							rf_resume <= 10'd147;
+							st <= 10'd566;
 						end
-						else if (fe_avail != 6'd0) begin
-							dq_bytes <= d_bytes;
-							dq_n <= d_n;
-							st <= 10'd96;
-						end
+						else if (soft_pt && evt_q)
+							st <= 10'd811;
 						else if (fe_fault && (fe_fault_addr[31:2] == pc[31:2]))
 							fetch_fault;
-					10'd96:
+						else begin
+							dq_bytes <= d_bytes;
+							dq_n <= d_n;
+							st <= 10'd132;
+						end
+					10'd132:
 						if ((ca_fault_i || (sp >= sv2v_cast_7_signed(RF_SPILL_AT))) || (has_link && (sp <= sv2v_cast_7_signed(RF_RELOAD_AT))))
-							st <= 10'd111;
+							st <= 10'd147;
 						else if (d_trunc) begin
-							if (dq_n == 4'd8)
+							if (dq_n == 4'd0)
+								st <= 10'd147;
+							else if (dq_n == 4'd8)
 								halt(ABI_HALT_BAD_OPCODE, pc);
 							else if (fe_fault)
 								fetch_fault;
 							else
-								st <= 10'd111;
+								st <= 10'd147;
 						end
 						else if (d_illegal || !d_valid)
 							halt(ABI_HALT_BAD_OPCODE, pc);
@@ -8626,25 +9376,41 @@ module mpy_core (
 							op <= d_op;
 							arg <= d_arg;
 							ext <= d_ext;
+							lf_ix <= (d_op[7:4] == 4'h2 ? d_arg[7:0] : {4'd0, d_op[3:0]});
+							lc_hit_r <= lc_is_hit({4'd0, dq_bytes[3:0]});
+							lc_way_r <= lc_hit_way({4'd0, dq_bytes[3:0]});
 							op_pc <= pc;
 							pc <= pc + d_len;
+							soft_pt <= 1'b0;
+							scr_id <= SCR_NONE;
 							extv <= d_extv;
 							nops <= nops + 32'd1;
 							trace <= 1'b1;
-							st <= 10'd103;
+							st <= (((((dq_bytes[7:0] >= 8'h24) && (dq_bytes[7:0] <= 8'h29)) || (dq_bytes[7:0] == 8'h34)) || (dq_bytes[7:0] == 8'h36)) || (dq_bytes[7:0] == 8'h68) ? 10'd818 : 10'd139);
 						end
-					10'd103: begin
+					10'd818: begin
+						call_fit_r <= sv2v_cast_16((sv2v_cast_10(arg[7:0]) + {1'b0, arg[15:8], 1'b0}) + (op == 8'h36 ? 10'd2 : 10'd1)) <= resident_reals;
+						call_ring_r <= ((sv2v_cast_10(arg[7:0]) + {1'b0, arg[15:8], 1'b0}) + (op == 8'h36 ? 10'd2 : 10'd1)) <= sv2v_cast_10_signed(MPY_RF_DEPTH);
+						call_big_r <= (sv2v_cast_10(arg[7:0]) + {1'b0, arg[15:8], 1'b0}) > 10'd224;
+						yf_fast_r <= ((inj == VNONE) && (rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))] == VNONE)) && (tg(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))]) == ABI_TAG_OBJECT);
+						if (((op != 8'h34) && (op != 8'h36)) && (op != 8'h68)) begin
+							lc_hit_r <= lc_is_hit(lf_ix);
+							lc_way_r <= lc_hit_way(lf_ix);
+						end
+						st <= 10'd139;
+					end
+					10'd139: begin
 						jt <= jt_c;
 						if (aalu_pend && !aalu_pass(op)) begin
 							if (aalu_go) begin
-								aalu_ret <= 10'd103;
-								st <= 10'd710;
+								aalu_ret <= 10'd139;
+								st <= 10'd777;
 							end
 						end
 						else if (((op >= 8'hb0) && (op < 8'hc0)) || (op == 8'h24)) begin
-							vi = (op == 8'h24 ? arg[7:0] : op - 8'hb0);
-							if (lc_is_hit(vi)) begin
-								vs0 = {4'd0, lc_hit_way(vi)};
+							vi = lf_ix;
+							if (lc_hit_r) begin
+								vs0 = {4'd0, lc_way_r};
 								if ((lc_d[vs0[2:0]] == VNULL) && !(fflags & FF_FW))
 									raise_msg(ABI_MSG_LOCAL_UNBOUND);
 								else begin
@@ -8655,39 +9421,39 @@ module mpy_core (
 							end
 							else begin
 								i0 <= vi;
-								rd(loc_ptr(vi), 10'd496);
+								rd(loc_ptr(vi), 10'd553);
 							end
 						end
 						else if (((op >= 8'hc0) && (op < 8'hd0)) || (op == 8'h26)) begin
-							vi = (op == 8'h26 ? arg[7:0] : op - 8'hc0);
+							vi = lf_ix;
 							if ((cfg_lc_n != 4'd0) && cfg_lc_wb) begin
 								sp <= sp - 7'd1;
-								lc_fill(vi, rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))], 1'b1, 1'b1, 10'd111);
+								lc_fill(vi, rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))], 1'b1, 1'b1, 10'd147);
 							end
 							else begin
-								wr(loc_ptr(vi), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))], 10'd111);
+								wr(loc_ptr(vi), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))], 10'd147);
 								sp <= sp - 7'd1;
 								if (cfg_lc_n != 4'd0)
-									lc_fill(vi, rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))], 1'b0, 1'b0, 10'd111);
+									lc_fill(vi, rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))], 1'b0, 1'b0, 10'd147);
 							end
 						end
 						else if ((((op == 8'h25) || (op == 8'h27)) || (op == 8'h29)) || (op == 8'h28)) begin
 							vi = arg[7:0];
-							if (lc_is_hit(vi)) begin
-								vs0 = {4'd0, lc_hit_way(vi)};
+							if (lc_hit_r) begin
+								vs0 = {4'd0, lc_way_r};
 								lc_note(vs0[2:0]);
 								if ((lc_d[vs0[2:0]] == VNULL) && ((op == 8'h28) || !(fflags & FF_FW)))
 									raise_msg(ABI_MSG_LOCAL_UNBOUND);
 								else if (op == 8'h25)
-									rd(aoff(adr(lc_d[vs0[2:0]]), 8), 10'd99);
+									rd(aoff(adr(lc_d[vs0[2:0]]), 8), 10'd135);
 								else if (op == 8'h27) begin
-									wr(aoff(adr(lc_d[vs0[2:0]]), 8), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))], 10'd111);
+									wr(aoff(adr(lc_d[vs0[2:0]]), 8), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))], 10'd147);
 									sp <= sp - 7'd1;
 								end
 								else if (op == 8'h29)
-									rd(aoff(adr(lc_d[vs0[2:0]]), 8), 10'd97);
+									rd(aoff(adr(lc_d[vs0[2:0]]), 8), 10'd133);
 								else begin
-									wr(loc_ptr(vi), VNULL, 10'd111);
+									wr(loc_ptr(vi), VNULL, 10'd147);
 									lc_v[vs0[2:0]] <= 1'b0;
 									lc_dirty[vs0[2:0]] <= 1'b0;
 								end
@@ -8695,13 +9461,13 @@ module mpy_core (
 							else begin
 								i0 <= vi;
 								if (op == 8'h25)
-									rd(loc_ptr(vi), 10'd495);
+									rd(loc_ptr(vi), 10'd552);
 								else if (op == 8'h27)
-									rd(loc_ptr(vi), 10'd500);
+									rd(loc_ptr(vi), 10'd557);
 								else if (op == 8'h29)
-									rd(loc_ptr(vi), 10'd499);
+									rd(loc_ptr(vi), 10'd556);
 								else
-									rd(loc_ptr(vi), 10'd494);
+									rd(loc_ptr(vi), 10'd551);
 							end
 						end
 						else if ((op >= 8'h70) && (op < 8'hb0)) begin
@@ -8710,22 +9476,24 @@ module mpy_core (
 						end
 						else if ((op >= 8'hd0) && (op < 8'hd7)) begin
 							n_o <= op - 8'hd0;
-							st <= 10'd479;
+							st <= 10'd536;
 						end
 						else if ((op >= 8'hd7) && (op < 8'hfa)) begin
 							n_o <= op - 8'hd7;
 							st <= 10'd32;
+							bin_num_r <= numlike(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))]) && numlike(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]);
+							bin_cx_r <= (((tg(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))]) == ABI_TAG_COMPLEX) || (tg(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]) == ABI_TAG_COMPLEX)) && cx_operand(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))])) && cx_operand(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]);
 						end
 						else
 							case (op)
 								8'h10:
-									rd(ha_qarg, 10'd251);
+									rd(ha_qarg, 10'd295);
 								8'h22: begin
 									push(vint(arg));
 									go_next;
 								end
 								8'h23:
-									rd(ha_carg, 10'd250);
+									rd(ha_carg, 10'd294);
 								8'h50: begin
 									push(VFALSE);
 									go_next;
@@ -8745,19 +9513,19 @@ module mpy_core (
 								8'h24, 8'h25, 8'h26, 8'h27, 8'h28, 8'h29:
 									halt(ABI_HALT_INTERNAL, 32'h000010ca);
 								8'h11, 8'h12, 8'h16, 8'h17, 8'h19, 8'h1a, 8'h13, 8'h14, 8'h18, 8'h15, 8'h1b, 8'h1c:
-									rd(ha_qarg, 10'd386);
+									rd(ha_qarg, 10'd441);
 								8'h54:
-									rd(h_hooks + (4 * ABI_HOOK_BUILD_CLASS), 10'd250);
+									rd(h_hooks + (4 * ABI_HOOK_BUILD_CLASS), 10'd294);
 								8'h55: begin
 									t[0] <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))];
 									t[1] <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))];
-									st <= 10'd278;
+									st <= 10'd322;
 								end
 								8'h56: begin
 									t[0] <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))];
 									t[1] <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))];
 									t[6] <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd3))];
-									st <= 10'd458;
+									st <= 10'd514;
 								end
 								8'h57: begin
 									push(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]);
@@ -8786,16 +9554,17 @@ module mpy_core (
 								end
 								8'h42: begin
 									pc <= jt_c;
-									st <= 10'd111;
+									st <= 10'd147;
+									soft_pt <= !(fflags & FF_FW);
 								end
 								8'h43, 8'h44, 8'h45, 8'h46: begin
 									tr_v <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))];
-									gosub(10'd467, 10'd228);
+									gosub(10'd524, 10'd267);
 								end
 								8'h47: begin
 									t[0] <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))];
 									at_q <= ABI_Q_EXIT_D;
-									gosub_scr(SCR_AT, 10'd9, 10'd466);
+									gosub_scr(SCR_AT, 10'd9, 10'd523);
 								end
 								8'h48, 8'h49:
 									if (xsp >= nexc)
@@ -8805,43 +9574,44 @@ module mpy_core (
 										b0 <= op == 8'h49;
 										x1 <= {16'd0, stk_depth};
 										sw_k <= 2'd0;
-										gosub(10'd529, 10'd111);
+										gosub(10'd586, 10'd147);
 									end
 								8'h4a: begin
 									pc <= jt_c;
 									sw_k <= 2'd0;
-									gosub(10'd530, 10'd111);
+									gosub(10'd587, 10'd147);
+									soft_pt <= !(fflags & FF_FW);
 								end
 								8'h40: begin
 									rf[rf_base[3:0] + sv2v_cast_4(sp)] <= vint(jt_c);
 									rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp + 7'd1))] <= vint({24'd0, ext});
 									sp <= sp + 7'd2;
-									st <= 10'd477;
+									st <= 10'd534;
 								end
-								8'h5c: st <= 10'd490;
+								8'h5c: st <= 10'd547;
 								8'h5d: begin
 									sw_k <= 2'd0;
-									gosub(10'd530, 10'd534);
+									gosub(10'd587, 10'd591);
 								end
-								8'h63: st <= 10'd487;
+								8'h63: st <= 10'd544;
 								8'h64:
 									if ((xsp != 5'd0) && (xp != VNULL)) begin
 										xc <= xp;
 										rx_from <= 1'b0;
 										rsp <= 5'd0;
-										st <= 10'd387;
+										st <= 10'd442;
 									end
 									else if (xsp < 5'd2)
 										raise_msg(ABI_MSG_NO_ACTIVE_EXC);
 									else begin
 										sw_i <= sv2v_cast_32(xsp - 5'd2);
 										sw_k <= 2'd0;
-										st <= 10'd533;
+										st <= 10'd590;
 									end
 								8'h65: begin
 									t[0] <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))];
 									sp <= sp - 7'd1;
-									st <= 10'd411;
+									st <= 10'd467;
 								end
 								8'h66:
 									if (rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))] != VNONE) begin
@@ -8856,57 +9626,57 @@ module mpy_core (
 									end
 								8'h5e: begin
 									t[0] <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))];
-									st <= 10'd179;
+									st <= 10'd215;
 								end
 								8'h5f: begin
 									t[0] <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))];
 									b1 <= ovr == ABI_OVR_PYOBJ;
 									ovr <= ABI_OVR_NONE;
-									st <= 10'd178;
+									st <= 10'd214;
 								end
-								8'h4b: st <= 10'd701;
+								8'h4b: st <= 10'd771;
 								8'h2a: begin
 									tb_src <= 1'b1;
 									tb_nz <= 1'b0;
 									tb_from <= sv2v_cast_8(sp - sv2v_cast_7(arg));
 									stk_from <= stk_depth - sv2v_cast_16(arg);
 									tb_n <= arg[15:0];
-									gosub(10'd471, 10'd59);
+									gosub(10'd528, 10'd93);
 								end
 								8'h2b:
-									alloc(32'd3 + (arg < 32'd4 ? 32'd4 : arg), 10'd34);
+									alloc(32'd3 + (arg < 32'd4 ? 32'd4 : arg), 10'd66);
 								8'h2c:
-									alloc(32'd4 + (2 * arg), 10'd36);
+									alloc(32'd4 + (2 * arg), 10'd68);
 								8'h2d: begin
 									tb_src <= 1'b1;
 									tb_nz <= 1'b0;
 									tb_from <= sv2v_cast_8(sp - sv2v_cast_7(arg));
 									stk_from <= stk_depth - sv2v_cast_16(arg);
 									tb_n <= arg[15:0];
-									gosub(10'd471, 10'd57);
+									gosub(10'd528, 10'd91);
 								end
 								8'h2e:
-									alloc(32'd5, 10'd450);
+									alloc(32'd5, 10'd506);
 								8'h2f: begin
 									vs0 = sv2v_cast_7((sp - 7'd1) - sv2v_cast_7(arg >> 2));
 									case (arg[1:0])
 										2'd0: begin
 											t[2] <= rf[rf_base[3:0] + sv2v_cast_4(vs0)];
 											t[3] <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))];
-											gosub_scr(SCR_LA, 10'd236, 10'd437);
+											gosub_scr(SCR_LA, 10'd280, 10'd493);
 										end
 										2'd1:
-											lookup(rf[rf_base[3:0] + sv2v_cast_4(vs0)], rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))], rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))], LK_ADD, 1'b0, 10'd436);
+											lookup(rf[rf_base[3:0] + sv2v_cast_4(vs0)], rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))], rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))], LK_ADD, 1'b0, 10'd492);
 										default:
-											lookup(rf[rf_base[3:0] + sv2v_cast_4(vs0)], rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))], VNULL, LK_ADD, 1'b1, 10'd438);
+											lookup(rf[rf_base[3:0] + sv2v_cast_4(vs0)], rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))], VNULL, LK_ADD, 1'b1, 10'd494);
 									endcase
 								end
 								8'h62:
-									lookup(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd3))], rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))], rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))], LK_ADD, 1'b0, 10'd463);
+									lookup(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd3))], rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))], rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))], LK_ADD, 1'b0, 10'd520);
 								8'h30: begin
 									t[0] <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))];
 									if ((tg(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]) == ABI_TAG_TUPLE) || is_mut(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))], ABI_MUT_LIST))
-										rd(adr(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]), 10'd484);
+										rd(adr(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]), 10'd541);
 									else begin
 										sp <= sp - 7'd1;
 										fcont <= ABI_CONT_UNPACK;
@@ -8919,13 +9689,13 @@ module mpy_core (
 									hook(ABI_HOOK_UNPACK, ABI_RK_CONT, 8'd3, rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))], vint(arg), vint(32'd1), VNULL);
 								end
 								8'h32, 8'h33, 8'h20, 8'h21:
-									rd(rc + 24, 10'd288);
+									rd(rc + 24, 10'd334);
 								8'h34, 8'h36: begin
 									ab_chunked <= 1'b0;
 									v0 = {24'd0, arg[7:0]};
 									v1 = {24'd0, arg[15:8]};
 									v2 = (v0 + (v1 << 1)) + (op == 8'h36 ? 32'd2 : 32'd1);
-									if (v2 <= sv2v_cast_32(resident_reals)) begin
+									if (call_fit_r) begin
 										rf_reload_miss <= 1'b0;
 										vs0 = sv2v_cast_7((sp - sv2v_cast_7(v0)) - sv2v_cast_7(2 * v1));
 										vs1 = vs0 - (op == 8'h36 ? 7'd2 : 7'd1);
@@ -8945,13 +9715,13 @@ module mpy_core (
 										ab_nkw <= v1[7:0];
 										sp <= vs1;
 										crk <= ABI_RK_PUSH;
-										wr(ab_ptr(8'd0), rf[rf_base[3:0] + sv2v_cast_4(vs1)], 10'd542);
+										wr(ab_ptr(8'd0), rf[rf_base[3:0] + sv2v_cast_4(vs1)], 10'd599);
 									end
-									else if ((has_link && !rf_reload_miss) && (v2 <= MPY_RF_DEPTH)) begin
-										rf_resume <= 10'd103;
-										st <= 10'd509;
+									else if ((has_link && !rf_reload_miss) && call_ring_r) begin
+										rf_resume <= 10'd818;
+										st <= 10'd566;
 									end
-									else if ((v0 + (v1 << 1)) > 32'd224)
+									else if (call_big_r)
 										raise_err(ABI_ERR_STAR_ARGS, VNULL, VNULL);
 									else begin
 										rf_reload_miss <= 1'b0;
@@ -8963,7 +9733,7 @@ module mpy_core (
 										x2 <= (sv2v_cast_32(stk_depth) - v2) + (op == 8'h36 ? 32'd2 : 32'd1);
 										x3 <= v2;
 										gi <= 32'd0;
-										st <= 10'd516;
+										st <= 10'd573;
 									end
 								end
 								8'h35, 8'h37: begin
@@ -8980,17 +9750,17 @@ module mpy_core (
 									cv_n <= v0[7:0];
 									cv_j <= v1[7:0];
 									cv_i <= 8'd0;
-									st <= 10'd91;
+									st <= 10'd127;
 								end
 								8'h67:
 									if (gen == VNULL)
 										raise_err(ABI_ERR_GENERATOR, VNULL, VNULL);
 									else
-										st <= 10'd157;
+										st <= 10'd193;
 								8'h68: begin
 									fflags <= fflags & ~FF_YFAST;
-									if (((inj == VNONE) && (rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))] == VNONE)) && (tg(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))]) == ABI_TAG_OBJECT))
-										rd(adr(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))]), 10'd161);
+									if (yf_fast_r)
+										rd(adr(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))]), 10'd197);
 									else begin
 										aux <= inj;
 										fcont <= ABI_CONT_YFROM;
@@ -9007,103 +9777,103 @@ module mpy_core (
 									halt(ABI_HALT_BAD_OPCODE, op_pc);
 							endcase
 					end
-					10'd251: begin
+					10'd295: begin
 						push({ABI_TAG_QSTR, md});
-						st <= 10'd111;
+						st <= 10'd147;
 					end
-					10'd250: begin
+					10'd294: begin
 						push(mv);
-						st <= 10'd111;
+						st <= 10'd147;
 					end
-					10'd496:
+					10'd553:
 						if ((mv == VNULL) && !(fflags & FF_FW))
 							raise_msg(ABI_MSG_LOCAL_UNBOUND);
 						else begin
 							push(mv);
-							lc_fill(i0, mv, 1'b0, 1'b1, 10'd111);
+							lc_fill(i0, mv, 1'b0, 1'b1, 10'd147);
 						end
-					10'd497: begin
+					10'd554: begin
 						lc_v[lc_ev_way] <= 1'b1;
 						lc_ix[lc_ev_way] <= lc_ev_idx;
 						lc_d[lc_ev_way] <= lc_ev_val;
 						lc_dirty[lc_ev_way] <= lc_ev_dirty;
 						lc_note(lc_ev_way);
-						st <= 10'd111;
+						st <= 10'd147;
 					end
-					10'd498:
+					10'd555:
 						if (lc_fi >= cfg_lc_n) begin
 							lc_fi <= 4'd0;
 							st <= lc_fl_ret;
 						end
 						else if (lc_v[lc_fi[2:0]] && lc_dirty[lc_fi[2:0]]) begin
 							lc_dirty[lc_fi[2:0]] <= 1'b0;
-							wr(loc_ptr(lc_ix[lc_fi[2:0]]), lc_d[lc_fi[2:0]], 10'd498);
+							wr(loc_ptr(lc_ix[lc_fi[2:0]]), lc_d[lc_fi[2:0]], 10'd555);
 							lc_fi <= lc_fi + 4'd1;
 						end
 						else
 							lc_fi <= lc_fi + 4'd1;
-					10'd494:
+					10'd551:
 						if (mv == VNULL)
 							raise_msg(ABI_MSG_LOCAL_UNBOUND);
 						else
-							wr(loc_ptr(i0), VNULL, 10'd111);
-					10'd495:
+							wr(loc_ptr(i0), VNULL, 10'd147);
+					10'd552:
 						if ((mv == VNULL) && !(fflags & FF_FW))
 							raise_msg(ABI_MSG_LOCAL_UNBOUND);
 						else begin
-							rd(aoff(adr(mv), 8), 10'd99);
+							rd(aoff(adr(mv), 8), 10'd135);
 							if (cfg_lc_n != 4'd0) begin
 								vs0 = {4'd0, lc_pick(i0)};
 								if (!lc_v[vs0[2:0]] || !lc_dirty[vs0[2:0]])
-									lc_fill(i0, mv, 1'b0, 1'b0, 10'd99);
+									lc_fill(i0, mv, 1'b0, 1'b0, 10'd135);
 							end
 						end
-					10'd500:
+					10'd557:
 						if (mv == VNULL)
 							raise_msg(ABI_MSG_LOCAL_UNBOUND);
 						else begin
-							wr(aoff(adr(mv), 8), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))], 10'd111);
+							wr(aoff(adr(mv), 8), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))], 10'd147);
 							sp <= sp - 7'd1;
 						end
-					10'd499:
+					10'd556:
 						if (mv == VNULL)
 							raise_msg(ABI_MSG_LOCAL_UNBOUND);
 						else
-							rd(aoff(adr(mv), 8), 10'd97);
-					10'd99:
+							rd(aoff(adr(mv), 8), 10'd133);
+					10'd135:
 						if (mv == VNULL)
 							raise_msg(ABI_MSG_LOCAL_UNBOUND);
 						else begin
 							push(mv);
-							st <= 10'd111;
+							st <= 10'd147;
 						end
-					10'd97:
+					10'd133:
 						if (mv == VNULL)
 							raise_msg(ABI_MSG_LOCAL_UNBOUND);
 						else
-							wr(m_addr, VNULL, 10'd111);
-					10'd386: begin
+							wr(m_addr, VNULL, 10'd147);
+					10'd441: begin
 						at_q <= md;
 						case (op)
 							8'h11, 8'h12: begin
 								b0 <= ((op == 8'h11) && (loc != VNULL) ? 1'b0 : 1'b1);
 								i2 <= ((op == 8'h11) && (loc != VNULL) ? 8'd0 : 8'd1);
-								st <= 10'd276;
+								st <= 10'd320;
 							end
 							8'h16, 8'h17:
-								lookup(((op == 8'h16) && (loc != VNULL) ? loc : glb), {ABI_TAG_QSTR, md}, rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))], LK_ADD, 1'b0, 10'd451);
+								lookup(((op == 8'h16) && (loc != VNULL) ? loc : glb), {ABI_TAG_QSTR, md}, rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))], LK_ADD, 1'b0, 10'd507);
 							8'h19, 8'h1a:
-								lookup(((op == 8'h19) && (loc != VNULL) ? loc : glb), {ABI_TAG_QSTR, md}, VNULL, LK_REMOVE, 1'b0, 10'd100);
+								lookup(((op == 8'h19) && (loc != VNULL) ? loc : glb), {ABI_TAG_QSTR, md}, VNULL, LK_REMOVE, 1'b0, 10'd136);
 							8'h13, 8'h14: begin
 								at_nat <= 1'b0;
 								t[0] <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))];
-								gosub_scr(SCR_AT, 10'd9, 10'd248);
+								gosub_scr(SCR_AT, 10'd9, 10'd292);
 							end
 							8'h18: begin
 								at_nat <= 1'b0;
 								t[0] <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))];
 								t[6] <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))];
-								st <= 10'd426;
+								st <= 10'd482;
 							end
 							8'h15: begin
 								sp <= sp - 7'd3;
@@ -9119,46 +9889,46 @@ module mpy_core (
 								halt(ABI_HALT_BAD_OPCODE, op_pc);
 						endcase
 					end
-					10'd276:
+					10'd320:
 						if ((i2 == 8'd2) && (bov != VNULL))
-							lookup(bov, {ABI_TAG_QSTR, at_q}, VNULL, LK_FIND, 1'b0, 10'd277);
+							lookup(bov, {ABI_TAG_QSTR, at_q}, VNULL, LK_FIND, 1'b0, 10'd321);
 						else
-							lookup((i2 == 8'd0 ? loc : (i2 == 8'd1 ? glb : vmut(h_builtins, ABI_MUT_DICT))), {ABI_TAG_QSTR, at_q}, VNULL, LK_FIND, 1'b0, 10'd277);
-					10'd277:
+							lookup((i2 == 8'd0 ? loc : (i2 == 8'd1 ? glb : vmut(h_builtins, ABI_MUT_DICT))), {ABI_TAG_QSTR, at_q}, VNULL, LK_FIND, 1'b0, 10'd321);
+					10'd321:
 						if (lk_found) begin
 							push(lk_res);
-							st <= 10'd111;
+							st <= 10'd147;
 						end
 						else if ((i2 == 8'd2) && (bov != VNULL)) begin
 							i2 <= 8'd3;
-							lookup(vmut(h_builtins, ABI_MUT_DICT), {ABI_TAG_QSTR, at_q}, VNULL, LK_FIND, 1'b0, 10'd277);
+							lookup(vmut(h_builtins, ABI_MUT_DICT), {ABI_TAG_QSTR, at_q}, VNULL, LK_FIND, 1'b0, 10'd321);
 						end
 						else if (i2 >= 8'd2)
 							raise_err(ABI_ERR_NAME, {ABI_TAG_QSTR, at_q}, VNULL);
 						else begin
 							i2 <= i2 + 8'd1;
-							st <= 10'd276;
+							st <= 10'd320;
 						end
-					10'd451:
+					10'd507:
 						if (lk_ro || lk_cx)
 							raise_err(ABI_ERR_INTERNAL, t[4], VNULL);
 						else begin
 							sp <= sp - 7'd1;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
-					10'd100:
+					10'd136:
 						if (!lk_found)
 							raise_err(ABI_ERR_NAME, {ABI_TAG_QSTR, at_q}, VNULL);
 						else
-							st <= 10'd111;
-					10'd248:
+							st <= 10'd147;
+					10'd292:
 						if (at_nat) begin
 							if (at_kind == 2'd1)
 								deliver(at_v, crk);
 							else if (((((at_kind == 2'd0) && ((ab_pe - ab_lo) == 8'd3)) && (tg(t[0]) == ABI_TAG_OBJECT)) && (at_q != ABI_Q_CLASS_D)) && (at_q != ABI_Q_DICT_D))
-								rd(adr(t[0]), 10'd619);
+								rd(adr(t[0]), 10'd676);
 							else
-								st <= 10'd294;
+								st <= 10'd340;
 						end
 						else
 							case (at_kind)
@@ -9166,221 +9936,223 @@ module mpy_core (
 									rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))] <= at_v;
 									if (op == 8'h14)
 										push(VNULL);
-									st <= 10'd111;
+									st <= 10'd147;
 								end
 								2'd2:
 									if (op == 8'h14) begin
 										rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))] <= at_v;
 										push(t[0]);
-										st <= 10'd111;
+										st <= 10'd147;
 									end
 									else begin
 										t[1] <= at_v;
-										alloc(32'd4, 10'd238);
+										alloc(32'd4, 10'd282);
 									end
 								default: begin
 									sp <= sp - 7'd1;
 									hook(ABI_HOOK_GETATTR, (op == 8'h14 ? ABI_RK_PUSH_NULL : ABI_RK_PUSH), 8'd2, t[0], {ABI_TAG_QSTR, at_q}, VNULL, VNULL);
 								end
 							endcase
-					10'd238: begin
+					10'd282: begin
 						wb_v[0] <= vint(ABI_OB_BOUND_METHOD);
 						wb_v[1] <= ty_bm;
 						wb_v[2] <= t[1];
 						wb_v[3] <= t[0];
 						rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))] <= vobj(al_a);
-						wblock(al_a, 4'd4, 10'd111);
+						wblock(al_a, 4'd4, 10'd147);
 					end
-					10'd426:
+					10'd482:
 						if (tg(t[0]) == ABI_TAG_OBJECT)
-							rd(adr(t[0]), 10'd429);
+							rd(adr(t[0]), 10'd485);
 						else
-							st <= 10'd428;
-					10'd429:
+							st <= 10'd484;
+					10'd485:
 						if ((scr_id == SCR_NONE) || (scr_id == SCR_AT)) begin
 							scr_id <= SCR_AT;
 							sA[3] <= md;
 							if ((md == ABI_OB_INSTANCE) || (md == ABI_OB_EXCEPTION))
-								rd(aoff(adr(t[0]), 4), 10'd435);
+								rd(aoff(adr(t[0]), 4), 10'd491);
 							else if ((md == ABI_OB_TYPE) || (md == ABI_OB_MODULE))
-								rd(aoff(adr(t[0]), 8), 10'd427);
+								rd(aoff(adr(t[0]), 8), 10'd483);
 							else
-								st <= 10'd428;
+								st <= 10'd484;
 						end
 						else
-							wr(scr_addr(SCR_AT, 4'd3), {4'd0, md}, 10'd703);
-					10'd703:
+							wr(scr_addr(SCR_AT, 4'd3), {4'd0, md}, 10'd773);
+					10'd773:
 						if (scr_id != SCR_AT)
-							scr_ensure(SCR_AT, 10'd703);
+							scr_ensure(SCR_AT, 10'd773);
 						else if ((sA[3] == ABI_OB_INSTANCE) || (sA[3] == ABI_OB_EXCEPTION))
-							rd(aoff(adr(t[0]), 4), 10'd435);
+							rd(aoff(adr(t[0]), 4), 10'd491);
 						else if ((sA[3] == ABI_OB_TYPE) || (sA[3] == ABI_OB_MODULE))
-							rd(aoff(adr(t[0]), 8), 10'd427);
+							rd(aoff(adr(t[0]), 8), 10'd483);
 						else
-							st <= 10'd428;
-					10'd435:
-						rd(aoff(adr(mv), 28), 10'd434);
-					10'd434:
+							st <= 10'd484;
+					10'd491:
+						rd(aoff(adr(mv), 28), 10'd490);
+					10'd490:
 						if (md & (ABI_TF_SETATTR | ABI_TF_DESC))
-							st <= 10'd428;
+							st <= 10'd484;
 						else
-							rd(adr(t[0]) + (sA[3] == ABI_OB_EXCEPTION ? 16 : 8), 10'd427);
-					10'd427:
+							rd(adr(t[0]) + (sA[3] == ABI_OB_EXCEPTION ? 16 : 8), 10'd483);
+					10'd483:
 						if (mv == VNULL) begin
 							if ((t[6] == VNULL) || !((sA[3] == ABI_OB_INSTANCE) || (sA[3] == ABI_OB_EXCEPTION)))
-								st <= 10'd428;
+								st <= 10'd484;
 							else
-								alloc(32'd4, 10'd430);
+								alloc(32'd4, 10'd486);
 						end
 						else
-							lookup(mv, {ABI_TAG_QSTR, at_q}, t[6], (t[6] == VNULL ? LK_REMOVE : LK_ADD), 1'b0, 10'd433);
-					10'd430: begin
+							lookup(mv, {ABI_TAG_QSTR, at_q}, t[6], (t[6] == VNULL ? LK_REMOVE : LK_ADD), 1'b0, 10'd489);
+					10'd486: begin
 						wb_v[0] <= vint(32'd0);
 						wb_v[1] <= vint(32'd0);
 						wb_v[2] <= VNULL;
 						wb_v[3] <= vint(32'd0);
 						t[4] <= vmut(al_a, ABI_MUT_DICT);
-						wblock(al_a, 4'd4, 10'd431);
+						wblock(al_a, 4'd4, 10'd487);
 					end
-					10'd431:
-						wr(adr(t[0]) + (sA[3] == ABI_OB_EXCEPTION ? 16 : 8), t[4], 10'd432);
-					10'd432:
-						lookup(t[4], {ABI_TAG_QSTR, at_q}, t[6], LK_ADD, 1'b0, 10'd433);
-					10'd433:
+					10'd487:
+						wr(adr(t[0]) + (sA[3] == ABI_OB_EXCEPTION ? 16 : 8), t[4], 10'd488);
+					10'd488:
+						lookup(t[4], {ABI_TAG_QSTR, at_q}, t[6], LK_ADD, 1'b0, 10'd489);
+					10'd489:
 						if ((lk_ro || lk_cx) || ((lk_mode == LK_REMOVE) && !lk_found))
-							st <= 10'd428;
+							st <= 10'd484;
 						else if (at_nat)
 							deliver(VNONE, crk);
 						else begin
 							sp <= sp - 7'd2;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
-					10'd428:
+					10'd484:
 						if (at_nat)
-							st <= 10'd294;
+							st <= 10'd340;
 						else begin
 							sp <= sp - 7'd2;
 							hook(ABI_HOOK_SETATTR, ABI_RK_DISCARD, 8'd3, t[0], {ABI_TAG_QSTR, at_q}, t[6], VNULL);
 						end
-					10'd278:
+					10'd322:
 						if (((is_mut(t[0], ABI_MUT_LIST) || is_mut(t[0], ABI_MUT_BYTEARRAY)) || (tg(t[0]) == ABI_TAG_TUPLE)) && intlike(t[1]))
-							rd(adr(t[0]), 10'd282);
+							rd(adr(t[0]), 10'd326);
 						else if (((cfg_sl != 0) && is_mut(t[0], ABI_MUT_LIST)) && (tg(t[1]) == ABI_TAG_OBJECT)) begin
 							ss_store <= 0;
 							ss_native <= 0;
-							st <= 10'd732;
-							ss_back <= 10'd711;
+							st <= 10'd799;
+							ss_back <= 10'd778;
 						end
 						else if (is_mut(t[0], ABI_MUT_DICT))
-							lookup(t[0], t[1], VNULL, LK_FIND, 1'b0, 10'd279);
+							lookup(t[0], t[1], VNULL, LK_FIND, 1'b0, 10'd323);
 						else if ((strlike(t[0]) || (tg(t[0]) == ABI_TAG_BYTES)) && intlike(t[1])) begin
 							si_v <= t[0];
-							gosub(10'd444, 10'd284);
+							gosub(10'd500, 10'd329);
 						end
 						else
-							st <= 10'd280;
-					10'd282: begin
+							st <= 10'd324;
+					10'd326: begin
 						v0 = ival(t[1]);
-						if (v0[31])
-							v0 = v0 + md;
-						x1 <= v0;
-						if ((v0[31] || (v0 >= md)) && is_mut(t[0], ABI_MUT_BYTEARRAY))
-							st <= 10'd280;
-						else if (v0[31] || (v0 >= md))
-							raise_msg((tg(t[0]) == ABI_TAG_TUPLE ? ABI_MSG_TUPLE_INDEX : ABI_MSG_LIST_INDEX));
-						else if (tg(t[0]) == ABI_TAG_TUPLE)
-							rd((adr(t[0]) + 4) + (v0 << 2), 10'd283);
-						else
-							rd(aoff(adr(t[0]), 8), 10'd281);
+						if (v0[31]) begin
+							x1 <= v0 + md;
+							st <= 10'd327;
+						end
+						else begin
+							x1 <= v0;
+							load_seq_index(v0);
+						end
 					end
-					10'd281:
+					10'd327:
+						load_seq_index(x1);
+					10'd325:
 						if (is_mut(t[0], ABI_MUT_BYTEARRAY))
-							rd(md + {x1[31:2], 2'b00}, 10'd285);
+							rd(md + {x1[31:2], 2'b00}, 10'd331);
 						else
-							rd(md + (x1 << 2), 10'd283);
-					10'd283: begin
+							rd(md + (x1 << 2), 10'd328);
+					10'd328: begin
 						rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))] <= mv;
 						sp <= sp - 7'd1;
-						st <= 10'd111;
+						st <= 10'd147;
 					end
-					10'd279:
+					10'd323:
 						if (lk_cx)
-							st <= 10'd280;
+							st <= 10'd324;
 						else if (lk_found) begin
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))] <= lk_res;
 							sp <= sp - 7'd1;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
 						else
 							raise_err(ABI_ERR_KEY, t[1], VNULL);
-					10'd284: begin
+					10'd329: begin
 						v0 = ival(t[1]);
-						if (v0[31])
-							v0 = v0 + si_len;
-						x1 <= v0;
 						if (si_na && (tg(t[0]) != ABI_TAG_BYTES))
-							st <= 10'd280;
-						else if (v0[31] || (v0 >= si_len))
-							raise_msg((tg(t[0]) == ABI_TAG_BYTES ? ABI_MSG_BYTES_INDEX : ABI_MSG_STR_INDEX));
-						else
-							rd(si_addr + {v0[31:2], 2'b00}, 10'd285);
+							st <= 10'd324;
+						else if (v0[31]) begin
+							x1 <= v0 + si_len;
+							st <= 10'd330;
+						end
+						else begin
+							x1 <= v0;
+							load_string_index(v0);
+						end
 					end
-					10'd285:
+					10'd330:
+						load_string_index(x1);
+					10'd331:
 						if (!strlike(t[0])) begin
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))] <= vint({24'd0, byte_of(md, x1[1:0])});
 							sp <= sp - 7'd1;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
 						else
-							rd(h_chars + (4 * byte_of(md, x1[1:0])), 10'd286);
-					10'd286: begin
+							rd(h_chars + (4 * byte_of(md, x1[1:0])), 10'd332);
+					10'd332: begin
 						rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))] <= {ABI_TAG_QSTR, md};
 						sp <= sp - 7'd1;
-						st <= 10'd111;
+						st <= 10'd147;
 					end
-					10'd280: begin
+					10'd324: begin
 						sp <= sp - 7'd2;
 						hook(ABI_HOOK_SUBSCR, ABI_RK_PUSH, 8'd2, t[0], t[1], VNULL, VNULL);
 					end
-					10'd711:
-						rd(adr(t[1]), 10'd712);
-					10'd712:
+					10'd778:
+						rd(adr(t[1]), 10'd779);
+					10'd779:
 						if (md != ABI_OB_SLICE)
-							st <= 10'd731;
+							st <= 10'd798;
 						else
-							rd(adr(t[0]), 10'd713);
-					10'd713:
+							rd(adr(t[0]), 10'd780);
+					10'd780:
 						if (md > SHORTLIST_MAX)
-							st <= 10'd731;
+							st <= 10'd798;
 						else begin
 							ss_len <= md;
-							rd(aoff(adr(t[1]), 16), 10'd714);
+							rd(aoff(adr(t[1]), 16), 10'd781);
 						end
-					10'd714:
+					10'd781:
 						if ((mv == VNONE) || ((tg(mv) == ABI_TAG_INT) && (mv[31:0] == 1))) begin
 							ss_reverse <= 0;
-							rd(aoff(adr(t[1]), 8), 10'd715);
+							rd(aoff(adr(t[1]), 8), 10'd782);
 						end
 						else if ((!ss_store && (tg(mv) == ABI_TAG_INT)) && (mv[31:0] == 32'hffffffff)) begin
 							ss_reverse <= 1;
-							rd(aoff(adr(t[1]), 8), 10'd715);
+							rd(aoff(adr(t[1]), 8), 10'd782);
 						end
 						else
-							st <= 10'd731;
-					10'd715:
+							st <= 10'd798;
+					10'd782:
 						if ((mv != VNONE) && (tg(mv) != ABI_TAG_INT))
-							st <= 10'd731;
+							st <= 10'd798;
 						else begin
 							ss_omitted <= mv == VNONE;
 							ss_bound <= (mv == VNONE ? (ss_reverse ? ss_len - 32'd1 : 32'd0) : mv[31:0]);
-							st <= 10'd716;
+							st <= 10'd783;
 						end
-					10'd716: begin
+					10'd783: begin
 						if (!ss_omitted && ss_bound[31])
 							ss_bound <= ss_bound + ss_len;
-						st <= 10'd717;
+						st <= 10'd784;
 					end
-					10'd717: begin
+					10'd784: begin
 						if (ss_omitted)
 							ss_start <= ss_bound;
 						else if (ss_bound[31])
@@ -9389,22 +10161,22 @@ module mpy_core (
 							ss_start <= (ss_reverse ? ss_len - 32'd1 : ss_len);
 						else
 							ss_start <= ss_bound;
-						rd(aoff(adr(t[1]), 12), 10'd718);
+						rd(aoff(adr(t[1]), 12), 10'd785);
 					end
-					10'd718:
+					10'd785:
 						if ((mv != VNONE) && (tg(mv) != ABI_TAG_INT))
-							st <= 10'd731;
+							st <= 10'd798;
 						else begin
 							ss_omitted <= mv == VNONE;
 							ss_bound <= (mv == VNONE ? (ss_reverse ? 32'hffffffff : ss_len) : mv[31:0]);
-							st <= 10'd719;
+							st <= 10'd786;
 						end
-					10'd719: begin
+					10'd786: begin
 						if (!ss_omitted && ss_bound[31])
 							ss_bound <= ss_bound + ss_len;
-						st <= 10'd720;
+						st <= 10'd787;
 					end
-					10'd720: begin
+					10'd787: begin
 						if (ss_omitted)
 							ss_stop <= ss_bound;
 						else if (ss_bound[31])
@@ -9413,197 +10185,198 @@ module mpy_core (
 							ss_stop <= (ss_reverse ? ss_len - 32'd1 : ss_len);
 						else
 							ss_stop <= ss_bound;
-						st <= 10'd721;
+						st <= 10'd788;
 					end
-					10'd721: begin
+					10'd788: begin
 						ss_count <= ss_count_d;
-						st <= 10'd722;
+						st <= 10'd789;
 					end
-					10'd722:
+					10'd789:
 						if (ss_store) begin
 							if (!is_mut(t[6], ABI_MUT_LIST) && (tg(t[6]) != ABI_TAG_TUPLE))
-								st <= 10'd731;
+								st <= 10'd798;
 							else
-								rd(adr(t[6]), 10'd725);
+								rd(adr(t[6]), 10'd792);
 						end
 						else
-							alloc(32'd3 + (ss_count < 4 ? 32'd4 : ss_count), 10'd723);
-					10'd723: begin
+							alloc(32'd3 + (ss_count < 4 ? 32'd4 : ss_count), 10'd790);
+					10'd790: begin
 						t[2] <= vmut(al_a, ABI_MUT_LIST);
 						ss_dst <= al_a + 32'd12;
 						wb_v[0] <= vint(ss_count);
 						wb_v[1] <= vint((ss_count < 4 ? 32'd4 : ss_count));
 						wb_v[2] <= {ABI_TAG_CONT, al_a + 32'd12};
-						wblock(al_a, 4'd3, 10'd726);
+						wblock(al_a, 4'd3, 10'd793);
 					end
-					10'd726:
+					10'd793:
 						if (!ss_store)
-							rd(aoff(adr(t[0]), 8), 10'd727);
+							rd(aoff(adr(t[0]), 8), 10'd794);
 						else begin
 							ss_src <= md;
-							rd(aoff(adr(t[0]), 8), 10'd727);
+							rd(aoff(adr(t[0]), 8), 10'd794);
 						end
-					10'd727: begin
+					10'd794: begin
 						if (ss_store) begin
 							ss_dst <= md + (ss_start << 2);
-							ss_back <= 10'd728;
+							ss_back <= 10'd795;
 						end
 						else begin
 							ss_src <= md + (ss_start << 2);
-							ss_back <= 10'd724;
+							ss_back <= 10'd791;
 						end
 						ss_n <= ss_count;
 						ss_clear <= 0;
 						ss_put <= 0;
 						ss_length <= 0;
 						ss_i <= 0;
-						st <= 10'd732;
+						st <= 10'd799;
 					end
-					10'd725:
+					10'd792:
 						if ((md != ss_count) || (md > SHORTLIST_MAX))
-							st <= 10'd731;
+							st <= 10'd798;
 						else if (tg(t[6]) == ABI_TAG_TUPLE) begin
 							ss_src <= adr(t[6]) + 32'd4;
-							rd(aoff(adr(t[0]), 8), 10'd727);
+							rd(aoff(adr(t[0]), 8), 10'd794);
 						end
 						else
-							rd(aoff(adr(t[6]), 8), 10'd726);
-					10'd729: begin
+							rd(aoff(adr(t[6]), 8), 10'd793);
+					10'd796: begin
 						ss_store <= 0;
 						ss_native <= 1;
 						ss_reverse <= 0;
 						ss_start <= 0;
-						rd(adr(t[0]), 10'd730);
+						rd(adr(t[0]), 10'd797);
 					end
-					10'd730:
+					10'd797:
 						if (md > SHORTLIST_MAX)
-							st <= 10'd294;
+							st <= 10'd340;
 						else begin
 							ss_count <= md;
-							st <= 10'd722;
+							st <= 10'd789;
 						end
-					10'd731:
+					10'd798:
 						if (ss_native)
-							st <= 10'd294;
+							st <= 10'd340;
 						else
-							st <= (ss_store ? 10'd460 : 10'd280);
-					10'd724:
+							st <= (ss_store ? 10'd516 : 10'd324);
+					10'd791:
 						if (ss_native)
 							deliver(t[2], crk);
 						else begin
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))] <= t[2];
 							sp <= sp - 7'd1;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
-					10'd728: begin
+					10'd795: begin
 						sp <= sp - 7'd3;
-						st <= 10'd111;
+						st <= 10'd147;
 					end
-					10'd732:
+					10'd799:
 						if (!ca_valid && ca_idle_i) begin
-							if ((ss_back == 10'd711) || (ss_back == 10'd729))
+							if ((ss_back == 10'd778) || (ss_back == 10'd796))
 								st <= ss_back;
 							else if ((cfg_sl == 2) && cfg_ca)
-								st <= 10'd733;
+								st <= 10'd800;
 							else begin
 								ss_i <= 0;
-								st <= 10'd735;
+								st <= 10'd802;
 							end
 						end
-					10'd733:
+					10'd800:
 						if (sl_ready_i)
-							st <= 10'd734;
-					10'd734:
+							st <= 10'd801;
+					10'd801:
 						if (sl_response_i)
-							st <= 10'd741;
-					10'd735:
+							st <= 10'd808;
+					10'd802:
 						if (ss_i == ss_n) begin
 							ss_i <= 0;
-							st <= 10'd737;
+							st <= 10'd804;
 						end
 						else
-							rd((ss_reverse ? ss_src - (sv2v_cast_32(ss_i) << 2) : ss_src + (sv2v_cast_32(ss_i) << 2)), 10'd736);
-					10'd736:
+							rd((ss_reverse ? ss_src - (sv2v_cast_32(ss_i) << 2) : ss_src + (sv2v_cast_32(ss_i) << 2)), 10'd803);
+					10'd803:
 						if (SL_REFERENCE) begin
 							ss_buf[ss_i] <= mv;
 							ss_i <= ss_i + 1'b1;
-							st <= 10'd735;
+							st <= 10'd802;
 						end
 						else
 							halt(ABI_HALT_INTERNAL, 32'h534c0001);
-					10'd737:
+					10'd804:
 						if (!SL_REFERENCE)
 							halt(ABI_HALT_INTERNAL, 32'h534c0002);
 						else if (ss_i == ss_n)
-							st <= 10'd738;
+							st <= 10'd805;
 						else begin
-							wr(ss_dst + (sv2v_cast_32(ss_i) << 2), ss_buf[ss_i], 10'd737);
+							wr(ss_dst + (sv2v_cast_32(ss_i) << 2), ss_buf[ss_i], 10'd804);
 							ss_i <= ss_i + 1'b1;
 						end
-					10'd738:
+					10'd805:
 						if (ss_clear)
-							wr(ss_clear_addr, VNULL, 10'd739);
+							wr(ss_clear_addr, VNULL, 10'd806);
 						else
-							st <= 10'd739;
-					10'd739:
+							st <= 10'd806;
+					10'd806:
 						if (ss_put)
-							wr(ss_put_addr, ss_put_value, 10'd740);
+							wr(ss_put_addr, ss_put_value, 10'd807);
 						else
-							st <= 10'd740;
-					10'd740:
+							st <= 10'd807;
+					10'd807:
 						if (ss_length)
-							wr(ss_header, vint(ss_new_length), 10'd741);
+							wr(ss_header, vint(ss_new_length), 10'd808);
 						else
-							st <= 10'd741;
-					10'd741: st <= ss_back;
-					10'd458:
+							st <= 10'd808;
+					10'd808: st <= ss_back;
+					10'd514:
 						if (t[6] == VNULL)
-							st <= 10'd460;
+							st <= 10'd516;
 						else if (is_mut(t[0], ABI_MUT_LIST) && intlike(t[1]))
-							rd(adr(t[0]), 10'd462);
+							rd(adr(t[0]), 10'd518);
 						else if (((cfg_sl != 0) && is_mut(t[0], ABI_MUT_LIST)) && (tg(t[1]) == ABI_TAG_OBJECT)) begin
 							ss_store <= 1;
 							ss_native <= 0;
-							st <= 10'd732;
-							ss_back <= 10'd711;
+							st <= 10'd799;
+							ss_back <= 10'd778;
 						end
 						else if ((is_mut(t[0], ABI_MUT_BYTEARRAY) && intlike(t[1])) && intlike(t[6]))
-							rd(adr(t[0]), 10'd462);
+							rd(adr(t[0]), 10'd518);
 						else if (is_mut(t[0], ABI_MUT_DICT))
-							lookup(t[0], t[1], t[6], LK_ADD, 1'b0, 10'd459);
+							lookup(t[0], t[1], t[6], LK_ADD, 1'b0, 10'd515);
 						else
-							st <= 10'd460;
-					10'd462: begin
+							st <= 10'd516;
+					10'd518: begin
 						v0 = ival(t[1]);
-						if (v0[31])
-							v0 = v0 + md;
-						x1 <= v0;
-						if ((v0[31] || (v0 >= md)) && is_mut(t[0], ABI_MUT_BYTEARRAY))
-							st <= 10'd460;
-						else if (v0[31] || (v0 >= md))
-							raise_msg(ABI_MSG_LIST_INDEX);
-						else
-							rd(aoff(adr(t[0]), 8), 10'd461);
+						if (v0[31]) begin
+							x1 <= v0 + md;
+							st <= 10'd519;
+						end
+						else begin
+							x1 <= v0;
+							store_seq_index(v0);
+						end
 					end
-					10'd461: begin
+					10'd519:
+						store_seq_index(x1);
+					10'd517: begin
 						if (is_mut(t[0], ABI_MUT_BYTEARRAY))
-							wrb(md + x1, ival(t[6]) & 32'h000000ff, 10'd111);
+							wrb(md + x1, ival(t[6]) & 32'h000000ff, 10'd147);
 						else
-							wr(md + (x1 << 2), t[6], 10'd111);
+							wr(md + (x1 << 2), t[6], 10'd147);
 						sp <= sp - 7'd3;
 					end
-					10'd459:
+					10'd515:
 						if (lk_cx || lk_ro)
-							st <= 10'd460;
+							st <= 10'd516;
 						else begin
 							sp <= sp - 7'd3;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
-					10'd460: begin
+					10'd516: begin
 						sp <= sp - 7'd3;
 						hook(ABI_HOOK_SETSUBSCR, ABI_RK_DISCARD, 8'd3, t[0], t[1], t[6], VNULL);
 					end
-					10'd228:
+					10'd267:
 						if (tr_x) begin
 							fcont <= ABI_CONT_TRUTH;
 							pc <= op_pc;
@@ -9633,9 +10406,11 @@ module mpy_core (
 										sp <= sp - 7'd1;
 								default: rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))] <= vbool(!tr_r);
 							endcase
-							st <= 10'd111;
+							if (op[7:3] == 5'b01000)
+								soft_pt <= !(fflags & FF_FW);
+							st <= 10'd147;
 						end
-					10'd466: begin
+					10'd523: begin
 						if (at_kind == 2'd2) begin
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))] <= at_v;
 							rf[rf_base[3:0] + sv2v_cast_4(sp)] <= t[0];
@@ -9648,7 +10423,7 @@ module mpy_core (
 						end
 						if ((at_kind == 2'd1) || (at_kind == 2'd2)) begin
 							at_q <= ABI_Q_ENTER_D;
-							gosub_scr(SCR_AT, 10'd9, 10'd465);
+							gosub_scr(SCR_AT, 10'd9, 10'd522);
 						end
 						else if (at_kind == 2'd3) begin
 							aux <= vint(jt);
@@ -9660,7 +10435,7 @@ module mpy_core (
 						else
 							raise_err(ABI_ERR_ATTR, t[0], {ABI_TAG_QSTR, ABI_Q_EXIT_D});
 					end
-					10'd465:
+					10'd522:
 						if ((at_kind == 2'd2) || (at_kind == 2'd1)) begin
 							ab_lo <= (at_kind == 2'd2 ? 8'd31 : 8'd32);
 							ab_pe <= 8'd32;
@@ -9668,7 +10443,7 @@ module mpy_core (
 							crk <= ABI_RK_CONT;
 							fcont <= ABI_CONT_WITH_ENTER;
 							aux <= vint(jt);
-							wr(ab_ptr(8'd0), at_v, 10'd544);
+							wr(ab_ptr(8'd0), at_v, 10'd601);
 						end
 						else if (at_kind == 2'd3) begin
 							aux <= vint(jt);
@@ -9679,9 +10454,9 @@ module mpy_core (
 						end
 						else
 							raise_err(ABI_ERR_ATTR, t[0], {ABI_TAG_QSTR, ABI_Q_ENTER_D});
-					10'd544:
-						wr(ab_ptr(8'd31), t[0], 10'd60);
-					10'd490: begin
+					10'd601:
+						wr(ab_ptr(8'd31), t[0], 10'd94);
+					10'd547: begin
 						ab_nkw <= 8'd0;
 						crk <= ABI_RK_CONT;
 						ab_pe <= 8'd35;
@@ -9704,67 +10479,67 @@ module mpy_core (
 							fcont <= ABI_CONT_WITH_EXC;
 						end
 						i0 <= 8'd0;
-						st <= 10'd545;
+						st <= 10'd602;
 					end
-					10'd545:
+					10'd602:
 						case (i0)
 							8'd0: begin
-								wr(ab_ptr(8'd34), VNONE, 10'd545);
+								wr(ab_ptr(8'd34), VNONE, 10'd602);
 								i0 <= 8'd1;
 							end
 							8'd1:
 								if (x0 == 32'd2)
 									i0 <= 8'd2;
 								else begin
-									wr(ab_ptr(8'd32), VNONE, 10'd545);
+									wr(ab_ptr(8'd32), VNONE, 10'd602);
 									i0 <= 8'd2;
 								end
 							8'd2: begin
 								if (x0 == 32'd2)
-									wr(ab_ptr(8'd33), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))], 10'd545);
+									wr(ab_ptr(8'd33), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))], 10'd602);
 								else
-									wr(ab_ptr(8'd33), VNONE, 10'd545);
+									wr(ab_ptr(8'd33), VNONE, 10'd602);
 								i0 <= 8'd3;
 							end
 							8'd3: begin
 								if (x0 == 32'd1)
-									wr(ab_ptr(8'd0), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd4))], 10'd545);
+									wr(ab_ptr(8'd0), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd4))], 10'd602);
 								else
-									wr(ab_ptr(8'd0), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd3))], 10'd545);
+									wr(ab_ptr(8'd0), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd3))], 10'd602);
 								i0 <= 8'd4;
 							end
 							8'd4: begin
 								if (x0 == 32'd1)
-									wr(ab_ptr(8'd31), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd3))], 10'd545);
+									wr(ab_ptr(8'd31), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd3))], 10'd602);
 								else
-									wr(ab_ptr(8'd31), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))], 10'd545);
+									wr(ab_ptr(8'd31), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))], 10'd602);
 								i0 <= 8'd5;
 							end
 							default:
 								if (x0 == 32'd2)
-									rd(aoff(adr(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]), 4), 10'd491);
+									rd(aoff(adr(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]), 4), 10'd548);
 								else
-									st <= 10'd546;
+									st <= 10'd603;
 						endcase
-					10'd491:
-						wr(ab_ptr(8'd32), mv, 10'd546);
-					10'd546: begin
+					10'd548:
+						wr(ab_ptr(8'd32), mv, 10'd603);
+					10'd603: begin
 						if (x0 == 32'd1)
 							sp <= sp - 7'd4;
 						else
 							sp <= sp - 7'd3;
-						st <= 10'd60;
+						st <= 10'd94;
 					end
-					10'd529:
+					10'd586:
 						if ((xsp != 5'd0) && (sw_k != 2'd3)) begin
-							v0 = exc_ptr(fbase, xsp - 5'd1) + {28'd0, sw_k, 2'b00};
+							v0 = xb_r + sv2v_cast_32((10'd12 * sv2v_cast_10(xsp - 5'd1)) + {6'd0, sw_k, 2'b00});
 							case (sw_k)
 								2'd0:
-									wr(v0, {4'd0, xh}, 10'd529);
+									wr(v0, {4'd0, xh}, 10'd586);
 								2'd1:
-									wr(v0, {4'd0, xf, 15'd0, xv}, 10'd529);
+									wr(v0, {4'd0, xf, 15'd0, xv}, 10'd586);
 								default:
-									wr(v0, xp, 10'd529);
+									wr(v0, xp, 10'd586);
 							endcase
 							sw_k <= sw_k + 2'd1;
 						end
@@ -9776,7 +10551,7 @@ module mpy_core (
 							xsp <= xsp + 5'd1;
 							ret;
 						end
-					10'd530:
+					10'd587:
 						if (sw_k == 2'd0) begin
 							if (xsp <= 5'd1) begin
 								if (xsp == 5'd1)
@@ -9784,122 +10559,122 @@ module mpy_core (
 								ret;
 							end
 							else begin
-								rd(exc_ptr(fbase, xsp - 5'd2), 10'd530);
+								rd(exc_ptr_f(xsp - 5'd2), 10'd587);
 								xsp <= xsp - 5'd1;
 								sw_k <= 2'd1;
 							end
 						end
 						else if (sw_k == 2'd1) begin
 							xh <= md;
-							rd(aoff(exc_ptr(fbase, xsp - 5'd1), 4), 10'd530);
+							rd(exc_ptr_k(xsp - 5'd1, 2'd1), 10'd587);
 							sw_k <= 2'd2;
 						end
 						else if (sw_k == 2'd2) begin
 							xv <= md[15:0];
 							xf <= md[31];
-							rd(aoff(exc_ptr(fbase, xsp - 5'd1), 8), 10'd530);
+							rd(exc_ptr_k(xsp - 5'd1, 2'd2), 10'd587);
 							sw_k <= 2'd3;
 						end
 						else begin
 							xp <= mv;
 							ret;
 						end
-					10'd531:
+					10'd588:
 						if ((xsp == 5'd0) || (sw_k == 2'd3))
 							ret;
 						else begin
 							v0 = exc_ptr((spill_to_img ? x4 : fbase), xsp - 5'd1) + {28'd0, sw_k, 2'b00};
 							case (sw_k)
 								2'd0:
-									wr(v0, {4'd0, xh}, 10'd531);
+									wr(v0, {4'd0, xh}, 10'd588);
 								2'd1:
-									wr(v0, {4'd0, xf, 15'd0, xv}, 10'd531);
+									wr(v0, {4'd0, xf, 15'd0, xv}, 10'd588);
 								default:
-									wr(v0, xp, 10'd531);
+									wr(v0, xp, 10'd588);
 							endcase
 							sw_k <= sw_k + 2'd1;
 						end
-					10'd532:
+					10'd589:
 						if (xsp == 5'd0)
 							ret;
 						else if (sw_k == 2'd0) begin
-							rd(exc_ptr(fbase, xsp - 5'd1), 10'd532);
+							rd(exc_ptr_f(xsp - 5'd1), 10'd589);
 							sw_k <= 2'd1;
 						end
 						else if (sw_k == 2'd1) begin
 							xh <= md;
-							rd(aoff(exc_ptr(fbase, xsp - 5'd1), 4), 10'd532);
+							rd(exc_ptr_k(xsp - 5'd1, 2'd1), 10'd589);
 							sw_k <= 2'd2;
 						end
 						else if (sw_k == 2'd2) begin
 							xv <= md[15:0];
 							xf <= md[31];
-							rd(aoff(exc_ptr(fbase, xsp - 5'd1), 8), 10'd532);
+							rd(exc_ptr_k(xsp - 5'd1, 2'd2), 10'd589);
 							sw_k <= 2'd3;
 						end
 						else begin
 							xp <= mv;
 							ret;
 						end
-					10'd533:
+					10'd590:
 						if (sw_k == 2'd0) begin
-							rd(aoff(exc_ptr(fbase, sw_i[4:0]), 8), 10'd533);
+							rd(exc_ptr_k(sw_i[4:0], 2'd2), 10'd590);
 							sw_k <= 2'd1;
 						end
 						else if (mv != VNULL) begin
 							xc <= mv;
 							rx_from <= 1'b0;
 							rsp <= 5'd0;
-							st <= 10'd387;
+							st <= 10'd442;
 						end
 						else if (sw_i == 32'd0)
 							raise_msg(ABI_MSG_NO_ACTIVE_EXC);
 						else begin
-							rd(aoff(exc_ptr(fbase, sw_i[4:0] - 5'd1), 8), 10'd533);
+							rd(exc_ptr_k(sw_i[4:0] - 5'd1, 2'd2), 10'd590);
 							sw_i <= sw_i - 32'd1;
 						end
-					10'd534:
+					10'd591:
 						if (rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))] == VNONE) begin
 							sp <= sp - 7'd1;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
 						else if (tg(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]) == ABI_TAG_INT) begin
 							if (rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))][31]) begin
 								sp <= sp - 7'd1;
-								st <= 10'd487;
+								st <= 10'd544;
 							end
 							else
-								st <= 10'd477;
+								st <= 10'd534;
 						end
 						else
 							raise_val(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]);
-					10'd487:
+					10'd544:
 						if (has_link && (sp <= sv2v_cast_7_signed(RF_RELOAD_AT))) begin
-							rf_resume <= 10'd487;
-							st <= 10'd509;
+							rf_resume <= 10'd544;
+							st <= 10'd566;
 						end
 						else if (xsp == 5'd0) begin
 							t[7] <= rf[rf_base[3:0] + sv2v_cast_4(sp - 7'd1)];
 							if (gen != VNULL) begin
 								pc <= 32'd0;
-								st <= 10'd140;
+								st <= 10'd176;
 							end
 							else
-								st <= 10'd388;
+								st <= 10'd444;
 						end
 						else if (xf && (xh >= pc)) begin
 							if ((((spilled_reals != 16'd0) || has_link) || (rf_base != 6'd0)) || ((sv2v_cast_32(xv) + 32'd2) > MPY_RF_DEPTH)) begin
 								ur_target <= xv;
 								ur_val <= rf[rf_base[3:0] + sv2v_cast_4(sp - 7'd1)];
 								pc <= xh;
-								st <= 10'd488;
+								st <= 10'd545;
 							end
 							else begin
 								rf[rf_base[3:0] + sv2v_cast_4(xv[6:0])] <= rf[rf_base[3:0] + sv2v_cast_4(sp - 7'd1)];
 								rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(xv[6:0] + 7'd1))] <= vint(32'hffffffff);
 								sp <= xv[6:0] + 7'd2;
 								pc <= xh;
-								st <= 10'd111;
+								st <= 10'd147;
 							end
 						end
 						else begin
@@ -9914,18 +10689,19 @@ module mpy_core (
 								end
 							end
 							sw_k <= 2'd0;
-							gosub(10'd530, 10'd487);
+							gosub(10'd587, 10'd544);
 						end
-					10'd477: begin
+					10'd534: begin
 						uj <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))][31:0];
 						sp <= sp - 7'd1;
-						st <= 10'd478;
+						st <= 10'd535;
 					end
-					10'd478:
+					10'd535:
 						if (uj[6:0] == 7'd0) begin
 							pc <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))][31:0];
 							sp <= (sp - 7'd1) - (uj[7] ? 7'd4 : 7'd0);
-							st <= 10'd111;
+							soft_pt <= !(fflags & FF_FW);
+							st <= 10'd147;
 						end
 						else if (xsp == 5'd0)
 							uj <= uj - 32'd1;
@@ -9933,7 +10709,7 @@ module mpy_core (
 							uj <= uj - 32'd1;
 							push(vint(uj - 32'd1));
 							pc <= xh;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
 						else begin
 							uj <= uj - 32'd1;
@@ -9948,23 +10724,23 @@ module mpy_core (
 								end
 							end
 							sw_k <= 2'd0;
-							gosub(10'd530, 10'd478);
+							gosub(10'd587, 10'd535);
 						end
-					10'd411:
+					10'd467:
 						if (tg(t[0]) != ABI_TAG_OBJECT)
 							raise_err(ABI_ERR_NOT_EXC, t[0], VNULL);
 						else
-							rd(adr(t[0]), 10'd412);
-					10'd412:
+							rd(adr(t[0]), 10'd468);
+					10'd468:
 						if (md == ABI_OB_EXCEPTION)
 							raise_val(t[0]);
 						else if (md == ABI_OB_TYPE)
-							rd(aoff(adr(t[0]), 28), 10'd413);
+							rd(aoff(adr(t[0]), 28), 10'd469);
 						else
 							raise_err(ABI_ERR_NOT_EXC, t[0], VNULL);
-					10'd413:
+					10'd469:
 						if (md & ABI_TF_EXC) begin
-							wr(ab_ptr(8'd0), t[0], 10'd60);
+							wr(ab_ptr(8'd0), t[0], 10'd94);
 							ab_lo <= 8'd32;
 							ab_pe <= 8'd32;
 							ab_nkw <= 8'd0;
@@ -9973,76 +10749,76 @@ module mpy_core (
 						end
 						else
 							raise_err(ABI_ERR_NOT_EXC, t[0], VNULL);
-					10'd178: begin
+					10'd214: begin
 						vs0 = sp - 7'd1;
 						if ((((((((tg(t[0]) == ABI_TAG_TUPLE) || (tg(t[0]) == ABI_TAG_BYTES)) || is_mut(t[0], ABI_MUT_LIST)) || is_mut(t[0], ABI_MUT_DICT)) || is_mut(t[0], ABI_MUT_SET)) || is_mut(t[0], ABI_MUT_BYTEARRAY)) || (tg(t[0]) == ABI_TAG_ITER)) || ((tg(t[0]) == ABI_TAG_OBJECT) && b1)) begin
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(vs0 + 7'd1))] <= vint(32'd0);
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(vs0 + 7'd2))] <= vint(32'd0);
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(vs0 + 7'd3))] <= vint((tg(t[0]) == ABI_TAG_ITER ? ABI_IT_HEAPITER : (tg(t[0]) == ABI_TAG_OBJECT ? ABI_IT_PYOBJ : (is_mut(t[0], ABI_MUT_DICT) ? ABI_IT_DICT : (is_mut(t[0], ABI_MUT_SET) ? ABI_IT_SET : ABI_IT_SEQ)))));
 							sp <= sp + 7'd3;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
 						else if (tg(t[0]) == ABI_TAG_RANGE)
-							rd(adr(t[0]), 10'd189);
+							rd(adr(t[0]), 10'd225);
 						else if (strlike(t[0])) begin
 							si_v <= t[0];
-							gosub(10'd444, 10'd192);
+							gosub(10'd500, 10'd228);
 						end
 						else if (tg(t[0]) == ABI_TAG_OBJECT)
-							rd(adr(t[0]), 10'd188);
+							rd(adr(t[0]), 10'd224);
 						else
-							st <= 10'd187;
+							st <= 10'd223;
 					end
-					10'd189: begin
+					10'd225: begin
 						rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))] <= mv;
-						rd(aoff(adr(t[0]), 4), 10'd190);
+						rd(aoff(adr(t[0]), 4), 10'd226);
 					end
-					10'd190: begin
+					10'd226: begin
 						rf[rf_base[3:0] + sv2v_cast_4(sp)] <= mv;
-						rd(aoff(adr(t[0]), 8), 10'd191);
+						rd(aoff(adr(t[0]), 8), 10'd227);
 					end
-					10'd191: begin
+					10'd227: begin
 						rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp + 7'd1))] <= mv;
 						rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp + 7'd2))] <= vint(ABI_IT_RANGE);
 						sp <= sp + 7'd3;
-						st <= 10'd111;
+						st <= 10'd147;
 					end
-					10'd192:
+					10'd228:
 						if (si_na)
-							st <= 10'd187;
+							st <= 10'd223;
 						else begin
 							rf[rf_base[3:0] + sv2v_cast_4(sp)] <= vint(32'd0);
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp + 7'd1))] <= vint(32'd0);
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp + 7'd2))] <= vint(ABI_IT_STR);
 							sp <= sp + 7'd3;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
-					10'd188:
+					10'd224:
 						if ((md == ABI_OB_GENERATOR) || (md == ABI_OB_ITEROBJ)) begin
 							rf[rf_base[3:0] + sv2v_cast_4(sp)] <= vint(32'd0);
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp + 7'd1))] <= vint(32'd0);
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp + 7'd2))] <= vint(ABI_IT_PYOBJ);
 							sp <= sp + 7'd3;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
 						else if (md == ABI_OB_DICT_VIEW)
-							rd(aoff(adr(t[0]), 8), 10'd193);
+							rd(aoff(adr(t[0]), 8), 10'd229);
 						else begin
 							at_q <= ABI_Q_ITER_D;
-							gosub_scr(SCR_AT, 10'd9, 10'd186);
+							gosub_scr(SCR_AT, 10'd9, 10'd222);
 						end
-					10'd193: begin
+					10'd229: begin
 						rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))] <= mv;
-						rd(aoff(adr(t[0]), 12), 10'd194);
+						rd(aoff(adr(t[0]), 12), 10'd230);
 					end
-					10'd194: begin
+					10'd230: begin
 						rf[rf_base[3:0] + sv2v_cast_4(sp)] <= vint(32'd0);
 						rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp + 7'd1))] <= mv;
 						rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp + 7'd2))] <= vint(ABI_IT_DICT);
 						sp <= sp + 7'd3;
-						st <= 10'd111;
+						st <= 10'd147;
 					end
-					10'd186:
+					10'd222:
 						if ((at_kind == 2'd2) || (at_kind == 2'd1)) begin
 							ab_lo <= (at_kind == 2'd2 ? 8'd31 : 8'd32);
 							ab_pe <= 8'd32;
@@ -10050,66 +10826,66 @@ module mpy_core (
 							crk <= ABI_RK_CONT;
 							fcont <= ABI_CONT_GETITER;
 							pc <= op_pc;
-							wr(ab_ptr(8'd0), at_v, 10'd544);
+							wr(ab_ptr(8'd0), at_v, 10'd601);
 						end
 						else
-							st <= 10'd187;
-					10'd179:
+							st <= 10'd223;
+					10'd215:
 						if (tg(t[0]) == ABI_TAG_ITER)
-							st <= 10'd111;
+							st <= 10'd147;
 						else if ((((((tg(t[0]) == ABI_TAG_TUPLE) || (tg(t[0]) == ABI_TAG_BYTES)) || is_mut(t[0], ABI_MUT_LIST)) || is_mut(t[0], ABI_MUT_BYTEARRAY)) || is_mut(t[0], ABI_MUT_DICT)) || is_mut(t[0], ABI_MUT_SET)) begin
 							wb_v[0] <= t[0];
 							wb_v[1] <= vint(32'd0);
 							wb_v[2] <= vint(32'd0);
 							wb_v[3] <= vint((is_mut(t[0], ABI_MUT_DICT) ? ABI_IT_DICT : (is_mut(t[0], ABI_MUT_SET) ? ABI_IT_SET : ABI_IT_SEQ)));
-							alloc(32'd4, 10'd184);
+							alloc(32'd4, 10'd220);
 						end
 						else if (tg(t[0]) == ABI_TAG_RANGE)
-							rd(adr(t[0]), 10'd181);
+							rd(adr(t[0]), 10'd217);
 						else if (tg(t[0]) == ABI_TAG_OBJECT)
-							rd(adr(t[0]), 10'd180);
+							rd(adr(t[0]), 10'd216);
 						else begin
 							sp <= sp - 7'd1;
 							hook(ABI_HOOK_GETITER, ABI_RK_PUSH, 8'd1, t[0], VNULL, VNULL, VNULL);
 						end
-					10'd180:
+					10'd216:
 						if ((md == ABI_OB_GENERATOR) || (md == ABI_OB_ITEROBJ))
-							st <= 10'd111;
+							st <= 10'd147;
 						else begin
 							sp <= sp - 7'd1;
 							hook(ABI_HOOK_GETITER, ABI_RK_PUSH, 8'd1, t[0], VNULL, VNULL, VNULL);
 						end
-					10'd181: begin
+					10'd217: begin
 						wb_v[0] <= mv;
-						rd(aoff(adr(t[0]), 4), 10'd182);
+						rd(aoff(adr(t[0]), 4), 10'd218);
 					end
-					10'd182: begin
+					10'd218: begin
 						wb_v[1] <= mv;
-						rd(aoff(adr(t[0]), 8), 10'd183);
+						rd(aoff(adr(t[0]), 8), 10'd219);
 					end
-					10'd183: begin
+					10'd219: begin
 						wb_v[2] <= mv;
 						wb_v[3] <= vint(ABI_IT_RANGE);
-						alloc(32'd4, 10'd184);
+						alloc(32'd4, 10'd220);
 					end
-					10'd184: begin
+					10'd220: begin
 						t[2] <= {ABI_TAG_ITER, al_a};
-						wblock(al_a, 4'd4, 10'd185);
+						wblock(al_a, 4'd4, 10'd221);
 					end
-					10'd185: begin
+					10'd221: begin
 						rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))] <= t[2];
-						st <= 10'd111;
+						st <= 10'd147;
 					end
-					10'd187: begin
+					10'd223: begin
 						fcont <= ABI_CONT_GETITER;
 						pc <= op_pc;
 						hook(ABI_HOOK_GETITER, ABI_RK_CONT, 8'd1, t[0], VNULL, VNULL, VNULL);
 					end
-					10'd701:
+					10'd771:
 						if ((scr_id != SCR_NONE) && (scr_id != SCR_IT))
-							scr_go_store(scr_id, 10'd701);
+							scr_go_store(scr_id, 10'd771);
 						else begin
-							begin : sv2v_autoblock_20
+							begin : sv2v_autoblock_22
 								reg signed [31:0] k;
 								for (k = 0; k < 4; k = k + 1)
 									sV[k] <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6((sp - 7'd4) + sv2v_cast_7_signed(k)))];
@@ -10120,15 +10896,15 @@ module mpy_core (
 									it_h <= 1'b1;
 									t[3] <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd3))];
 									i0 <= 8'd0;
-									st <= 10'd116;
+									st <= 10'd152;
 								end
 								else begin
 									t[0] <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd3))];
 									if (tg(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd3))]) == ABI_TAG_OBJECT)
-										rd(adr(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd3))]), 10'd115);
+										rd(adr(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd3))]), 10'd151);
 									else begin
 										at_q <= ABI_Q_NEXT_D;
-										scr_go_store_gosub(SCR_IT, 10'd9, 10'd113);
+										scr_go_store_gosub(SCR_IT, 10'd9, 10'd149);
 									end
 								end
 							end
@@ -10136,58 +10912,58 @@ module mpy_core (
 								it_h <= 1'b1;
 								t[3] <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd4))];
 								i0 <= 8'd0;
-								st <= 10'd116;
+								st <= 10'd152;
 							end
 							else begin
 								it_h <= 1'b0;
-								gosub(10'd215, 10'd118);
+								gosub(10'd254, 10'd154);
 							end
 						end
-					10'd116:
+					10'd152:
 						if (((i0 == 8'd0) && (scr_id != SCR_NONE)) && (scr_id != SCR_IT))
-							scr_go_store(scr_id, 10'd116);
+							scr_go_store(scr_id, 10'd152);
 						else begin
 							if (scr_id != SCR_IT)
 								scr_id <= SCR_IT;
 							if (i0 == 8'd4)
-								gosub(10'd215, 10'd118);
+								gosub(10'd254, 10'd154);
 							else
-								rd(adr(t[3]) + (4 * i0), 10'd117);
+								rd(adr(t[3]) + (4 * i0), 10'd153);
 						end
-					10'd117: begin
+					10'd153: begin
 						sV[i0[1:0]] <= mv;
 						i0 <= i0 + 8'd1;
-						st <= 10'd116;
+						st <= 10'd152;
 					end
-					10'd118:
+					10'd154:
 						if (it_py) begin
 							t[0] <= sV[0];
 							if (tg(sV[0]) == ABI_TAG_OBJECT)
-								rd(adr(sV[0]), 10'd115);
+								rd(adr(sV[0]), 10'd151);
 							else begin
 								at_q <= ABI_Q_NEXT_D;
-								gosub_scr(SCR_AT, 10'd9, 10'd113);
+								gosub_scr(SCR_AT, 10'd9, 10'd149);
 							end
 						end
 						else if (it_h)
-							wr(adr(t[3]), sV[0], 10'd119);
+							wr(adr(t[3]), sV[0], 10'd155);
 						else begin
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd4))] <= sV[0];
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd3))] <= sV[1];
-							st <= 10'd114;
+							st <= 10'd150;
 						end
-					10'd119:
-						wr(aoff(adr(t[3]), 4), sV[1], 10'd114);
-					10'd114: begin
+					10'd155:
+						wr(aoff(adr(t[3]), 4), sV[1], 10'd150);
+					10'd150: begin
 						if (it_stop) begin
 							sp <= sp - 7'd4;
 							pc <= jt;
 						end
 						else
 							push(it_val);
-						st <= 10'd111;
+						st <= 10'd147;
 					end
-					10'd113:
+					10'd149:
 						if ((at_kind == 2'd2) || (at_kind == 2'd1)) begin
 							ab_lo <= (at_kind == 2'd2 ? 8'd31 : 8'd32);
 							ab_pe <= 8'd32;
@@ -10195,85 +10971,86 @@ module mpy_core (
 							crk <= ABI_RK_CONT;
 							fcont <= ABI_CONT_FOR_NEXT;
 							aux <= vint(jt);
-							wr(ab_ptr(8'd0), at_v, 10'd544);
+							wr(ab_ptr(8'd0), at_v, 10'd601);
 						end
 						else
 							raise_err(ABI_ERR_NOT_ITERATOR, t[0], VNULL);
-					10'd115:
+					10'd151:
 						if (md == ABI_OB_GENERATOR) begin
 							t[1] <= VNONE;
 							t[2] <= VNONE;
 							r_rk <= ABI_RK_CONT;
 							fcont <= ABI_CONT_FOR_NEXT;
 							aux <= vint(jt);
-							st <= 10'd144;
+							st <= 10'd180;
 						end
 						else begin
 							at_q <= ABI_Q_NEXT_D;
-							gosub_scr(SCR_AT, 10'd9, 10'd113);
+							gosub_scr(SCR_AT, 10'd9, 10'd149);
 						end
-					10'd59: begin
+					10'd93: begin
 						drop_left <= tb_n;
 						drop_push_en <= 1'b1;
 						drop_push_v <= tb_v;
-						drop_then <= 10'd111;
-						st <= 10'd523;
+						drop_then <= 10'd147;
+						st <= 10'd580;
 					end
-					10'd34: begin
+					10'd66: begin
+						bl_base <= stk_depth - arg[15:0];
 						v0 = (arg < 32'd4 ? 32'd4 : arg);
 						wb_v[0] <= vint(arg);
 						wb_v[1] <= vint(v0);
 						wb_v[2] <= {ABI_TAG_CONT, al_a + 32'd12};
 						t[0] <= vmut(al_a, ABI_MUT_LIST);
 						gi <= 32'd0;
-						wblock(al_a, 4'd3, 10'd35);
+						wblock(al_a, 4'd3, 10'd67);
 					end
-					10'd35:
+					10'd67:
 						if (gi == arg) begin
 							drop_left <= arg[15:0];
 							drop_push_en <= 1'b1;
 							drop_push_v <= t[0];
-							drop_then <= 10'd111;
-							st <= 10'd523;
+							drop_then <= 10'd147;
+							st <= 10'd580;
 						end
 						else begin
-							v0 = (sv2v_cast_32(stk_depth) - arg) + gi;
-							if (stk_hit(v0[15:0])) begin
-								wr((adr(t[0]) + 12) + (4 * gi), stk_val(v0[15:0]), 10'd35);
+							v0 = {16'd0, bl_base + gi[15:0]};
+							if (sv2v_cast_16(arg - gi) <= resident_reals) begin
+								wr((adr(t[0]) + 12) + (4 * gi), stk_val(v0[15:0]), 10'd67);
 								gi <= gi + 32'd1;
 							end
 							else begin
 								srd_g <= v0[15:0];
-								gosub(10'd512, 10'd524);
+								gosub(10'd569, 10'd581);
 							end
 						end
-					10'd524: begin
-						wr((adr(t[0]) + 12) + (4 * gi), srd_v, 10'd35);
+					10'd581: begin
+						wr((adr(t[0]) + 12) + (4 * gi), srd_v, 10'd67);
 						gi <= gi + 32'd1;
 					end
-					10'd36: begin
+					10'd68: begin
 						wb_v[0] <= vint(32'd0);
 						wb_v[1] <= vint(arg);
 						wb_v[2] <= (arg == 32'd0 ? VNULL : {ABI_TAG_CONT, al_a + 32'd16});
 						wb_v[3] <= vint(32'd0);
 						rf[rf_base[3:0] + sv2v_cast_4(sp)] <= vmut(al_a, ABI_MUT_DICT);
 						sp <= sp + 7'd1;
-						wblock(al_a, 4'd4, 10'd111);
+						wblock(al_a, 4'd4, 10'd147);
 					end
-					10'd57:
+					10'd91:
 						if (tb_n > resident_reals) begin
 							drop_left <= tb_n;
 							drop_push_en <= 1'b0;
-							drop_then <= 10'd58;
-							st <= 10'd523;
+							drop_then <= 10'd92;
+							st <= 10'd580;
 						end
 						else begin
 							sp <= sp - sv2v_cast_7(tb_n);
 							hook(ABI_HOOK_DICTOP, ABI_RK_PUSH, 8'd4, vint(32'd0), tb_v, VNULL, VNULL);
 						end
-					10'd58:
+					10'd92:
 						hook(ABI_HOOK_DICTOP, ABI_RK_PUSH, 8'd4, vint(32'd0), tb_v, VNULL, VNULL);
-					10'd450: begin
+					10'd506: begin
 						wb_v[0] <= vint(ABI_OB_SLICE);
 						wb_v[1] <= ty_slice;
 						if (arg == 32'd3) begin
@@ -10288,40 +11065,40 @@ module mpy_core (
 						end
 						rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - sv2v_cast_7(arg)))] <= vobj(al_a);
 						sp <= (sp - sv2v_cast_7(arg)) + 7'd1;
-						wblock(al_a, 4'd5, 10'd111);
+						wblock(al_a, 4'd5, 10'd147);
 					end
-					10'd437: begin
+					10'd493: begin
 						sp <= sp - 7'd1;
-						st <= 10'd111;
+						st <= 10'd147;
 					end
-					10'd436:
+					10'd492:
 						if (lk_cx || lk_ro) begin
 							sp <= sp - 7'd2;
 							hook(ABI_HOOK_DICTOP, ABI_RK_DISCARD, 8'd4, vint(32'd1), t[4], t[5], t[6]);
 						end
 						else begin
 							sp <= sp - 7'd2;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
-					10'd438:
+					10'd494:
 						if (lk_cx || lk_ro) begin
 							sp <= sp - 7'd1;
 							hook(ABI_HOOK_DICTOP, ABI_RK_DISCARD, 8'd4, vint(32'd2), t[4], t[5], VNULL);
 						end
 						else begin
 							sp <= sp - 7'd1;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
-					10'd463:
+					10'd520:
 						if (lk_cx || lk_ro) begin
 							sp <= sp - 7'd2;
 							hook(ABI_HOOK_DICTOP, ABI_RK_DISCARD, 8'd4, vint(32'd1), t[4], t[5], t[6]);
 						end
 						else begin
 							sp <= sp - 7'd2;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
-					10'd484:
+					10'd541:
 						if (md != arg) begin
 							sp <= sp - 7'd1;
 							fcont <= ABI_CONT_UNPACK;
@@ -10331,29 +11108,29 @@ module mpy_core (
 							x2 <= adr(t[0]) + 4;
 							x1 <= arg;
 							sp <= sp - 7'd1;
-							st <= 10'd483;
+							st <= 10'd540;
 						end
 						else
-							rd(aoff(adr(t[0]), 8), 10'd485);
-					10'd485: begin
+							rd(aoff(adr(t[0]), 8), 10'd542);
+					10'd542: begin
 						x2 <= md;
 						x1 <= arg;
 						sp <= sp - 7'd1;
-						st <= 10'd483;
+						st <= 10'd540;
 					end
-					10'd483:
+					10'd540:
 						if (x1 == 32'd0)
-							st <= 10'd111;
+							st <= 10'd147;
 						else
-							rd((x2 + (x1 << 2)) - 32'd4, 10'd486);
-					10'd486: begin
+							rd((x2 + (x1 << 2)) - 32'd4, 10'd543);
+					10'd543: begin
 						x1 <= x1 - 32'd1;
 						push(mv);
-						st <= 10'd483;
+						st <= 10'd540;
 					end
-					10'd288:
-						rd(ha_mdarg, 10'd290);
-					10'd290: begin
+					10'd334:
+						rd(ha_mdarg, 10'd336);
+					10'd336: begin
 						c_rc <= md;
 						if ((op == 8'h20) || (op == 8'h21)) begin
 							tb_src <= 1'b1;
@@ -10361,29 +11138,29 @@ module mpy_core (
 							tb_from <= sv2v_cast_8(sp - sv2v_cast_7(ext));
 							stk_from <= stk_depth - sv2v_cast_16(ext);
 							tb_n <= {8'd0, ext};
-							gosub(10'd471, 10'd289);
+							gosub(10'd528, 10'd335);
 						end
 						else begin
 							t[0] <= VNULL;
-							st <= 10'd291;
+							st <= 10'd337;
 						end
 					end
-					10'd289: begin
+					10'd335: begin
 						t[0] <= tb_v;
-						st <= 10'd291;
+						st <= 10'd337;
 					end
-					10'd291:
+					10'd337:
 						if (fun == VNULL) begin
 							t[1] <= VNULL;
-							alloc(32'd8, 10'd287);
+							alloc(32'd8, 10'd333);
 						end
 						else
-							rd(aoff(adr(fun), 28), 10'd292);
-					10'd292: begin
+							rd(aoff(adr(fun), 28), 10'd338);
+					10'd338: begin
 						t[1] <= mv;
-						alloc(32'd8, 10'd287);
+						alloc(32'd8, 10'd333);
 					end
-					10'd287: begin
+					10'd333: begin
 						v0 = ((op == 8'h20) || (op == 8'h21) ? {24'd0, ext} : 32'd0);
 						wb_v[0] <= vint(ABI_OB_FUNCTION);
 						wb_v[1] <= ty_fun;
@@ -10402,11 +11179,11 @@ module mpy_core (
 						end
 						rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - sv2v_cast_7(v0)))] <= vobj(al_a);
 						sp <= (sp - sv2v_cast_7(v0)) + 7'd1;
-						wblock(al_a, 4'd8, 10'd111);
+						wblock(al_a, 4'd8, 10'd147);
 					end
-					10'd91:
+					10'd127:
 						if (cv_wide)
-							st <= 10'd549;
+							st <= 10'd606;
 						else if (cv_i == cv_n) begin
 							if ((op == 8'h37) && (rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(cv_fidx + 7'd1))] != VNULL)) begin
 								b1 <= 1'b1;
@@ -10418,7 +11195,7 @@ module mpy_core (
 							end
 							ab_pe <= 8'd32;
 							cv_i <= 8'd0;
-							wr(ab_ptr(8'd0), rf[rf_base[3:0] + sv2v_cast_4(cv_fidx)], 10'd547);
+							wr(ab_ptr(8'd0), rf[rf_base[3:0] + sv2v_cast_4(cv_fidx)], 10'd604);
 						end
 						else begin
 							t[0] <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(cv_base + sv2v_cast_7(cv_i)))];
@@ -10431,37 +11208,37 @@ module mpy_core (
 							else
 								cv_i <= cv_i + 8'd1;
 						end
-					10'd547:
+					10'd604:
 						if (b1)
-							wr(ab_ptr(8'd31), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(cv_fidx + 7'd1))], 10'd87);
+							wr(ab_ptr(8'd31), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(cv_fidx + 7'd1))], 10'd123);
 						else
-							st <= 10'd87;
-					10'd549:
+							st <= 10'd123;
+					10'd606:
 						if (cv_i == cv_n) begin
 							cv_g <= cv_fun_g;
-							cv_ret <= 10'd550;
-							st <= 10'd560;
+							cv_ret <= 10'd607;
+							st <= 10'd617;
 						end
 						else begin
 							cv_g <= cv_pos_g + {8'd0, cv_i};
-							cv_ret <= 10'd553;
-							st <= 10'd560;
+							cv_ret <= 10'd610;
+							st <= 10'd617;
 						end
-					10'd550:
+					10'd607:
 						if (op == 8'h37) begin
 							t[2] <= t[3];
 							cv_g <= cv_fun_g + 16'd1;
-							cv_ret <= 10'd551;
-							st <= 10'd560;
+							cv_ret <= 10'd608;
+							st <= 10'd617;
 						end
 						else begin
 							b1 <= 1'b0;
 							ab_lo <= 8'd32;
 							ab_pe <= 8'd32;
 							cv_i <= 8'd0;
-							wr(ab_ptr(8'd0), t[3], 10'd87);
+							wr(ab_ptr(8'd0), t[3], 10'd123);
 						end
-					10'd551: begin
+					10'd608: begin
 						t[6] <= t[3];
 						if (t[3] != VNULL) begin
 							b1 <= 1'b1;
@@ -10473,14 +11250,14 @@ module mpy_core (
 						end
 						ab_pe <= 8'd32;
 						cv_i <= 8'd0;
-						wr(ab_ptr(8'd0), t[2], 10'd552);
+						wr(ab_ptr(8'd0), t[2], 10'd609);
 					end
-					10'd552:
+					10'd609:
 						if (b1)
-							wr(ab_ptr(8'd31), t[6], 10'd87);
+							wr(ab_ptr(8'd31), t[6], 10'd123);
 						else
-							st <= 10'd87;
-					10'd553: begin
+							st <= 10'd123;
+					10'd610: begin
 						t[0] <= t[3];
 						if (cv_bm[cv_i[4:0]] && !((tg(t[3]) == ABI_TAG_TUPLE) || is_mut(t[3], ABI_MUT_LIST))) begin
 							if (stk_hit(cv_g)) begin
@@ -10496,18 +11273,18 @@ module mpy_core (
 						end
 						else begin
 							cv_i <= cv_i + 8'd1;
-							st <= 10'd549;
+							st <= 10'd606;
 						end
 					end
-					10'd554:
-						rd(srd_addr, 10'd555);
-					10'd555: begin
+					10'd611:
+						rd(srd_addr, 10'd612);
+					10'd612: begin
 						v0 = sv2v_cast_32(mpy_rf_chunk_count(mt, md));
 						v1 = mpy_rf_chunk_prev(md);
 						if ((v0 != 32'd0) && (srd_off < v0[15:0])) begin
 							x1 <= (v0 - 32'd1) - sv2v_cast_32(srd_off);
 							x0 <= ((srd_addr + 32'd4) + (sv2v_cast_32((v0[5:0] + 6'd7) >> 3) << 2)) + (((v0 - 32'd1) - sv2v_cast_32(srd_off)) << 2);
-							st <= 10'd556;
+							st <= 10'd613;
 						end
 						else if ((v1 == 32'd0) || (srd_hops == spilled_reals))
 							halt(ABI_HALT_INTERNAL, 32'h0000c0c1);
@@ -10515,12 +11292,12 @@ module mpy_core (
 							srd_off <= srd_off - v0[15:0];
 							srd_addr <= v1;
 							srd_hops <= srd_hops + 16'd1;
-							st <= 10'd554;
+							st <= 10'd611;
 						end
 					end
-					10'd556:
-						rd((srd_addr + 32'd4) + ((x1 >> 3) << 2), 10'd557);
-					10'd557: begin
+					10'd613:
+						rd((srd_addr + 32'd4) + ((x1 >> 3) << 2), 10'd614);
+					10'd614: begin
 						case (x1[2:0])
 							3'd0: v3 = {md[31:4], t[7][35:32]};
 							3'd1: v3 = {md[31:8], t[7][35:32], md[3:0]};
@@ -10531,28 +11308,28 @@ module mpy_core (
 							3'd6: v3 = {md[31:28], t[7][35:32], md[23:0]};
 							default: v3 = {t[7][35:32], md[27:0]};
 						endcase
-						wr((srd_addr + 32'd4) + ((x1 >> 3) << 2), {4'd0, v3}, 10'd558);
+						wr((srd_addr + 32'd4) + ((x1 >> 3) << 2), {4'd0, v3}, 10'd615);
 					end
-					10'd558:
-						wr(x0, t[7], 10'd559);
-					10'd559: begin
+					10'd615:
+						wr(x0, t[7], 10'd616);
+					10'd616: begin
 						pc <= op_pc;
-						st <= 10'd111;
+						st <= 10'd147;
 					end
-					10'd560:
+					10'd617:
 						if (stk_hit(cv_g)) begin
 							t[3] <= stk_val(cv_g);
 							st <= cv_ret;
 						end
 						else begin
 							srd_g <= cv_g;
-							gosub(10'd512, 10'd561);
+							gosub(10'd569, 10'd618);
 						end
-					10'd561: begin
+					10'd618: begin
 						t[3] <= srd_v;
 						st <= cv_ret;
 					end
-					10'd87:
+					10'd123:
 						if (cv_i == cv_n) begin
 							ab_nkw <= cv_j;
 							crk <= ABI_RK_PUSH;
@@ -10561,118 +11338,118 @@ module mpy_core (
 								ab_npos <= ab_nitems;
 							if (!cv_wide)
 								sp <= cv_fidx;
-							st <= 10'd548;
+							st <= 10'd605;
 						end
 						else if (cv_wide) begin
 							cv_g <= cv_pos_g + {8'd0, cv_i};
-							cv_ret <= (cv_bm[cv_i[4:0]] ? 10'd563 : 10'd562);
-							st <= 10'd560;
+							cv_ret <= (cv_bm[cv_i[4:0]] ? 10'd620 : 10'd619);
+							st <= 10'd617;
 						end
 						else if (!cv_bm[cv_i[4:0]]) begin
-							wr(ab_ptr(ab_pe), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(cv_base + sv2v_cast_7(cv_i)))], 10'd87);
+							wr(ab_ptr(ab_pe), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(cv_base + sv2v_cast_7(cv_i)))], 10'd123);
 							ab_pe <= ab_pe + 8'd1;
 							cv_i <= cv_i + 8'd1;
 						end
 						else begin
 							t[0] <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(cv_base + sv2v_cast_7(cv_i)))];
-							rd(adr(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(cv_base + sv2v_cast_7(cv_i)))]), 10'd90);
+							rd(adr(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(cv_base + sv2v_cast_7(cv_i)))]), 10'd126);
 						end
-					10'd562:
+					10'd619:
 						if (ab_chunked) begin
 							cv_i <= cv_i + 8'd1;
-							cv_ret <= 10'd87;
-							st <= 10'd571;
+							cv_ret <= 10'd123;
+							st <= 10'd628;
 						end
 						else begin
-							wr(ab_ptr(ab_pe), t[3], 10'd87);
+							wr(ab_ptr(ab_pe), t[3], 10'd123);
 							ab_pe <= ab_pe + 8'd1;
 							cv_i <= cv_i + 8'd1;
 						end
-					10'd563: begin
+					10'd620: begin
 						t[0] <= t[3];
-						rd(adr(t[3]), 10'd90);
+						rd(adr(t[3]), 10'd126);
 					end
-					10'd90: begin
+					10'd126: begin
 						x4 <= md;
 						gi <= 32'd0;
 						if (tg(t[0]) == ABI_TAG_TUPLE) begin
 							cv_items <= adr(t[0]) + 4;
-							st <= 10'd89;
+							st <= 10'd125;
 						end
 						else
-							rd(aoff(adr(t[0]), 8), 10'd88);
+							rd(aoff(adr(t[0]), 8), 10'd124);
 					end
-					10'd88: begin
+					10'd124: begin
 						cv_items <= md;
-						st <= 10'd89;
+						st <= 10'd125;
 					end
-					10'd89:
+					10'd125:
 						if (gi == x4) begin
 							cv_i <= cv_i + 8'd1;
-							st <= 10'd87;
+							st <= 10'd123;
 						end
 						else if (ab_chunked)
-							rd(cv_items + (gi << 2), 10'd566);
+							rd(cv_items + (gi << 2), 10'd623);
 						else if (ab_pe >= 8'd200) begin
 							cv_kw <= 1'b0;
-							st <= 10'd567;
+							st <= 10'd624;
 						end
 						else
-							rd(cv_items + (gi << 2), 10'd92);
-					10'd566: begin
+							rd(cv_items + (gi << 2), 10'd128);
+					10'd623: begin
 						t[3] <= mv;
 						gi <= gi + 32'd1;
-						cv_ret <= 10'd89;
-						st <= 10'd571;
+						cv_ret <= 10'd125;
+						st <= 10'd628;
 					end
-					10'd92: begin
-						wr(ab_ptr(ab_pe), mv, 10'd89);
+					10'd128: begin
+						wr(ab_ptr(ab_pe), mv, 10'd125);
 						ab_pe <= ab_pe + 8'd1;
 						gi <= gi + 32'd1;
 					end
-					10'd548:
+					10'd605:
 						if ((!ab_chunked && (gi == 32'd0)) && (({24'd0, ab_pe} + {23'd0, cv_j, 1'b0}) > 32'd256)) begin
 							cv_kw <= 1'b1;
-							st <= 10'd567;
+							st <= 10'd624;
 						end
 						else if (gi == {23'd0, cv_j, 1'b0}) begin
 							if (cv_wide) begin
 								drop_left <= stk_depth - cv_fun_g;
 								drop_push_en <= 1'b0;
-								drop_then <= (ab_chunked ? 10'd586 : 10'd60);
-								st <= 10'd523;
+								drop_then <= (ab_chunked ? 10'd643 : 10'd94);
+								st <= 10'd580;
 							end
 							else
-								st <= (ab_chunked ? 10'd586 : 10'd60);
+								st <= (ab_chunked ? 10'd643 : 10'd94);
 						end
 						else if (cv_wide) begin
 							cv_g <= (cv_pos_g + {8'd0, cv_n}) + gi[15:0];
-							cv_ret <= 10'd564;
-							st <= 10'd560;
+							cv_ret <= 10'd621;
+							st <= 10'd617;
 						end
 						else if (ab_chunked) begin
 							t[3] <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6((cv_base + sv2v_cast_7(cv_n)) + gi[6:0]))];
-							st <= 10'd564;
+							st <= 10'd621;
 						end
 						else begin
-							wr(ab_ptr(ab_pe + gi[7:0]), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6((cv_base + sv2v_cast_7(cv_n)) + gi[6:0]))], 10'd548);
+							wr(ab_ptr(ab_pe + gi[7:0]), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6((cv_base + sv2v_cast_7(cv_n)) + gi[6:0]))], 10'd605);
 							gi <= gi + 32'd1;
 						end
-					10'd564: begin
+					10'd621: begin
 						if ((t[3] == VNULL) && !gi[0])
 							t[3] <= vint(32'd0);
-						st <= 10'd565;
+						st <= 10'd622;
 					end
-					10'd565: begin
+					10'd622: begin
 						gi <= gi + 32'd1;
 						if (ab_chunked) begin
-							cv_ret <= 10'd548;
-							st <= 10'd571;
+							cv_ret <= 10'd605;
+							st <= 10'd628;
 						end
 						else
-							wr(ab_ptr(ab_pe + gi[7:0]), t[3], 10'd548);
+							wr(ab_ptr(ab_pe + gi[7:0]), t[3], 10'd605);
 					end
-					10'd567: begin
+					10'd624: begin
 						ab_chunked <= 1'b1;
 						ab_ovf <= 1'b0;
 						ab_npos <= {24'd0, ab_pe} - {24'd0, ab_lo};
@@ -10682,240 +11459,240 @@ module mpy_core (
 						ab_blk <= VNULL;
 						t[5] <= VNULL;
 						cv_k <= 32'd0;
-						wr(ab_ptr(8'd1), vint(32'd1), 10'd568);
+						wr(ab_ptr(8'd1), vint(32'd1), 10'd625);
 					end
-					10'd568:
-						wr(ab_ptr(8'd4), VNULL, 10'd569);
-					10'd569:
+					10'd625:
+						wr(ab_ptr(8'd4), VNULL, 10'd626);
+					10'd626:
 						if (cv_k == ab_npos)
-							st <= (cv_kw ? 10'd548 : 10'd89);
+							st <= (cv_kw ? 10'd605 : 10'd125);
 						else
-							rd(ab_ptr(sv2v_cast_8({24'd0, ab_lo} + cv_k)), 10'd570);
-					10'd570: begin
+							rd(ab_ptr(sv2v_cast_8({24'd0, ab_lo} + cv_k)), 10'd627);
+					10'd627: begin
 						t[3] <= mv;
 						cv_k <= cv_k + 32'd1;
-						cv_ret <= 10'd569;
-						st <= 10'd571;
+						cv_ret <= 10'd626;
+						st <= 10'd628;
 					end
-					10'd571:
+					10'd628:
 						if ((ab_nblk != 32'd0) && (ab_fill != 5'd16))
-							wr((adr(ab_blk) + 32'd4) + {25'd0, ab_fill, 2'b00}, t[3], 10'd572);
+							wr((adr(ab_blk) + 32'd4) + {25'd0, ab_fill, 2'b00}, t[3], 10'd629);
 						else
-							alloc(32'd17, 10'd574);
-					10'd572: begin
-						wr(adr(ab_blk), vint({27'd0, ab_fill} + 32'd1), 10'd573);
+							alloc(32'd17, 10'd631);
+					10'd629: begin
+						wr(adr(ab_blk), vint({27'd0, ab_fill} + 32'd1), 10'd630);
 						ab_fill <= ab_fill + 5'd1;
 						ab_nitems <= ab_nitems + 32'd1;
 					end
-					10'd573: st <= cv_ret;
-					10'd574: begin
+					10'd630: st <= cv_ret;
+					10'd631: begin
 						ab_blk <= {ABI_TAG_TUPLE, al_a};
 						t[2] <= {ABI_TAG_TUPLE, al_a};
 						if (ab_ovf || (ab_nblk >= 32'd251))
-							st <= 10'd577;
+							st <= 10'd634;
 						else begin
-							wr(ab_ptr(sv2v_cast_8(32'd5 + ab_nblk)), {ABI_TAG_TUPLE, al_a}, 10'd575);
+							wr(ab_ptr(sv2v_cast_8(32'd5 + ab_nblk)), {ABI_TAG_TUPLE, al_a}, 10'd632);
 							ab_nblk <= ab_nblk + 32'd1;
 							ab_fill <= 5'd0;
 						end
 					end
-					10'd575:
-						wr(aoff(adr(ab_blk), 4), t[3], 10'd576);
-					10'd576: begin
-						wr(adr(ab_blk), vint(32'd1), 10'd573);
+					10'd632:
+						wr(aoff(adr(ab_blk), 4), t[3], 10'd633);
+					10'd633: begin
+						wr(adr(ab_blk), vint(32'd1), 10'd630);
 						ab_fill <= 5'd1;
 						ab_nitems <= ab_nitems + 32'd1;
 					end
-					10'd577:
+					10'd634:
 						if (!ab_ovf)
-							alloc(32'd253, 10'd578);
+							alloc(32'd253, 10'd635);
 						else
-							rd(adr(t[5]), 10'd582);
-					10'd578: begin
+							rd(adr(t[5]), 10'd639);
+					10'd635: begin
 						t[4] <= {ABI_TAG_TUPLE, al_a};
 						cv_k <= 32'd0;
-						wr(al_a, vint(32'd252), 10'd579);
+						wr(al_a, vint(32'd252), 10'd636);
 					end
-					10'd579:
+					10'd636:
 						if (cv_k == 32'd251) begin
 							x0 <= 32'd252;
-							wr((adr(t[4]) + 32'd4) + (32'd251 << 2), t[2], 10'd581);
+							wr((adr(t[4]) + 32'd4) + (32'd251 << 2), t[2], 10'd638);
 						end
 						else
-							rd(ab_ptr(sv2v_cast_8(32'd5 + cv_k)), 10'd580);
-					10'd580: begin
-						wr((adr(t[4]) + 32'd4) + (cv_k << 2), mv, 10'd579);
+							rd(ab_ptr(sv2v_cast_8(32'd5 + cv_k)), 10'd637);
+					10'd637: begin
+						wr((adr(t[4]) + 32'd4) + (cv_k << 2), mv, 10'd636);
 						cv_k <= cv_k + 32'd1;
 					end
-					10'd581: begin
-						wr(ab_ptr(8'd4), t[4], 10'd575);
+					10'd638: begin
+						wr(ab_ptr(8'd4), t[4], 10'd632);
 						t[5] <= t[4];
 						ab_ovf <= 1'b1;
 						ab_nblk <= x0;
 						ab_fill <= 5'd0;
 					end
-					10'd582: begin
+					10'd639: begin
 						x1 <= md;
-						alloc(md + 32'd2, 10'd583);
+						alloc(md + 32'd2, 10'd640);
 					end
-					10'd583: begin
+					10'd640: begin
 						t[4] <= {ABI_TAG_TUPLE, al_a};
 						cv_k <= 32'd0;
-						wr(al_a, vint(x1 + 32'd1), 10'd584);
+						wr(al_a, vint(x1 + 32'd1), 10'd641);
 					end
-					10'd584:
+					10'd641:
 						if (cv_k == x1) begin
 							x0 <= ab_nblk + 32'd1;
-							wr((adr(t[4]) + 32'd4) + (x1 << 2), t[2], 10'd581);
+							wr((adr(t[4]) + 32'd4) + (x1 << 2), t[2], 10'd638);
 						end
 						else
-							rd((adr(t[5]) + 32'd4) + (cv_k << 2), 10'd585);
-					10'd585: begin
-						wr((adr(t[4]) + 32'd4) + (cv_k << 2), mv, 10'd584);
+							rd((adr(t[5]) + 32'd4) + (cv_k << 2), 10'd642);
+					10'd642: begin
+						wr((adr(t[4]) + 32'd4) + (cv_k << 2), mv, 10'd641);
 						cv_k <= cv_k + 32'd1;
 					end
-					10'd586:
-						rd(ab_ptr(8'd0), 10'd587);
-					10'd587: begin
+					10'd643:
+						rd(ab_ptr(8'd0), 10'd644);
+					10'd644: begin
 						t[0] <= mv;
 						if (ab_ovf) begin
 							t[1] <= t[5];
 							cv_k <= 32'd5;
 							x1 <= 32'd256;
-							st <= 10'd591;
+							st <= 10'd648;
 						end
 						else if (ab_nblk == 32'd0) begin
 							t[1] <= {ABI_TAG_TUPLE, h_empty};
 							cv_k <= 32'd5;
 							x1 <= 32'd5;
-							st <= 10'd591;
+							st <= 10'd648;
 						end
 						else
-							alloc(32'd1 + ab_nblk, 10'd588);
+							alloc(32'd1 + ab_nblk, 10'd645);
 					end
-					10'd588: begin
+					10'd645: begin
 						t[1] <= {ABI_TAG_TUPLE, al_a};
 						cv_k <= 32'd0;
-						wr(al_a, vint(ab_nblk), 10'd589);
+						wr(al_a, vint(ab_nblk), 10'd646);
 					end
-					10'd589:
+					10'd646:
 						if (cv_k == ab_nblk) begin
 							cv_k <= 32'd5;
 							x1 <= 32'd5 + ab_nblk;
-							st <= 10'd591;
+							st <= 10'd648;
 						end
 						else
-							rd(ab_ptr(sv2v_cast_8(32'd5 + cv_k)), 10'd590);
-					10'd590: begin
-						wr((adr(t[1]) + 32'd4) + (cv_k << 2), mv, 10'd589);
+							rd(ab_ptr(sv2v_cast_8(32'd5 + cv_k)), 10'd647);
+					10'd647: begin
+						wr((adr(t[1]) + 32'd4) + (cv_k << 2), mv, 10'd646);
 						cv_k <= cv_k + 32'd1;
 					end
-					10'd591:
+					10'd648:
 						if (cv_k == x1)
-							st <= 10'd592;
+							st <= 10'd649;
 						else begin
-							wr(ab_ptr(cv_k[7:0]), VNULL, 10'd591);
+							wr(ab_ptr(cv_k[7:0]), VNULL, 10'd648);
 							cv_k <= cv_k + 32'd1;
 						end
-					10'd592:
+					10'd649:
 						if (ab_ovf)
-							wr(ab_ptr(8'd4), VNULL, 10'd593);
+							wr(ab_ptr(8'd4), VNULL, 10'd650);
 						else
-							st <= 10'd593;
-					10'd593:
-						wr(ab_ptr(8'd1), VNULL, 10'd60);
-					10'd594: begin
+							st <= 10'd650;
+					10'd650:
+						wr(ab_ptr(8'd1), VNULL, 10'd94);
+					10'd651: begin
 						t[2] <= mv;
-						alloc(32'd2, 10'd595);
+						alloc(32'd2, 10'd652);
 					end
-					10'd595: begin
+					10'd652: begin
 						t[3] <= {ABI_TAG_TUPLE, al_a};
-						wr(al_a, vint(32'd1), 10'd596);
+						wr(al_a, vint(32'd1), 10'd653);
 					end
-					10'd596:
-						wr(aoff(al_a, 4), t[2], 10'd597);
-					10'd597:
-						alloc(32'd2 + ab_nblk, 10'd598);
-					10'd598: begin
+					10'd653:
+						wr(aoff(al_a, 4), t[2], 10'd654);
+					10'd654:
+						alloc(32'd2 + ab_nblk, 10'd655);
+					10'd655: begin
 						t[4] <= {ABI_TAG_TUPLE, al_a};
 						x0 <= al_a;
 						cv_k <= 32'd0;
-						wr(al_a, vint(ab_nblk + 32'd1), 10'd599);
+						wr(al_a, vint(ab_nblk + 32'd1), 10'd656);
 					end
-					10'd599:
-						wr(aoff(x0, 4), t[3], 10'd600);
-					10'd600:
+					10'd656:
+						wr(aoff(x0, 4), t[3], 10'd657);
+					10'd657:
 						if (cv_k == ab_nblk) begin
 							t[1] <= t[4];
 							ab_npos <= ab_npos + 32'd1;
 							ab_nblk <= ab_nblk + 32'd1;
-							rd(aoff(adr(ab_q), 8), 10'd61);
+							rd(aoff(adr(ab_q), 8), 10'd95);
 						end
 						else
-							rd((adr(t[1]) + 32'd4) + (cv_k << 2), 10'd601);
-					10'd601: begin
-						wr((x0 + 32'd8) + (cv_k << 2), mv, 10'd600);
+							rd((adr(t[1]) + 32'd4) + (cv_k << 2), 10'd658);
+					10'd658: begin
+						wr((x0 + 32'd8) + (cv_k << 2), mv, 10'd657);
 						cv_k <= cv_k + 32'd1;
 					end
-					10'd602:
+					10'd659:
 						if (ab_lo0 != ab_lo) begin
 							x1 <= {24'd0, ab_lo0} - {24'd0, ab_lo};
 							cv_k <= 32'd0;
-							alloc(32'd1 + ({24'd0, ab_lo0} - {24'd0, ab_lo}), 10'd603);
+							alloc(32'd1 + ({24'd0, ab_lo0} - {24'd0, ab_lo}), 10'd660);
 						end
 						else
-							st <= 10'd611;
-					10'd603: begin
+							st <= 10'd668;
+					10'd660: begin
 						t[3] <= {ABI_TAG_TUPLE, al_a};
 						x0 <= al_a;
-						wr(al_a, vint(x1), 10'd604);
+						wr(al_a, vint(x1), 10'd661);
 					end
-					10'd604:
+					10'd661:
 						if (cv_k == x1)
-							st <= 10'd607;
+							st <= 10'd664;
 						else
-							rd(ab_ptr(ab_lo + cv_k[7:0]), 10'd605);
-					10'd605: begin
-						wr((x0 + 32'd4) + (cv_k << 2), mv, 10'd604);
+							rd(ab_ptr(ab_lo + cv_k[7:0]), 10'd662);
+					10'd662: begin
+						wr((x0 + 32'd4) + (cv_k << 2), mv, 10'd661);
 						cv_k <= cv_k + 32'd1;
 					end
-					10'd607: begin
+					10'd664: begin
 						cv_k <= 32'd0;
-						alloc(32'd2 + ab_nblk, 10'd606);
+						alloc(32'd2 + ab_nblk, 10'd663);
 					end
-					10'd606: begin
+					10'd663: begin
 						t[4] <= {ABI_TAG_TUPLE, al_a};
 						x0 <= al_a;
-						wr(al_a, vint(ab_nblk + 32'd1), 10'd608);
+						wr(al_a, vint(ab_nblk + 32'd1), 10'd665);
 					end
-					10'd608:
-						wr(aoff(x0, 4), t[3], 10'd609);
-					10'd609:
+					10'd665:
+						wr(aoff(x0, 4), t[3], 10'd666);
+					10'd666:
 						if (cv_k == ab_nblk) begin
 							t[1] <= t[4];
 							ab_npos <= ab_npos + x1;
 							ab_nblk <= ab_nblk + 32'd1;
 							ab_lo <= ab_lo0;
-							st <= 10'd611;
+							st <= 10'd668;
 						end
 						else
-							rd((adr(t[1]) + 32'd4) + (cv_k << 2), 10'd610);
-					10'd610: begin
-						wr((x0 + 32'd8) + (cv_k << 2), mv, 10'd609);
+							rd((adr(t[1]) + 32'd4) + (cv_k << 2), 10'd667);
+					10'd667: begin
+						wr((x0 + 32'd8) + (cv_k << 2), mv, 10'd666);
 						cv_k <= cv_k + 32'd1;
 					end
-					10'd611:
-						rd(ab_ptr(8'd0), 10'd612);
-					10'd612: begin
+					10'd668:
+						rd(ab_ptr(8'd0), 10'd669);
+					10'd669: begin
 						fflags <= fflags | FF_NOTB;
 						fcont <= ABI_CONT_BIND;
 						hook(ABI_HOOK_BIND_WIDE, ABI_RK_CONT, 8'd3, mv, vint(ab_npos), t[1], VNULL);
 					end
-					10'd479: begin
+					10'd536: begin
 						v0 = sv2v_cast_32(n_o);
 						if (v0 == ABI_UNOP_NOT) begin
 							tr_v <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))];
-							gosub(10'd467, 10'd228);
+							gosub(10'd524, 10'd267);
 						end
 						else if (numlike(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]) && (v0 <= ABI_UNOP_INVERT)) begin
 							n_un <= 1'b1;
@@ -10927,10 +11704,10 @@ module mpy_core (
 								na <= sx64(ival(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]));
 								nb_f <= 1'b0;
 								nb <= 64'd0;
-								st <= 10'd310;
+								st <= 10'd356;
 							end
 							else
-								st <= 10'd303;
+								st <= 10'd349;
 						end
 						else begin
 							sp <= sp - 7'd1;
@@ -10945,227 +11722,525 @@ module mpy_core (
 						if (v0 == ABI_BINOP_IS) begin
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))] <= vbool(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))] == rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]);
 							sp <= sp - 7'd1;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
 						else if (v0 == ABI_BINOP_EXCEPTION_MATCH)
-							st <= 10'd104;
+							st <= 10'd140;
 						else if (v0 == ABI_BINOP_IN)
-							st <= 10'd204;
-						else if (((((tg(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))]) == ABI_TAG_COMPLEX) || (tg(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]) == ABI_TAG_COMPLEX)) && cx_operand(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))])) && cx_operand(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))])) && ((((((v0 == ABI_BINOP_ADD) || (v0 == ABI_BINOP_INPLACE_ADD)) || (v0 == ABI_BINOP_SUBTRACT)) || (v0 == ABI_BINOP_INPLACE_SUBTRACT)) || (v0 == ABI_BINOP_MULTIPLY)) || (v0 == ABI_BINOP_INPLACE_MULTIPLY))) begin
+							st <= 10'd243;
+						else if (bin_cx_r && ((((((v0 == ABI_BINOP_ADD) || (v0 == ABI_BINOP_INPLACE_ADD)) || (v0 == ABI_BINOP_SUBTRACT)) || (v0 == ABI_BINOP_INPLACE_SUBTRACT)) || (v0 == ABI_BINOP_MULTIPLY)) || (v0 == ABI_BINOP_INPLACE_MULTIPLY))) begin
 							cx_op <= ((v0 == ABI_BINOP_ADD) || (v0 == ABI_BINOP_INPLACE_ADD) ? CX_ADD : ((v0 == ABI_BINOP_SUBTRACT) || (v0 == ABI_BINOP_INPLACE_SUBTRACT) ? CX_SUB : CX_MUL));
 							cx_start(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))], rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]);
 						end
-						else if ((numlike(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))]) && numlike(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))])) && ((v0 <= ABI_BINOP_NOT_EQUAL) || ((v0 >= ABI_BINOP_INPLACE_OR) && (v0 <= ABI_BINOP_POWER)))) begin
+						else if (bin_num_r && ((v0 <= ABI_BINOP_NOT_EQUAL) || ((v0 >= ABI_BINOP_INPLACE_OR) && (v0 <= ABI_BINOP_POWER)))) begin
 							alu_op <= ((v0 >= ABI_BINOP_INPLACE_OR) && (v0 < ABI_BINOP_OR) ? sv2v_cast_6(v0 + 32'd13) : sv2v_cast_6(v0));
 							if ((tg(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))]) != ABI_TAG_INT64) && (tg(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]) != ABI_TAG_INT64)) begin
 								na_f <= tg(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))]) == ABI_TAG_FLOAT;
 								nb_f <= tg(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]) == ABI_TAG_FLOAT;
 								na <= sx64(ival(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))]));
 								nb <= sx64(ival(rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))]));
-								st <= 10'd310;
+								st <= 10'd356;
 							end
 							else
-								st <= 10'd303;
+								st <= 10'd349;
 						end
 						else if ((v0 == ABI_BINOP_EQUAL) || (v0 == ABI_BINOP_NOT_EQUAL))
-							st <= 10'd101;
+							st <= 10'd137;
 						else
 							st <= 10'd33;
 					end
-					10'd33: begin
+					10'd33:
+						if (((((n_o == ABI_BINOP_LESS) || (n_o == ABI_BINOP_MORE)) || (n_o == ABI_BINOP_LESS_EQUAL)) || (n_o == ABI_BINOP_MORE_EQUAL)) && ((strlike(t[0]) && strlike(t[1])) || ((tg(t[0]) == ABI_TAG_BYTES) && (tg(t[1]) == ABI_TAG_BYTES)))) begin
+							b0 <= 1'b0;
+							si_v <= t[0];
+							gosub(10'd500, 10'd371);
+						end
+						else if (((n_o == ABI_BINOP_ADD) && is_mut(t[0], ABI_MUT_LIST)) && is_mut(t[1], ABI_MUT_LIST))
+							rd(adr(t[0]), 10'd34);
+						else if (h_bigint && ((tg(t[0]) == ABI_TAG_OBJECT) || (tg(t[1]) == ABI_TAG_OBJECT)))
+							st <= 10'd45;
+						else
+							st <= 10'd44;
+					10'd34: begin
+						x0 <= md;
+						rd(adr(t[1]), 10'd35);
+					end
+					10'd35: begin
+						x1 <= md;
+						x4 <= x0 + md;
+						st <= 10'd36;
+					end
+					10'd36:
+						alloc(32'd3 + (x4 < 32'd4 ? 32'd4 : x4), 10'd37);
+					10'd37: begin
+						t[2] <= vmut(al_a, ABI_MUT_LIST);
+						wb_v[0] <= vint(x4);
+						wb_v[1] <= vint((x4 < 32'd4 ? 32'd4 : x4));
+						wb_v[2] <= {ABI_TAG_CONT, al_a + 32'd12};
+						x3 <= al_a + 32'd12;
+						b0 <= 1'b0;
+						wblock(al_a, 4'd3, 10'd38);
+					end
+					10'd38:
+						rd(aoff(adr(t[0]), 8), 10'd39);
+					10'd39: begin
+						x2 <= md;
+						gi <= 32'd0;
+						st <= 10'd40;
+					end
+					10'd40:
+						if (x0 == 32'd0)
+							st <= 10'd43;
+						else if (cfg_ca) begin
+							if (ca_ok) begin
+								ca_ship(x3, x2, x0);
+								st <= 10'd43;
+							end
+						end
+						else
+							st <= 10'd41;
+					10'd41:
+						if (gi == x0)
+							st <= 10'd43;
+						else
+							rd(x2 + (gi << 2), 10'd42);
+					10'd42: begin
+						wr(x3 + (gi << 2), mv, 10'd41);
+						gi <= gi + 32'd1;
+					end
+					10'd43:
+						if (b0 || (x1 == 32'd0))
+							st <= 10'd357;
+						else begin
+							b0 <= 1'b1;
+							x3 <= x3 + (x0 << 2);
+							x0 <= x1;
+							rd(aoff(adr(t[1]), 8), 10'd39);
+						end
+					10'd45: begin
+						v0 = sv2v_cast_32(n_o);
+						if ((v0 >= ABI_BINOP_INPLACE_OR) && (v0 < ABI_BINOP_OR))
+							v0 = v0 + 32'd13;
+						if ((h_bigint && !n_un) && ((((v0 == ABI_BINOP_MULTIPLY) && (((tg(t[0]) == ABI_TAG_OBJECT) && (tg(t[1]) == ABI_TAG_INT)) || ((tg(t[1]) == ABI_TAG_OBJECT) && (tg(t[0]) == ABI_TAG_INT)))) || (((((v0 == ABI_BINOP_ADD) || (v0 == ABI_BINOP_SUBTRACT)) || (v0 == ABI_BINOP_FLOOR_DIVIDE)) && (tg(t[0]) == ABI_TAG_OBJECT)) && (tg(t[1]) == ABI_TAG_OBJECT))) || ((v0 == ABI_BINOP_ADD) && (((tg(t[0]) == ABI_TAG_OBJECT) && (t[1] == vint(32'd0))) || ((tg(t[1]) == ABI_TAG_OBJECT) && (t[0] == vint(32'd0))))))) begin
+							bi_op <= sv2v_cast_6(v0);
+							bi_an <= 18'd0;
+							bi_bn <= 18'd0;
+							bi_left_neg <= 1'b0;
+							bi_right_neg <= 1'b0;
+							if (tg(t[0]) == ABI_TAG_OBJECT)
+								rd(adr(t[0]), 10'd46);
+							else
+								rd(adr(t[1]), 10'd48);
+						end
+						else
+							st <= 10'd44;
+					end
+					10'd44: begin
 						sp <= sp - 7'd2;
 						hook(ABI_HOOK_BINOP, ABI_RK_PUSH, 8'd3, vint(sv2v_cast_32(n_o)), t[0], t[1], VNULL);
 					end
-					10'd101: begin
+					10'd46:
+						if (md == ABI_OB_BIGINT)
+							rd(aoff(adr(t[0]), 8), 10'd47);
+						else
+							st <= 10'd44;
+					10'd47: begin
+						bi_an <= (md[31] ? -md[17:0] : md[17:0]);
+						bi_left_neg <= md[31];
+						if (tg(t[1]) == ABI_TAG_OBJECT)
+							rd(adr(t[1]), 10'd48);
+						else
+							st <= 10'd50;
+					end
+					10'd48:
+						if (md == ABI_OB_BIGINT)
+							rd(aoff(adr(t[1]), 8), 10'd49);
+						else
+							st <= 10'd44;
+					10'd49: begin
+						bi_bn <= (md[31] ? -md[17:0] : md[17:0]);
+						bi_right_neg <= md[31] ^ (bi_op == mpy_alu_pkg_ALU_SUB);
+						st <= 10'd50;
+					end
+					10'd50: begin
+						bi_swap <= 1'b0;
+						bi_sub <= bi_left_neg ^ bi_right_neg;
+						bi_neg <= bi_left_neg;
+						if (bi_op == mpy_alu_pkg_ALU_MUL) begin
+							if (($signed(bi_scalar) < -32'sd1073741823) || ($signed(bi_scalar) > 32'sd1073741823))
+								st <= 10'd44;
+							else if (bi_scalar == 32'd0) begin
+								t[2] <= vint(32'd0);
+								st <= 10'd357;
+							end
+							else if (bi_scalar == 32'd1) begin
+								t[2] <= (bi_an != 0 ? t[0] : t[1]);
+								st <= 10'd357;
+							end
+							else begin
+								limb_factor <= (bi_scalar[31] ? -bi_scalar : bi_scalar);
+								bi_neg <= (bi_left_neg ^ bi_right_neg) ^ bi_scalar[31];
+								alloc(sv2v_cast_32(bi_an | bi_bn) + 32'd4, 10'd54);
+							end
+						end
+						else if (bi_op == mpy_alu_pkg_ALU_FLOOR) begin
+							if (((bi_left_neg != bi_right_neg) || (bi_bn < 18'd2)) || (bi_an > (bi_bn + 18'd1)))
+								st <= 10'd44;
+							else if (bi_an < bi_bn) begin
+								t[2] <= vint(32'd0);
+								st <= 10'd357;
+							end
+							else if (bi_an != bi_bn)
+								rd((adr(t[0]) + 32'd8) + (sv2v_cast_32(bi_an) << 2), 10'd58);
+							else begin
+								bi_prefix <= 64'd0;
+								rd((adr(t[0]) + 32'd8) + (sv2v_cast_32(bi_bn) << 2), 10'd59);
+							end
+						end
+						else if ((bi_an == 0) || (bi_bn == 0)) begin
+							t[2] <= (bi_an != 0 ? t[0] : t[1]);
+							st <= 10'd357;
+						end
+						else if (bi_left_neg == bi_right_neg)
+							st <= 10'd53;
+						else if (bi_an != bi_bn) begin
+							bi_swap <= bi_an < bi_bn;
+							st <= 10'd53;
+						end
+						else begin
+							bi_i <= bi_an;
+							rd((adr(t[0]) + 32'd8) + (sv2v_cast_32(bi_an) << 2), 10'd51);
+						end
+					end
+					10'd51: begin
+						bi_cmp_l <= md;
+						rd((adr(t[1]) + 32'd8) + (sv2v_cast_32(bi_i) << 2), 10'd52);
+					end
+					10'd52:
+						if (md != bi_cmp_l) begin
+							bi_swap <= bi_cmp_l < md;
+							st <= 10'd53;
+						end
+						else if (bi_i == 18'd1) begin
+							t[2] <= vint(32'd0);
+							st <= 10'd357;
+						end
+						else begin
+							bi_i <= bi_i - 18'd1;
+							rd((adr(t[0]) + 32'd4) + (sv2v_cast_32(bi_i) << 2), 10'd51);
+						end
+					10'd53: begin
+						bi_neg <= (bi_swap ? bi_right_neg : bi_left_neg);
+						limb_factor <= (bi_sub ? 32'hffffffff : 32'd1);
+						alloc(sv2v_cast_32((bi_an > bi_bn ? bi_an : bi_bn)) + 32'd4, 10'd54);
+					end
+					10'd54: begin
+						x0 <= al_a + 32'd12;
+						if (bi_op == mpy_alu_pkg_ALU_MUL) begin
+							x1 <= adr((bi_an != 0 ? t[0] : t[1])) + 32'd12;
+							x3 <= (adr((bi_an != 0 ? t[0] : t[1])) + 32'd12) + (sv2v_cast_32(bi_an | bi_bn) << 2);
+							x2 <= 32'd0;
+							x4 <= 32'd0;
+						end
+						else if (bi_sub && !bi_swap) begin
+							x1 <= adr(t[1]) + 32'd12;
+							x3 <= (adr(t[1]) + 32'd12) + (sv2v_cast_32(bi_bn) << 2);
+							x2 <= adr(t[0]) + 32'd12;
+							x4 <= (adr(t[0]) + 32'd12) + (sv2v_cast_32(bi_an) << 2);
+						end
+						else begin
+							x1 <= adr(t[0]) + 32'd12;
+							x3 <= (adr(t[0]) + 32'd12) + (sv2v_cast_32(bi_an) << 2);
+							x2 <= adr(t[1]) + 32'd12;
+							x4 <= (adr(t[1]) + 32'd12) + (sv2v_cast_32(bi_bn) << 2);
+						end
+						bi_inline <= 1'b1;
+						bi_i <= 18'd0;
+						bi_used <= 18'd0;
+						bi_top <= 30'd0;
+						bi_low_nonzero <= 1'b0;
+						limb_carry <= 32'd0;
+						st <= 10'd701;
+					end
+					10'd55:
+						if (limb_carry == 32'd0)
+							st <= 10'd56;
+						else begin
+							bi_used <= bi_i + 18'd1;
+							bi_top <= limb_carry[29:0];
+							wr(x0, vint(limb_carry), 10'd56);
+						end
+					10'd56:
+						if (bi_used == 0) begin
+							t[2] <= vint(32'd0);
+							st <= 10'd357;
+						end
+						else if ((bi_used < 18'd3) || ((bi_used == 18'd3) && ((bi_top < 30'd8) || ((bi_neg && (bi_top == 30'd8)) && !bi_low_nonzero))))
+							st <= 10'd44;
+						else
+							rd(TT + (4 * ABI_T_INT), 10'd57);
+					10'd57: begin
+						t[2] <= vobj(al_a);
+						wb_v[0] <= vint(ABI_OB_BIGINT);
+						wb_v[1] <= mv;
+						wb_v[2] <= vint((bi_neg ? -sv2v_cast_32(bi_used) : sv2v_cast_32(bi_used)));
+						wblock(al_a, 4'd3, 10'd357);
+					end
+					10'd58:
+						if (md > 32'd7)
+							st <= 10'd44;
+						else begin
+							bi_prefix <= {1'b0, md[2:0], 60'd0};
+							rd((adr(t[0]) + 32'd8) + (sv2v_cast_32(bi_bn) << 2), 10'd59);
+						end
+					10'd59: begin
+						bi_prefix[59:30] <= md[29:0];
+						rd(m_addr - 32'd4, 10'd60);
+					end
+					10'd60: begin
+						bi_prefix[29:0] <= md[29:0];
+						rd((adr(t[1]) + 32'd8) + (sv2v_cast_32(bi_bn) << 2), 10'd61);
+					end
+					10'd61: begin
+						nb[63:30] <= {4'd0, md[29:0]};
+						rd(m_addr - 32'd4, 10'd62);
+					end
+					10'd62: begin
+						nb[29:0] <= md[29:0];
+						st <= 10'd63;
+					end
+					10'd63: begin
+						na <= bi_prefix;
+						na_f <= 1'b0;
+						nb_f <= 1'b0;
+						n_small <= 1'b0;
+						alu_op <= mpy_alu_pkg_ALU_FLOOR;
+						alu_start <= 1'b1;
+						st <= 10'd64;
+					end
+					10'd64:
+						if (alu_done) begin
+							if ((alu_err != mpy_alu_pkg_AE_NONE) || (alu_res[63:31] != 0))
+								st <= 10'd44;
+							else if (alu_res == 0) begin
+								t[2] <= vint(32'd0);
+								st <= 10'd357;
+							end
+							else begin
+								bi_q <= alu_res[31:0];
+								na <= alu_res;
+								alu_op <= mpy_alu_pkg_ALU_MUL;
+								alu_start <= 1'b1;
+								st <= 10'd65;
+							end
+						end
+					10'd65:
+						if (alu_done) begin
+							if ((alu_err == mpy_alu_pkg_AE_NONE) && ((bi_prefix - alu_res) >= sv2v_cast_64(bi_q))) begin
+								t[2] <= vint(bi_q);
+								st <= 10'd357;
+							end
+							else
+								st <= 10'd44;
+						end
+					10'd137: begin
 						vb = sv2v_cast_32(n_o) == ABI_BINOP_NOT_EQUAL;
 						if (((t[0] == t[1]) && (tg(t[0]) != ABI_TAG_OBJECT)) && (tg(t[0]) != ABI_TAG_COMPLEX)) begin
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))] <= vbool(!vb);
 							sp <= sp - 7'd1;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
 						else if (strlike(t[0]) && strlike(t[1])) begin
 							se_a <= t[0];
 							se_b <= t[1];
-							gosub_scr(SCR_SE, 10'd464, 10'd102);
+							gosub_scr(SCR_SE, 10'd521, 10'd138);
 						end
 						else if (((strlike(t[0]) || strlike(t[1])) || ((tg(t[0]) == ABI_TAG_CONTROL) && (tg(t[1]) != ABI_TAG_OBJECT))) || ((tg(t[1]) == ABI_TAG_CONTROL) && (tg(t[0]) != ABI_TAG_OBJECT))) begin
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))] <= vbool(vb);
 							sp <= sp - 7'd1;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
 						else
-							st <= 10'd33;
+							st <= 10'd44;
 					end
-					10'd102: begin
+					10'd138: begin
 						rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))] <= vbool(se_eq ^ (sv2v_cast_32(n_o) == ABI_BINOP_NOT_EQUAL));
 						sp <= sp - 7'd1;
-						st <= 10'd111;
+						st <= 10'd147;
 					end
-					10'd204:
+					10'd243:
 						if (is_mut(t[1], ABI_MUT_DICT) || is_mut(t[1], ABI_MUT_SET))
-							lookup(t[1], t[0], VNULL, LK_FIND, is_mut(t[1], ABI_MUT_SET), 10'd205);
+							lookup(t[1], t[0], VNULL, LK_FIND, is_mut(t[1], ABI_MUT_SET), 10'd244);
 						else if ((tg(t[0]) == ABI_TAG_INT) && (is_mut(t[1], ABI_MUT_LIST) || (tg(t[1]) == ABI_TAG_TUPLE)))
-							rd(adr(t[1]), 10'd206);
+							rd(adr(t[1]), 10'd245);
 						else
-							st <= 10'd33;
-					10'd206: begin
+							st <= 10'd44;
+					10'd245: begin
 						x4 <= md;
 						gi <= 32'd0;
 						if (tg(t[1]) == ABI_TAG_TUPLE) begin
 							x3 <= adr(t[1]) + 32'd4;
-							st <= 10'd208;
+							st <= 10'd247;
 						end
 						else
-							rd(aoff(adr(t[1]), 8), 10'd207);
+							rd(aoff(adr(t[1]), 8), 10'd246);
 					end
-					10'd207: begin
+					10'd246: begin
 						x3 <= md;
-						st <= 10'd208;
+						st <= 10'd247;
 					end
-					10'd208:
+					10'd247:
 						if (gi == x4) begin
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))] <= VFALSE;
 							sp <= sp - 7'd1;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
 						else
-							rd(x3 + (gi << 2), 10'd209);
-					10'd209:
+							rd(x3 + (gi << 2), 10'd248);
+					10'd248:
 						if (((tg(mv) == ABI_TAG_INT) && (mv[31:0] == t[0][31:0])) || (is_bool(mv) && (t[0][31:0] == {31'd0, mv == VTRUE}))) begin
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))] <= VTRUE;
 							sp <= sp - 7'd1;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
 						else if (((((((((tg(mv) == ABI_TAG_INT) || is_bool(mv)) || (mv == VNONE)) || (tg(mv) == ABI_TAG_QSTR)) || (tg(mv) == ABI_TAG_STR)) || (tg(mv) == ABI_TAG_BYTES)) || (tg(mv) == ABI_TAG_TUPLE)) || (tg(mv) == ABI_TAG_MUT)) || (tg(mv) == ABI_TAG_RANGE)) begin
 							gi <= gi + 32'd1;
-							st <= 10'd208;
+							st <= 10'd247;
 						end
 						else
-							st <= 10'd33;
-					10'd205:
+							st <= 10'd44;
+					10'd244:
 						if (lk_cx)
-							st <= 10'd33;
+							st <= 10'd44;
 						else begin
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))] <= vbool(lk_found);
 							sp <= sp - 7'd1;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
-					10'd104:
+					10'd140:
 						if (tg(t[0]) != ABI_TAG_OBJECT)
-							st <= 10'd33;
+							st <= 10'd44;
 						else
-							rd(aoff(adr(t[0]), 4), 10'd106);
-					10'd106: begin
+							rd(aoff(adr(t[0]), 4), 10'd142);
+					10'd142: begin
 						is_t <= mv;
 						if (tg(t[1]) == ABI_TAG_OBJECT) begin
 							is_c <= t[1];
-							gosub(10'd210, 10'd105);
+							gosub(10'd249, 10'd141);
 						end
 						else if (tg(t[1]) == ABI_TAG_TUPLE)
-							rd(adr(t[1]), 10'd109);
+							rd(adr(t[1]), 10'd145);
 						else
-							st <= 10'd33;
+							st <= 10'd44;
 					end
-					10'd105: begin
+					10'd141: begin
 						rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))] <= vbool(is_r);
 						sp <= sp - 7'd1;
-						st <= 10'd111;
+						st <= 10'd147;
 					end
-					10'd109: begin
+					10'd145: begin
 						x4 <= md;
 						gi <= 32'd0;
-						st <= 10'd108;
+						st <= 10'd144;
 					end
-					10'd108:
+					10'd144:
 						if (gi == x4) begin
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))] <= VFALSE;
 							sp <= sp - 7'd1;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
 						else
-							rd((adr(t[1]) + 4) + (gi << 2), 10'd107);
-					10'd107: begin
+							rd((adr(t[1]) + 4) + (gi << 2), 10'd143);
+					10'd143: begin
 						is_c <= mv;
-						gosub(10'd210, 10'd110);
+						gosub(10'd249, 10'd146);
 					end
-					10'd110:
+					10'd146:
 						if (is_r) begin
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))] <= VTRUE;
 							sp <= sp - 7'd1;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
 						else begin
 							gi <= gi + 32'd1;
-							st <= 10'd108;
+							st <= 10'd144;
 						end
-					10'd303: begin
+					10'd349: begin
 						na_f <= tg(t[0]) == ABI_TAG_FLOAT;
 						if (tg(t[0]) == ABI_TAG_INT64)
-							rd(adr(t[0]), 10'd305);
+							rd(adr(t[0]), 10'd351);
 						else begin
 							na <= sx64(ival(t[0]));
-							st <= 10'd306;
+							st <= 10'd352;
 						end
 					end
-					10'd305: begin
+					10'd351: begin
 						na[31:0] <= md;
-						rd(aoff(adr(t[0]), 4), 10'd304);
+						rd(aoff(adr(t[0]), 4), 10'd350);
 					end
-					10'd304: begin
+					10'd350: begin
 						na[63:32] <= md;
-						st <= 10'd306;
+						st <= 10'd352;
 					end
-					10'd306: begin
+					10'd352: begin
 						nb_f <= tg(t[1]) == ABI_TAG_FLOAT;
 						if (tg(t[1]) == ABI_TAG_INT64)
-							rd(adr(t[1]), 10'd308);
+							rd(adr(t[1]), 10'd354);
 						else begin
 							nb <= sx64(ival(t[1]));
-							st <= 10'd310;
+							st <= 10'd356;
 						end
 					end
-					10'd308: begin
+					10'd354: begin
 						nb[31:0] <= md;
-						rd(aoff(adr(t[1]), 4), 10'd307);
+						rd(aoff(adr(t[1]), 4), 10'd353);
 					end
-					10'd307: begin
+					10'd353: begin
 						nb[63:32] <= md;
-						st <= 10'd310;
+						st <= 10'd356;
 					end
-					10'd310: begin
-						n_small <= ((!na_f && !nb_f) && fits31(na)) && fits31(nb);
-						alu_start <= 1'b1;
-						if (cfg_aalu && aalu_safe(alu_op, n_un, na_f, nb_f, na, nb)) begin
-							aalu_pend <= 1'b1;
-							aalu_slot <= rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2));
-							sp <= sp - 7'd1;
-							go_next;
+					10'd356:
+						if (((h_bigint && !n_un) && ((tg(t[0]) == ABI_TAG_INT64) || (tg(t[1]) == ABI_TAG_INT64))) && (((na_f || nb_f) || (alu_op == mpy_alu_pkg_ALU_TDIV)) || ((alu_op == mpy_alu_pkg_ALU_POW) && nb[63])))
+							st <= 10'd44;
+						else begin
+							n_small <= (!na_f && !nb_f) && (h_bigint || (fits31(na) && fits31(nb)));
+							alu_start <= 1'b1;
+							if (cfg_aalu && aalu_safe(alu_op, n_un, na_f, nb_f, na, nb)) begin
+								aalu_pend <= 1'b1;
+								aalu_slot <= rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2));
+								sp <= sp - 7'd1;
+								go_next;
+							end
+							else
+								st <= 10'd358;
 						end
-						else
-							st <= 10'd312;
-					end
-					10'd312:
+					10'd358:
 						if (alu_done)
 							case (alu_err)
 								mpy_alu_pkg_AE_NONE:
 									if (alu_kind == mpy_alu_pkg_AK_BOOL) begin
 										t[2] <= vbool(alu_res[0]);
-										st <= 10'd311;
+										st <= 10'd357;
 									end
 									else if (alu_kind == mpy_alu_pkg_AK_FLOAT) begin
 										t[2] <= {ABI_TAG_FLOAT, alu_res[31:0]};
-										st <= 10'd311;
+										st <= 10'd357;
 									end
 									else if (fits32(alu_res)) begin
 										t[2] <= vint(alu_res[31:0]);
-										st <= 10'd311;
+										st <= 10'd357;
 									end
 									else
-										alloc(32'd2, 10'd309);
+										alloc(32'd2, 10'd355);
 								mpy_alu_pkg_AE_ZERO_DIV:
 									raise_msg(ABI_MSG_DIV_ZERO);
 								mpy_alu_pkg_AE_OVERFLOW:
-									raise_msg(ABI_MSG_OVERFLOW);
+									if ((h_bigint && !na_f) && !nb_f) begin
+										sp <= sp - (n_un ? 7'd1 : 7'd2);
+										hook(ABI_HOOK_INT_OVERFLOW, ABI_RK_PUSH, 8'd3, vint(sv2v_cast_32(n_o)), t[0], (n_un ? VNULL : t[1]), VNULL);
+									end
+									else
+										raise_msg(ABI_MSG_OVERFLOW);
 								mpy_alu_pkg_AE_NEG_SHIFT:
 									raise_msg(ABI_MSG_NEG_SHIFT);
 								default:
@@ -11174,21 +12249,21 @@ module mpy_core (
 										hook(ABI_HOOK_UNOP, ABI_RK_PUSH, 8'd2, vint(sv2v_cast_32(n_o)), t[0], VNULL, VNULL);
 									end
 									else
-										st <= 10'd33;
+										st <= 10'd44;
 							endcase
-					10'd309: begin
+					10'd355: begin
 						wb_v[0] <= vint(alu_res[31:0]);
 						wb_v[1] <= vint(alu_res[63:32]);
 						t[2] <= {ABI_TAG_INT64, al_a};
-						wblock(al_a, 4'd2, 10'd311);
+						wblock(al_a, 4'd2, 10'd357);
 					end
-					10'd710: begin
+					10'd777: begin
 						rf[aalu_slot] <= (alu_kind == mpy_alu_pkg_AK_BOOL ? vbool(alu_res[0]) : (alu_kind == mpy_alu_pkg_AK_FLOAT ? {ABI_TAG_FLOAT, alu_res[31:0]} : vint(alu_res[31:0])));
 						aalu_pend <= 1'b0;
 						aalu_ready <= 1'b0;
 						st <= aalu_ret;
 					end
-					10'd311: begin
+					10'd357: begin
 						if (n_un)
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))] <= t[2];
 						else begin
@@ -11197,7 +12272,7 @@ module mpy_core (
 						end
 						go_next;
 					end
-					10'd313: begin
+					10'd359: begin
 						if (!m_wait) begin
 							if (bl_n == 8'd1) begin
 								bload(ha_cx_pa4);
@@ -11225,11 +12300,11 @@ module mpy_core (
 								endcase
 								bl_k <= v0[2:0] + 3'd1;
 								if ((v0 == 32'd3) || ((v0 == 32'd1) && (!cx_bcx || (cx_op == CX_ABS))))
-									st <= 10'd314;
+									st <= 10'd360;
 							end
 						end
 					end
-					10'd314: begin
+					10'd360: begin
 						na_f <= 1'b1;
 						nb_f <= 1'b1;
 						n_small <= 1'b0;
@@ -11298,33 +12373,33 @@ module mpy_core (
 								endcase
 						endcase
 						alu_start <= 1'b1;
-						st <= 10'd315;
+						st <= 10'd361;
 					end
-					10'd315:
+					10'd361:
 						if (alu_done) begin
 							if ((alu_err != mpy_alu_pkg_AE_NONE) || (alu_kind != mpy_alu_pkg_AK_FLOAT)) begin
 								if (cx_op == CX_ABS)
-									st <= 10'd294;
+									st <= 10'd340;
 								else
-									st <= 10'd33;
+									st <= 10'd44;
 							end
 							else begin
 								cx_k <= cx_k + 3'd1;
 								cx_im <= alu_res[31:0];
-								st <= 10'd314;
+								st <= 10'd360;
 								case (cx_op)
 									CX_ADD, CX_SUB:
 										if (cx_k == 3'd0)
 											cx_re <= alu_res[31:0];
 										else
-											alloc(32'd2, 10'd316);
+											alloc(32'd2, 10'd362);
 									CX_MUL:
 										case (cx_k)
 											3'd0, 3'd3: cx_t0 <= alu_res[31:0];
 											3'd1, 3'd4: cx_t1 <= alu_res[31:0];
 											3'd2: cx_re <= alu_res[31:0];
 											default:
-												alloc(32'd2, 10'd316);
+												alloc(32'd2, 10'd362);
 										endcase
 									default:
 										case (cx_k)
@@ -11336,47 +12411,59 @@ module mpy_core (
 								endcase
 							end
 						end
-					10'd316: begin
+					10'd362: begin
 						wb_v[0] <= vint(cx_re);
 						wb_v[1] <= vint(cx_im);
 						t[2] <= {ABI_TAG_COMPLEX, al_a};
-						wblock(al_a, 4'd2, 10'd311);
+						wblock(al_a, 4'd2, 10'd357);
 					end
-					10'd293:
+					10'd339:
 						if (ab_nkw != 8'd0)
-							st <= 10'd294;
+							st <= 10'd340;
 						else
-							rd(ab_ptr(ab_lo), 10'd615);
-					10'd615: begin
+							rd(ab_ptr(ab_lo), 10'd672);
+					10'd672: begin
 						ab_q <= mv;
-						v0 = sv2v_cast_32(ab_pe - ab_lo);
+						v0 = {24'd0, nargs_r};
 						v1 = mv[31:0];
 						case (nid)
 							ABI_N_LEN:
 								if (v0 != 32'd1)
-									st <= 10'd294;
+									st <= 10'd340;
 								else if (strlike(mv) || (tg(mv) == ABI_TAG_BYTES)) begin
 									si_v <= mv;
-									gosub(10'd444, 10'd364);
+									gosub(10'd500, 10'd419);
 								end
 								else if ((((tg(mv) == ABI_TAG_TUPLE) || is_mut(mv, ABI_MUT_LIST)) || is_mut(mv, ABI_MUT_DICT)) || is_mut(mv, ABI_MUT_SET))
-									rd(adr(mv), 10'd370);
+									rd(adr(mv), 10'd425);
 								else
-									st <= 10'd294;
+									st <= 10'd340;
 							ABI_N_ISINSTANCE:
 								if (v0 != 32'd2)
-									st <= 10'd294;
+									st <= 10'd340;
 								else
-									rd(ab_ptr(ab_lo + 8'd1), 10'd617);
+									rd(ab_ptr(ab_lo + 8'd1), 10'd674);
 							ABI_N_ID:
 								deliver(vint(v1), crk);
+							ABI_N_WFE: begin
+								wfe_n <= v1;
+								st <= 10'd813;
+							end
+							ABI_N_HLOCK: begin
+								hl_cnt <= hl_cnt + 15'd1;
+								deliver(VNONE, crk);
+							end
+							ABI_N_HUNLOCK: begin
+								hl_cnt <= hl_cnt - 15'd1;
+								deliver(vint({17'd0, hl_cnt - 15'd1}), crk);
+							end
 							ABI_N_WR, ABI_N_WE: begin
 								x4 <= ABI_SIM_BASE + (4 * (nid == ABI_N_WR ? ABI_SIM_STDOUT : ABI_SIM_STDERR));
 								if (tg(mv) == ABI_TAG_INT)
-									wr(ABI_SIM_BASE + (4 * (nid == ABI_N_WR ? ABI_SIM_STDOUT : ABI_SIM_STDERR)), mv, 10'd366);
+									wr(ABI_SIM_BASE + (4 * (nid == ABI_N_WR ? ABI_SIM_STDOUT : ABI_SIM_STDERR)), mv, 10'd421);
 								else begin
 									si_v <= mv;
-									gosub(10'd444, 10'd382);
+									gosub(10'd500, 10'd437);
 								end
 							end
 							ABI_N_HALT:
@@ -11386,45 +12473,59 @@ module mpy_core (
 							ABI_N_PAY:
 								deliver(vint(v1), crk);
 							ABI_N_MK:
-								rd(ab_ptr(ab_lo + 8'd1), 10'd624);
+								rd(ab_ptr(ab_lo + 8'd1), 10'd681);
 							ABI_N_LD:
-								rd(ab_ptr(ab_lo + 8'd1), 10'd625);
+								rd(ab_ptr(ab_lo + 8'd1), 10'd682);
 							ABI_N_ST:
-								rd(ab_ptr(ab_lo + 8'd1), 10'd626);
+								rd(ab_ptr(ab_lo + 8'd1), 10'd683);
 							ABI_N_PEEK8:
-								rd(ab_ptr(ab_lo + 8'd1), 10'd628);
+								rd(ab_ptr(ab_lo + 8'd1), 10'd685);
 							ABI_N_POKE8:
-								rd(ab_ptr(ab_lo + 8'd1), 10'd629);
+								rd(ab_ptr(ab_lo + 8'd1), 10'd686);
 							ABI_N_PEEK32:
-								rd(v1, 10'd370);
+								rd(v1, 10'd425);
 							ABI_N_ALLOC:
-								alloc(v1, 10'd317);
+								alloc(v1, 10'd363);
 							ABI_N_TYPEOF: begin
 								ty_v <= mv;
-								gosub(10'd474, 10'd379);
+								gosub(10'd531, 10'd434);
 							end
 							ABI_N_CALLNS:
 								if (tg(mv) == ABI_TAG_INT)
-									rd(ab_ptr(ab_lo + 8'd1), 10'd631);
+									rd(ab_ptr(ab_lo + 8'd1), 10'd688);
 								else
-									wr(ab_ptr(8'd0), mv, 10'd632);
+									wr(ab_ptr(8'd0), mv, 10'd689);
 							ABI_N_WCOPY:
-								rd(ab_ptr(ab_lo + 8'd1), 10'd634);
+								rd(ab_ptr(ab_lo + 8'd1), 10'd691);
+							ABI_N_LIMB_MAC:
+								if (v0 != 32'd6)
+									st <= 10'd340;
+								else begin
+									x0 <= padr(mv) + 32'd12;
+									rd(ab_ptr(ab_lo + 8'd1), 10'd696);
+								end
+							ABI_N_LIMB_NEW:
+								if (v0 != 32'd1)
+									st <= 10'd340;
+								else if ((tg(mv) != ABI_TAG_INT) || (v1 > 122557))
+									raise_msg(ABI_MSG_MEMORY);
+								else
+									alloc(v1 + 32'd3, 10'd707);
 							ABI_N_BCOPY:
-								rd(ab_ptr(ab_lo + 8'd2), 10'd639);
+								rd(ab_ptr(ab_lo + 8'd2), 10'd709);
 							ABI_N_STRNEW:
 								if ((!intlike(mv) || v1[31]) || (v1 > (ABI_GC_POOL_BYTES - 32'd12)))
-									alloc(122561, 10'd377);
+									alloc(122561, 10'd432);
 								else
-									alloc(32'd3 + ((v1 + 32'd3) >> 2), 10'd377);
+									alloc(32'd3 + ((v1 + 32'd3) >> 2), 10'd432);
 							ABI_N_STRFIN:
-								rd(adr(mv), 10'd372);
+								rd(adr(mv), 10'd427);
 							ABI_N_LOOKUP:
-								rd(ab_ptr(ab_lo + 8'd1), 10'd640);
+								rd(ab_ptr(ab_lo + 8'd1), 10'd710);
 							ABI_N_TICKS:
 								deliver(vint({2'b00, cyc[29:0]}), crk);
 							ABI_N_GC:
-								gosub(10'd173, 10'd366);
+								gosub(10'd209, 10'd421);
 							ABI_N_GCINFO:
 								deliver(vint((v1 == 32'd0 ? gc_free_i << 4 : (v1 == 32'd1 ? gc_total_i << 4 : gc_collections_i))), crk);
 							ABI_N_FTOI: begin
@@ -11432,17 +12533,17 @@ module mpy_core (
 								t[1] <= vint(32'd0);
 								n_un <= 1'b1;
 								alu_op <= mpy_alu_pkg_ALU_F2I;
-								st <= 10'd330;
+								st <= 10'd385;
 							end
 							ABI_N_ABS:
 								if (v0 != 32'd1)
-									st <= 10'd294;
+									st <= 10'd340;
 								else if (tg(mv) == ABI_TAG_COMPLEX) begin
 									cx_op <= CX_ABS;
 									cx_start(mv, VNULL);
 								end
 								else if (!(((tg(mv) == ABI_TAG_INT) || (tg(mv) == ABI_TAG_FLOAT)) || is_bool(mv)))
-									st <= 10'd294;
+									st <= 10'd340;
 								else begin
 									na_f <= tg(mv) == ABI_TAG_FLOAT;
 									na <= sx64(ival(mv));
@@ -11451,37 +12552,45 @@ module mpy_core (
 									n_small <= 1'b0;
 									alu_op <= mpy_alu_pkg_ALU_ABS;
 									alu_start <= 1'b1;
-									st <= 10'd333;
+									st <= 10'd388;
 								end
 							ABI_N_GETATTR:
 								if ((v0 != 32'd2) && (v0 != 32'd3))
-									st <= 10'd294;
+									st <= 10'd340;
 								else
-									rd(ab_ptr(ab_lo + 8'd1), 10'd618);
+									rd(ab_ptr(ab_lo + 8'd1), 10'd675);
 							ABI_N_SETATTR:
 								if (v0 != 32'd3)
-									st <= 10'd294;
+									st <= 10'd340;
 								else
-									rd(ab_ptr(ab_lo + 8'd1), 10'd622);
+									rd(ab_ptr(ab_lo + 8'd1), 10'd679);
 							ABI_N_INEXT:
 								if (tg(mv) != ABI_TAG_ITER)
 									deliver(VNULL, crk);
 								else begin
 									t[3] <= mv;
 									i0 <= 8'd0;
-									st <= 10'd357;
+									st <= 10'd412;
 								end
 							ABI_N_GRESUME:
 								if (v0 != 32'd3)
-									st <= 10'd294;
+									st <= 10'd340;
 								else begin
 									r_rk <= crk;
 									t[0] <= mv;
-									rd(ab_ptr(ab_lo + 8'd1), 10'd650);
+									rd(ab_ptr(ab_lo + 8'd1), 10'd720);
+								end
+							ABI_N_FIND_BYTES:
+								if ((v0 != 32'd4) || !(strlike(mv) || (tg(mv) == ABI_TAG_BYTES)))
+									st <= 10'd340;
+								else begin
+									t[0] <= mv;
+									rd(ab_ptr(ab_lo + 8'd1), 10'd373);
 								end
 							ABI_N_BCMP: begin
+								b0 <= 1'b1;
 								si_v <= mv;
-								gosub(10'd444, 10'd325);
+								gosub(10'd500, 10'd371);
 							end
 							ABI_N_SEQSCAN:
 								if ((!cfg_ca || !cfg_bulk) || (v0 != 5))
@@ -11494,13 +12603,13 @@ module mpy_core (
 									mb_header_o <= 0;
 									mb_source_header_o <= 0;
 									mb_hashes_o <= 0;
-									rd(ab_ptr(ab_lo + 8'd1), 10'd335);
+									rd(ab_ptr(ab_lo + 8'd1), 10'd390);
 								end
 							ABI_N_SEQREVERSE:
 								if ((!cfg_ca || !cfg_bulk) || (v0 != 2))
 									deliver(VFALSE, crk);
 								else
-									rd(ab_ptr(ab_lo + 8'd1), 10'd338);
+									rd(ab_ptr(ab_lo + 8'd1), 10'd393);
 							ABI_N_MAPINSERT_HASHED:
 								if (((!cfg_ca || !cfg_bulk) || (v0 != 6)) || !(is_mut(mv, ABI_MUT_DICT) || is_mut(mv, ABI_MUT_SET)))
 									deliver(VFALSE, crk);
@@ -11512,7 +12621,7 @@ module mpy_core (
 									mb_src_o <= ab_ptr(ab_lo + 8'd3);
 									mb_sn_o <= 1;
 									mb_hashes_o <= ab_ptr(ab_lo + 8'd5);
-									rd(ab_ptr(ab_lo + 8'd1), 10'd340);
+									rd(ab_ptr(ab_lo + 8'd1), 10'd395);
 								end
 							ABI_N_MAPBULK, ABI_N_MAPRELATION:
 								if ((((!cfg_ca || !cfg_bulk) || (v0 != 3)) || (tg(mv) != ABI_TAG_MUT)) || !(is_mut(mv, ABI_MUT_DICT) || is_mut(mv, ABI_MUT_SET)))
@@ -11521,157 +12630,157 @@ module mpy_core (
 									mb_hashes_o <= 0;
 									mb_header_o <= adr(mv);
 									mb_set_o <= is_mut(mv, ABI_MUT_SET);
-									rd(ab_ptr(ab_lo + 8'd1), 10'd344);
+									rd(ab_ptr(ab_lo + 8'd1), 10'd399);
 								end
 							ABI_N_HASH: begin
 								hk <= mv;
-								gosub(10'd195, 10'd334);
+								gosub(10'd231, 10'd389);
 							end
 							ABI_N_DATA: begin
 								si_v <= mv;
-								gosub(10'd93, 10'd328);
+								gosub(10'd129, 10'd383);
 							end
 							ABI_N_FGET:
 								if (fprev == 32'd0)
 									deliver(VNULL, crk);
 								else begin
 									x3 <= v1;
-									rd(fprev + (v1 << 2), 10'd329);
+									rd(fprev + (v1 << 2), 10'd384);
 								end
 							ABI_N_FLOC:
 								if (fprev == 32'd0)
 									deliver(VNULL, crk);
 								else
-									rd((fprev + 32'd64) + (v1 << 2), 10'd371);
+									rd((fprev + 32'd64) + (v1 << 2), 10'd426);
 							ABI_N_QXSET: begin
 								h_qext <= mv[31:0];
-								rd(ab_ptr(ab_lo + 8'd1), 10'd684);
+								rd(ab_ptr(ab_lo + 8'd1), 10'd754);
 							end
 							ABI_N_SLEN:
 								if ((tg(mv) == ABI_TAG_MUT) || (tg(mv) == ABI_TAG_TUPLE))
-									rd(adr(mv), 10'd370);
+									rd(adr(mv), 10'd425);
 								else begin
 									si_v <= mv;
-									gosub(10'd444, 10'd364);
+									gosub(10'd500, 10'd419);
 								end
 							ABI_N_LIST_APPEND:
 								if ((v0 != 32'd2) || !is_mut(mv, ABI_MUT_LIST))
-									st <= 10'd294;
+									st <= 10'd340;
 								else begin
 									t[2] <= mv;
-									rd(ab_ptr(ab_lo + 8'd1), 10'd652);
+									rd(ab_ptr(ab_lo + 8'd1), 10'd722);
 								end
 							ABI_N_LIST_COPY:
 								if (((v0 != 1) || !is_mut(mv, ABI_MUT_LIST)) || (cfg_sl == 0))
-									st <= 10'd294;
+									st <= 10'd340;
 								else begin
 									t[0] <= mv;
 									ss_store <= 0;
 									ss_native <= 1;
-									ss_back <= 10'd729;
-									st <= 10'd732;
+									ss_back <= 10'd796;
+									st <= 10'd799;
 								end
 							ABI_N_ORD:
 								if ((v0 != 32'd1) || !(strlike(mv) || (tg(mv) == ABI_TAG_BYTES)))
-									st <= 10'd294;
+									st <= 10'd340;
 								else begin
 									si_v <= mv;
-									gosub(10'd444, 10'd643);
+									gosub(10'd500, 10'd713);
 								end
 							ABI_N_CHR:
 								if (((v0 != 32'd1) || (tg(mv) != ABI_TAG_INT)) || (v1 >= 32'd128))
-									st <= 10'd294;
+									st <= 10'd340;
 								else
-									rd(h_chars + (v1 << 2), 10'd645);
+									rd(h_chars + (v1 << 2), 10'd715);
 							ABI_N_DICT_GET:
 								if (((v0 != 32'd2) && (v0 != 32'd3)) || !is_mut(mv, ABI_MUT_DICT))
-									st <= 10'd294;
+									st <= 10'd340;
 								else
-									rd(ab_ptr(ab_lo + 8'd1), 10'd641);
+									rd(ab_ptr(ab_lo + 8'd1), 10'd711);
 							ABI_N_LIST_POP:
 								if (((v0 != 32'd1) && (v0 != 32'd2)) || !is_mut(mv, ABI_MUT_LIST))
-									st <= 10'd294;
+									st <= 10'd340;
 								else begin
 									t[2] <= mv;
 									x0 <= 32'hffffffff;
 									if (v0 == 32'd2)
-										rd(ab_ptr(ab_lo + 8'd1), 10'd653);
+										rd(ab_ptr(ab_lo + 8'd1), 10'd723);
 									else
-										rd(adr(mv), 10'd654);
+										rd(adr(mv), 10'd724);
 								end
 							ABI_N_LIST_INSERT:
 								if ((v0 != 32'd3) || !is_mut(mv, ABI_MUT_LIST))
-									st <= 10'd294;
+									st <= 10'd340;
 								else begin
 									t[2] <= mv;
-									rd(ab_ptr(ab_lo + 8'd1), 10'd665);
+									rd(ab_ptr(ab_lo + 8'd1), 10'd735);
 								end
 							ABI_N_WCOPY_STEP:
 								if (v0 != 32'd6)
-									st <= 10'd294;
+									st <= 10'd340;
 								else
-									rd(ab_ptr(ab_lo + 8'd1), 10'd677);
+									rd(ab_ptr(ab_lo + 8'd1), 10'd747);
 							ABI_N_OBJECT_INIT:
 								if (v0 != 32'd1)
-									st <= 10'd294;
+									st <= 10'd340;
 								else
 									deliver(VNONE, crk);
 							ABI_N_BASEEXCEPTION_INIT:
 								if ((v0 < 32'd1) || (tg(mv) != ABI_TAG_OBJECT))
-									st <= 10'd294;
+									st <= 10'd340;
 								else begin
 									t[0] <= mv;
 									tb_src <= 1'b0;
 									tb_nz <= 1'b0;
 									tb_from <= ab_lo + 8'd1;
 									tb_n <= sv2v_cast_16((ab_pe - ab_lo) - 8'd1);
-									gosub(10'd471, 10'd327);
+									gosub(10'd528, 10'd382);
 								end
 							ABI_N_NEW_RANGE:
 								if ((v0 < 32'd2) || (v0 > 32'd4))
-									st <= 10'd294;
+									st <= 10'd340;
 								else begin
 									x0 <= v0;
-									rd(ab_ptr(ab_lo + 8'd1), 10'd685);
+									rd(ab_ptr(ab_lo + 8'd1), 10'd755);
 								end
 							ABI_N_NEW_FLOAT, ABI_N_NEW_INT, ABI_N_NEW_TYPE:
 								if (v0 != 32'd2)
-									st <= 10'd294;
+									st <= 10'd340;
 								else
-									rd(TT + (4 * (nid == ABI_N_NEW_FLOAT ? ABI_T_FLOAT : (nid == ABI_N_NEW_INT ? ABI_T_INT : ABI_T_TYPE))), 10'd646);
+									rd(TT + (4 * (nid == ABI_N_NEW_FLOAT ? ABI_T_FLOAT : (nid == ABI_N_NEW_INT ? ABI_T_INT : ABI_T_TYPE))), 10'd716);
 							ABI_N_NEW_OBJECT:
 								if (v0 != 32'd1)
-									st <= 10'd294;
+									st <= 10'd340;
 								else begin
 									t[0] <= mv;
-									alloc(32'd3, 10'd367);
+									alloc(32'd3, 10'd422);
 								end
-							default: st <= 10'd294;
+							default: st <= 10'd340;
 						endcase
 					end
-					10'd335:
+					10'd390:
 						if ((tg(mv) != ABI_TAG_INT) || mv[31])
 							deliver(vint(32'hfffffffe), crk);
 						else begin
 							mb_dst_o <= padr(ab_q) + (mv[31:0] << 2);
-							rd(ab_ptr(ab_lo + 8'd2), 10'd336);
+							rd(ab_ptr(ab_lo + 8'd2), 10'd391);
 						end
-					10'd336:
+					10'd391:
 						if ((tg(mv) != ABI_TAG_INT) || mv[31])
 							deliver(vint(32'hfffffffe), crk);
 						else begin
 							mb_dn_o <= mv[31:0];
-							rd(ab_ptr(ab_lo + 8'd4), 10'd337);
+							rd(ab_ptr(ab_lo + 8'd4), 10'd392);
 						end
-					10'd337: begin
+					10'd392: begin
 						mb_used_o <= mv[31:0];
-						st <= 10'd352;
+						st <= 10'd407;
 					end
-					10'd338: begin
+					10'd393: begin
 						x0 <= mv[31:0];
-						st <= 10'd339;
+						st <= 10'd394;
 					end
-					10'd339:
+					10'd394:
 						if (x0 < 2)
 							deliver(VTRUE, crk);
 						else if (ca_ok) begin
@@ -11680,74 +12789,74 @@ module mpy_core (
 							ca_reverse_o <= 1;
 							deliver(VTRUE, crk);
 						end
-					10'd340: begin
+					10'd395: begin
 						mb_dst_o <= padr(mv);
-						rd(ab_ptr(ab_lo + 8'd2), 10'd341);
+						rd(ab_ptr(ab_lo + 8'd2), 10'd396);
 					end
-					10'd341:
+					10'd396:
 						if (((tg(mv) != ABI_TAG_INT) || (mv[31:0] == 0)) || mv[31])
 							deliver(VFALSE, crk);
 						else begin
 							mb_dn_o <= mv[31:0];
-							rd(ab_ptr(ab_lo + 8'd5), 10'd342);
+							rd(ab_ptr(ab_lo + 8'd5), 10'd397);
 						end
-					10'd342:
+					10'd397:
 						if (tg(mv) != ABI_TAG_INT)
 							deliver(VFALSE, crk);
 						else
-							rd(mb_header_o, 10'd343);
-					10'd343: begin
+							rd(mb_header_o, 10'd398);
+					10'd398: begin
 						mb_used_o <= md;
-						st <= 10'd352;
+						st <= 10'd407;
 					end
-					10'd344:
+					10'd399:
 						if ((tg(mv) != ABI_TAG_MUT) || !(mb_set_o ? is_mut(mv, ABI_MUT_SET) : is_mut(mv, ABI_MUT_DICT)))
 							deliver((nid == ABI_N_MAPRELATION ? vint(32'hffffffff) : VFALSE), crk);
 						else begin
 							mb_source_header_o <= adr(mv);
-							rd(ab_ptr(ab_lo + 8'd2), 10'd345);
+							rd(ab_ptr(ab_lo + 8'd2), 10'd400);
 						end
-					10'd345:
+					10'd400:
 						if (((tg(mv) != ABI_TAG_INT) || (nid == ABI_N_MAPRELATION ? (mv[31:0] < 5) || (mv[31:0] > 6) : (mv[31:0] < 1) || (mv[31:0] > 4))) || (!mb_set_o && (mv[31:0] != 1)))
 							deliver((nid == ABI_N_MAPRELATION ? vint(32'hffffffff) : VFALSE), crk);
 						else begin
 							mb_op_o <= mv[2:0];
-							rd(mb_header_o, 10'd346);
+							rd(mb_header_o, 10'd401);
 						end
-					10'd346: begin
+					10'd401: begin
 						mb_used_o <= md;
-						rd(aoff(mb_header_o, 4), 10'd347);
+						rd(aoff(mb_header_o, 4), 10'd402);
 					end
-					10'd347: begin
+					10'd402: begin
 						mb_dn_o <= md;
-						rd(aoff(mb_header_o, 8), 10'd348);
+						rd(aoff(mb_header_o, 8), 10'd403);
 					end
-					10'd348: begin
+					10'd403: begin
 						mb_dst_o <= md;
-						rd(aoff(mb_header_o, 12), 10'd349);
+						rd(aoff(mb_header_o, 12), 10'd404);
 					end
-					10'd349:
+					10'd404:
 						if ((mb_op_o < 5) && ((md & (mb_set_o ? ABI_SET_FLAG_FROZEN : ABI_DICT_FLAG_ROM)) != 0))
 							deliver((nid == ABI_N_MAPRELATION ? vint(32'hffffffff) : VFALSE), crk);
 						else
-							rd(aoff(mb_source_header_o, 4), 10'd350);
-					10'd350: begin
+							rd(aoff(mb_source_header_o, 4), 10'd405);
+					10'd405: begin
 						mb_sn_o <= md;
-						rd(aoff(mb_source_header_o, 8), 10'd351);
+						rd(aoff(mb_source_header_o, 8), 10'd406);
 					end
-					10'd351: begin
+					10'd406: begin
 						mb_src_o <= md;
-						st <= 10'd352;
+						st <= 10'd407;
 					end
-					10'd352:
+					10'd407:
 						if (mb_ready_i) begin
 							mb_valid_o <= 1;
-							st <= 10'd353;
+							st <= 10'd408;
 						end
-					10'd353:
+					10'd408:
 						if (mb_return_i)
 							deliver((nid == ABI_N_SEQSCAN ? vint((mb_ok_i ? mb_used_i : 32'hfffffffe)) : (nid == ABI_N_MAPRELATION ? vint((mb_ok_i ? mb_used_i : 32'hffffffff)) : (mb_ok_i ? VTRUE : VFALSE))), crk);
-					10'd354:
+					10'd409:
 						if (mb_ready_i) begin
 							mb_valid_o <= 1;
 							mb_op_o <= 0;
@@ -11760,93 +12869,185 @@ module mpy_core (
 							mb_header_o <= 0;
 							mb_hashes_o <= 0;
 							mb_source_header_o <= adr(t[4]);
-							st <= 10'd355;
+							st <= 10'd410;
 						end
-					10'd355:
+					10'd410:
 						if (mb_return_i) begin
 							if (mb_ok_i) begin
 								sA[4] <= mb_used_i;
 								sA[2] <= sA[5];
-								st <= 10'd400;
+								st <= 10'd456;
 							end
 							else begin
 								lk_cx <= 1;
 								ret;
 							end
 						end
-					10'd617:
+					10'd674:
 						if (tg(mv) != ABI_TAG_OBJECT)
-							st <= 10'd294;
+							st <= 10'd340;
 						else begin
 							ab_s[0] <= mv;
-							rd(adr(mv), 10'd361);
+							rd(adr(mv), 10'd416);
 						end
-					10'd624:
+					10'd681:
 						deliver({ab_q[3:0], mv[31:0]}, crk);
-					10'd625:
-						rd(padr(ab_q) + (mv[31:0] << 2), 10'd371);
-					10'd626: begin
+					10'd682:
+						rd(padr(ab_q) + (mv[31:0] << 2), 10'd426);
+					10'd683: begin
 						x0 <= mv[31:0];
-						rd(ab_ptr(ab_lo + 8'd2), 10'd627);
+						rd(ab_ptr(ab_lo + 8'd2), 10'd684);
 					end
-					10'd627:
-						wr(padr(ab_q) + (x0 << 2), mv, 10'd366);
-					10'd628: begin
+					10'd684:
+						wr(padr(ab_q) + (x0 << 2), mv, 10'd421);
+					10'd685: begin
 						v2 = padr(ab_q) + mv[31:0];
 						x3 <= v2;
-						rd({v2[31:2], 2'b00}, 10'd368);
+						rd({v2[31:2], 2'b00}, 10'd423);
 					end
-					10'd629: begin
+					10'd686: begin
 						x0 <= mv[31:0];
-						rd(ab_ptr(ab_lo + 8'd2), 10'd630);
+						rd(ab_ptr(ab_lo + 8'd2), 10'd687);
 					end
-					10'd630:
-						wrb(padr(ab_q) + x0, mv[7:0], 10'd366);
-					10'd631: begin
+					10'd687:
+						wrb(padr(ab_q) + x0, mv[7:0], 10'd421);
+					10'd688: begin
 						c_ismod <= 1'b1;
 						c_md <= ab_q[31:0];
 						cl_loc <= mv;
 						ab_lo <= 8'd32;
 						ab_pe <= 8'd32;
-						rd(ab_q[31:0] + 12, 10'd85);
+						rd(ab_q[31:0] + 12, 10'd121);
 					end
-					10'd632:
-						rd(ab_ptr(ab_lo + 8'd1), 10'd633);
-					10'd633: begin
+					10'd689:
+						rd(ab_ptr(ab_lo + 8'd1), 10'd690);
+					10'd690: begin
 						cl_loc <= mv;
 						ab_lo <= 8'd32;
 						ab_pe <= 8'd32;
-						st <= 10'd60;
+						st <= 10'd94;
 					end
-					10'd634: begin
+					10'd696: begin
+						x1 <= padr(mv) + 32'd12;
+						rd(ab_ptr(ab_lo + 8'd2), 10'd697);
+					end
+					10'd697: begin
+						x3 <= x1 + (md << 2);
+						rd(ab_ptr(ab_lo + 8'd3), 10'd698);
+					end
+					10'd698: begin
+						x2 <= padr(mv) + 32'd12;
+						rd(ab_ptr(ab_lo + 8'd4), 10'd699);
+					end
+					10'd699: begin
+						x4 <= x2 + (md << 2);
+						rd(ab_ptr(ab_lo + 8'd5), 10'd700);
+					end
+					10'd700: begin
+						bi_inline <= 1'b0;
+						limb_factor <= md;
+						limb_carry <= 32'd0;
+						st <= 10'd701;
+					end
+					10'd701:
+						if ((x1 == x3) && (x2 == x4)) begin
+							if (bi_inline)
+								st <= 10'd55;
+							else
+								deliver(vint(limb_carry), crk);
+						end
+						else if (x1 == x3) begin
+							limb_product <= 64'd0;
+							st <= 10'd704;
+						end
+						else
+							rd(x1, 10'd702);
+					10'd702: begin
+						x1 <= x1 + 32'd4;
+						if ((limb_factor == 32'd1) || (limb_factor == 32'hffffffff)) begin
+							limb_product <= (limb_factor[31] ? -{34'd0, md[29:0]} : {34'd0, md[29:0]});
+							st <= 10'd704;
+						end
+						else begin
+							na <= {34'd0, md[29:0]};
+							nb <= sx64(limb_factor);
+							na_f <= 1'b0;
+							nb_f <= 1'b0;
+							n_small <= 1'b0;
+							alu_op <= mpy_alu_pkg_ALU_MUL;
+							alu_start <= 1'b1;
+							st <= 10'd703;
+						end
+					end
+					10'd703:
+						if (alu_done) begin
+							limb_product <= alu_res;
+							st <= 10'd704;
+						end
+					10'd704:
+						if (x2 == x4) begin
+							limb_offset <= limb_carry;
+							st <= 10'd706;
+						end
+						else
+							rd(x2, 10'd705);
+					10'd705: begin
+						limb_offset <= limb_carry + {2'd0, md[29:0]};
+						x2 <= x2 + 32'd4;
+						st <= 10'd706;
+					end
+					10'd706: begin
+						if (bi_inline) begin
+							bi_i <= bi_i + 18'd1;
+							if (limb_sum[29:0] != 0) begin
+								bi_used <= bi_i + 18'd1;
+								bi_top <= limb_sum[29:0];
+								if (bi_i < 18'd2)
+									bi_low_nonzero <= 1'b1;
+							end
+						end
+						limb_carry <= limb_sum[61:30];
+						wr(x0, vint({2'd0, limb_sum[29:0]}), 10'd701);
+						x0 <= x0 + 32'd4;
+					end
+					10'd707:
+						rd(TT + (4 * ABI_T_INT), 10'd708);
+					10'd708: begin
+						t[0] <= {ABI_TAG_OBJECT, al_a};
+						wb_v[0] <= vint(ABI_OB_BIGINT);
+						wb_v[1] <= mv;
+						wb_v[2] <= vint(32'd0);
+						wblock(al_a, 4'd3, 10'd433);
+					end
+					10'd691: begin
 						x1 <= mv[31:0];
-						rd(ab_ptr(ab_lo + 8'd2), 10'd635);
+						rd(ab_ptr(ab_lo + 8'd2), 10'd692);
 					end
-					10'd635: begin
+					10'd692: begin
 						ab_s[0] <= mv;
-						rd(ab_ptr(ab_lo + 8'd3), 10'd636);
+						rd(ab_ptr(ab_lo + 8'd3), 10'd693);
 					end
-					10'd636: begin
+					10'd693: begin
 						x2 <= mv[31:0];
-						rd(ab_ptr(ab_lo + 8'd4), 10'd637);
+						rd(ab_ptr(ab_lo + 8'd4), 10'd694);
 					end
-					10'd637: begin
+					10'd694: begin
 						x3 <= mv[31:0];
 						if (cfg_ca)
-							st <= 10'd708;
+							st <= 10'd775;
 						else if (scr_id != SCR_LA)
-							scr_adopt(SCR_LA, 10'd638);
+							scr_adopt(SCR_LA, 10'd695);
 						else
-							st <= 10'd638;
+							st <= 10'd695;
 					end
-					10'd708:
+					10'd775:
 						if (x3 == 32'd0)
 							deliver(VNONE, crk);
 						else if (ca_ok) begin
 							ca_ship(padr(ab_q) + (x1 << 2), padr(ab_s[0]) + (x2 << 2), x3);
 							deliver(VNONE, crk);
 						end
-					10'd638: begin
+					10'd695: begin
 						v2 = padr(ab_q) + (x1 << 2);
 						v3 = padr(ab_s[0]) + (x2 << 2);
 						sA[3] <= v2;
@@ -11854,41 +13055,41 @@ module mpy_core (
 						sA[0] <= x3;
 						b1 <= v2 > v3;
 						sA[4] <= 32'd0;
-						st <= 10'd380;
+						st <= 10'd435;
 					end
-					10'd639: begin
+					10'd709: begin
 						si_v <= mv;
-						gosub(10'd93, 10'd319);
+						gosub(10'd129, 10'd365);
 					end
-					10'd640:
-						lookup(ab_q, mv, VNULL, LK_FIND, is_mut(ab_q, ABI_MUT_SET), 10'd365);
-					10'd643:
+					10'd710:
+						lookup(ab_q, mv, VNULL, LK_FIND, is_mut(ab_q, ABI_MUT_SET), 10'd420);
+					10'd713:
 						if (si_len != 32'd1)
-							st <= 10'd294;
+							st <= 10'd340;
 						else
-							rd({si_addr[31:2], 2'b00}, 10'd644);
-					10'd644:
+							rd({si_addr[31:2], 2'b00}, 10'd714);
+					10'd714:
 						if ((byte_of(md, si_addr[1:0]) >= 8'd128) && (tg(si_v) != ABI_TAG_BYTES))
-							st <= 10'd294;
+							st <= 10'd340;
 						else
 							deliver(vint({24'd0, byte_of(md, si_addr[1:0])}), crk);
-					10'd645:
+					10'd715:
 						deliver({ABI_TAG_QSTR, md}, crk);
-					10'd648: begin
+					10'd718: begin
 						na[31:0] <= md;
-						rd(ha_m4, 10'd649);
+						rd(ha_m4, 10'd719);
 					end
-					10'd649: begin
+					10'd719: begin
 						na[63:32] <= md;
 						alu_start <= 1'b1;
-						st <= 10'd333;
+						st <= 10'd388;
 					end
-					10'd646:
+					10'd716:
 						if (mv != ab_q)
-							st <= 10'd294;
+							st <= 10'd340;
 						else
-							rd(ab_ptr(ab_lo + 8'd1), 10'd647);
-					10'd647: begin
+							rd(ab_ptr(ab_lo + 8'd1), 10'd717);
+					10'd717: begin
 						nb_f <= 1'b1;
 						nb <= 64'd0;
 						n_small <= 1'b0;
@@ -11897,7 +13098,7 @@ module mpy_core (
 						na <= (tg(mv) == ABI_TAG_FLOAT ? {32'd0, mv[31:0]} : sx64(ival(mv)));
 						if (nid == ABI_N_NEW_TYPE) begin
 							ty_v <= mv;
-							gosub(10'd474, 10'd379);
+							gosub(10'd531, 10'd434);
 						end
 						else if ((nid == ABI_N_NEW_FLOAT) && (tg(mv) == ABI_TAG_FLOAT))
 							deliver(mv, crk);
@@ -11908,69 +13109,69 @@ module mpy_core (
 						else if ((nid == ABI_N_NEW_FLOAT) && ((tg(mv) == ABI_TAG_INT) || is_bool(mv))) begin
 							alu_op <= mpy_alu_pkg_ALU_ADD;
 							alu_start <= 1'b1;
-							st <= 10'd333;
+							st <= 10'd388;
 						end
-						else if ((nid == ABI_N_NEW_FLOAT) && (tg(mv) == ABI_TAG_INT64)) begin
+						else if (((nid == ABI_N_NEW_FLOAT) && (tg(mv) == ABI_TAG_INT64)) && !h_bigint) begin
 							alu_op <= mpy_alu_pkg_ALU_ADD;
-							rd(adr(mv), 10'd648);
+							rd(adr(mv), 10'd718);
 						end
 						else if ((nid == ABI_N_NEW_INT) && (tg(mv) == ABI_TAG_FLOAT)) begin
 							nb_f <= 1'b0;
 							alu_op <= mpy_alu_pkg_ALU_F2I;
 							alu_start <= 1'b1;
-							st <= 10'd333;
+							st <= 10'd388;
 						end
 						else
-							st <= 10'd294;
+							st <= 10'd340;
 					end
-					10'd641:
-						lookup(ab_q, mv, VNULL, LK_FIND, 1'b0, 10'd642);
-					10'd642:
+					10'd711:
+						lookup(ab_q, mv, VNULL, LK_FIND, 1'b0, 10'd712);
+					10'd712:
 						if (lk_cx)
-							st <= 10'd294;
+							st <= 10'd340;
 						else if (lk_found)
 							deliver(lk_res, crk);
 						else if ((ab_pe - ab_lo) == 8'd3)
-							rd(ab_ptr(ab_lo + 8'd2), 10'd371);
+							rd(ab_ptr(ab_lo + 8'd2), 10'd426);
 						else
 							deliver(VNONE, crk);
-					10'd650: begin
+					10'd720: begin
 						t[1] <= mv;
-						rd(ab_ptr(ab_lo + 8'd2), 10'd651);
+						rd(ab_ptr(ab_lo + 8'd2), 10'd721);
 					end
-					10'd651: begin
+					10'd721: begin
 						t[2] <= mv;
-						st <= 10'd144;
+						st <= 10'd180;
 					end
-					10'd652: begin
+					10'd722: begin
 						t[3] <= mv;
-						gosub(10'd236, 10'd366);
+						gosub(10'd280, 10'd421);
 					end
-					10'd653:
+					10'd723:
 						if (!intlike(mv))
-							st <= 10'd294;
+							st <= 10'd340;
 						else begin
 							x0 <= ival(mv);
-							rd(adr(t[2]), 10'd654);
+							rd(adr(t[2]), 10'd724);
 						end
-					10'd654: begin
+					10'd724: begin
 						v0 = x0;
 						if (v0[31])
 							v0 = v0 + md;
 						if (((md == 32'd0) || v0[31]) || (v0 >= md))
-							st <= 10'd294;
+							st <= 10'd340;
 						else begin
 							x0 <= v0;
 							x1 <= md;
-							rd(aoff(adr(t[2]), 8), 10'd655);
+							rd(aoff(adr(t[2]), 8), 10'd725);
 						end
 					end
-					10'd655: begin
+					10'd725: begin
 						x2 <= md;
 						x3 <= x0;
-						rd(md + (x0 << 2), 10'd656);
+						rd(md + (x0 << 2), 10'd726);
 					end
-					10'd656: begin
+					10'd726: begin
 						t[3] <= mv;
 						if (((cfg_sl != 0) && (x1 <= SHORTLIST_MAX)) && ((x0 + 32'd1) != x1)) begin
 							ss_src <= x2 + ((x0 + 32'd1) << 2);
@@ -11983,113 +13184,113 @@ module mpy_core (
 							ss_length <= 1;
 							ss_header <= adr(t[2]);
 							ss_new_length <= x1 - 32'd1;
-							ss_back <= 10'd664;
-							st <= 10'd732;
+							ss_back <= 10'd734;
+							st <= 10'd799;
 						end
 						else if ((x0 + 32'd1) == x1)
-							st <= 10'd662;
+							st <= 10'd732;
 						else if (cfg_ca && ((x1 - x0) > LS_CA_MIN))
-							st <= 10'd659;
+							st <= 10'd729;
 						else
-							st <= 10'd657;
+							st <= 10'd727;
 					end
-					10'd657:
+					10'd727:
 						if ((x3 + 32'd1) == x1)
-							st <= 10'd662;
+							st <= 10'd732;
 						else
-							rd(x2 + ((x3 + 32'd1) << 2), 10'd658);
-					10'd658: begin
-						wr(x2 + (x3 << 2), mv, 10'd657);
+							rd(x2 + ((x3 + 32'd1) << 2), 10'd728);
+					10'd728: begin
+						wr(x2 + (x3 << 2), mv, 10'd727);
 						x3 <= x3 + 32'd1;
 					end
-					10'd659:
+					10'd729:
 						if (ca_ok) begin
 							ca_ship(x2 + (x0 << 2), x2 + ((x0 + 32'd1) << 2), (x1 - x0) - 32'd1);
-							st <= 10'd660;
+							st <= 10'd730;
 						end
-					10'd660: st <= 10'd661;
-					10'd661:
+					10'd730: st <= 10'd731;
+					10'd731:
 						if (!ca_valid && ca_idle_i)
-							st <= 10'd662;
-					10'd662:
-						wr(x2 + ((x1 - 32'd1) << 2), VNULL, 10'd663);
-					10'd663:
-						wr(adr(t[2]), vint(x1 - 32'd1), 10'd664);
-					10'd664:
+							st <= 10'd732;
+					10'd732:
+						wr(x2 + ((x1 - 32'd1) << 2), VNULL, 10'd733);
+					10'd733:
+						wr(adr(t[2]), vint(x1 - 32'd1), 10'd734);
+					10'd734:
 						deliver(t[3], crk);
-					10'd677:
+					10'd747:
 						if (tg(mv) != ABI_TAG_INT)
-							st <= 10'd294;
+							st <= 10'd340;
 						else begin
 							x1 <= mv[31:0];
-							rd(ab_ptr(ab_lo + 8'd2), 10'd678);
+							rd(ab_ptr(ab_lo + 8'd2), 10'd748);
 						end
-					10'd678: begin
+					10'd748: begin
 						ab_s[0] <= mv;
-						rd(ab_ptr(ab_lo + 8'd3), 10'd679);
+						rd(ab_ptr(ab_lo + 8'd3), 10'd749);
 					end
-					10'd679:
+					10'd749:
 						if (tg(mv) != ABI_TAG_INT)
-							st <= 10'd294;
+							st <= 10'd340;
 						else begin
 							x2 <= mv[31:0];
-							rd(ab_ptr(ab_lo + 8'd4), 10'd680);
+							rd(ab_ptr(ab_lo + 8'd4), 10'd750);
 						end
-					10'd680:
+					10'd750:
 						if ((tg(mv) != ABI_TAG_INT) || mv[31])
-							st <= 10'd294;
+							st <= 10'd340;
 						else begin
 							x3 <= mv[31:0];
-							rd(ab_ptr(ab_lo + 8'd5), 10'd681);
+							rd(ab_ptr(ab_lo + 8'd5), 10'd751);
 						end
-					10'd681:
+					10'd751:
 						if (tg(mv) != ABI_TAG_INT)
-							st <= 10'd294;
+							st <= 10'd340;
 						else begin
 							x4 <= mv[31:0] << 2;
 							x1 <= padr(ab_q) + (x1 << 2);
 							x2 <= padr(ab_s[0]) + (x2 << 2);
-							st <= 10'd682;
+							st <= 10'd752;
 						end
-					10'd682:
+					10'd752:
 						if (x3 == 32'd0)
 							deliver(VNONE, crk);
 						else
-							rd(x2, 10'd683);
-					10'd683: begin
-						wr(x1, mv, 10'd682);
+							rd(x2, 10'd753);
+					10'd753: begin
+						wr(x1, mv, 10'd752);
 						x1 <= x1 + 32'd4;
 						x2 <= x2 + x4;
 						x3 <= x3 - 32'd1;
 					end
-					10'd665:
+					10'd735:
 						if (!intlike(mv) || ((cfg_sl != 0) && is_bool(mv)))
-							st <= 10'd294;
+							st <= 10'd340;
 						else begin
 							x0 <= ival(mv);
-							rd(ab_ptr(ab_lo + 8'd2), 10'd666);
+							rd(ab_ptr(ab_lo + 8'd2), 10'd736);
 						end
-					10'd666: begin
+					10'd736: begin
 						t[3] <= mv;
-						rd(adr(t[2]), 10'd667);
+						rd(adr(t[2]), 10'd737);
 					end
-					10'd667: begin
+					10'd737: begin
 						x1 <= md;
 						if (x0[31])
 							x0 <= x0 + md;
-						rd(aoff(adr(t[2]), 4), 10'd668);
+						rd(aoff(adr(t[2]), 4), 10'd738);
 					end
-					10'd668: begin
+					10'd738: begin
 						if (x0[31])
 							x0 <= 32'd0;
 						else if (x0 > x1)
 							x0 <= x1;
 						if (x1 >= md)
-							st <= 10'd294;
+							st <= 10'd340;
 						else
-							rd(aoff(adr(t[2]), 8), 10'd669);
+							rd(aoff(adr(t[2]), 8), 10'd739);
 					end
-					10'd669: begin
+					10'd739: begin
 						x2 <= md;
 						x3 <= x1;
 						if (((cfg_sl != 0) && (x1 < SHORTLIST_MAX)) && (x0 != x1)) begin
@@ -12104,210 +13305,210 @@ module mpy_core (
 							ss_length <= 1;
 							ss_header <= adr(t[2]);
 							ss_new_length <= x1 + 32'd1;
-							ss_back <= 10'd366;
-							st <= 10'd732;
+							ss_back <= 10'd421;
+							st <= 10'd799;
 						end
 						else if (x0 == x1)
-							st <= 10'd675;
+							st <= 10'd745;
 						else if (cfg_ca && ((x1 - x0) > LS_CA_MIN))
-							st <= 10'd672;
+							st <= 10'd742;
 						else
-							st <= 10'd670;
+							st <= 10'd740;
 					end
-					10'd670:
+					10'd740:
 						if (x3 == x0)
-							st <= 10'd675;
+							st <= 10'd745;
 						else
-							rd(x2 + ((x3 - 32'd1) << 2), 10'd671);
-					10'd671: begin
-						wr(x2 + (x3 << 2), mv, 10'd670);
+							rd(x2 + ((x3 - 32'd1) << 2), 10'd741);
+					10'd741: begin
+						wr(x2 + (x3 << 2), mv, 10'd740);
 						x3 <= x3 - 32'd1;
 					end
-					10'd672:
+					10'd742:
 						if (ca_ok) begin
 							ca_ship(x2 + ((x0 + 32'd1) << 2), x2 + (x0 << 2), x1 - x0);
-							st <= 10'd673;
+							st <= 10'd743;
 						end
-					10'd673: st <= 10'd674;
-					10'd674:
+					10'd743: st <= 10'd744;
+					10'd744:
 						if (!ca_valid && ca_idle_i)
-							st <= 10'd675;
-					10'd675:
-						wr(x2 + (x0 << 2), t[3], 10'd676);
-					10'd676:
-						wr(adr(t[2]), vint(x1 + 32'd1), 10'd366);
-					10'd684: begin
+							st <= 10'd745;
+					10'd745:
+						wr(x2 + (x0 << 2), t[3], 10'd746);
+					10'd746:
+						wr(adr(t[2]), vint(x1 + 32'd1), 10'd421);
+					10'd754: begin
 						h_qextn <= mv[31:0];
 						deliver(VNONE, crk);
 					end
-					10'd685:
+					10'd755:
 						if (!intlike(mv))
-							st <= 10'd294;
+							st <= 10'd340;
 						else if (x0 == 32'd2) begin
 							wb_v[0] <= vint(32'd0);
 							wb_v[1] <= vint(ival(mv));
 							wb_v[2] <= vint(32'd1);
-							alloc(32'd3, 10'd369);
+							alloc(32'd3, 10'd424);
 						end
 						else begin
 							ab_s[0] <= mv;
-							rd(ab_ptr(ab_lo + 8'd2), 10'd686);
+							rd(ab_ptr(ab_lo + 8'd2), 10'd756);
 						end
-					10'd686:
+					10'd756:
 						if (!intlike(mv))
-							st <= 10'd294;
+							st <= 10'd340;
 						else if (x0 == 32'd3) begin
 							wb_v[0] <= vint(ival(ab_s[0]));
 							wb_v[1] <= vint(ival(mv));
 							wb_v[2] <= vint(32'd1);
-							alloc(32'd3, 10'd369);
+							alloc(32'd3, 10'd424);
 						end
 						else begin
 							ab_s[1] <= mv;
-							rd(ab_ptr(ab_lo + 8'd3), 10'd687);
+							rd(ab_ptr(ab_lo + 8'd3), 10'd757);
 						end
-					10'd687:
+					10'd757:
 						if (!intlike(mv))
-							st <= 10'd294;
+							st <= 10'd340;
 						else if (ival(mv) == 32'd0)
 							raise_msg(ABI_MSG_ZERO_STEP);
 						else begin
 							wb_v[0] <= vint(ival(ab_s[0]));
 							wb_v[1] <= vint(ival(ab_s[1]));
 							wb_v[2] <= vint(ival(mv));
-							alloc(32'd3, 10'd369);
+							alloc(32'd3, 10'd424);
 						end
-					10'd618:
+					10'd675:
 						if (tg(mv) != ABI_TAG_QSTR)
-							st <= 10'd294;
+							st <= 10'd340;
 						else begin
 							at_q <= mv[31:0];
 							at_nat <= 1'b1;
 							t[0] <= ab_q;
-							gosub_scr(SCR_AT, 10'd9, 10'd248);
+							gosub_scr(SCR_AT, 10'd9, 10'd292);
 						end
-					10'd619:
+					10'd676:
 						if (md != ABI_OB_INSTANCE)
-							st <= 10'd294;
+							st <= 10'd340;
 						else
-							rd(aoff(adr(t[0]), 4), 10'd620);
-					10'd620:
-						rd(aoff(adr(mv), 28), 10'd621);
-					10'd621:
+							rd(aoff(adr(t[0]), 4), 10'd677);
+					10'd677:
+						rd(aoff(adr(mv), 28), 10'd678);
+					10'd678:
 						if (md & (ABI_TF_GETATTR | ABI_TF_NATIVE_SUB))
-							st <= 10'd294;
+							st <= 10'd340;
 						else
-							rd(ab_ptr(ab_lo + 8'd2), 10'd371);
-					10'd622:
+							rd(ab_ptr(ab_lo + 8'd2), 10'd426);
+					10'd679:
 						if (tg(mv) != ABI_TAG_QSTR)
-							st <= 10'd294;
+							st <= 10'd340;
 						else begin
 							at_q <= mv[31:0];
-							rd(ab_ptr(ab_lo + 8'd2), 10'd623);
+							rd(ab_ptr(ab_lo + 8'd2), 10'd680);
 						end
-					10'd623: begin
+					10'd680: begin
 						at_nat <= 1'b1;
 						t[0] <= ab_q;
 						t[6] <= mv;
-						st <= 10'd426;
+						st <= 10'd482;
 					end
-					10'd294:
-						rd(ab_ptr(8'd0), 10'd616);
-					10'd616: begin
+					10'd340:
+						rd(ab_ptr(8'd0), 10'd673);
+					10'd673: begin
 						ab_q <= mv;
-						rd(aoff(adr(mv), 12), 10'd295);
+						rd(aoff(adr(mv), 12), 10'd341);
 					end
-					10'd295:
+					10'd341:
 						if (mv == VNULL)
-							rd(aoff(adr(ab_q), 16), 10'd296);
+							rd(aoff(adr(ab_q), 16), 10'd342);
 						else
-							wr(ab_ptr(8'd0), mv, 10'd60);
-					10'd296:
+							wr(ab_ptr(8'd0), mv, 10'd94);
+					10'd342:
 						raise_err(ABI_ERR_BUILTIN_ARGS, mv, vint(sv2v_cast_32(ab_pe - ab_lo)));
-					10'd366:
+					10'd421:
 						deliver(VNONE, crk);
-					10'd370:
+					10'd425:
 						deliver(vint(md), crk);
-					10'd371:
+					10'd426:
 						deliver(mv, crk);
-					10'd364:
+					10'd419:
 						if ((si_na && (tg(si_v) != ABI_TAG_BYTES)) && (nid == ABI_N_LEN))
-							st <= 10'd294;
+							st <= 10'd340;
 						else
 							deliver(vint(si_len), crk);
-					10'd361:
+					10'd416:
 						if (md != ABI_OB_TYPE)
-							st <= 10'd294;
+							st <= 10'd340;
 						else begin
 							ty_v <= ab_q;
 							is_c <= ab_s[0];
-							gosub(10'd474, 10'd362);
+							gosub(10'd531, 10'd417);
 						end
-					10'd362: begin
+					10'd417: begin
 						is_t <= ty_t;
-						gosub(10'd210, 10'd363);
+						gosub(10'd249, 10'd418);
 					end
-					10'd363:
+					10'd418:
 						deliver(vbool(is_r), crk);
-					10'd382: begin
+					10'd437: begin
 						x2 <= si_addr;
 						x1 <= 32'd0;
-						st <= 10'd384;
+						st <= 10'd439;
 					end
-					10'd384:
+					10'd439:
 						if (x1 == si_len)
 							deliver(VNONE, crk);
 						else
-							rd(x2 + {x1[31:2], 2'b00}, 10'd383);
-					10'd383: begin
-						wr(x4, vint({24'd0, byte_of(md, x1[1:0])}), 10'd384);
+							rd(x2 + {x1[31:2], 2'b00}, 10'd438);
+					10'd438: begin
+						wr(x4, vint({24'd0, byte_of(md, x1[1:0])}), 10'd439);
 						x1 <= x1 + 32'd1;
 					end
-					10'd368:
+					10'd423:
 						deliver(vint({24'd0, byte_of(md, x3[1:0])}), crk);
-					10'd317:
-						rd(ab_ptr(ab_lo + 8'd1), 10'd688);
-					10'd688: begin
+					10'd363:
+						rd(ab_ptr(ab_lo + 8'd1), 10'd758);
+					10'd758: begin
 						ab_q <= mv;
-						rd(ab_ptr(ab_lo + 8'd2), 10'd689);
+						rd(ab_ptr(ab_lo + 8'd2), 10'd759);
 					end
-					10'd689:
+					10'd759:
 						deliver({ab_q[3:0], al_a | mv[31:0]}, crk);
-					10'd379:
+					10'd434:
 						deliver(ty_t, crk);
-					10'd380:
+					10'd435:
 						if (sA[4] == sA[0])
 							deliver(VNONE, crk);
 						else
-							rd((b1 ? sA[2] + (((sA[0] - 32'd1) - sA[4]) << 2) : sA[2] + (sA[4] << 2)), 10'd381);
-					10'd381: begin
-						wr((b1 ? sA[3] + (((sA[0] - 32'd1) - sA[4]) << 2) : sA[3] + (sA[4] << 2)), mv, 10'd380);
+							rd((b1 ? sA[2] + (((sA[0] - 32'd1) - sA[4]) << 2) : sA[2] + (sA[4] << 2)), 10'd436);
+					10'd436: begin
+						wr((b1 ? sA[3] + (((sA[0] - 32'd1) - sA[4]) << 2) : sA[3] + (sA[4] << 2)), mv, 10'd435);
 						sA[4] <= sA[4] + 32'd1;
 					end
-					10'd319:
+					10'd365:
 						if (scr_id != SCR_LA)
-							scr_adopt(SCR_LA, 10'd319);
+							scr_adopt(SCR_LA, 10'd365);
 						else
-							rd(ab_ptr(ab_lo + 8'd3), 10'd690);
-					10'd690: begin
+							rd(ab_ptr(ab_lo + 8'd3), 10'd760);
+					10'd760: begin
 						sA[2] <= si_addr + mv[31:0];
 						si_v <= ab_q;
-						gosub(10'd93, 10'd320);
+						gosub(10'd129, 10'd366);
 					end
-					10'd320:
-						rd(ab_ptr(ab_lo + 8'd1), 10'd691);
-					10'd691: begin
+					10'd366:
+						rd(ab_ptr(ab_lo + 8'd1), 10'd761);
+					10'd761: begin
 						x0 <= mv[31:0];
-						rd(ab_ptr(ab_lo + 8'd4), 10'd692);
+						rd(ab_ptr(ab_lo + 8'd4), 10'd762);
 					end
-					10'd692: begin
+					10'd762: begin
 						sA[3] <= si_addr + x0;
 						sA[0] <= mv[31:0];
 						b1 <= (si_addr + x0) > sA[2];
 						sA[4] <= 32'd0;
-						st <= 10'd318;
+						st <= 10'd364;
 					end
-					10'd318:
+					10'd364:
 						if (sA[4] == sA[0])
 							deliver(VNONE, crk);
 						else if (cfg_ca && cfg_bulk) begin
@@ -12320,233 +13521,328 @@ module mpy_core (
 						else begin
 							v2 = (b1 ? ((sA[2] + sA[0]) - 32'd1) - sA[4] : sA[2] + sA[4]);
 							x3 <= v2;
-							rd({v2[31:2], 2'b00}, 10'd321);
+							rd({v2[31:2], 2'b00}, 10'd367);
 						end
-					10'd321: begin
-						wrb((b1 ? ((sA[3] + sA[0]) - 32'd1) - sA[4] : sA[3] + sA[4]), byte_of(md, x3[1:0]), 10'd318);
+					10'd367: begin
+						wrb((b1 ? ((sA[3] + sA[0]) - 32'd1) - sA[4] : sA[3] + sA[4]), byte_of(md, x3[1:0]), 10'd364);
 						sA[4] <= sA[4] + 32'd1;
 					end
-					10'd377:
-						rd(ab_ptr(ab_lo), 10'd694);
-					10'd694: begin
+					10'd432:
+						rd(ab_ptr(ab_lo), 10'd764);
+					10'd764: begin
 						wb_v[0] <= vint(mv[31:0]);
 						wb_v[1] <= vint(32'd0);
 						wb_v[2] <= {ABI_TAG_CONT, al_a + 32'd12};
-						rd(ab_ptr(ab_lo + 8'd1), 10'd695);
+						rd(ab_ptr(ab_lo + 8'd1), 10'd765);
 					end
-					10'd695: begin
+					10'd765: begin
 						t[0] <= {mv[3:0], al_a};
-						wblock(al_a, 4'd3, 10'd378);
+						wblock(al_a, 4'd3, 10'd433);
 					end
-					10'd378:
+					10'd433:
 						deliver(t[0], crk);
-					10'd372:
+					10'd427:
 						if ((scr_id == SCR_NONE) || (scr_id == SCR_LA)) begin
 							scr_id <= SCR_LA;
 							sA[0] <= md;
-							rd(aoff(adr(ab_q), 8), 10'd373);
+							rd(aoff(adr(ab_q), 8), 10'd428);
 						end
 						else
-							wr(scr_addr(SCR_LA, 4'd0), {4'd0, md}, 10'd702);
-					10'd702:
+							wr(scr_addr(SCR_LA, 4'd0), {4'd0, md}, 10'd772);
+					10'd772:
 						if (scr_id != SCR_LA)
-							scr_ensure(SCR_LA, 10'd702);
+							scr_ensure(SCR_LA, 10'd772);
 						else
-							rd(aoff(adr(ab_q), 8), 10'd373);
-					10'd373: begin
+							rd(aoff(adr(ab_q), 8), 10'd428);
+					10'd428: begin
 						sA[2] <= md;
 						sA[4] <= 32'd0;
 						x2 <= 32'd5381;
 						b1 <= 1'b0;
-						st <= 10'd376;
+						st <= 10'd431;
 					end
-					10'd376:
+					10'd431:
 						if (sA[4] == sA[0]) begin
 							v3 = {16'd0, x2[15:0]};
 							if (v3 == 32'd0)
 								v3 = 32'd1;
-							wr(aoff(adr(ab_q), 4), vint(v3 | (b1 ? ABI_STR_NONASCII : 32'd0)), 10'd374);
+							wr(aoff(adr(ab_q), 4), vint(v3 | (b1 ? ABI_STR_NONASCII : 32'd0)), 10'd429);
 						end
 						else
-							rd(sA[2] + {sA[4][31:2], 2'b00}, 10'd375);
-					10'd375: begin
+							rd(sA[2] + {sA[4][31:2], 2'b00}, 10'd430);
+					10'd430: begin
 						v3 = {24'd0, byte_of(md, sA[4][1:0])};
 						x2 <= (x2 * 32'd33) ^ v3;
 						if (v3[7])
 							b1 <= 1'b1;
 						sA[4] <= sA[4] + 32'd1;
-						st <= 10'd376;
+						st <= 10'd431;
 					end
-					10'd374:
+					10'd429:
 						deliver(ab_q, crk);
-					10'd365:
+					10'd420:
 						deliver((lk_cx ? VSTOP : (lk_found ? lk_res : VNULL)), crk);
-					10'd330: begin
+					10'd385: begin
 						na_f <= 1'b1;
 						na <= {32'd0, t[0][31:0]};
 						nb_f <= 1'b0;
 						nb <= 64'd0;
 						n_small <= 1'b0;
 						alu_start <= 1'b1;
-						st <= 10'd332;
+						st <= 10'd387;
 					end
-					10'd332:
+					10'd387:
 						if (alu_done) begin
 							if (alu_err != mpy_alu_pkg_AE_NONE)
 								deliver(VSTOP, crk);
 							else if (fits32(alu_res))
 								deliver(vint(alu_res[31:0]), crk);
 							else
-								alloc(32'd2, 10'd331);
+								alloc(32'd2, 10'd386);
 						end
-					10'd333:
+					10'd388:
 						if (alu_done) begin
 							if (alu_err != mpy_alu_pkg_AE_NONE)
-								st <= 10'd294;
+								st <= 10'd340;
 							else if (alu_kind == mpy_alu_pkg_AK_FLOAT)
 								deliver({ABI_TAG_FLOAT, alu_res[31:0]}, crk);
 							else if (fits32(alu_res))
 								deliver(vint(alu_res[31:0]), crk);
 							else
-								alloc(32'd2, 10'd331);
+								alloc(32'd2, 10'd386);
 						end
-					10'd331: begin
+					10'd386: begin
 						wb_v[0] <= vint(alu_res[31:0]);
 						wb_v[1] <= vint(alu_res[63:32]);
 						t[0] <= {ABI_TAG_INT64, al_a};
-						wblock(al_a, 4'd2, 10'd378);
+						wblock(al_a, 4'd2, 10'd433);
 					end
-					10'd357:
+					10'd412:
 						if (((i0 == 8'd0) && (scr_id != SCR_NONE)) && (scr_id != SCR_IT))
-							scr_go_store(scr_id, 10'd357);
+							scr_go_store(scr_id, 10'd412);
 						else begin
 							if (scr_id != SCR_IT)
 								scr_id <= SCR_IT;
 							if (i0 == 8'd4) begin
 								it_h <= 1'b1;
-								gosub(10'd215, 10'd359);
+								gosub(10'd254, 10'd414);
 							end
 							else
-								rd(adr(t[3]) + (4 * i0), 10'd358);
+								rd(adr(t[3]) + (4 * i0), 10'd413);
 						end
-					10'd358: begin
+					10'd413: begin
 						sV[i0[1:0]] <= mv;
 						i0 <= i0 + 8'd1;
-						st <= 10'd357;
+						st <= 10'd412;
 					end
-					10'd359:
+					10'd414:
 						if (it_py)
 							deliver(VNULL, crk);
 						else
-							wr(adr(t[3]), sV[0], 10'd360);
-					10'd360:
-						wr(aoff(adr(t[3]), 4), sV[1], 10'd356);
-					10'd356:
+							wr(adr(t[3]), sV[0], 10'd415);
+					10'd415:
+						wr(aoff(adr(t[3]), 4), sV[1], 10'd411);
+					10'd411:
 						deliver((it_stop ? VSTOP : it_val), crk);
-					10'd325:
-						if (scr_id != SCR_SE)
-							scr_ensure(SCR_SE, 10'd325);
+					10'd373:
+						if (!(strlike(mv) || (tg(mv) == ABI_TAG_BYTES)))
+							st <= 10'd340;
 						else begin
-							sA[0] <= si_len;
-							sA[2] <= si_addr;
-							rd(ab_ptr(ab_lo + 8'd1), 10'd693);
+							si_v <= mv;
+							gosub(10'd500, 10'd374);
 						end
-					10'd693: begin
+					10'd374:
+						if (si_len != 32'd1)
+							st <= 10'd340;
+						else
+							rd({si_addr[31:2], 2'b00}, 10'd375);
+					10'd375: begin
+						x4 <= {24'd0, byte_of(md, si_addr[1:0])};
+						rd(ab_ptr(ab_lo + 8'd2), 10'd376);
+					end
+					10'd376:
+						if ((tg(mv) != ABI_TAG_INT) || mv[31])
+							st <= 10'd340;
+						else begin
+							x0 <= {mv[31:2], 2'b00};
+							x1 <= mv[31:0];
+							rd(ab_ptr(ab_lo + 8'd3), 10'd377);
+						end
+					10'd377:
+						if ((tg(mv) != ABI_TAG_INT) || mv[31])
+							st <= 10'd340;
+						else begin
+							x2 <= mv[31:0];
+							si_v <= t[0];
+							gosub(10'd500, 10'd378);
+						end
+					10'd378:
+						if ((x2 > si_len) || (si_addr[1:0] != 2'b00))
+							st <= 10'd340;
+						else if (x1 >= x2)
+							deliver(vint(32'hffffffff), crk);
+						else begin
+							x3 <= si_addr;
+							st <= 10'd379;
+						end
+					10'd379:
+						if (x0 >= x2)
+							deliver(vint(32'hffffffff), crk);
+						else
+							rd(x3 + x0, 10'd380);
+					10'd380: begin
+						begin : sv2v_autoblock_23
+							reg signed [31:0] k;
+							for (k = 0; k < 4; k = k + 1)
+								gi[k] <= ((md[8 * k+:8] == x4[7:0]) && ({x0[31:2], sv2v_cast_2_signed(k)} >= x1)) && ({x0[31:2], sv2v_cast_2_signed(k)} < x2);
+						end
+						st <= 10'd381;
+					end
+					10'd381:
+						if (gi[3:0] == 4'b0000) begin
+							x0 <= x0 + 32'd4;
+							st <= 10'd379;
+						end
+						else begin
+							casez (gi[3:0])
+								4'bzzz1: v0 = x0;
+								4'bzz10: v0 = {x0[31:2], 2'd1};
+								4'bz100: v0 = {x0[31:2], 2'd2};
+								default: v0 = {x0[31:2], 2'd3};
+							endcase
+							deliver(vint(v0), crk);
+						end
+					10'd371: begin
+						x0 <= si_len;
+						x2 <= si_addr;
+						if (b0)
+							rd(ab_ptr(ab_lo + 8'd1), 10'd763);
+						else begin
+							si_v <= t[1];
+							gosub(10'd500, 10'd372);
+						end
+					end
+					10'd763: begin
 						si_v <= mv;
-						gosub(10'd444, 10'd326);
+						gosub(10'd500, 10'd372);
 					end
-					10'd326: begin
-						sA[3] <= si_addr;
-						sA[6] <= si_len;
-						sA[7] <= 32'd0;
-						st <= 10'd704;
+					10'd372: begin
+						x1 <= si_len;
+						x3 <= si_addr;
+						x4 <= 32'd0;
+						gi <= (x0 < si_len ? x0 : si_len);
+						st <= 10'd370;
 					end
-					10'd704:
-						wr(scr_addr(SCR_LA, 4'd0), {4'd0, sA[6]}, 10'd705);
-					10'd705:
-						wr(scr_addr(SCR_LA, 4'd4), {4'd0, sA[7]}, 10'd324);
-					10'd324:
-						if ((sA[7] == sA[0]) || (sA[7] == sA[6])) begin
-							t[7] <= vint(sA[0] - sA[6]);
-							d_rk <= crk;
-							st <= 10'd707;
+					10'd370:
+						if (x4 >= gi) begin
+							t[7] <= vint(x0 - x1);
+							st <= 10'd774;
 						end
 						else
-							rd(sA[2] + {sA[7][31:2], 2'b00}, 10'd322);
-					10'd322: begin
-						sA[5] <= md;
-						rd(sA[3] + {sA[7][31:2], 2'b00}, 10'd323);
+							rd(x2 + x4, 10'd368);
+					10'd817: begin
+						v1 = {24'd0, byte_of(t[2][31:0], bc_k)};
+						v2 = {24'd0, byte_of(md, bc_k)};
+						t[7] <= vint(v1 - v2);
+						st <= 10'd774;
 					end
-					10'd323:
-						if (byte_of(sA[5], sA[7][1:0]) != byte_of(md, sA[7][1:0])) begin
-							t[7] <= vint({24'd0, byte_of(sA[5], sA[7][1:0])} - {24'd0, byte_of(md, sA[7][1:0])});
-							d_rk <= crk;
-							st <= 10'd707;
+					10'd368: begin
+						t[2] <= vint(md);
+						rd(x3 + x4, 10'd369);
+					end
+					10'd369: begin
+						v0 = gi - x4;
+						vs0 = 7'd4;
+						begin : sv2v_autoblock_24
+							reg signed [31:0] k;
+							for (k = 3; k >= 0; k = k - 1)
+								if ((k < v0) && (t[2][8 * k+:8] != md[8 * k+:8]))
+									vs0 = sv2v_cast_7_signed(k);
+						end
+						if (vs0 != 7'd4) begin
+							bc_k <= vs0[1:0];
+							st <= 10'd817;
 						end
 						else begin
-							sA[7] <= sA[7] + 32'd1;
-							st <= 10'd706;
+							x4 <= x4 + 32'd4;
+							st <= 10'd370;
 						end
-					10'd706:
-						wr(scr_addr(SCR_LA, 4'd4), {4'd0, sA[7]}, 10'd324);
-					10'd707:
-						wr(scr_addr(SCR_LA, 4'd4), {4'd0, sA[7]}, 10'd98);
-					10'd334:
+					end
+					10'd774:
+						if (b0)
+							deliver(t[7], crk);
+						else begin
+							v0 = t[7][31:0];
+							case (n_o)
+								ABI_BINOP_LESS: vb = v0[31];
+								ABI_BINOP_LESS_EQUAL: vb = v0[31] || (v0 == 0);
+								ABI_BINOP_MORE: vb = !v0[31] && (v0 != 0);
+								default: vb = !v0[31];
+							endcase
+							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))] <= vbool(vb);
+							sp <= sp - 7'd1;
+							st <= 10'd147;
+						end
+					10'd389:
 						deliver((hok ? vint(hh) : VSTOP), crk);
-					10'd328:
+					10'd383:
 						deliver(vint(si_addr), crk);
-					10'd329:
+					10'd384:
 						if ((x3 >= 32'd6) && (x3 <= 32'd11))
 							deliver(mv, crk);
 						else
 							deliver(vint(md), crk);
-					10'd327:
-						wr(aoff(adr(t[0]), 8), tb_v, 10'd366);
-					10'd369: begin
+					10'd382:
+						wr(aoff(adr(t[0]), 8), tb_v, 10'd421);
+					10'd424: begin
 						t[0] <= {ABI_TAG_RANGE, al_a};
-						wblock(al_a, 4'd3, 10'd378);
+						wblock(al_a, 4'd3, 10'd433);
 					end
-					10'd367: begin
+					10'd422: begin
 						wb_v[0] <= vint(ABI_OB_INSTANCE);
 						wb_v[1] <= t[0];
 						wb_v[2] <= VNULL;
 						t[0] <= vobj(al_a);
-						wblock(al_a, 4'd3, 10'd378);
+						wblock(al_a, 4'd3, 10'd433);
 					end
-					10'd124:
-						rd(aoff(adr(gen), 20), 10'd125);
-					10'd125: begin
+					10'd160:
+						rd(aoff(adr(gen), 20), 10'd161);
+					10'd161: begin
 						x4 <= fbase;
 						x0 <= md;
 						spill_to_img <= 1'b1;
 						if (lc_dirty_any) begin
 							lc_fi <= 4'd0;
-							lc_fl_ret <= 10'd126;
-							st <= 10'd498;
+							lc_fl_ret <= 10'd162;
+							st <= 10'd555;
 						end
 						else
-							st <= 10'd126;
+							st <= 10'd162;
 					end
-					10'd126: begin
+					10'd162: begin
 						fbase <= x0;
-						gosub(10'd452, 10'd127);
+						if (locals_in_image)
+							stack_prefix_words <= frame_prefix(nloc, 5'd0);
+						gosub(10'd508, 10'd163);
 					end
-					10'd127: begin
+					10'd163: begin
 						fbase <= x4;
+						if (locals_in_image)
+							stack_prefix_words <= 9'd17;
 						spill_to_img <= 1'b0;
 						ret;
 					end
-					10'd128:
-						rd(TT + (4 * ABI_T_GENERATOR), 10'd129);
-					10'd129: begin
+					10'd164:
+						rd(TT + (4 * ABI_T_GENERATOR), 10'd165);
+					10'd165: begin
 						t[3] <= mv;
-						alloc(32'd6, 10'd130);
+						alloc(32'd6, 10'd166);
 					end
-					10'd130: begin
+					10'd166: begin
 						t[0] <= vobj(al_a);
-						alloc(((32'd17 + sv2v_cast_32(nloc)) + (32'd3 * {27'd0, nexc})) + 32'd64, 10'd131);
+						alloc(((32'd17 + sv2v_cast_32(nloc)) + (32'd3 * {27'd0, nexc})) + 32'd64, 10'd167);
 					end
-					10'd131: begin
+					10'd167: begin
 						wb_v[0] <= vint(ABI_OB_GENERATOR);
 						wb_v[1] <= t[3];
 						wb_v[2] <= fun;
@@ -12554,27 +13850,27 @@ module mpy_core (
 						wb_v[4] <= VNONE;
 						wb_v[5] <= {ABI_TAG_CONT, al_a};
 						gen <= t[0];
-						wblock(adr(t[0]), 4'd6, 10'd132);
+						wblock(adr(t[0]), 4'd6, 10'd168);
 					end
-					10'd132:
-						gosub(10'd124, 10'd133);
-					10'd133: begin
+					10'd168:
+						gosub(10'd160, 10'd169);
+					10'd169: begin
 						t[7] <= gen;
-						st <= 10'd388;
+						st <= 10'd444;
 					end
-					10'd140:
-						wr(aoff(adr(gen), 12), vint(32'd0), 10'd141);
-					10'd141:
-						gosub(10'd124, 10'd142);
-					10'd142: begin
+					10'd176:
+						wr(aoff(adr(gen), 12), vint(32'd0), 10'd177);
+					10'd177:
+						gosub(10'd160, 10'd178);
+					10'd178: begin
 						fl_base <= fprev;
-						gosub(10'd112, 10'd143);
+						gosub(10'd148, 10'd179);
 					end
-					10'd143:
+					10'd179:
 						if (fflags & FF_YFAST) begin
 							fflags <= fflags & ~FF_YFAST;
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))] <= t[7];
-							st <= 10'd111;
+							st <= 10'd147;
 						end
 						else if (fcont == ABI_CONT_FOR_NEXT) begin
 							op <= 8'h4b;
@@ -12588,138 +13884,146 @@ module mpy_core (
 							ab_nkw <= 8'd0;
 							crk <= ABI_RK_CONT;
 							fcont <= ABI_CONT_RAISE;
-							wr(ab_ptr(8'd0), ty_stop, 10'd613);
+							wr(ab_ptr(8'd0), ty_stop, 10'd670);
 						end
-					10'd613:
-						wr(ab_ptr(8'd32), t[7], 10'd60);
-					10'd134:
-						wr(aoff(adr(gen), 12), vint(32'd0), 10'd135);
-					10'd135:
-						gosub(10'd124, 10'd136);
-					10'd136:
-						rd(aoff(adr(xc), 4), 10'd137);
-					10'd137: begin
+					10'd670:
+						wr(ab_ptr(8'd32), t[7], 10'd94);
+					10'd170:
+						wr(aoff(adr(gen), 12), vint(32'd0), 10'd171);
+					10'd171:
+						gosub(10'd160, 10'd172);
+					10'd172:
+						rd(aoff(adr(xc), 4), 10'd173);
+					10'd173: begin
 						is_t <= mv;
 						is_c <= ty_stop;
-						gosub(10'd210, 10'd138);
+						gosub(10'd249, 10'd174);
 					end
-					10'd138: begin
+					10'd174: begin
 						b0 <= is_r;
 						rx_crk <= frk;
 						fl_base <= fprev;
-						gosub(10'd112, 10'd139);
+						gosub(10'd148, 10'd175);
 					end
-					10'd139: begin
+					10'd175: begin
 						fflags <= fflags & ~FF_YFAST;
 						if (b0)
 							raise_msg(ABI_MSG_GEN_STOP);
 						else begin
 							rx_from <= 1'b1;
-							st <= 10'd387;
+							st <= 10'd442;
 						end
 					end
-					10'd144:
-						rd(aoff(adr(t[0]), 20), 10'd145);
-					10'd145: begin
+					10'd180:
+						rd(aoff(adr(t[0]), 20), 10'd181);
+					10'd181: begin
 						x4 <= md;
-						rd(aoff(md, 8), 10'd146);
+						rd(aoff(md, 8), 10'd182);
 					end
-					10'd146:
+					10'd182:
 						if (md == 32'd0) begin
 							if (fflags & FF_YFAST) begin
 								fflags <= fflags & ~FF_YFAST;
 								rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))] <= VNONE;
-								st <= 10'd111;
+								st <= 10'd147;
 							end
 							else
 								raise_msg(ABI_MSG_STOP_ITER);
 						end
 						else
-							rd(aoff(adr(t[0]), 12), 10'd147);
-					10'd147:
+							rd(aoff(adr(t[0]), 12), 10'd183);
+					10'd183:
 						if (md[0]) begin
 							fflags <= fflags & ~FF_YFAST;
 							raise_msg(ABI_MSG_GEN_RUNNING);
 						end
 						else
-							rd(aoff(adr(t[0]), 16), 10'd148);
-					10'd148: begin
+							rd(aoff(adr(t[0]), 16), 10'd184);
+					10'd184: begin
 						if (mv != VNONE)
 							t[2] <= mv;
-						rd(aoff(x4, 16), 10'd149);
+						rd(aoff(x4, 16), 10'd185);
 					end
-					10'd149: begin
+					10'd185: begin
 						x1 <= md;
-						rd(aoff(x4, 20), 10'd150);
+						rd(aoff(x4, 20), 10'd186);
 					end
-					10'd150: begin
+					10'd186: begin
+						gr_geo_r <= (12'd17 + sv2v_cast_12((md[20:16] == 0 ? 7'd0 : x1[22:16]))) + (12'd3 * sv2v_cast_12(md[20:16]));
+						st <= 10'd815;
+					end
+					10'd815: begin
 						v0 = (noframe ? ABI_FRAME_BASE : stk_top);
-						v3 = sv2v_cast_32((12'd17 + sv2v_cast_12(x1[22:16])) + (12'd3 * sv2v_cast_12(md[20:16])));
+						v3 = sv2v_cast_32(gr_geo_r);
 						v1 = (noframe ? ABI_FRAME_BASE + (v3 << 2) : fbase + {18'd0, sv2v_cast_12(stk_off) + v3[11:0], 2'b00});
 						if ((x1[6:0] == 7'd0) && (t[1] != VNONE)) begin
 							fflags <= fflags & ~FF_YFAST;
 							raise_msg(ABI_MSG_GEN_SEND);
 						end
-						else if (v1 > spill_hp) begin
+						else if ((noframe ? (ABI_FRAME_BASE + (v3 << 2)) > spill_hp : over_hp(v3))) begin
 							fflags <= fflags & ~FF_YFAST;
 							raise_msg(ABI_MSG_RECURSION);
 						end
 						else begin
 							x3 <= v0;
 							b1 <= x1[6:0] != 7'd0;
-							wr(aoff(adr(t[0]), 16), VNONE, 10'd151);
+							gen_direct_locals <= md[20:16] == 0;
+							wr(aoff(adr(t[0]), 16), VNONE, 10'd187);
 						end
 					end
-					10'd151:
-						wr(aoff(adr(t[0]), 12), vint(32'd1), 10'd156);
-					10'd156:
+					10'd187:
+						wr(aoff(adr(t[0]), 12), vint(32'd1), 10'd192);
+					10'd192:
 						if (noframe)
-							st <= 10'd153;
+							st <= 10'd189;
 						else
-							gosub(10'd452, 10'd153);
-					10'd153: begin
+							gosub(10'd508, 10'd189);
+					10'd189: begin
 						fprev <= (noframe ? 32'd0 : fbase);
 						fbase <= x3;
 						noframe <= 1'b0;
+						local_base <= (gen_direct_locals ? x4 : x3);
+						local_image_word <= (gen_direct_locals ? x4[18:2] : 17'd0);
+						locals_in_image <= gen_direct_locals;
 						fl_base <= x4;
 						fl_img <= 1'b1;
-						gosub(10'd112, 10'd152);
+						gosub(10'd148, 10'd188);
 					end
-					10'd152: begin
+					10'd188: begin
 						frk <= r_rk;
 						gen <= t[0];
 						if (b1)
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))] <= t[1];
 						if (t[2] != VNONE)
-							st <= 10'd155;
+							st <= 10'd191;
 						else begin
 							inj <= VNONE;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
 					end
-					10'd155:
-						rd({pc[31:2], 2'b00}, 10'd154);
-					10'd154:
+					10'd191:
+						rd({pc[31:2], 2'b00}, 10'd190);
+					10'd190:
 						if (byte_of(md, pc[1:0]) == 8'h68) begin
 							inj <= t[2];
-							st <= 10'd111;
+							st <= 10'd147;
 						end
 						else begin
 							inj <= VNONE;
 							t[0] <= t[2];
 							op <= 8'h65;
 							op_pc <= pc;
-							st <= 10'd411;
+							st <= 10'd467;
 						end
-					10'd157: begin
+					10'd193: begin
 						t[7] <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))];
 						rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))] <= VNONE;
-						wr(aoff(adr(gen), 12), vint(32'd0), 10'd158);
+						wr(aoff(adr(gen), 12), vint(32'd0), 10'd194);
 					end
-					10'd158:
-						gosub(10'd124, 10'd159);
-					10'd159: st <= 10'd388;
-					10'd161:
+					10'd194:
+						gosub(10'd160, 10'd195);
+					10'd195: st <= 10'd444;
+					10'd197:
 						if (md == ABI_OB_GENERATOR) begin
 							fflags <= fflags | FF_YFAST;
 							t[0] <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd2))];
@@ -12728,7 +14032,7 @@ module mpy_core (
 							r_rk <= ABI_RK_CONT;
 							fcont <= ABI_CONT_YFROM;
 							sp <= sp - 7'd1;
-							st <= 10'd144;
+							st <= 10'd180;
 						end
 						else begin
 							aux <= inj;
@@ -12737,100 +14041,125 @@ module mpy_core (
 							inj <= VNONE;
 							sp <= sp - 7'd1;
 						end
-					10'd160: begin
+					10'd196: begin
 						b0 <= mv == VTRUE;
-						rd(aoff(adr(t[7]), 8), 10'd162);
+						rd(aoff(adr(t[7]), 8), 10'd198);
 					end
-					10'd162: begin
+					10'd198: begin
 						fcont <= 8'd0;
 						if (b0) begin
 							aux <= VNONE;
 							push(mv);
 							pc <= op_pc;
-							st <= 10'd157;
+							st <= 10'd193;
 						end
 						else begin
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))] <= mv;
 							if (aux != VNONE)
-								st <= 10'd163;
+								st <= 10'd199;
 							else
-								st <= 10'd111;
+								st <= 10'd147;
 						end
 					end
-					10'd163:
+					10'd199:
 						if (tg(aux) != ABI_TAG_OBJECT) begin
 							aux <= VNONE;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
 						else
-							rd(adr(aux), 10'd164);
-					10'd164:
+							rd(adr(aux), 10'd200);
+					10'd200:
 						if (md == ABI_OB_EXCEPTION)
-							rd(aoff(adr(aux), 4), 10'd165);
+							rd(aoff(adr(aux), 4), 10'd201);
 						else if (md == ABI_OB_TYPE) begin
 							is_t <= aux;
-							rd(TT + (4 * ABI_T_GENERATOREXIT), 10'd166);
+							rd(TT + (4 * ABI_T_GENERATOREXIT), 10'd202);
 						end
 						else begin
 							aux <= VNONE;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
-					10'd165: begin
+					10'd201: begin
 						is_t <= mv;
-						rd(TT + (4 * ABI_T_GENERATOREXIT), 10'd166);
+						rd(TT + (4 * ABI_T_GENERATOREXIT), 10'd202);
 					end
-					10'd166: begin
+					10'd202: begin
 						is_c <= mv;
-						gosub(10'd210, 10'd167);
+						gosub(10'd249, 10'd203);
 					end
-					10'd167: begin
+					10'd203: begin
 						if (is_r) begin
 							t[0] <= aux;
-							st <= 10'd411;
+							st <= 10'd467;
 						end
 						else
-							st <= 10'd111;
+							st <= 10'd147;
 						aux <= VNONE;
 					end
-					10'd168: begin
+					10'd204: begin
 						is_t <= mv;
 						is_c <= ty_stop;
 						fcont <= 8'd0;
-						gosub(10'd210, 10'd169);
+						gosub(10'd249, 10'd205);
 					end
-					10'd169:
+					10'd205:
 						if (is_r)
-							rd(aoff(adr(xc), 8), 10'd170);
+							rd(aoff(adr(xc), 8), 10'd206);
 						else begin
 							sp <= sp - 7'd1;
-							st <= 10'd418;
+							st <= 10'd474;
 						end
-					10'd170: begin
+					10'd206: begin
 						t[6] <= mv;
-						rd(adr(mv), 10'd171);
+						rd(adr(mv), 10'd207);
 					end
-					10'd171:
+					10'd207:
 						if (md == 32'd0) begin
 							rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))] <= VNONE;
-							st <= 10'd111;
+							st <= 10'd147;
 						end
 						else
-							rd(aoff(adr(t[6]), 4), 10'd172);
-					10'd172: begin
+							rd(aoff(adr(t[6]), 4), 10'd208);
+					10'd208: begin
 						rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))] <= mv;
-						st <= 10'd111;
+						st <= 10'd147;
 					end
-					10'd489:
+					10'd546:
 						if (wb_i == wb_n)
 							ret;
 						else begin
-							wr(wb_a + (4 * wb_i), wb_v[wb_i[2:0]], 10'd489);
+							wr(wb_a + (4 * wb_i), wb_v[wb_i[2:0]], 10'd546);
 							wb_i <= wb_i + 4'd1;
 						end
 					10'd3: begin
-						gc_alloc_req <= 1'b1;
 						al_gc <= 1'b0;
-						st <= 10'd8;
+						hl_skip <= 1'b0;
+						if (hl_r)
+							st <= 10'd812;
+						else begin
+							gc_alloc_req <= 1'b1;
+							st <= 10'd8;
+						end
+					end
+					10'd812:
+						if (al_soft) begin
+							al_ok <= 1'b0;
+							al_a <= 32'd0;
+							ret;
+						end
+						else begin
+							hl_skip <= 1'b1;
+							raise_msg(ABI_MSG_HEAP_LOCKED);
+						end
+					10'd811: begin
+						soft_pt <= 1'b0;
+						ab_lo <= 8'd32;
+						ab_pe <= 8'd32;
+						ab_nkw <= 8'd0;
+						crk <= ABI_RK_DISCARD;
+						ab_chunked <= 1'b0;
+						hk_id <= ABI_HOOK_IRQ_DISPATCH;
+						st <= 10'd241;
 					end
 					10'd8:
 						if (gc_alloc_done_i) begin
@@ -12841,7 +14170,7 @@ module mpy_core (
 							end
 							else if (!al_gc) begin
 								al_gc <= 1'b1;
-								gosub(10'd173, 10'd7);
+								gosub(10'd209, 10'd7);
 							end
 							else if (al_soft) begin
 								al_ok <= 1'b0;
@@ -12869,6 +14198,13 @@ module mpy_core (
 						gc_alloc_req <= 1'b1;
 						st <= 10'd8;
 					end
+					10'd813:
+						if (evt_q)
+							deliver(VTRUE, crk);
+						else if ((wfe_n == 32'd0) || wfe_n[31])
+							deliver(VFALSE, crk);
+						else
+							wfe_n <= wfe_n - 32'd1;
 					10'd4:
 						wr(aoff(EMERG_ADDR, 12), VNULL, 10'd5);
 					10'd5:
@@ -12880,103 +14216,103 @@ module mpy_core (
 							wr(ab_ptr(cv_k[7:0]), VNULL, 10'd6);
 							cv_k <= cv_k + 32'd1;
 						end
-					10'd173:
+					10'd209:
 						if (aalu_pend) begin
 							if (aalu_go) begin
-								aalu_ret <= 10'd173;
-								st <= 10'd710;
+								aalu_ret <= 10'd209;
+								st <= 10'd777;
 							end
 						end
 						else if (noframe) begin
 							gi <= 32'd0;
-							st <= 10'd176;
+							st <= 10'd212;
 						end
 						else
-							gosub(10'd452, 10'd174);
-					10'd174: begin
+							gosub(10'd508, 10'd210);
+					10'd210: begin
 						gi <= 32'd0;
-						st <= 10'd176;
+						st <= 10'd212;
 					end
-					10'd175: begin
+					10'd211: begin
 						gi <= 32'd0;
-						st <= 10'd176;
+						st <= 10'd212;
 					end
-					10'd176:
+					10'd212:
 						if (gi == 32'd9) begin
 							if (ca_idle_i) begin
 								gc_collect_req <= 1'b1;
-								st <= 10'd177;
+								st <= 10'd213;
 							end
 						end
 						else begin
 							case (gi[3:0])
 								4'd0:
-									wr(ABI_SYSROOT_BASE + (4 * ABI_SR_CUR_EXC), xc, 10'd176);
+									wr(ABI_SYSROOT_BASE + (4 * ABI_SR_CUR_EXC), xc, 10'd212);
 								4'd1:
-									wr(ABI_SYSROOT_BASE + (4 * ABI_SR_T0), t[0], 10'd176);
+									wr(ABI_SYSROOT_BASE + (4 * ABI_SR_T0), t[0], 10'd212);
 								4'd2:
-									wr(ABI_SYSROOT_BASE + (4 * ABI_SR_T1), t[1], 10'd176);
+									wr(ABI_SYSROOT_BASE + (4 * ABI_SR_T1), t[1], 10'd212);
 								4'd3:
-									wr(ABI_SYSROOT_BASE + (4 * ABI_SR_T2), t[2], 10'd176);
+									wr(ABI_SYSROOT_BASE + (4 * ABI_SR_T2), t[2], 10'd212);
 								4'd4:
-									wr(ABI_SYSROOT_BASE + (4 * ABI_SR_T3), t[3], 10'd176);
+									wr(ABI_SYSROOT_BASE + (4 * ABI_SR_T3), t[3], 10'd212);
 								4'd5:
-									wr(ABI_SYSROOT_BASE + (4 * ABI_SR_T4), t[4], 10'd176);
+									wr(ABI_SYSROOT_BASE + (4 * ABI_SR_T4), t[4], 10'd212);
 								4'd6:
-									wr(ABI_SYSROOT_BASE + (4 * ABI_SR_T5), t[5], 10'd176);
+									wr(ABI_SYSROOT_BASE + (4 * ABI_SR_T5), t[5], 10'd212);
 								4'd7:
-									wr(ABI_SYSROOT_BASE + (4 * ABI_SR_T6), t[6], 10'd176);
+									wr(ABI_SYSROOT_BASE + (4 * ABI_SR_T6), t[6], 10'd212);
 								default:
-									wr(ABI_SYSROOT_BASE + (4 * ABI_SR_T7), t[7], 10'd176);
+									wr(ABI_SYSROOT_BASE + (4 * ABI_SR_T7), t[7], 10'd212);
 							endcase
 							gi <= gi + 32'd1;
 						end
-					10'd177:
+					10'd213:
 						if (gc_collect_done_i)
 							ret;
-					10'd474:
+					10'd531:
 						case (tg(ty_v))
 							ABI_TAG_CONTROL:
-								rd(TT + (4 * (is_bool(ty_v) ? ABI_T_BOOL : ABI_T_NONETYPE)), 10'd476);
+								rd(TT + (4 * (is_bool(ty_v) ? ABI_T_BOOL : ABI_T_NONETYPE)), 10'd533);
 							ABI_TAG_INT, ABI_TAG_INT64:
-								rd(TT + (4 * ABI_T_INT), 10'd476);
+								rd(TT + (4 * ABI_T_INT), 10'd533);
 							ABI_TAG_FLOAT:
-								rd(TT + (4 * ABI_T_FLOAT), 10'd476);
+								rd(TT + (4 * ABI_T_FLOAT), 10'd533);
 							ABI_TAG_COMPLEX:
-								rd(TT + (4 * ABI_T_COMPLEX), 10'd476);
+								rd(TT + (4 * ABI_T_COMPLEX), 10'd533);
 							ABI_TAG_QSTR, ABI_TAG_STR:
-								rd(TT + (4 * ABI_T_STR), 10'd476);
+								rd(TT + (4 * ABI_T_STR), 10'd533);
 							ABI_TAG_BYTES:
-								rd(TT + (4 * ABI_T_BYTES), 10'd476);
+								rd(TT + (4 * ABI_T_BYTES), 10'd533);
 							ABI_TAG_TUPLE:
-								rd(TT + (4 * ABI_T_TUPLE), 10'd476);
+								rd(TT + (4 * ABI_T_TUPLE), 10'd533);
 							ABI_TAG_RANGE:
-								rd(TT + (4 * ABI_T_RANGE), 10'd476);
+								rd(TT + (4 * ABI_T_RANGE), 10'd533);
 							ABI_TAG_ITER:
-								rd(TT + (4 * ABI_T_ITERATOR), 10'd476);
+								rd(TT + (4 * ABI_T_ITERATOR), 10'd533);
 							ABI_TAG_OBJECT:
-								rd(aoff(adr(ty_v), 4), 10'd476);
+								rd(aoff(adr(ty_v), 4), 10'd533);
 							ABI_TAG_MUT:
 								case (ty_v[1:0])
 									ABI_MUT_LIST:
-										rd(TT + (4 * ABI_T_LIST), 10'd476);
+										rd(TT + (4 * ABI_T_LIST), 10'd533);
 									ABI_MUT_DICT:
-										rd(TT + (4 * ABI_T_DICT), 10'd476);
+										rd(TT + (4 * ABI_T_DICT), 10'd533);
 									ABI_MUT_SET:
-										rd(aoff(adr(ty_v), 12), 10'd475);
+										rd(aoff(adr(ty_v), 12), 10'd532);
 									default:
-										rd(TT + (4 * ABI_T_BYTEARRAY), 10'd476);
+										rd(TT + (4 * ABI_T_BYTEARRAY), 10'd533);
 								endcase
 							default:
-								rd(TT + (4 * ABI_T_OBJECT), 10'd476);
+								rd(TT + (4 * ABI_T_OBJECT), 10'd533);
 						endcase
-					10'd475:
-						rd(TT + (4 * (md & ABI_SET_FLAG_FROZEN ? ABI_T_FROZENSET : ABI_T_SET)), 10'd476);
-					10'd476: begin
+					10'd532:
+						rd(TT + (4 * (md & ABI_SET_FLAG_FROZEN ? ABI_T_FROZENSET : ABI_T_SET)), 10'd533);
+					10'd533: begin
 						ty_t <= mv;
 						ret;
 					end
-					10'd195: begin
+					10'd231: begin
 						hok <= 1'b1;
 						case (tg(hk))
 							ABI_TAG_INT: begin
@@ -12996,103 +14332,135 @@ module mpy_core (
 							end
 							ABI_TAG_QSTR: begin
 								qid <= hk[31:0];
-								qd_nxt <= 10'd198;
-								st <= 10'd385;
+								qd_nxt <= 10'd237;
+								st <= 10'd440;
 							end
 							ABI_TAG_STR, ABI_TAG_BYTES:
-								rd(aoff(adr(hk), 4), 10'd198);
+								rd(aoff(adr(hk), 4), 10'd237);
 							ABI_TAG_INT64:
-								rd(adr(hk), 10'd196);
+								rd(adr(hk), 10'd232);
+							ABI_TAG_TUPLE:
+								rd(adr(hk), 10'd233);
 							ABI_TAG_OBJECT:
-								rd(adr(hk), 10'd197);
+								rd(adr(hk), 10'd236);
 							default: begin
 								hok <= 1'b0;
 								ret;
 							end
 						endcase
 					end
-					10'd198: begin
+					10'd237: begin
 						hh <= {16'd0, md[15:0]};
 						ret;
 					end
-					10'd196: begin
+					10'd232: begin
 						hh <= sx31(md);
 						ret;
 					end
-					10'd197: begin
-						if ((md == ABI_OB_INSTANCE) || (md == ABI_OB_EXCEPTION))
+					10'd233: begin
+						hh <= 32'd12345;
+						if (md > 32'd15) begin
+							hok <= 1'b0;
+							ret;
+						end
+						else if (md == 32'd0)
+							ret;
+						else begin
+							key_tuple_len <= md[3:0];
+							key_tuple_index <= 4'd1;
+							rd(ha_m4, 10'd234);
+						end
+					end
+					10'd234:
+						if (!intlike(mv)) begin
+							hok <= 1'b0;
+							ret;
+						end
+						else begin
+							hh <= sx31(hh + ival(mv));
+							st <= 10'd235;
+						end
+					10'd235:
+						if (key_tuple_index == key_tuple_len)
+							ret;
+						else begin
+							key_tuple_index <= key_tuple_index + 4'd1;
+							rd(ha_m4, 10'd234);
+						end
+					10'd236: begin
+						if (((md == ABI_OB_INSTANCE) || (md == ABI_OB_EXCEPTION)) || (md == ABI_OB_BIGINT))
 							hok <= 1'b0;
 						else
 							hh <= {1'b0, hk[31:1]};
 						ret;
 					end
-					10'd385:
+					10'd440:
 						rd((qid < h_nq ? h_qdesc + (qid << 3) : h_qext + ((qid - h_nq) << 3)), qd_nxt);
-					10'd444:
+					10'd500:
 						if (tg(si_v) == ABI_TAG_QSTR) begin
 							qid <= si_v[31:0];
-							qd_nxt <= 10'd445;
-							st <= 10'd385;
+							qd_nxt <= 10'd501;
+							st <= 10'd440;
 						end
 						else
-							rd(adr(si_v), 10'd447);
-					10'd445: begin
+							rd(adr(si_v), 10'd503);
+					10'd501: begin
 						si_hash <= {16'd0, md[15:0]};
 						si_len <= {16'd0, md[31:16]};
-						rd(ha_m4, 10'd446);
+						rd(ha_m4, 10'd502);
 					end
-					10'd446: begin
+					10'd502: begin
 						si_addr <= {1'b0, md[30:0]};
 						si_na <= md[31];
 						ret;
 					end
-					10'd447: begin
+					10'd503: begin
 						si_len <= md;
-						rd(aoff(adr(si_v), 4), 10'd448);
+						rd(aoff(adr(si_v), 4), 10'd504);
 					end
-					10'd448: begin
+					10'd504: begin
 						si_hash <= {16'd0, md[15:0]};
 						si_na <= md[30];
-						rd(aoff(adr(si_v), 8), 10'd449);
+						rd(aoff(adr(si_v), 8), 10'd505);
 					end
-					10'd449: begin
+					10'd505: begin
 						si_addr <= md;
 						ret;
 					end
-					10'd93:
+					10'd129:
 						if (tg(si_v) == ABI_TAG_QSTR)
-							gosub(10'd444, 10'd95);
+							gosub(10'd500, 10'd131);
 						else if (tg(si_v) == ABI_TAG_INT) begin
 							si_addr <= si_v[31:0];
 							ret;
 						end
 						else
-							rd(aoff(adr(si_v), 8), 10'd94);
-					10'd94: begin
+							rd(aoff(adr(si_v), 8), 10'd130);
+					10'd130: begin
 						si_addr <= md;
 						ret;
 					end
-					10'd95:
+					10'd131:
 						ret;
-					10'd464:
+					10'd521:
 						if (scr_id != SCR_SE)
-							scr_adopt(SCR_SE, 10'd464);
+							scr_adopt(SCR_SE, 10'd521);
 						else if (se_a == se_b) begin
 							se_eq <= 1'b1;
 							ret;
 						end
 						else begin
 							si_v <= se_a;
-							gosub(10'd444, 10'd439);
+							gosub(10'd500, 10'd495);
 						end
-					10'd439: begin
+					10'd495: begin
 						sA[0] <= si_len;
 						sA[1] <= si_hash;
 						sA[2] <= si_addr;
 						si_v <= se_b;
-						gosub(10'd444, 10'd440);
+						gosub(10'd500, 10'd496);
 					end
-					10'd440:
+					10'd496:
 						if ((si_len != sA[0]) || (si_hash != sA[1])) begin
 							se_eq <= 1'b0;
 							ret;
@@ -13100,32 +14468,33 @@ module mpy_core (
 						else begin
 							sA[3] <= si_addr;
 							sA[4] <= 32'd0;
-							st <= 10'd443;
+							st <= 10'd499;
 						end
-					10'd443:
+					10'd499:
 						if (sA[4] >= sA[0]) begin
 							se_eq <= 1'b1;
 							ret;
 						end
 						else
-							rd(sA[2] + sA[4], 10'd441);
-					10'd441: begin
+							rd(sA[2] + sA[4], 10'd497);
+					10'd497: begin
 						sA[5] <= md;
-						rd(sA[3] + sA[4], 10'd442);
-					end
-					10'd442: begin
 						v0 = sA[0] - sA[4];
-						v1 = (v0 >= 32'd4 ? 32'hffffffff : (32'd1 << (v0 << 3)) - 32'd1);
+						se_mask <= (v0 >= 32'd4 ? 32'hffffffff : (v0[1:0] == 2'd3 ? 32'h00ffffff : (v0[1:0] == 2'd2 ? 32'h0000ffff : (v0[1:0] == 2'd1 ? 32'h000000ff : 32'd0))));
+						rd(sA[3] + sA[4], 10'd498);
+					end
+					10'd498: begin
+						v1 = se_mask;
 						if (((sA[5] ^ md) & v1) != 32'd0) begin
 							se_eq <= 1'b0;
 							ret;
 						end
 						else begin
 							sA[4] <= sA[4] + 32'd4;
-							st <= 10'd443;
+							st <= 10'd499;
 						end
 					end
-					10'd229: begin
+					10'd268: begin
 						ke_cx <= 1'b0;
 						if (ke_a == ke_b) begin
 							ke_eq <= 1'b1;
@@ -13138,12 +14507,12 @@ module mpy_core (
 						else if (strlike(ke_a) && strlike(ke_b)) begin
 							se_a <= ke_a;
 							se_b <= ke_b;
-							gosub_scr(SCR_SE, 10'd464, 10'd235);
+							gosub_scr(SCR_SE, 10'd521, 10'd279);
 						end
 						else if ((tg(ke_a) == ABI_TAG_BYTES) && (tg(ke_b) == ABI_TAG_BYTES)) begin
 							se_a <= ke_a;
 							se_b <= ke_b;
-							gosub_scr(SCR_SE, 10'd464, 10'd235);
+							gosub_scr(SCR_SE, 10'd521, 10'd279);
 						end
 						else if (strlike(ke_a) || strlike(ke_b)) begin
 							ke_eq <= 1'b0;
@@ -13155,90 +14524,142 @@ module mpy_core (
 						end
 						else if ((tg(ke_a) == ABI_TAG_INT64) && (tg(ke_b) == ABI_TAG_INT64)) begin
 							if (scr_id != SCR_KE)
-								scr_adopt(SCR_KE, 10'd229);
+								scr_adopt(SCR_KE, 10'd268);
 							else
-								rd(adr(ke_a), 10'd230);
+								rd(adr(ke_a), 10'd269);
 						end
 						else if ((tg(ke_a) == ABI_TAG_FLOAT) || (tg(ke_a) == ABI_TAG_COMPLEX)) begin
 							ke_eq <= 1'b0;
 							ke_cx <= numlike(ke_b);
 							ret;
 						end
-						else if ((tg(ke_a) == ABI_TAG_OBJECT) || (tg(ke_a) == ABI_TAG_TUPLE))
-							rd(adr(ke_a), 10'd234);
+						else if ((tg(ke_a) == ABI_TAG_TUPLE) && (tg(ke_b) == ABI_TAG_TUPLE))
+							rd(adr(ke_a), 10'd274);
+						else if ((tg(ke_a) == ABI_TAG_TUPLE) && (tg(ke_b) == ABI_TAG_OBJECT)) begin
+							ke_eq <= 1'b0;
+							ke_cx <= 1'b1;
+							ret;
+						end
+						else if (tg(ke_a) == ABI_TAG_OBJECT)
+							rd(adr(ke_a), 10'd273);
 						else begin
 							ke_eq <= 1'b0;
 							ret;
 						end
 					end
-					10'd235: begin
+					10'd279: begin
 						ke_eq <= se_eq;
 						ret;
 					end
-					10'd230: begin
+					10'd269: begin
 						sA[0] <= md;
-						rd(aoff(adr(ke_a), 4), 10'd231);
+						rd(aoff(adr(ke_a), 4), 10'd270);
 					end
-					10'd231: begin
+					10'd270: begin
 						sA[1] <= md;
-						rd(adr(ke_b), 10'd232);
+						rd(adr(ke_b), 10'd271);
 					end
-					10'd232:
+					10'd271:
 						if (md != sA[0]) begin
 							ke_eq <= 1'b0;
 							ret;
 						end
 						else
-							rd(aoff(adr(ke_b), 4), 10'd233);
-					10'd233: begin
+							rd(aoff(adr(ke_b), 4), 10'd272);
+					10'd272: begin
 						ke_eq <= md == sA[1];
 						ret;
 					end
-					10'd234: begin
+					10'd273: begin
 						ke_eq <= 1'b0;
-						ke_cx <= (tg(ke_a) == ABI_TAG_TUPLE ? tg(ke_b) == ABI_TAG_TUPLE : (md == ABI_OB_INSTANCE) || (md == ABI_OB_EXCEPTION));
+						ke_cx <= (md == ABI_OB_INSTANCE) || (md == ABI_OB_EXCEPTION);
 						ret;
 					end
-					10'd252:
+					10'd274:
+						if (md > 32'd15) begin
+							ke_eq <= 1'b0;
+							ke_cx <= 1'b1;
+							ret;
+						end
+						else begin
+							key_tuple_len <= md[3:0];
+							rd(adr(ke_b), 10'd275);
+						end
+					10'd275:
+						if (md != sv2v_cast_32(key_tuple_len)) begin
+							ke_eq <= 1'b0;
+							ret;
+						end
+						else if (md == 32'd0) begin
+							ke_eq <= 1'b1;
+							ret;
+						end
+						else begin
+							key_tuple_index <= 4'd1;
+							st <= 10'd278;
+						end
+					10'd278:
+						rd(adr(ke_a) + {26'd0, key_tuple_index, 2'b00}, 10'd276);
+					10'd276: begin
+						key_tuple_item <= mv;
+						rd(adr(ke_b) + {26'd0, key_tuple_index, 2'b00}, 10'd277);
+					end
+					10'd277:
+						if ((((key_tuple_item == mv) && (tg(mv) != ABI_TAG_FLOAT)) && (tg(mv) != ABI_TAG_COMPLEX)) || ((intlike(key_tuple_item) && intlike(mv)) && (ival(key_tuple_item) == ival(mv)))) begin
+							if (key_tuple_index == key_tuple_len) begin
+								ke_eq <= 1'b1;
+								ret;
+							end
+							else begin
+								key_tuple_index <= key_tuple_index + 4'd1;
+								st <= 10'd278;
+							end
+						end
+						else begin
+							ke_eq <= 1'b0;
+							ke_cx <= !(intlike(key_tuple_item) && intlike(mv));
+							ret;
+						end
+					10'd296:
 						if (scr_id != SCR_LK)
-							scr_adopt(SCR_LK, 10'd252);
+							scr_adopt(SCR_LK, 10'd296);
 						else begin
 							lk_found <= 1'b0;
 							lk_cx <= 1'b0;
 							lk_ro <= 1'b0;
 							lk_res <= VNULL;
-							rd(aoff(adr(t[4]), 12), 10'd255);
+							rd(aoff(adr(t[4]), 12), 10'd299);
 						end
-					10'd255:
+					10'd299:
 						if ((lk_mode != LK_FIND) && (md & ABI_DICT_FLAG_ROM)) begin
 							lk_ro <= 1'b1;
 							ret;
 						end
 						else
-							rd(aoff(adr(t[4]), 4), 10'd253);
-					10'd253: begin
+							rd(aoff(adr(t[4]), 4), 10'd297);
+					10'd297: begin
 						sA[0] <= md;
-						rd(aoff(adr(t[4]), 8), 10'd274);
+						rd(aoff(adr(t[4]), 8), 10'd318);
 					end
-					10'd274: begin
+					10'd318: begin
 						sA[1] <= md;
 						if (sA[0] == 32'd0) begin
 							if (lk_mode == LK_ADD)
-								gosub_scr(SCR_RH, 10'd390, 10'd268);
+								gosub_scr(SCR_RH, 10'd446, 10'd312);
 							else
 								ret;
 						end
 						else begin
 							hk <= t[5];
-							gosub(10'd195, 10'd256);
+							gosub(10'd231, 10'd300);
 						end
 					end
-					10'd268:
+					10'd312:
 						if (lk_cx)
 							ret;
 						else
-							st <= 10'd252;
-					10'd256:
+							st <= 10'd296;
+					10'd300:
 						if (!hok) begin
 							lk_cx <= 1'b1;
 							ret;
@@ -13247,29 +14668,29 @@ module mpy_core (
 							sA[2] <= hh;
 							sA[3] <= hh;
 							lk_hasav <= 1'b0;
-							st <= 10'd266;
+							st <= 10'd310;
 						end
 						else begin
 							hm_start <= 1'b1;
-							st <= 10'd257;
+							st <= 10'd301;
 						end
-					10'd257:
+					10'd301:
 						if (hm_done) begin
 							sA[2] <= hm_rem;
 							sA[3] <= hm_rem;
 							lk_hasav <= 1'b0;
-							st <= 10'd266;
+							st <= 10'd310;
 						end
-					10'd266: begin
+					10'd310: begin
 						sA[5] <= sA[1] + (lk_set ? sA[2] << 2 : sA[2] << 3);
-						rd(sA[1] + (lk_set ? sA[2] << 2 : sA[2] << 3), 10'd263);
+						rd(sA[1] + (lk_set ? sA[2] << 2 : sA[2] << 3), 10'd307);
 					end
-					10'd263:
+					10'd307:
 						if (mv == VNULL) begin
 							if (lk_mode == LK_ADD) begin
 								if (lk_hasav)
 									sA[5] <= sA[4];
-								st <= 10'd260;
+								st <= 10'd304;
 							end
 							else
 								ret;
@@ -13279,48 +14700,48 @@ module mpy_core (
 								lk_hasav <= 1'b1;
 								sA[4] <= sA[5];
 							end
-							st <= 10'd265;
+							st <= 10'd309;
 						end
 						else if (mv == t[5])
-							st <= 10'd258;
+							st <= 10'd302;
 						else if (((tg(mv) == ABI_TAG_QSTR) && (tg(t[5]) == ABI_TAG_QSTR)) || ((tg(mv) == ABI_TAG_INT) && (tg(t[5]) == ABI_TAG_INT)))
-							st <= 10'd265;
+							st <= 10'd309;
 						else begin
 							ke_a <= mv;
 							ke_b <= t[5];
-							gosub(10'd229, 10'd264);
+							gosub(10'd268, 10'd308);
 						end
-					10'd264:
+					10'd308:
 						if (ke_cx) begin
 							lk_cx <= 1'b1;
 							ret;
 						end
 						else if (scr_id != SCR_LK)
-							scr_ensure(SCR_LK, 10'd264);
+							scr_ensure(SCR_LK, 10'd308);
 						else if (ke_eq)
-							st <= 10'd258;
+							st <= 10'd302;
 						else
-							st <= 10'd265;
-					10'd265: begin
+							st <= 10'd309;
+					10'd309: begin
 						v0 = ((sA[2] + 32'd1) == sA[0] ? 32'd0 : sA[2] + 32'd1);
 						if (v0 == sA[3]) begin
 							if (lk_mode == LK_ADD) begin
 								if (lk_hasav) begin
 									sA[5] <= sA[4];
-									st <= 10'd260;
+									st <= 10'd304;
 								end
 								else
-									gosub_scr(SCR_RH, 10'd390, 10'd268);
+									gosub_scr(SCR_RH, 10'd446, 10'd312);
 							end
 							else
 								ret;
 						end
 						else begin
 							sA[2] <= v0;
-							st <= 10'd266;
+							st <= 10'd310;
 						end
 					end
-					10'd258: begin
+					10'd302: begin
 						lk_found <= 1'b1;
 						case (lk_mode)
 							LK_FIND:
@@ -13329,283 +14750,285 @@ module mpy_core (
 									ret;
 								end
 								else
-									rd(ha_lk4, 10'd275);
+									rd(ha_lk4, 10'd319);
 							LK_ADD:
 								if (lk_set)
 									ret;
 								else
-									wr(ha_lk4, t[6], 10'd267);
+									wr(ha_lk4, t[6], 10'd311);
 							default:
 								if (lk_set)
-									st <= 10'd269;
+									st <= 10'd313;
 								else
-									rd(ha_lk4, 10'd273);
+									rd(ha_lk4, 10'd317);
 						endcase
 					end
-					10'd275: begin
+					10'd319: begin
 						lk_res <= mv;
 						ret;
 					end
-					10'd267:
+					10'd311:
 						ret;
-					10'd273: begin
+					10'd317: begin
 						lk_res <= mv;
-						st <= 10'd269;
+						st <= 10'd313;
 					end
-					10'd269: begin
+					10'd313: begin
 						v0 = ((sA[2] + 32'd1) == sA[0] ? 32'd0 : sA[2] + 32'd1);
-						rd(sA[1] + (lk_set ? v0 << 2 : v0 << 3), 10'd270);
+						rd(sA[1] + (lk_set ? v0 << 2 : v0 << 3), 10'd314);
 					end
-					10'd270:
-						wr(sA[5], (mv == VNULL ? VNULL : VTOMB), 10'd271);
-					10'd271:
+					10'd314:
+						wr(sA[5], (mv == VNULL ? VNULL : VTOMB), 10'd315);
+					10'd315:
 						if (lk_set)
-							rd(adr(t[4]), 10'd254);
+							rd(adr(t[4]), 10'd298);
 						else
-							wr(ha_lk4, VNULL, 10'd272);
-					10'd272:
-						rd(adr(t[4]), 10'd254);
-					10'd254:
-						wr(adr(t[4]), vint(md - 32'd1), 10'd267);
-					10'd260:
-						wr(sA[5], t[5], (lk_set ? 10'd262 : 10'd261));
-					10'd261:
-						wr(ha_lk4, t[6], 10'd262);
-					10'd262:
-						rd(adr(t[4]), 10'd259);
-					10'd259:
-						wr(adr(t[4]), vint(md + 32'd1), 10'd267);
-					10'd390:
+							wr(ha_lk4, VNULL, 10'd316);
+					10'd316:
+						rd(adr(t[4]), 10'd298);
+					10'd298:
+						wr(adr(t[4]), vint(md - 32'd1), 10'd311);
+					10'd304:
+						wr(sA[5], t[5], (lk_set ? 10'd306 : 10'd305));
+					10'd305:
+						wr(ha_lk4, t[6], 10'd306);
+					10'd306:
+						rd(adr(t[4]), 10'd303);
+					10'd303:
+						wr(adr(t[4]), vint(md + 32'd1), 10'd311);
+					10'd446:
 						if (scr_id != SCR_RH)
-							scr_adopt(SCR_RH, 10'd390);
+							scr_adopt(SCR_RH, 10'd446);
 						else
-							st <= 10'd697;
-					10'd697:
-						rd(scr_addr(SCR_LK, 4'd0), 10'd698);
-					10'd698: begin
+							st <= 10'd767;
+					10'd767:
+						rd(scr_addr(SCR_LK, 4'd0), 10'd768);
+					10'd768: begin
 						sA[0] <= md + 32'd1;
-						st <= 10'd699;
+						st <= 10'd769;
 					end
-					10'd699: begin
+					10'd769: begin
 						sA[0] <= next_alloc(sA[0]);
-						alloc(next_alloc(sA[0]) << (lk_set ? 0 : 1), 10'd391);
+						st <= 10'd814;
 					end
-					10'd391: begin
+					10'd814:
+						alloc(sA[0] << (lk_set ? 0 : 1), 10'd447);
+					10'd447: begin
 						sA[1] <= al_a;
 						sA[2] <= 32'd0;
 						sA[4] <= 32'd0;
-						rd(aoff(adr(t[4]), 4), 10'd392);
+						rd(aoff(adr(t[4]), 4), 10'd448);
 					end
-					10'd392: begin
+					10'd448: begin
 						sA[5] <= md;
-						rd(aoff(adr(t[4]), 8), 10'd393);
+						rd(aoff(adr(t[4]), 8), 10'd449);
 					end
-					10'd393: begin
+					10'd449: begin
 						sA[6] <= md;
-						st <= ((cfg_ca && cfg_bulk) && (sA[5] != 0) ? 10'd354 : 10'd400);
+						st <= ((cfg_ca && cfg_bulk) && (sA[5] != 0) ? 10'd409 : 10'd456);
 					end
-					10'd400:
+					10'd456:
 						if (sA[2] == sA[5])
-							wr(aoff(adr(t[4]), 4), vint(sA[0]), 10'd394);
+							wr(aoff(adr(t[4]), 4), vint(sA[0]), 10'd450);
 						else
-							rd(sA[6] + (lk_set ? sA[2] << 2 : sA[2] << 3), 10'd399);
-					10'd399:
+							rd(sA[6] + (lk_set ? sA[2] << 2 : sA[2] << 3), 10'd455);
+					10'd455:
 						if ((mv == VNULL) || (mv == VTOMB)) begin
 							sA[2] <= sA[2] + 32'd1;
-							st <= 10'd400;
+							st <= 10'd456;
 						end
 						else begin
 							sV[7] <= mv;
 							hk <= mv;
-							gosub(10'd195, 10'd397);
+							gosub(10'd231, 10'd453);
 						end
-					10'd397:
+					10'd453:
 						if (!hok) begin
 							lk_cx <= 1'b1;
 							ret;
 						end
 						else if (hh < sA[0]) begin
 							sA[3] <= hh;
-							st <= 10'd402;
+							st <= 10'd458;
 						end
 						else begin
 							hm_start <= 1'b1;
-							st <= 10'd398;
+							st <= 10'd454;
 						end
-					10'd398:
+					10'd454:
 						if (hm_done) begin
 							sA[3] <= hm_rem;
-							st <= 10'd402;
+							st <= 10'd458;
 						end
-					10'd402:
-						rd(sA[1] + (lk_set ? sA[3] << 2 : sA[3] << 3), 10'd403);
-					10'd403:
+					10'd458:
+						rd(sA[1] + (lk_set ? sA[3] << 2 : sA[3] << 3), 10'd459);
+					10'd459:
 						if (mv != VNULL) begin
 							sA[3] <= ((sA[3] + 32'd1) == sA[0] ? 32'd0 : sA[3] + 32'd1);
-							st <= 10'd402;
+							st <= 10'd458;
 						end
 						else
-							wr(sA[1] + (lk_set ? sA[3] << 2 : sA[3] << 3), sV[7], (lk_set ? 10'd401 : 10'd404));
-					10'd404:
-						rd((sA[6] + (sA[2] << 3)) + 4, 10'd405);
-					10'd405:
-						wr((sA[1] + (sA[3] << 3)) + 4, mv, 10'd401);
-					10'd401: begin
+							wr(sA[1] + (lk_set ? sA[3] << 2 : sA[3] << 3), sV[7], (lk_set ? 10'd457 : 10'd460));
+					10'd460:
+						rd((sA[6] + (sA[2] << 3)) + 4, 10'd461);
+					10'd461:
+						wr((sA[1] + (sA[3] << 3)) + 4, mv, 10'd457);
+					10'd457: begin
 						sA[4] <= sA[4] + 32'd1;
 						sA[2] <= sA[2] + 32'd1;
-						st <= 10'd400;
+						st <= 10'd456;
 					end
-					10'd394:
-						wr(aoff(adr(t[4]), 8), {ABI_TAG_CONT, sA[1]}, 10'd395);
-					10'd395:
-						wr(adr(t[4]), vint(sA[4]), 10'd396);
-					10'd396:
-						wr(scr_addr(SCR_LK, 4'd0), {4'd0, sA[0]}, 10'd700);
-					10'd700:
-						wr(scr_addr(SCR_LK, 4'd1), {4'd0, sA[1]}, 10'd267);
-					10'd236:
+					10'd450:
+						wr(aoff(adr(t[4]), 8), {ABI_TAG_CONT, sA[1]}, 10'd451);
+					10'd451:
+						wr(adr(t[4]), vint(sA[4]), 10'd452);
+					10'd452:
+						wr(scr_addr(SCR_LK, 4'd0), {4'd0, sA[0]}, 10'd770);
+					10'd770:
+						wr(scr_addr(SCR_LK, 4'd1), {4'd0, sA[1]}, 10'd311);
+					10'd280:
 						if (scr_id != SCR_LA)
-							scr_adopt(SCR_LA, 10'd236);
+							scr_adopt(SCR_LA, 10'd280);
 						else
-							rd(adr(t[2]), 10'd247);
-					10'd247: begin
+							rd(adr(t[2]), 10'd291);
+					10'd291: begin
 						sA[0] <= md;
-						rd(aoff(adr(t[2]), 4), 10'd237);
+						rd(aoff(adr(t[2]), 4), 10'd281);
 					end
-					10'd237: begin
+					10'd281: begin
 						sA[1] <= md;
-						rd(aoff(adr(t[2]), 8), 10'd245);
+						rd(aoff(adr(t[2]), 8), 10'd289);
 					end
-					10'd245: begin
+					10'd289: begin
 						sA[2] <= md;
 						if (sA[0] < sA[1])
-							wr(md + (sA[0] << 2), t[3], 10'd246);
+							wr(md + (sA[0] << 2), t[3], 10'd290);
 						else
-							alloc((sA[1] == 32'd0 ? 32'd4 : sA[1] << 1), 10'd241);
+							alloc((sA[1] == 32'd0 ? 32'd4 : sA[1] << 1), 10'd285);
 					end
-					10'd241:
+					10'd285:
 						if (!al_ok)
 							ret;
 						else begin
 							sA[3] <= al_a;
 							sA[4] <= 32'd0;
-							rd(aoff(adr(t[2]), 8), 10'd242);
+							rd(aoff(adr(t[2]), 8), 10'd286);
 						end
-					10'd242: begin
+					10'd286: begin
 						sA[2] <= md;
-						st <= (cfg_ca && (sA[0] != 32'd0) ? 10'd709 : 10'd239);
+						st <= (cfg_ca && (sA[0] != 32'd0) ? 10'd776 : 10'd283);
 					end
-					10'd709:
+					10'd776:
 						if (ca_ok) begin
 							ca_ship(sA[3], sA[2], sA[0]);
 							sA[4] <= sA[0];
-							st <= 10'd239;
+							st <= 10'd283;
 						end
-					10'd239:
+					10'd283:
 						if (sA[4] == sA[0])
-							wr(aoff(adr(t[2]), 4), vint((sA[1] == 32'd0 ? 32'd4 : sA[1] << 1)), 10'd243);
+							wr(aoff(adr(t[2]), 4), vint((sA[1] == 32'd0 ? 32'd4 : sA[1] << 1)), 10'd287);
 						else
-							rd(sA[2] + (sA[4] << 2), 10'd240);
-					10'd240: begin
-						wr(sA[3] + (sA[4] << 2), mv, 10'd239);
+							rd(sA[2] + (sA[4] << 2), 10'd284);
+					10'd284: begin
+						wr(sA[3] + (sA[4] << 2), mv, 10'd283);
 						sA[4] <= sA[4] + 32'd1;
 					end
-					10'd243:
-						wr(aoff(adr(t[2]), 8), {ABI_TAG_CONT, sA[3]}, 10'd244);
-					10'd244:
+					10'd287:
+						wr(aoff(adr(t[2]), 8), {ABI_TAG_CONT, sA[3]}, 10'd288);
+					10'd288:
 						if (sA[2] == (adr(t[2]) + 32'd12)) begin
 							sA[4] <= 0;
-							st <= 10'd742;
+							st <= 10'd809;
 						end
 						else
-							st <= 10'd743;
-					10'd742:
+							st <= 10'd810;
+					10'd809:
 						if (sA[4] == sA[0])
-							st <= 10'd743;
+							st <= 10'd810;
 						else begin
-							wr(sA[2] + (sA[4] << 2), VNULL, 10'd742);
+							wr(sA[2] + (sA[4] << 2), VNULL, 10'd809);
 							sA[4] <= sA[4] + 32'd1;
 						end
-					10'd743:
-						wr(sA[3] + (sA[0] << 2), t[3], 10'd246);
-					10'd246:
-						wr(adr(t[2]), vint(sA[0] + 32'd1), 10'd249);
-					10'd249:
+					10'd810:
+						wr(sA[3] + (sA[0] << 2), t[3], 10'd290);
+					10'd290:
+						wr(adr(t[2]), vint(sA[0] + 32'd1), 10'd293);
+					10'd293:
 						ret;
-					10'd471:
+					10'd528:
 						if (tb_n == 16'd0) begin
 							tb_v <= {ABI_TAG_TUPLE, h_empty};
 							ret;
 						end
 						else
-							alloc(32'd1 + tb_n, 10'd472);
-					10'd472: begin
+							alloc(32'd1 + tb_n, 10'd529);
+					10'd529: begin
 						tb_a <= al_a;
 						tb_i <= 16'd0;
-						wr(al_a, vint(sv2v_cast_32(tb_n)), 10'd473);
+						wr(al_a, vint(sv2v_cast_32(tb_n)), 10'd530);
 					end
-					10'd473:
+					10'd530:
 						if (tb_i == tb_n) begin
 							tb_v <= {ABI_TAG_TUPLE, tb_a};
 							ret;
 						end
 						else if (!tb_src)
-							rd(ab_ptr(sv2v_cast_8(tb_from + tb_i)), 10'd614);
+							rd(ab_ptr(sv2v_cast_8(tb_from + tb_i)), 10'd671);
 						else begin
 							v0 = {16'd0, stk_from} + {16'd0, tb_i};
 							if (stk_hit(v0[15:0])) begin
-								wr((tb_a + 4) + (4 * tb_i), stk_val(v0[15:0]), 10'd473);
+								wr((tb_a + 4) + (4 * tb_i), stk_val(v0[15:0]), 10'd530);
 								tb_i <= tb_i + 16'd1;
 							end
 							else begin
 								srd_g <= v0[15:0];
-								gosub(10'd512, 10'd525);
+								gosub(10'd569, 10'd582);
 							end
 						end
-					10'd614: begin
+					10'd671: begin
 						if (tb_nz && (mv == VNULL))
-							wr((tb_a + 4) + (4 * tb_i), vint(32'd0), 10'd473);
+							wr((tb_a + 4) + (4 * tb_i), vint(32'd0), 10'd530);
 						else
-							wr((tb_a + 4) + (4 * tb_i), mv, 10'd473);
+							wr((tb_a + 4) + (4 * tb_i), mv, 10'd530);
 						tb_i <= tb_i + 16'd1;
 					end
-					10'd525: begin
-						wr((tb_a + 4) + (4 * tb_i), srd_v, 10'd473);
+					10'd582: begin
+						wr((tb_a + 4) + (4 * tb_i), srd_v, 10'd530);
 						tb_i <= tb_i + 16'd1;
 					end
-					10'd210:
+					10'd249:
 						if ((is_c == ty_obj) || (is_c == is_t)) begin
 							is_r <= 1'b1;
 							ret;
 						end
 						else
-							rd(aoff(adr(is_t), 20), 10'd213);
-					10'd213: begin
+							rd(aoff(adr(is_t), 20), 10'd252);
+					10'd252: begin
 						is_m <= adr(mv);
-						rd(adr(mv), 10'd214);
+						rd(adr(mv), 10'd253);
 					end
-					10'd214: begin
+					10'd253: begin
 						is_n <= md;
 						is_i <= 32'd0;
-						st <= 10'd212;
+						st <= 10'd251;
 					end
-					10'd212:
+					10'd251:
 						if (is_i == is_n) begin
 							is_r <= 1'b0;
 							ret;
 						end
 						else
-							rd((is_m + 4) + (is_i << 2), 10'd211);
-					10'd211:
+							rd((is_m + 4) + (is_i << 2), 10'd250);
+					10'd250:
 						if (mv == is_c) begin
 							is_r <= 1'b1;
 							ret;
 						end
 						else begin
 							is_i <= is_i + 32'd1;
-							st <= 10'd212;
+							st <= 10'd251;
 						end
-					10'd467: begin
+					10'd524: begin
 						tr_x <= 1'b0;
 						if ((ovr == ABI_OVR_TRUE) || (ovr == ABI_OVR_FALSE)) begin
 							tr_r <= ovr == ABI_OVR_TRUE;
@@ -13635,22 +15058,22 @@ module mpy_core (
 									ret;
 								end
 								ABI_TAG_STR, ABI_TAG_BYTES, ABI_TAG_TUPLE, ABI_TAG_MUT:
-									rd(adr(tr_v), 10'd469);
+									rd(adr(tr_v), 10'd526);
 								ABI_TAG_OBJECT:
-									rd(aoff(adr(tr_v), 4), 10'd470);
+									rd(aoff(adr(tr_v), 4), 10'd527);
 								default: begin
 									tr_x <= 1'b1;
 									ret;
 								end
 							endcase
 					end
-					10'd469: begin
+					10'd526: begin
 						tr_r <= md != 32'd0;
 						ret;
 					end
-					10'd470:
-						rd(aoff(adr(mv), 28), 10'd468);
-					10'd468: begin
+					10'd527:
+						rd(aoff(adr(mv), 28), 10'd525);
+					10'd525: begin
 						if (md & ABI_TF_TRUTH)
 							tr_x <= 1'b1;
 						else
@@ -13667,7 +15090,7 @@ module mpy_core (
 								rd(adr(t[0]), 10'd12);
 							else begin
 								ty_v <= t[0];
-								gosub(10'd474, 10'd22);
+								gosub(10'd531, 10'd22);
 							end
 						end
 					10'd12:
@@ -13773,9 +15196,9 @@ module mpy_core (
 							at_kind <= 2'd3;
 						ret;
 					end
-					10'd215:
+					10'd254:
 						if (scr_id != SCR_IT)
-							scr_ensure(SCR_IT, 10'd215);
+							scr_ensure(SCR_IT, 10'd254);
 						else begin
 							it_stop <= 1'b0;
 							it_py <= 1'b0;
@@ -13792,16 +15215,16 @@ module mpy_core (
 								end
 								ABI_IT_SEQ:
 									if ((tg(sV[0]) == ABI_TAG_TUPLE) || is_mut(sV[0], ABI_MUT_LIST))
-										rd(adr(sV[0]), 10'd226);
+										rd(adr(sV[0]), 10'd265);
 									else begin
 										si_v <= sV[0];
-										gosub(10'd444, 10'd217);
+										gosub(10'd500, 10'd256);
 									end
 								ABI_IT_DICT, ABI_IT_SET:
-									rd(aoff(adr(sV[0]), 4), 10'd218);
+									rd(aoff(adr(sV[0]), 4), 10'd257);
 								ABI_IT_STR: begin
 									si_v <= sV[0];
-									gosub(10'd444, 10'd217);
+									gosub(10'd500, 10'd256);
 								end
 								ABI_IT_PYOBJ: begin
 									it_py <= 1'b1;
@@ -13813,62 +15236,62 @@ module mpy_core (
 								end
 							endcase
 						end
-					10'd226:
+					10'd265:
 						if (sA[4] >= md) begin
 							it_stop <= 1'b1;
 							ret;
 						end
 						else if (tg(sV[0]) == ABI_TAG_TUPLE)
-							rd((adr(sV[0]) + 4) + (sA[4] << 2), 10'd227);
+							rd((adr(sV[0]) + 4) + (sA[4] << 2), 10'd266);
 						else
-							rd(aoff(adr(sV[0]), 8), 10'd224);
-					10'd224:
-						rd(md + (sA[4] << 2), 10'd227);
-					10'd227: begin
+							rd(aoff(adr(sV[0]), 8), 10'd263);
+					10'd263:
+						rd(md + (sA[4] << 2), 10'd266);
+					10'd266: begin
 						it_val <= mv;
 						sV[1] <= vint(sA[4] + 32'd1);
 						ret;
 					end
-					10'd217:
+					10'd256:
 						if (sA[4] >= si_len) begin
 							it_stop <= 1'b1;
 							ret;
 						end
 						else
-							rd(si_addr + {sA[4][31:2], 2'b00}, 10'd216);
-					10'd216:
+							rd(si_addr + {sA[4][31:2], 2'b00}, 10'd255);
+					10'd255:
 						if ((tg(sV[0]) == ABI_TAG_BYTES) || is_mut(sV[0], ABI_MUT_BYTEARRAY)) begin
 							it_val <= vint({24'd0, byte_of(md, sA[4][1:0])});
 							sV[1] <= vint(sA[4] + 32'd1);
 							ret;
 						end
 						else
-							rd(h_chars + (4 * byte_of(md, sA[4][1:0])), 10'd225);
-					10'd225: begin
+							rd(h_chars + (4 * byte_of(md, sA[4][1:0])), 10'd264);
+					10'd264: begin
 						it_val <= {ABI_TAG_QSTR, md};
 						sV[1] <= vint(sA[4] + 32'd1);
 						ret;
 					end
-					10'd218: begin
+					10'd257: begin
 						sA[5] <= md;
-						rd(aoff(adr(sV[0]), 8), 10'd222);
+						rd(aoff(adr(sV[0]), 8), 10'd261);
 					end
-					10'd222: begin
+					10'd261: begin
 						sA[6] <= md;
-						st <= 10'd221;
+						st <= 10'd260;
 					end
-					10'd221:
+					10'd260:
 						if (sA[4] >= sA[5]) begin
 							it_stop <= 1'b1;
 							sV[1] <= vint(sA[4]);
 							ret;
 						end
 						else
-							rd(sA[6] + (sV[3][31:0] == ABI_IT_SET ? sA[4] << 2 : sA[4] << 3), 10'd220);
-					10'd220:
+							rd(sA[6] + (sV[3][31:0] == ABI_IT_SET ? sA[4] << 2 : sA[4] << 3), 10'd259);
+					10'd259:
 						if ((mv == VNULL) || (mv == VTOMB)) begin
 							sA[4] <= sA[4] + 32'd1;
-							st <= 10'd221;
+							st <= 10'd260;
 						end
 						else if ((sV[3][31:0] == ABI_IT_SET) || (sV[2][31:0] == 32'd0)) begin
 							it_val <= mv;
@@ -13876,28 +15299,28 @@ module mpy_core (
 							ret;
 						end
 						else if (sV[2][31:0] == 32'd1)
-							rd(ha_m4, 10'd227);
+							rd(ha_m4, 10'd266);
 						else begin
 							t[2] <= mv;
-							rd(ha_m4, 10'd223);
+							rd(ha_m4, 10'd262);
 						end
-					10'd223: begin
+					10'd262: begin
 						t[1] <= mv;
-						alloc(32'd3, 10'd219);
+						alloc(32'd3, 10'd258);
 					end
-					10'd219: begin
+					10'd258: begin
 						wb_v[0] <= vint(32'd2);
 						wb_v[1] <= t[2];
 						wb_v[2] <= t[1];
 						it_val <= {ABI_TAG_TUPLE, al_a};
 						sV[1] <= vint(sA[4] + 32'd1);
-						wblock(al_a, 4'd3, 10'd249);
+						wblock(al_a, 4'd3, 10'd293);
 					end
-					10'd506:
+					10'd563:
 						if (aalu_pend) begin
 							if (aalu_go) begin
-								aalu_ret <= 10'd506;
-								st <= 10'd710;
+								aalu_ret <= 10'd563;
+								st <= 10'd777;
 							end
 						end
 						else begin
@@ -13911,9 +15334,9 @@ module mpy_core (
 								v0 = v1;
 							spill_nc <= v0[5:0];
 							spill_bc <= mpy_rf_block_bytes(v0[5:0]);
-							st <= 10'd507;
+							st <= 10'd564;
 						end
-					10'd507:
+					10'd564:
 						if (spill_nc < sv2v_cast_6_signed(MPY_RF_CHUNK_MIN))
 							st <= rf_resume;
 						else if (spill_hp < (ftop + spill_bc))
@@ -13926,9 +15349,9 @@ module mpy_core (
 							spill_had_link <= has_link;
 							spill_prev <= (has_link ? mpy_rf_link_addr(rf[rf_base[3:0] + 4'd0]) : 32'd0);
 							sw_i <= 32'd0;
-							st <= 10'd508;
+							st <= 10'd565;
 						end
-					10'd508:
+					10'd565:
 						if (sw_i == spill_words) begin
 							if (spill_had_link) begin
 								rf[rf_base[3:0] + sv2v_cast_4(spill_n)] <= mpy_make_rf_link(spill_addr);
@@ -13946,12 +15369,12 @@ module mpy_core (
 							st <= rf_resume;
 						end
 						else if (sw_i == 32'd0) begin
-							wr(spill_addr, mpy_rf_chunk_hdr(spill_prev, spill_n), 10'd508);
+							wr(spill_addr, mpy_rf_chunk_hdr(spill_prev, spill_n), 10'd565);
 							sw_i <= 32'd1;
 						end
 						else if (sw_i <= sv2v_cast_32(spill_ntag)) begin
 							v3 = 32'd0;
-							begin : sv2v_autoblock_21
+							begin : sv2v_autoblock_25
 								reg signed [31:0] k;
 								for (k = 0; k < 8; k = k + 1)
 									begin
@@ -13960,19 +15383,19 @@ module mpy_core (
 											v3[4 * k+:4] = rf[rf_base[3:0] + sv2v_cast_4((spill_had_link ? vs0 + 7'd1 : vs0))][35:32];
 									end
 							end
-							wr(spill_addr + (sw_i << 2), {4'd0, v3}, 10'd508);
+							wr(spill_addr + (sw_i << 2), {4'd0, v3}, 10'd565);
 							sw_i <= sw_i + 32'd1;
 						end
 						else begin
 							vs0 = (spill_had_link ? sw_i[6:0] - {1'b0, spill_ntag} : (sw_i[6:0] - 7'd1) - {1'b0, spill_ntag});
-							wr(spill_addr + (sw_i << 2), rf[rf_base[3:0] + sv2v_cast_4(vs0)], 10'd508);
+							wr(spill_addr + (sw_i << 2), rf[rf_base[3:0] + sv2v_cast_4(vs0)], 10'd565);
 							sw_i <= sw_i + 32'd1;
 						end
-					10'd509:
+					10'd566:
 						if (aalu_pend) begin
 							if (aalu_go) begin
-								aalu_ret <= 10'd509;
-								st <= 10'd710;
+								aalu_ret <= 10'd566;
+								st <= 10'd777;
 							end
 						end
 						else if (!has_link)
@@ -13980,9 +15403,9 @@ module mpy_core (
 						else begin
 							spill_addr <= mpy_rf_link_addr(rf[rf_base[3:0] + 4'd0]);
 							sw_i <= 32'd0;
-							st <= 10'd510;
+							st <= 10'd567;
 						end
-					10'd510:
+					10'd567:
 						if ((sw_i != 32'd0) && (sw_i == spill_words)) begin
 							spilled_reals <= (spilled_reals >= {10'd0, spill_n} ? spilled_reals - {10'd0, spill_n} : 16'd0);
 							if (reload_top)
@@ -14001,8 +15424,8 @@ module mpy_core (
 							st <= rf_resume;
 						end
 						else
-							rd(spill_addr + (sw_i << 2), 10'd511);
-					10'd511:
+							rd(spill_addr + (sw_i << 2), 10'd568);
+					10'd568:
 						if (sw_i == 32'd0) begin
 							v0 = sv2v_cast_32(mpy_rf_chunk_count(mt, md));
 							v1 = mpy_rf_chunk_prev(md);
@@ -14013,25 +15436,25 @@ module mpy_core (
 							spill_words <= (32'd1 + sv2v_cast_32((v0[5:0] + 6'd7) >> 3)) + v0;
 							reload_top <= spill_addr == spill_hp;
 							if (((v0 < MPY_RF_CHUNK_MIN) || (v0 > MPY_RF_CHUNK_MAX)) || (v2 > MPY_RF_DEPTH)) begin
-								if (rf_resume == 10'd103) begin
+								if (rf_resume == 10'd818) begin
 									rf_reload_miss <= 1'b1;
-									st <= 10'd103;
+									st <= 10'd818;
 								end
 								else
 									halt(ABI_HALT_INTERNAL, 32'h00005f01);
 							end
 							else begin
 								sw_i <= 32'd1 + sv2v_cast_32((v0[5:0] + 6'd7) >> 3);
-								st <= 10'd510;
+								st <= 10'd567;
 							end
 						end
 						else begin
 							v0 = (sw_i - 32'd1) - sv2v_cast_32(spill_ntag);
 							rf[sv2v_cast_4(((rf_base - spill_n) + v0) + 32'd1)] <= mv;
 							sw_i <= sw_i + 32'd1;
-							st <= 10'd510;
+							st <= 10'd567;
 						end
-					10'd512:
+					10'd569:
 						if (stk_hit(srd_g)) begin
 							srd_v <= stk_val(srd_g);
 							ret;
@@ -14044,15 +15467,19 @@ module mpy_core (
 							srd_addr <= mpy_rf_link_addr(rf[rf_base[3:0] + 4'd0]);
 							srd_off <= (spilled_reals - 16'd1) - srd_g;
 							srd_hops <= 16'd0;
-							st <= 10'd513;
+							st <= 10'd570;
 						end
-					10'd513:
-						rd(srd_addr, 10'd514);
-					10'd514: begin
+					10'd570:
+						rd(srd_addr, 10'd571);
+					10'd819:
+						rd(srd_addr + {12'd0, srd_o, 2'b00}, 10'd572);
+					10'd571: begin
 						v0 = sv2v_cast_32(mpy_rf_chunk_count(mt, md));
 						v1 = mpy_rf_chunk_prev(md);
-						if ((v0 != 32'd0) && (srd_off < v0[15:0]))
-							rd(((srd_addr + 32'd4) + (sv2v_cast_32((v0[5:0] + 6'd7) >> 3) << 2)) + (((v0 - 32'd1) - sv2v_cast_32(srd_off)) << 2), 10'd515);
+						if ((v0 != 32'd0) && (srd_off < v0[15:0])) begin
+							srd_o <= (18'd1 + sv2v_cast_18((v0[5:0] + 6'd7) >> 3)) + sv2v_cast_18((v0 - 32'd1) - sv2v_cast_32(srd_off));
+							st <= 10'd819;
+						end
 						else if ((v1 == 32'd0) || (srd_hops == spilled_reals)) begin
 							srd_v <= VNULL;
 							ret;
@@ -14061,93 +15488,93 @@ module mpy_core (
 							srd_off <= srd_off - v0[15:0];
 							srd_addr <= v1;
 							srd_hops <= srd_hops + 16'd1;
-							st <= 10'd513;
+							st <= 10'd570;
 						end
 					end
-					10'd515: begin
+					10'd572: begin
 						srd_v <= mv;
 						ret;
 					end
-					10'd542:
+					10'd599:
 						if (b1)
-							wr(ab_ptr(8'd31), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(s1 + 7'd1))], 10'd543);
+							wr(ab_ptr(8'd31), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(s1 + 7'd1))], 10'd600);
 						else
-							st <= 10'd543;
-					10'd543:
+							st <= 10'd600;
+					10'd600:
 						if (sv2v_cast_32(i0) == x1)
-							st <= 10'd60;
+							st <= 10'd94;
 						else begin
-							wr(ab_ptr(8'd32 + i0), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(s0 + sv2v_cast_7(i0)))], 10'd543);
+							wr(ab_ptr(8'd32 + i0), rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(s0 + sv2v_cast_7(i0)))], 10'd600);
 							i0 <= i0 + 8'd1;
 						end
-					10'd516:
+					10'd573:
 						if (stk_hit(x0[15:0]))
-							wr(ab_ptr(8'd0), stk_val(x0[15:0]), 10'd518);
+							wr(ab_ptr(8'd0), stk_val(x0[15:0]), 10'd575);
 						else begin
 							srd_g <= x0[15:0];
-							gosub(10'd512, 10'd517);
+							gosub(10'd569, 10'd574);
 						end
-					10'd517:
-						wr(ab_ptr(8'd0), srd_v, 10'd518);
-					10'd518:
+					10'd574:
+						wr(ab_ptr(8'd0), srd_v, 10'd575);
+					10'd575:
 						if (!b0) begin
 							ab_lo <= 8'd32;
-							st <= 10'd520;
+							st <= 10'd577;
 						end
 						else if (stk_hit(x0[15:0] + 16'd1)) begin
 							if (stk_val(x0[15:0] + 16'd1) != VNULL) begin
-								wr(ab_ptr(8'd31), stk_val(x0[15:0] + 16'd1), 10'd520);
+								wr(ab_ptr(8'd31), stk_val(x0[15:0] + 16'd1), 10'd577);
 								ab_lo <= 8'd31;
 							end
 							else begin
 								ab_lo <= 8'd32;
-								st <= 10'd520;
+								st <= 10'd577;
 							end
 						end
 						else begin
 							srd_g <= x0[15:0] + 16'd1;
-							gosub(10'd512, 10'd519);
+							gosub(10'd569, 10'd576);
 						end
-					10'd519:
+					10'd576:
 						if (srd_v != VNULL) begin
-							wr(ab_ptr(8'd31), srd_v, 10'd520);
+							wr(ab_ptr(8'd31), srd_v, 10'd577);
 							ab_lo <= 8'd31;
 						end
 						else begin
 							ab_lo <= 8'd32;
-							st <= 10'd520;
+							st <= 10'd577;
 						end
-					10'd520:
+					10'd577:
 						if (gi == x1)
-							st <= 10'd522;
-						else if (stk_hit(x2[15:0] + gi[15:0])) begin
-							wr(ab_ptr(sv2v_cast_8(32 + gi)), stk_val(x2[15:0] + gi[15:0]), 10'd520);
+							st <= 10'd579;
+						else if (sv2v_cast_16((x3 - (b0 ? 32'd2 : 32'd1)) - gi) <= resident_reals) begin
+							wr(ab_ptr(sv2v_cast_8(32 + gi)), stk_val(x2[15:0] + gi[15:0]), 10'd577);
 							gi <= gi + 32'd1;
 						end
 						else begin
 							srd_g <= x2[15:0] + gi[15:0];
-							gosub(10'd512, 10'd521);
+							gosub(10'd569, 10'd578);
 						end
-					10'd521: begin
-						wr(ab_ptr(sv2v_cast_8(32 + gi)), srd_v, 10'd520);
+					10'd578: begin
+						wr(ab_ptr(sv2v_cast_8(32 + gi)), srd_v, 10'd577);
 						gi <= gi + 32'd1;
 					end
-					10'd522: begin
+					10'd579: begin
 						ab_pe <= sv2v_cast_8(32 + x4);
 						crk <= ABI_RK_PUSH;
 						drop_left <= x3[15:0];
 						drop_push_en <= 1'b0;
-						drop_then <= 10'd60;
-						st <= 10'd523;
+						drop_then <= 10'd94;
+						st <= 10'd580;
 					end
-					10'd523:
+					10'd580:
 						if (drop_left == 16'd0) begin
 							if (drop_push_en) begin
 								if (sp >= sv2v_cast_7_signed(MPY_RF_DEPTH)) begin
 									rf_pend <= 1'b1;
 									rf_pend_v <= drop_push_v;
 									rf_resume <= drop_then;
-									st <= 10'd506;
+									st <= 10'd563;
 								end
 								else begin
 									rf[rf_base[3:0] + sv2v_cast_4(sp)] <= drop_push_v;
@@ -14159,8 +15586,8 @@ module mpy_core (
 								st <= drop_then;
 						end
 						else if (has_link && (sp <= 7'd1)) begin
-							rf_resume <= 10'd523;
-							st <= 10'd509;
+							rf_resume <= 10'd580;
+							st <= 10'd566;
 						end
 						else if (sp == 7'd0)
 							drop_left <= 16'd0;
@@ -14168,27 +15595,33 @@ module mpy_core (
 							sp <= sp - 7'd1;
 							drop_left <= drop_left - 16'd1;
 						end
-					10'd488:
-						if (stk_depth <= ur_target) begin
+					10'd545: begin
+						ur_le <= stk_depth <= ur_target;
+						st <= 10'd816;
+					end
+					10'd816:
+						if (ur_le) begin
 							if (sp >= sv2v_cast_7_signed(14)) begin
-								rf_resume <= 10'd488;
-								st <= 10'd506;
+								rf_resume <= 10'd545;
+								st <= 10'd563;
 							end
 							else begin
 								rf[rf_base[3:0] + sv2v_cast_4(sp)] <= ur_val;
 								rf[rf_base[3:0] + sv2v_cast_4(sp + 7'd1)] <= vint(32'hffffffff);
 								sp <= sp + 7'd2;
-								st <= 10'd111;
+								st <= 10'd147;
 							end
 						end
 						else if (has_link && (sp <= 7'd1)) begin
-							rf_resume <= 10'd488;
-							st <= 10'd509;
+							rf_resume <= 10'd545;
+							st <= 10'd566;
 						end
-						else if (sp != 7'd0)
+						else if (sp != 7'd0) begin
 							sp <= sp - 7'd1;
+							st <= 10'd545;
+						end
 						else
-							st <= 10'd111;
+							st <= 10'd147;
 					default:
 						halt(ABI_HALT_INTERNAL, 32'hdead0000 | sv2v_cast_32(st));
 				endcase
@@ -15139,7 +16572,7 @@ module mpy_ca (
 	assign take = rq_v && gnt_i;
 	assign ld_ok = !rq_v || gnt_i;
 	assign ld_wr = ((ld_ok && act) && (wn != 32'd0)) && (fc != {(BW >= 0 ? BW + 1 : 1 - BW) {1'sb0}});
-	assign ld_rd = (((ld_ok && act) && !ld_wr) && (rn != 32'd0)) && ((sv2v_cast_32(rpend) + sv2v_cast_32(fc)) < BUF);
+	assign ld_rd = (((ld_ok && act) && !((act && (wn != 32'd0)) && (fc != {(BW >= 0 ? BW + 1 : 1 - BW) {1'sb0}}))) && (rn != 32'd0)) && ((sv2v_cast_32(rpend) + sv2v_cast_32(fc)) < BUF);
 	assign last_wr = (take && rq_we) && (wn == 32'd0);
 	assign flt = (ack_i && fault_i) && !fault_o;
 	assign rd_ack = ((ack_i && !fault_i) && !fault_o) && !if_we[0];
@@ -15148,20 +16581,19 @@ module mpy_ca (
 	assign pop = last_wr && !flt;
 	assign cmd_ready_o = sv2v_cast_32(cnt) < QDEPTH;
 	assign idle_o = ((cnt == {(QW >= 0 ? QW + 1 : 1 - QW) {1'sb0}}) && (if_n == {2 {1'sb0}})) && !rq_v;
+	reg [(2 * QDEPTH) - 1:0] chk_hit;
 	always @(*) begin
 		if (_sv2v_0)
 			;
-		chk_busy_o = 1'b0;
 		begin : sv2v_autoblock_2
 			reg signed [31:0] k;
 			for (k = 0; k < QDEPTH; k = k + 1)
 				begin
-					if ((qv[k] && (chk_addr_i >= dlo[k])) && (chk_addr_i < dhi[k]))
-						chk_busy_o = 1'b1;
-					if (((qv[k] && chk_we_i) && (chk_addr_i >= slo[k])) && (chk_addr_i < shi[k]))
-						chk_busy_o = 1'b1;
+					chk_hit[2 * k] = (qv[k] && (chk_addr_i >= dlo[k])) && (chk_addr_i < dhi[k]);
+					chk_hit[(2 * k) + 1] = ((qv[k] && chk_we_i) && (chk_addr_i >= slo[k])) && (chk_addr_i < shi[k]);
 				end
 		end
+		chk_busy_o = |chk_hit;
 	end
 	always @(posedge clk_i or negedge rst_n_i)
 		if (!rst_n_i) begin
@@ -15498,14 +16930,17 @@ module mpy_hash (
 							fail;
 					endcase
 				1: hash_o <= hash_sx31(payload_i);
-				3: hash_o <= hash_float(payload_i);
+				3: begin
+					part_r <= payload_i;
+					state <= 5'd22;
+				end
 				11, 12, 14: hash_o <= hash_sx31(payload_i >> 1);
 				default: state <= 5'd1;
 			endcase
 		end
 	endtask
 	initial if ((DEPTH < 1) || ((BYTES_PER_CYCLE != 1) && (BYTES_PER_CYCLE != 4)))
-		$display("Error [%0t] /tmp/tmp.qJUjjmms9z/mpy_soc.sv:19955:13 - mpy_hash.<unnamed_block>.<unnamed_block>\n msg: ", $time, "mpy_hash: invalid parameters");
+		$display("Error [%0t] /tmp/tmp.QxSBci6NnL/mpy_soc.sv:21146:13 - mpy_hash.<unnamed_block>.<unnamed_block>\n msg: ", $time, "mpy_hash: invalid parameters");
 	always @(posedge clk_i or negedge rst_n_i)
 		if (!rst_n_i) begin
 			state <= 5'd0;
@@ -15546,8 +16981,10 @@ module mpy_hash (
 						1:
 							finish(payload);
 						2: state <= 5'd4;
-						3:
-							finish(hash_float(payload));
+						3: begin
+							part_r <= payload;
+							state <= 5'd24;
+						end
 						4: state <= 5'd5;
 						6: state <= 5'd11;
 						8, 13: state <= 5'd12;
@@ -15592,6 +17029,20 @@ module mpy_hash (
 				5'd4:
 					if (mem_ack_i)
 						finish(mem_data_i);
+				5'd22: begin
+					mag_r <= hash_float_mag(part_r);
+					state <= 5'd23;
+				end
+				5'd23: begin
+					hash_o <= hash_float_sign(part_r[31], mag_r);
+					state <= 5'd3;
+				end
+				5'd24: begin
+					mag_r <= hash_float_mag(part_r);
+					state <= 5'd25;
+				end
+				5'd25:
+					finish(hash_float_sign(part_r[31], mag_r));
 				5'd5:
 					if (mem_ack_i) begin
 						part_r <= mem_data_i;
@@ -15762,10 +17213,13 @@ module mpy_key_equal (
 	reg [31:0] qcount;
 	reg [31:0] qbase;
 	reg [31:0] qext;
+	reg [31:0] qext_off;
+	reg [31:0] desc_r;
 	reg [2:0] acount;
 	reg [2:0] bcount;
 	wire [35:0] current;
 	wire [31:0] descriptor;
+	always @(posedge clk_i) desc_r <= descriptor;
 	reg [63:0] convert_input;
 	reg [63:0] magnitude;
 	reg [63:0] normalized;
@@ -15806,7 +17260,7 @@ module mpy_key_equal (
 		exponent_bits = (8'd127 + {2'b00, exponent_index}) + {7'd0, rounded[24]};
 	end
 	assign current = (side ? b : a);
-	assign descriptor = (current[31:0] < qcount ? qbase + (current[31:0] << 3) : qext + ((current[31:0] - qcount) << 3));
+	assign descriptor = (current[31:0] < qcount ? qbase + (current[31:0] << 3) : qext_off + (current[31:0] << 3));
 	assign ready_o = (state == 5'd0) || ((state == 5'd19) && ready_i);
 	assign valid_o = state == 5'd19;
 	localparam [31:0] ABI_CTL_FALSE = 32'd4;
@@ -15848,6 +17302,7 @@ module mpy_key_equal (
 			qcount <= qstr_count_i;
 			qbase <= qstr_base_i;
 			qext <= qstr_ext_i;
+			qext_off <= qstr_ext_i - (qstr_count_i << 3);
 			state <= 5'd1;
 		end
 	endtask
@@ -15860,7 +17315,7 @@ module mpy_key_equal (
 			5'd3: mem_addr_o = current[31:0];
 			5'd4: mem_addr_o = current[31:0] + 4;
 			5'd12: mem_addr_o = (current[35:32] == ABI_TAG_QSTR ? descriptor : current[31:0]);
-			5'd13: mem_addr_o = (current[35:32] == ABI_TAG_QSTR ? descriptor + 4 : current[31:0] + 8);
+			5'd13: mem_addr_o = (current[35:32] == ABI_TAG_QSTR ? desc_r + 4 : current[31:0] + 8);
 			5'd16: mem_addr_o = {ptr[0][31:2], 2'b00};
 			5'd17: mem_addr_o = {ptr[1][31:2], 2'b00};
 			default: mem_req_o = 0;
@@ -15884,6 +17339,7 @@ module mpy_key_equal (
 			qcount <= 0;
 			qbase <= 0;
 			qext <= 0;
+			qext_off <= 0;
 			aword <= 0;
 			bword <= 0;
 			remaining <= 0;
@@ -18213,19 +19669,7 @@ module mpy_shortlist (
 			default:
 				;
 		endcase
-		chk_busy_o = 0;
-		if (st != 4'd0) begin
-			if (({1'b0, chk_addr_i} >= {1'b0, dst}) && ({1'b0, chk_addr_i} < dest_end))
-				chk_busy_o = 1;
-			if ((chk_we_i && ({1'b0, chk_addr_i} >= source_low)) && ({1'b0, chk_addr_i} < source_end))
-				chk_busy_o = 1;
-			if (clear_tail && (chk_addr_i == clear_addr))
-				chk_busy_o = 1;
-			if (put_value && (chk_addr_i == put_addr))
-				chk_busy_o = 1;
-			if ((write_length && (chk_addr_i >= header)) && ({1'b0, chk_addr_i} < header_end))
-				chk_busy_o = 1;
-		end
+		chk_busy_o = (st != 4'd0) && (((((({1'b0, chk_addr_i} >= {1'b0, dst}) && ({1'b0, chk_addr_i} < dest_end)) || ((chk_we_i && ({1'b0, chk_addr_i} >= source_low)) && ({1'b0, chk_addr_i} < source_end))) || (clear_tail && (chk_addr_i == clear_addr))) || (put_value && (chk_addr_i == put_addr))) || ((write_length && (chk_addr_i >= header)) && ({1'b0, chk_addr_i} < header_end)));
 	end
 	task automatic finish_items;
 		if (clear_tail)
@@ -18627,6 +20071,7 @@ module mpy_collection (
 	assign fault_addr_o = (sl_fault ? sl_faddr : (bm_fault ? bm_fault_addr : (by_fault ? by_fault_addr : cp_fault_addr)));
 	localparam [3:0] MPY_FAULT_BUS = 4'd3;
 	assign fault_reason_o = (sl_fault ? sl_reason : (bm_fault || by_fault ? MPY_FAULT_BUS : cp_reason));
+	reg [9:0] chk_hit;
 	function automatic signed [0:0] sv2v_cast_1_signed;
 		input reg signed [0:0] inp;
 		sv2v_cast_1_signed = inp;
@@ -18634,23 +20079,19 @@ module mpy_collection (
 	always @(*) begin
 		if (_sv2v_0)
 			;
-		chk_busy_o = cp_busy || sl_lock;
+		chk_hit = 1'sb0;
 		begin : sv2v_autoblock_1
 			reg signed [31:0] i;
 			for (i = 0; i < 2; i = i + 1)
 				if (occupied[i] && !(((running && !owner_bulk) && !owner_byte) && (head == sv2v_cast_1_signed(i)))) begin
-					if ((chk_addr_i >= queue[i][226-:32]) && (chk_addr_i < queue[i][290-:32]))
-						chk_busy_o = 1;
-					if ((chk_we_i && (chk_addr_i >= queue[i][258-:32])) && (chk_addr_i < queue[i][322-:32]))
-						chk_busy_o = 1;
-					if (((chk_we_i && queue[i][98]) && (chk_addr_i >= queue[i][354-:32])) && (chk_addr_i < queue[i][194-:32]))
-						chk_busy_o = 1;
-					if ((queue[i][97] && (chk_addr_i >= queue[i][418-:32])) && (chk_addr_i < queue[i][162-:32]))
-						chk_busy_o = 1;
-					if (((chk_we_i && queue[i][96]) && (chk_addr_i >= queue[i][386-:32])) && (chk_addr_i < queue[i][130-:32]))
-						chk_busy_o = 1;
+					chk_hit[(5 * i) + 0] = (chk_addr_i >= queue[i][226-:32]) && (chk_addr_i < queue[i][290-:32]);
+					chk_hit[(5 * i) + 1] = (chk_we_i && (chk_addr_i >= queue[i][258-:32])) && (chk_addr_i < queue[i][322-:32]);
+					chk_hit[(5 * i) + 2] = ((chk_we_i && queue[i][98]) && (chk_addr_i >= queue[i][354-:32])) && (chk_addr_i < queue[i][194-:32]);
+					chk_hit[(5 * i) + 3] = (queue[i][97] && (chk_addr_i >= queue[i][418-:32])) && (chk_addr_i < queue[i][162-:32]);
+					chk_hit[(5 * i) + 4] = ((chk_we_i && queue[i][96]) && (chk_addr_i >= queue[i][386-:32])) && (chk_addr_i < queue[i][130-:32]);
 				end
 		end
+		chk_busy_o = (cp_busy || sl_lock) || |chk_hit;
 	end
 	function automatic [1:0] sv2v_cast_2;
 		input reg [1:0] inp;
@@ -18881,6 +20322,7 @@ module mpy_mem (
 	parameter signed [31:0] FLASH_WAIT_STATES = MPY_FLASH_WAIT_STATES;
 	localparam signed [31:0] MPY_SRAM_LATENCY = 1;
 	parameter signed [31:0] SRAM_LATENCY = MPY_SRAM_LATENCY;
+	parameter [NP - 1:0] EARLY = 1'sb0;
 	input wire clk_i;
 	input wire rst_n_i;
 	input wire [31:0] image_words_i;
@@ -18924,6 +20366,8 @@ module mpy_mem (
 	reg [31:0] image_words;
 	reg [31:0] data_words;
 	wire [31:0] image_words_n;
+	wire img_big;
+	assign img_big = |image_words[31:MPY_FLASH_IDX_W];
 	assign image_words_n = (image_words_i + 32'd7) & 32'hfffffff8;
 	always @(posedge clk_i or negedge rst_n_i)
 		if (!rst_n_i) begin
@@ -19008,19 +20452,12 @@ module mpy_mem (
 	localparam [3:0] MPY_FAULT_FLASH_STORE = 4'd2;
 	localparam [3:0] MPY_FAULT_NONE = 4'd0;
 	localparam [3:0] MPY_FAULT_UNALIGNED = 4'd1;
-	localparam [2:0] MPY_REGION_FLASH = 3'd1;
-	localparam [2:0] MPY_REGION_SRAM = 3'd2;
-	localparam [31:0] MPY_FLASH_BASE = 32'h00000000;
-	function automatic [MPY_MEM_WORD_AW - 1:0] sv2v_cast_EA15C;
-		input reg [MPY_MEM_WORD_AW - 1:0] inp;
-		sv2v_cast_EA15C = inp;
-	endfunction
-	function automatic [MPY_MEM_WORD_AW - 1:0] mpy_flash_word_index;
-		input reg [31:0] addr;
-		mpy_flash_word_index = sv2v_cast_EA15C((addr - MPY_FLASH_BASE) >> 2);
-	endfunction
 	localparam signed [31:0] MPY_MEM_BYTES = MPY_MEM_WORDS * 4;
 	localparam [31:0] MPY_FLASH_BYTES = MPY_MEM_BYTES;
+	localparam [2:0] MPY_REGION_FLASH = 3'd1;
+	localparam [2:0] MPY_REGION_SRAM = 3'd2;
+	localparam [31:0] MPY_SRAM_BASE = 32'h20000000;
+	localparam [31:0] MPY_SRAM_BYTES = MPY_MEM_BYTES;
 	localparam [31:0] MPY_MMIO_BASE = 32'h40000000;
 	localparam [31:0] MPY_MMIO_BYTES = 32'h00001000;
 	localparam [2:0] MPY_REGION_MMIO = 3'd3;
@@ -19028,8 +20465,6 @@ module mpy_mem (
 	localparam [2:0] MPY_REGION_SIM = 3'd4;
 	localparam [31:0] MPY_SIM_BASE = 32'he0000000;
 	localparam [31:0] MPY_SIM_BYTES = 32'd256;
-	localparam [31:0] MPY_SRAM_BASE = 32'h20000000;
-	localparam [31:0] MPY_SRAM_BYTES = MPY_MEM_BYTES;
 	function automatic [2:0] mpy_region_of;
 		input reg [31:0] addr;
 		if (addr < MPY_FLASH_BYTES)
@@ -19042,14 +20477,6 @@ module mpy_mem (
 			mpy_region_of = MPY_REGION_SIM;
 		else
 			mpy_region_of = MPY_REGION_NONE;
-	endfunction
-	function automatic [MPY_MEM_WORD_AW - 1:0] mpy_sram_word_index;
-		input reg [31:0] addr;
-		mpy_sram_word_index = sv2v_cast_EA15C((addr - MPY_SRAM_BASE) >> 2);
-	endfunction
-	function automatic [MPY_FLASH_IDX_W - 1:0] sv2v_cast_6DF93;
-		input reg [MPY_FLASH_IDX_W - 1:0] inp;
-		sv2v_cast_6DF93 = inp;
 	endfunction
 	function automatic [31:0] sv2v_cast_32;
 		input reg [31:0] inp;
@@ -19078,8 +20505,8 @@ module mpy_mem (
 					reg [MPY_MEM_WORD_AW - 1:0] sw;
 					reg [MPY_FLASH_IDX_W - 1:0] iw;
 					region = mpy_region_of(addr_i[p * 32+:32]);
-					sw = mpy_sram_word_index(addr_i[p * 32+:32]);
-					iw = sv2v_cast_6DF93(mpy_flash_word_index(addr_i[p * 32+:32]));
+					sw = addr_i[(p * 32) + ((MPY_MEM_WORD_AW + 1) >= 2 ? MPY_MEM_WORD_AW + 1 : ((MPY_MEM_WORD_AW + 1) + ((MPY_MEM_WORD_AW + 1) >= 2 ? MPY_MEM_WORD_AW + 0 : 3 - (MPY_MEM_WORD_AW + 1))) - 1)-:((MPY_MEM_WORD_AW + 1) >= 2 ? MPY_MEM_WORD_AW + 0 : 3 - (MPY_MEM_WORD_AW + 1))];
+					iw = addr_i[(p * 32) + ((MPY_FLASH_IDX_W + 1) >= 2 ? MPY_FLASH_IDX_W + 1 : ((MPY_FLASH_IDX_W + 1) + ((MPY_FLASH_IDX_W + 1) >= 2 ? MPY_FLASH_IDX_W + 0 : 3 - (MPY_FLASH_IDX_W + 1))) - 1)-:((MPY_FLASH_IDX_W + 1) >= 2 ? MPY_FLASH_IDX_W + 0 : 3 - (MPY_FLASH_IDX_W + 1))];
 					ready[p] = !clr_busy && (phase_r[p * 8+:8] <= 8'd1);
 					if (addr_i[(p * 32) + 1-:2] != 2'b00)
 						p_fault[p * 4+:4] = MPY_FAULT_UNALIGNED;
@@ -19089,8 +20516,8 @@ module mpy_mem (
 						p_fault[p * 4+:4] = (sv2v_cast_32(sw) >= data_words ? MPY_FAULT_BUS : MPY_FAULT_NONE);
 					else
 						p_fault[p * 4+:4] = MPY_FAULT_BUS;
-					p_mem[p] = p_fault[p * 4+:4] == MPY_FAULT_NONE;
-					p_img[p] = region == MPY_REGION_FLASH;
+					p_mem[p] = (addr_i[(p * 32) + 1-:2] == 2'b00) && ((((addr_i[p * 32+:32] < MPY_FLASH_BYTES) && (img_big || (iw < image_words[MPY_FLASH_IDX_W - 1:0]))) && !we_i[p]) || (((addr_i[(p * 32) + 31-:3] == MPY_SRAM_BASE[31:29]) && ({3'd0, addr_i[(p * 32) + 28-:29]} < MPY_SRAM_BYTES)) && ({1'b0, sw} < data_words[MPY_MEM_WORD_AW:0])));
+					p_img[p] = addr_i[p * 32+:32] < MPY_FLASH_BYTES;
 					if (p_img[p]) begin
 						p_blk[p * BS+:BS] = iw[1:0];
 						p_row[p * AW+:AW] = sv2v_cast_DE851(sv2v_cast_32(iw) >> BS);
@@ -19157,18 +20584,61 @@ module mpy_mem (
 		begin : sv2v_autoblock_9
 			reg signed [31:0] p;
 			for (p = 0; p < NP; p = p + 1)
-				if (req_i[p] && ready[p]) begin
-					if (!p_mem[p])
-						gnt_o[p] = 1'b1;
-					else if (!taken[p_blk[p * BS+:BS]]) begin
-						gnt_o[p] = 1'b1;
-						taken[p_blk[p * BS+:BS]] = 1'b1;
-						blk_v[p_blk[p * BS+:BS]] = 1'b1;
-						blk_w[p_blk[p * BS+:BS]] = we_i[p];
-						blk_addr[p_blk[p * BS+:BS]] = p_row[p * AW+:AW];
-						blk_data[p_blk[p * BS+:BS]] = {wtag_i[p * 4+:4], wdata_i[p * 32+:32]};
-						blk_mask[p_blk[p * BS+:BS]] = p_mask[p * W+:W];
-						blk_sel[p_blk[p * BS+:BS]] = p_sel[p * NM+:NM];
+				begin : sv2v_autoblock_10
+					reg lost;
+					lost = taken[p_blk[p * BS+:BS]];
+					begin : sv2v_autoblock_11
+						reg signed [31:0] j;
+						for (j = 0; j < p; j = j + 1)
+							lost = lost | ((req_i[j] && ready[j]) && (p_blk[j * BS+:BS] == p_blk[p * BS+:BS]));
+					end
+					gnt_o[p] = (req_i[p] && ready[p]) && (!p_mem[p] || !lost);
+				end
+		end
+		begin : sv2v_autoblock_12
+			reg signed [31:0] b;
+			for (b = 0; b < NB; b = b + 1)
+				begin : sv2v_autoblock_13
+					reg signed [31:0] p;
+					for (p = 0; p < NP; p = p + 1)
+						if ((gnt_o[p] && p_mem[p]) && (p_blk[p * BS+:BS] == sv2v_cast_62836_signed(b))) begin
+							blk_v[b] = 1'b1;
+							blk_w[b] = blk_w[b] | we_i[p];
+							blk_addr[b] = blk_addr[b] | p_row[p * AW+:AW];
+							blk_data[b] = blk_data[b] | {wtag_i[p * 4+:4], wdata_i[p * 32+:32]};
+							blk_mask[b] = blk_mask[b] | p_mask[p * W+:W];
+							blk_sel[b] = blk_sel[b] | p_sel[p * NM+:NM];
+						end
+				end
+		end
+	end
+	reg [NP - 1:0] ack_q;
+	reg [NP - 1:0] fault_q;
+	reg [(NP * 32) - 1:0] rdata_q;
+	reg [(NP * 4) - 1:0] rtag_q;
+	reg [(NP * 4) - 1:0] fault_reason_q;
+	reg [(NP * W) - 1:0] word_c;
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		begin : sv2v_autoblock_14
+			reg signed [31:0] p;
+			for (p = 0; p < NP; p = p + 1)
+				begin
+					word_c[p * W+:W] = (fresh_r[p] ? blk_q[rblk_r[p * BS+:BS]] : hold_r[p * W+:W]);
+					if (EARLY[p]) begin
+						ack_o[p] = phase_r[p * 8+:8] == 8'd1;
+						rdata_o[p * 32+:32] = (rd_r[p] ? word_c[(p * W) + 31-:32] : 32'd0);
+						rtag_o[p * 4+:4] = (rd_r[p] ? word_c[(p * W) + 35-:4] : 4'd0);
+						fault_o[p] = (phase_r[p * 8+:8] == 8'd1) && (fault_r[p * 4+:4] != MPY_FAULT_NONE);
+						fault_reason_o[p * 4+:4] = (fault_o[p] ? fault_r[p * 4+:4] : MPY_FAULT_NONE);
+					end
+					else begin
+						ack_o[p] = ack_q[p];
+						rdata_o[p * 32+:32] = rdata_q[p * 32+:32];
+						rtag_o[p * 4+:4] = rtag_q[p * 4+:4];
+						fault_o[p] = fault_q[p];
+						fault_reason_o[p * 4+:4] = fault_reason_q[p * 4+:4];
 					end
 				end
 		end
@@ -19191,11 +20661,11 @@ module mpy_mem (
 			rblk_r <= 1'sb0;
 			fresh_r <= 1'sb0;
 			hold_r <= 1'sb0;
-			ack_o <= 1'sb0;
-			rdata_o <= 1'sb0;
-			rtag_o <= 1'sb0;
-			fault_o <= 1'sb0;
-			fault_reason_o <= 1'sb0;
+			ack_q <= 1'sb0;
+			rdata_q <= 1'sb0;
+			rtag_q <= 1'sb0;
+			fault_q <= 1'sb0;
+			fault_reason_q <= 1'sb0;
 		end
 		else begin
 			if (clr_busy && !ld_we_i) begin
@@ -19203,27 +20673,27 @@ module mpy_mem (
 				if (clr_idx == sv2v_cast_89787_signed(4095))
 					clr_busy <= 1'b0;
 			end
-			begin : sv2v_autoblock_10
+			begin : sv2v_autoblock_15
 				reg signed [31:0] p;
 				for (p = 0; p < NP; p = p + 1)
-					begin : sv2v_autoblock_11
+					begin : sv2v_autoblock_16
 						reg [35:0] word;
 						word = (fresh_r[p] ? blk_q[rblk_r[p * BS+:BS]] : hold_r[p * W+:W]);
-						ack_o[p] <= 1'b0;
-						fault_o[p] <= 1'b0;
-						fault_reason_o[p * 4+:4] <= MPY_FAULT_NONE;
+						ack_q[p] <= 1'b0;
+						fault_q[p] <= 1'b0;
+						fault_reason_q[p * 4+:4] <= MPY_FAULT_NONE;
 						if (fresh_r[p]) begin
 							fresh_r[p] <= 1'b0;
 							hold_r[p * W+:W] <= blk_q[rblk_r[p * BS+:BS]];
 						end
 						if (phase_r[p * 8+:8] == 8'd1) begin
 							phase_r[p * 8+:8] <= 1'sb0;
-							ack_o[p] <= 1'b1;
-							rdata_o[p * 32+:32] <= (rd_r[p] ? word[31:0] : 32'd0);
-							rtag_o[p * 4+:4] <= (rd_r[p] ? word[35:32] : 4'd0);
+							ack_q[p] <= 1'b1;
+							rdata_q[p * 32+:32] <= (rd_r[p] ? word[31:0] : 32'd0);
+							rtag_q[p * 4+:4] <= (rd_r[p] ? word[35:32] : 4'd0);
 							if (fault_r[p * 4+:4] != MPY_FAULT_NONE) begin
-								fault_o[p] <= 1'b1;
-								fault_reason_o[p * 4+:4] <= fault_r[p * 4+:4];
+								fault_q[p] <= 1'b1;
+								fault_reason_q[p * 4+:4] <= fault_r[p * 4+:4];
 							end
 						end
 						else if (phase_r[p * 8+:8] != 8'd0)
@@ -19251,6 +20721,10 @@ module mpy_boot (
 	ld_idx_o,
 	ld_wdata_o,
 	ld_wtag_o,
+	ioc_we_o,
+	ioc_data_o,
+	ioc_stall_i,
+	ioc_loaded_o,
 	image_words_o,
 	pool_bytes_o,
 	done_o,
@@ -19261,6 +20735,8 @@ module mpy_boot (
 	parameter signed [31:0] PAGE_BYTES = 2048;
 	parameter [15:0] FIRST_PAGE = 16'd0;
 	parameter signed [31:0] POWERUP_CYCLES = 0;
+	parameter signed [31:0] IOC_CODE_WORDS = 4096;
+	parameter signed [31:0] IOC_DATA_WORDS = 1920;
 	input wire clk_i;
 	input wire rst_n_i;
 	output reg sck_o;
@@ -19276,6 +20752,10 @@ module mpy_boot (
 	output reg [MPY_FLASH_IDX_W - 1:0] ld_idx_o;
 	output reg [31:0] ld_wdata_o;
 	output reg [3:0] ld_wtag_o;
+	output reg ioc_we_o;
+	output reg [48:0] ioc_data_o;
+	input wire ioc_stall_i;
+	output reg ioc_loaded_o;
 	output wire [31:0] image_words_o;
 	output reg [31:0] pool_bytes_o;
 	output reg done_o;
@@ -19290,14 +20770,18 @@ module mpy_boot (
 	wire stop;
 	assign src_v = (use_fast ? fast_v : spi_v);
 	assign src_w = (use_fast ? fast_w : spi_w);
-	reg [2:0] cst;
+	reg [3:0] cst;
+	reg [15:0] ioc_nc;
+	reg [15:0] ioc_nd;
+	reg [15:0] ioc_i;
+	reg ioc_sel;
 	reg [31:0] nwords;
 	reg [31:0] tagw;
 	reg [2:0] k;
 	reg [MPY_FLASH_IDX_W:0] widx;
 	assign image_words_o = (nwords + 32'd7) & 32'hfffffff8;
-	assign stop = (cst == 3'd4) || (cst == 3'd5);
-	assign err_o = cst == 3'd5;
+	assign stop = (cst == 4'd4) || (cst == 4'd5);
+	assign err_o = cst == 4'd5;
 	localparam [31:0] MPY_BOOT_MAGIC = 32'h42595055;
 	localparam [31:0] MPY_FRAME_RESERVE_BYTES = 32'h00008000;
 	localparam [31:0] MPY_SRAM_BASE = 32'h20000000;
@@ -19308,6 +20792,7 @@ module mpy_boot (
 	localparam [31:0] MPY_SYSROOT_BASE = MPY_HANDLER_BASE + MPY_HANDLER_BYTES;
 	localparam [31:0] MPY_ARGBUF_BASE = MPY_SYSROOT_BASE + 32'h00000080;
 	localparam [31:0] MPY_GC_POOL_BASE = MPY_ARGBUF_BASE + 32'h00000400;
+	localparam [31:0] MPY_IOCB_MAGIC = 32'h42434f49;
 	localparam signed [31:0] MPY_MEM_BYTES = MPY_MEM_WORDS * 4;
 	function automatic [31:0] sv2v_cast_32;
 		input reg [31:0] inp;
@@ -19315,7 +20800,7 @@ module mpy_boot (
 	endfunction
 	always @(posedge clk_i or negedge rst_n_i)
 		if (!rst_n_i) begin
-			cst <= 3'd0;
+			cst <= 4'd0;
 			nwords <= 1'sb0;
 			pool_bytes_o <= 1'sb0;
 			tagw <= 1'sb0;
@@ -19326,25 +20811,33 @@ module mpy_boot (
 			ld_wdata_o <= 1'sb0;
 			ld_wtag_o <= 1'sb0;
 			done_o <= 1'b0;
+			ioc_we_o <= 1'b0;
+			ioc_data_o <= 1'sb0;
+			ioc_loaded_o <= 1'b0;
+			ioc_nc <= 1'sb0;
+			ioc_nd <= 1'sb0;
+			ioc_i <= 1'sb0;
+			ioc_sel <= 1'b0;
 		end
 		else begin
 			ld_we_o <= 1'b0;
-			if ((cst == 3'd4) && !ld_we_o)
+			ioc_we_o <= 1'b0;
+			if ((cst == 4'd4) && !ld_we_o)
 				done_o <= 1'b1;
 			if (src_v)
 				(* full_case, parallel_case *)
 				case (cst)
-					3'd0: cst <= (src_w == MPY_BOOT_MAGIC ? 3'd1 : 3'd5);
-					3'd1: begin
+					4'd0: cst <= (src_w == MPY_BOOT_MAGIC ? 4'd1 : 4'd5);
+					4'd1: begin
 						nwords <= src_w;
-						cst <= ((src_w < 32'd16) || (src_w > sv2v_cast_32((((MPY_MEM_BYTES - (MPY_GC_POOL_BASE - MPY_SRAM_BASE)) - 16) / 32) * 8)) ? 3'd5 : 3'd2);
+						cst <= ((src_w < 32'd16) || (src_w > sv2v_cast_32((((MPY_MEM_BYTES - (MPY_GC_POOL_BASE - MPY_SRAM_BASE)) - 16) / 32) * 8)) ? 4'd5 : 4'd2);
 					end
-					3'd2: begin
+					4'd2: begin
 						tagw <= src_w;
 						k <= 1'sb0;
-						cst <= 3'd3;
+						cst <= 4'd3;
 					end
-					3'd3: begin
+					4'd3: begin
 						if (widx == 14)
 							pool_bytes_o <= src_w;
 						ld_we_o <= 1'b1;
@@ -19354,11 +20847,38 @@ module mpy_boot (
 						widx <= widx + 1'b1;
 						k <= k + 3'd1;
 						if (k == 3'd7)
-							cst <= ((sv2v_cast_32(widx) + 32'd1) >= nwords ? 3'd4 : 3'd2);
+							cst <= ((sv2v_cast_32(widx) + 32'd1) >= nwords ? 4'd6 : 4'd2);
+					end
+					4'd6: cst <= (src_w == MPY_IOCB_MAGIC ? 4'd7 : 4'd4);
+					4'd7: begin
+						ioc_nc <= src_w[15:0];
+						cst <= (src_w > IOC_CODE_WORDS ? 4'd10 : 4'd8);
+					end
+					4'd8: begin
+						ioc_nd <= src_w[15:0];
+						ioc_i <= 1'sb0;
+						ioc_sel <= ioc_nc == 16'd0;
+						cst <= (src_w > IOC_DATA_WORDS ? 4'd10 : ((ioc_nc == 16'd0) && (src_w == 32'd0) ? 4'd4 : 4'd9));
+						if (src_w <= IOC_DATA_WORDS)
+							ioc_loaded_o <= 1'b1;
+					end
+					4'd9: begin
+						ioc_we_o <= 1'b1;
+						ioc_data_o <= {ioc_sel, ioc_i, src_w};
+						if ((ioc_i + 16'd1) == (ioc_sel ? ioc_nd : ioc_nc)) begin
+							ioc_i <= 1'sb0;
+							ioc_sel <= 1'b1;
+							if (ioc_sel || (ioc_nd == 16'd0))
+								cst <= 4'd4;
+						end
+						else
+							ioc_i <= ioc_i + 16'd1;
 					end
 					default:
 						;
 				endcase
+			if (cst == 4'd10)
+				cst <= 4'd5;
 		end
 	localparam signed [31:0] DW = (SPI_DIV > 1 ? $clog2(SPI_DIV) : 1);
 	reg start;
@@ -19544,6 +21064,12710 @@ module mpy_boot (
 	assign fast_w = 1'sb0;
 	initial _sv2v_0 = 0;
 endmodule
+module mpy_async_fifo (
+	wclk,
+	wrst_n,
+	w_en,
+	w_data,
+	w_full,
+	w_level,
+	rclk,
+	rrst_n,
+	r_en,
+	r_data,
+	r_empty,
+	r_level
+);
+	parameter signed [31:0] W = 32;
+	parameter signed [31:0] AW = 4;
+	input wire wclk;
+	input wire wrst_n;
+	input wire w_en;
+	input wire [W - 1:0] w_data;
+	output wire w_full;
+	output wire [AW:0] w_level;
+	input wire rclk;
+	input wire rrst_n;
+	input wire r_en;
+	output wire [W - 1:0] r_data;
+	output wire r_empty;
+	output wire [AW:0] r_level;
+	localparam signed [31:0] DEPTH = 1 << AW;
+	reg [W - 1:0] mem [0:DEPTH - 1];
+	reg [AW:0] wbin;
+	reg [AW:0] wgray;
+	reg [AW:0] rbin;
+	reg [AW:0] rgray;
+	reg [AW:0] rgray_w1;
+	reg [AW:0] rgray_w2;
+	reg [AW:0] wgray_r1;
+	reg [AW:0] wgray_r2;
+	function automatic [AW:0] bin2gray;
+		input reg [AW:0] b;
+		bin2gray = b ^ (b >> 1);
+	endfunction
+	function automatic [AW:0] gray2bin;
+		input reg [AW:0] g;
+		reg [AW:0] b;
+		begin
+			b[AW] = g[AW];
+			begin : sv2v_autoblock_1
+				reg signed [31:0] i;
+				for (i = AW - 1; i >= 0; i = i - 1)
+					b[i] = b[i + 1] ^ g[i];
+			end
+			gray2bin = b;
+		end
+	endfunction
+	assign w_level = wbin - gray2bin(rgray_w2);
+	function automatic [31:0] sv2v_cast_32;
+		input reg [31:0] inp;
+		sv2v_cast_32 = inp;
+	endfunction
+	assign w_full = sv2v_cast_32(w_level) == DEPTH;
+	always @(posedge wclk or negedge wrst_n)
+		if (!wrst_n) begin
+			wbin <= 1'sb0;
+			wgray <= 1'sb0;
+			rgray_w1 <= 1'sb0;
+			rgray_w2 <= 1'sb0;
+		end
+		else begin
+			rgray_w1 <= rgray;
+			rgray_w2 <= rgray_w1;
+			if (w_en && !w_full) begin
+				wbin <= wbin + 1'b1;
+				wgray <= bin2gray(wbin + 1'b1);
+			end
+		end
+	always @(posedge wclk)
+		if (w_en && !w_full)
+			mem[wbin[AW - 1:0]] <= w_data;
+	assign r_level = gray2bin(wgray_r2) - rbin;
+	assign r_empty = r_level == {(AW >= 0 ? AW + 1 : 1 - AW) {1'sb0}};
+	assign r_data = mem[rbin[AW - 1:0]];
+	always @(posedge rclk or negedge rrst_n)
+		if (!rrst_n) begin
+			rbin <= 1'sb0;
+			rgray <= 1'sb0;
+			wgray_r1 <= 1'sb0;
+			wgray_r2 <= 1'sb0;
+		end
+		else begin
+			wgray_r1 <= wgray;
+			wgray_r2 <= wgray_r1;
+			if (r_en && !r_empty) begin
+				rbin <= rbin + 1'b1;
+				rgray <= bin2gray(rbin + 1'b1);
+			end
+		end
+endmodule
+module mpy_iobr (
+	clk_i,
+	rst_n_i,
+	hart_rst_n_i,
+	sys_reset_o,
+	wdt_toggle_i,
+	acc_i,
+	we_i,
+	off_i,
+	wdata_i,
+	rdata_o,
+	acc_now_i,
+	stall_o,
+	con_push_i,
+	con_data_i,
+	con_mode_i,
+	evt_pend_o,
+	ld_push_i,
+	ld_data_i,
+	ld_idle_o,
+	run_i,
+	loaded_i,
+	io_clk_i,
+	io_rst_n_i,
+	us_gray_i,
+	ms_gray_i,
+	cmd_pop_i,
+	cmd_data_o,
+	cmd_empty_o,
+	cmd_level_o,
+	rsp_push_i,
+	rsp_data_i,
+	rsp_full_o,
+	evt_push_i,
+	evt_data_i,
+	evt_full_o,
+	con_pop_i,
+	con_data_o,
+	con_empty_o,
+	con_level_o,
+	conrx_push_i,
+	conrx_data_i,
+	conrx_full_o,
+	upd_push_i,
+	upd_data_i,
+	upd_full_o,
+	dn_pop_i,
+	dn_data_o,
+	dn_empty_o,
+	ld_pop_i,
+	ld_data_o,
+	ld_empty_o
+);
+	reg _sv2v_0;
+	parameter signed [31:0] NUP = 32;
+	parameter signed [31:0] NDN = 8;
+	input wire clk_i;
+	input wire rst_n_i;
+	input wire hart_rst_n_i;
+	output reg sys_reset_o;
+	input wire wdt_toggle_i;
+	input wire acc_i;
+	input wire we_i;
+	input wire [9:0] off_i;
+	input wire [31:0] wdata_i;
+	output reg [31:0] rdata_o;
+	input wire acc_now_i;
+	output reg stall_o;
+	input wire con_push_i;
+	input wire [8:0] con_data_i;
+	input wire [1:0] con_mode_i;
+	output reg evt_pend_o;
+	input wire ld_push_i;
+	input wire [48:0] ld_data_i;
+	output wire ld_idle_o;
+	input wire run_i;
+	input wire loaded_i;
+	input wire io_clk_i;
+	input wire io_rst_n_i;
+	input wire [31:0] us_gray_i;
+	input wire [31:0] ms_gray_i;
+	input wire cmd_pop_i;
+	output wire [31:0] cmd_data_o;
+	output wire cmd_empty_o;
+	output wire [5:0] cmd_level_o;
+	input wire rsp_push_i;
+	input wire [31:0] rsp_data_i;
+	output wire rsp_full_o;
+	input wire evt_push_i;
+	input wire [15:0] evt_data_i;
+	output wire evt_full_o;
+	input wire con_pop_i;
+	output wire [8:0] con_data_o;
+	output wire con_empty_o;
+	output wire [6:0] con_level_o;
+	input wire conrx_push_i;
+	input wire [7:0] conrx_data_i;
+	output wire conrx_full_o;
+	input wire upd_push_i;
+	input wire [36:0] upd_data_i;
+	output wire upd_full_o;
+	input wire dn_pop_i;
+	output wire [34:0] dn_data_o;
+	output wire dn_empty_o;
+	input wire ld_pop_i;
+	output wire [48:0] ld_data_o;
+	output wire ld_empty_o;
+	localparam [9:0] O_CMD = 10'h000;
+	localparam [9:0] O_RSP = 10'h001;
+	localparam [9:0] O_STATUS = 10'h002;
+	localparam [9:0] O_EVT = 10'h003;
+	localparam [9:0] O_EVT_EN = 10'h004;
+	localparam [9:0] O_EVT_SET = 10'h005;
+	localparam [9:0] O_EVT_MASK = 10'h006;
+	localparam [9:0] O_IOC_CTRL = 10'h007;
+	localparam [9:0] O_CON_RX = 10'h008;
+	localparam [9:0] O_CON_MODE = 10'h009;
+	localparam [9:0] O_CMD_SENT = 10'h00a;
+	localparam [9:0] O_RESET_CAUSE = 10'h00b;
+	localparam [9:0] O_SYS_RESET = 10'h00c;
+	localparam [9:0] O_KEEP = 10'h00d;
+	localparam [2:0] PWRON_RESET = 3'd1;
+	localparam [2:0] HARD_RESET = 3'd2;
+	localparam [2:0] WDT_RESET = 3'd3;
+	localparam [2:0] SOFT_RESET = 3'd5;
+	localparam [27:0] RESET_KEY = 28'h0b007ed;
+	wire cmd_push;
+	wire cmd_full;
+	wire [5:0] cmd_wl;
+	mpy_async_fifo #(
+		.W(32),
+		.AW(5)
+	) u_cmd(
+		.wclk(clk_i),
+		.wrst_n(rst_n_i),
+		.w_en(cmd_push),
+		.w_data(wdata_i),
+		.w_full(cmd_full),
+		.w_level(cmd_wl),
+		.rclk(io_clk_i),
+		.rrst_n(io_rst_n_i),
+		.r_en(cmd_pop_i),
+		.r_data(cmd_data_o),
+		.r_empty(cmd_empty_o),
+		.r_level(cmd_level_o)
+	);
+	wire rsp_pop;
+	wire rsp_empty;
+	wire [31:0] rsp_head;
+	wire [4:0] rsp_rl;
+	wire [4:0] rsp_wl_unused;
+	mpy_async_fifo #(
+		.W(32),
+		.AW(4)
+	) u_rsp(
+		.wclk(io_clk_i),
+		.wrst_n(io_rst_n_i),
+		.w_en(rsp_push_i),
+		.w_data(rsp_data_i),
+		.w_full(rsp_full_o),
+		.w_level(rsp_wl_unused),
+		.rclk(clk_i),
+		.rrst_n(rst_n_i),
+		.r_en(rsp_pop),
+		.r_data(rsp_head),
+		.r_empty(rsp_empty),
+		.r_level(rsp_rl)
+	);
+	wire con_full;
+	wire [6:0] con_wl;
+	mpy_async_fifo #(
+		.W(9),
+		.AW(6)
+	) u_con(
+		.wclk(clk_i),
+		.wrst_n(rst_n_i),
+		.w_en(con_push_i),
+		.w_data(con_data_i),
+		.w_full(con_full),
+		.w_level(con_wl),
+		.rclk(io_clk_i),
+		.rrst_n(io_rst_n_i),
+		.r_en(con_pop_i),
+		.r_data(con_data_o),
+		.r_empty(con_empty_o),
+		.r_level(con_level_o)
+	);
+	wire conrx_pop;
+	wire conrx_empty;
+	wire [7:0] conrx_head;
+	wire [4:0] conrx_rl_unused;
+	wire [4:0] conrx_wl_unused;
+	mpy_async_fifo #(
+		.W(8),
+		.AW(4)
+	) u_conrx(
+		.wclk(io_clk_i),
+		.wrst_n(io_rst_n_i),
+		.w_en(conrx_push_i),
+		.w_data(conrx_data_i),
+		.w_full(conrx_full_o),
+		.w_level(conrx_wl_unused),
+		.rclk(clk_i),
+		.rrst_n(rst_n_i),
+		.r_en(conrx_pop),
+		.r_data(conrx_head),
+		.r_empty(conrx_empty),
+		.r_level(conrx_rl_unused)
+	);
+	wire evt_empty;
+	wire [15:0] evt_head;
+	wire [2:0] evt_rl_unused;
+	wire [2:0] evt_wl_unused;
+	mpy_async_fifo #(
+		.W(16),
+		.AW(2)
+	) u_evt(
+		.wclk(io_clk_i),
+		.wrst_n(io_rst_n_i),
+		.w_en(evt_push_i),
+		.w_data(evt_data_i),
+		.w_full(evt_full_o),
+		.w_level(evt_wl_unused),
+		.rclk(clk_i),
+		.rrst_n(rst_n_i),
+		.r_en(!evt_empty),
+		.r_data(evt_head),
+		.r_empty(evt_empty),
+		.r_level(evt_rl_unused)
+	);
+	wire upd_empty;
+	wire [36:0] upd_head;
+	wire [2:0] upd_rl_unused;
+	wire [2:0] upd_wl_unused;
+	mpy_async_fifo #(
+		.W(37),
+		.AW(2)
+	) u_upd(
+		.wclk(io_clk_i),
+		.wrst_n(io_rst_n_i),
+		.w_en(upd_push_i),
+		.w_data(upd_data_i),
+		.w_full(upd_full_o),
+		.w_level(upd_wl_unused),
+		.rclk(clk_i),
+		.rrst_n(rst_n_i),
+		.r_en(!upd_empty),
+		.r_data(upd_head),
+		.r_empty(upd_empty),
+		.r_level(upd_rl_unused)
+	);
+	wire dn_push;
+	wire [2:0] dn_wl;
+	wire [2:0] dn_rl_unused;
+	wire dn_full_unused;
+	mpy_async_fifo #(
+		.W(35),
+		.AW(2)
+	) u_dn(
+		.wclk(clk_i),
+		.wrst_n(rst_n_i),
+		.w_en(dn_push),
+		.w_data({off_i[2:0], wdata_i}),
+		.w_full(dn_full_unused),
+		.w_level(dn_wl),
+		.rclk(io_clk_i),
+		.rrst_n(io_rst_n_i),
+		.r_en(dn_pop_i),
+		.r_data(dn_data_o),
+		.r_empty(dn_empty_o),
+		.r_level(dn_rl_unused)
+	);
+	wire [2:0] ld_wl;
+	wire [2:0] ld_rl_unused;
+	wire ld_full_unused;
+	mpy_async_fifo #(
+		.W(49),
+		.AW(2)
+	) u_ld(
+		.wclk(clk_i),
+		.wrst_n(rst_n_i),
+		.w_en(ld_push_i),
+		.w_data(ld_data_i),
+		.w_full(ld_full_unused),
+		.w_level(ld_wl),
+		.rclk(io_clk_i),
+		.rrst_n(io_rst_n_i),
+		.r_en(ld_pop_i),
+		.r_data(ld_data_o),
+		.r_empty(ld_empty_o),
+		.r_level(ld_rl_unused)
+	);
+	assign ld_idle_o = ld_wl == {3 {1'sb0}};
+	localparam signed [31:0] PG_MS = 3;
+	localparam signed [31:0] PG_US = 4;
+	reg [31:0] us_s1;
+	reg [31:0] us_s2;
+	reg [31:0] ms_s1;
+	reg [31:0] ms_s2;
+	reg [31:0] us_r;
+	reg [31:0] ms_r;
+	function automatic [31:0] g2b;
+		input reg [31:0] g;
+		reg [31:0] b;
+		begin
+			b = g;
+			b = b ^ (b >> 1);
+			b = b ^ (b >> 2);
+			b = b ^ (b >> 4);
+			b = b ^ (b >> 8);
+			b = b ^ (b >> 16);
+			g2b = b;
+		end
+	endfunction
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i) begin
+			us_s1 <= 1'sb0;
+			us_s2 <= 1'sb0;
+			ms_s1 <= 1'sb0;
+			ms_s2 <= 1'sb0;
+			us_r <= 1'sb0;
+			ms_r <= 1'sb0;
+		end
+		else begin
+			us_s1 <= us_gray_i;
+			us_s2 <= us_s1;
+			us_r <= g2b(us_s2);
+			ms_s1 <= ms_gray_i;
+			ms_s2 <= ms_s1;
+			ms_r <= g2b(ms_s2);
+		end
+	reg [31:0] evt_r;
+	reg [31:0] evt_en_r;
+	reg [31:0] sent_r;
+	reg [31:0] keep_r;
+	reg [2:0] cause_r;
+	reg [2:0] wdt_s;
+	reg [1:0] mask_r;
+	reg [31:0] up_r [0:NUP - 1];
+	reg [31:0] dn_r [0:NDN - 1];
+	wire is_up;
+	wire is_dn;
+	assign is_up = off_i[9:8] == 2'b10;
+	assign is_dn = off_i[9:8] == 2'b11;
+	assign cmd_push = (acc_i && we_i) && (off_i == O_CMD);
+	assign dn_push = (acc_i && we_i) && is_dn;
+	reg [31:0] stat_r;
+	reg rsp_ne_r;
+	reg conrx_ne_r;
+	assign rsp_pop = ((acc_i && !we_i) && (off_i == O_RSP)) && rsp_ne_r;
+	assign conrx_pop = ((acc_i && !we_i) && (off_i == O_CON_RX)) && conrx_ne_r;
+	reg [31:0] rd_up;
+	reg [31:0] rd_dn;
+	reg [31:0] rd_reg;
+	wire is_reg;
+	assign is_reg = off_i[9:8] == 2'b00;
+	function automatic [3:0] sv2v_cast_4;
+		input reg [3:0] inp;
+		sv2v_cast_4 = inp;
+	endfunction
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		if (off_i[$clog2(NUP) - 1:0] == PG_MS[$clog2(NUP) - 1:0])
+			rd_up = ms_r;
+		else if (off_i[$clog2(NUP) - 1:0] == PG_US[$clog2(NUP) - 1:0])
+			rd_up = us_r;
+		else
+			rd_up = up_r[off_i[$clog2(NUP) - 1:0]];
+		rd_dn = dn_r[off_i[$clog2(NDN) - 1:0]];
+		case (off_i[3:0])
+			sv2v_cast_4(O_RSP): rd_reg = (rsp_ne_r ? rsp_head : 32'h00000000);
+			sv2v_cast_4(O_STATUS): rd_reg = stat_r;
+			sv2v_cast_4(O_EVT): rd_reg = evt_r;
+			sv2v_cast_4(O_EVT_EN): rd_reg = evt_en_r;
+			sv2v_cast_4(O_EVT_MASK): rd_reg = {30'h00000000, mask_r};
+			sv2v_cast_4(O_IOC_CTRL): rd_reg = {30'h00000000, loaded_i, run_i};
+			sv2v_cast_4(O_CON_RX): rd_reg = {conrx_ne_r, 23'h000000, (conrx_ne_r ? conrx_head : 8'h00)};
+			sv2v_cast_4(O_CON_MODE): rd_reg = {30'h00000000, con_mode_i};
+			sv2v_cast_4(O_CMD_SENT): rd_reg = sent_r;
+			sv2v_cast_4(O_RESET_CAUSE): rd_reg = {29'h00000000, cause_r};
+			sv2v_cast_4(O_KEEP): rd_reg = keep_r;
+			default: rd_reg = 32'h00000000;
+		endcase
+		rdata_o = (we_i ? 32'h00000000 : (({32 {is_up}} & rd_up) | ({32 {is_dn}} & rd_dn)) | ({32 {is_reg}} & rd_reg));
+	end
+	wire stall_n;
+	function automatic [31:0] sv2v_cast_32;
+		input reg [31:0] inp;
+		sv2v_cast_32 = inp;
+	endfunction
+	assign stall_n = (((acc_now_i || ((sv2v_cast_32(cmd_wl) + sv2v_cast_32(cmd_push)) >= 30)) || ((sv2v_cast_32(con_wl) + sv2v_cast_32(con_push_i)) >= 62)) || ((sv2v_cast_32(dn_wl) + sv2v_cast_32(dn_push)) >= 2)) || ((sv2v_cast_32(ld_wl) + sv2v_cast_32(ld_push_i)) >= 2);
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i) begin
+			sent_r <= 32'h00000000;
+			keep_r <= 32'h00000000;
+			cause_r <= PWRON_RESET;
+			wdt_s <= 3'b000;
+			sys_reset_o <= 1'b0;
+			stall_o <= 1'b0;
+			stat_r <= 32'h00000000;
+			rsp_ne_r <= 1'b0;
+			conrx_ne_r <= 1'b0;
+			begin : sv2v_autoblock_1
+				reg signed [31:0] i;
+				for (i = 0; i < NUP; i = i + 1)
+					up_r[i] <= 32'h00000000;
+			end
+			begin : sv2v_autoblock_2
+				reg signed [31:0] i;
+				for (i = 0; i < NDN; i = i + 1)
+					dn_r[i] <= 32'h00000000;
+			end
+		end
+		else begin
+			wdt_s <= {wdt_s[1:0], wdt_toggle_i};
+			sys_reset_o <= 1'b0;
+			if (((acc_i && we_i) && (off_i == O_SYS_RESET)) && (wdata_i[31:4] == RESET_KEY)) begin
+				sys_reset_o <= 1'b1;
+				cause_r <= (wdata_i[0] ? SOFT_RESET : HARD_RESET);
+			end
+			if (wdt_s[2] != wdt_s[1]) begin
+				sys_reset_o <= 1'b1;
+				cause_r <= WDT_RESET;
+			end
+			if ((acc_i && we_i) && (off_i == O_KEEP))
+				keep_r <= wdata_i;
+			stall_o <= stall_n;
+			stat_r <= {!rsp_empty, con_wl, 5'h00, !conrx_empty, con_full, cmd_full, 3'h0, rsp_rl, 2'h0, cmd_wl};
+			rsp_ne_r <= !rsp_empty && !(rsp_pop && (rsp_rl == 5'd1));
+			conrx_ne_r <= !conrx_empty && !conrx_pop;
+			if (cmd_push)
+				sent_r <= sent_r + 32'd1;
+			if (!upd_empty)
+				up_r[upd_head[32+:$clog2(NUP)]] <= upd_head[31:0];
+			if (dn_push)
+				dn_r[off_i[$clog2(NDN) - 1:0]] <= wdata_i;
+		end
+	always @(posedge clk_i or negedge hart_rst_n_i)
+		if (!hart_rst_n_i) begin
+			evt_r <= 32'h00000000;
+			evt_en_r <= 32'h00000000;
+			mask_r <= 2'b00;
+			evt_pend_o <= 1'b0;
+		end
+		else begin
+			evt_r <= ((evt_r & ~((acc_i && we_i) && (off_i == O_EVT) ? wdata_i : 32'h00000000)) | ((acc_i && we_i) && (off_i == O_EVT_SET) ? wdata_i : 32'h00000000)) | (!evt_empty ? {16'h0000, evt_head} : 32'h00000000);
+			if ((acc_i && we_i) && (off_i == O_EVT_EN))
+				evt_en_r <= wdata_i;
+			if ((acc_i && we_i) && (off_i == O_EVT_MASK))
+				mask_r <= wdata_i[1:0];
+			evt_pend_o <= |(evt_r & evt_en_r) && (mask_r == 2'b00);
+		end
+	wire unused;
+	assign unused = ^{rsp_wl_unused, conrx_rl_unused, conrx_wl_unused, evt_rl_unused, evt_wl_unused, upd_rl_unused, upd_wl_unused, dn_rl_unused, dn_full_unused, ld_rl_unused, ld_full_unused};
+	initial _sv2v_0 = 0;
+endmodule
+module cve2_alu (
+	operator_i,
+	operand_a_i,
+	operand_b_i,
+	instr_first_cycle_i,
+	multdiv_operand_a_i,
+	multdiv_operand_b_i,
+	multdiv_sel_i,
+	imd_val_q_i,
+	imd_val_d_o,
+	imd_val_we_o,
+	adder_result_o,
+	adder_result_ext_o,
+	result_o,
+	comparison_result_o,
+	is_equal_result_o
+);
+	reg _sv2v_0;
+	parameter integer RV32B = 32'sd0;
+	input wire [6:0] operator_i;
+	input wire [31:0] operand_a_i;
+	input wire [31:0] operand_b_i;
+	input wire instr_first_cycle_i;
+	input wire [32:0] multdiv_operand_a_i;
+	input wire [32:0] multdiv_operand_b_i;
+	input wire multdiv_sel_i;
+	input wire [63:0] imd_val_q_i;
+	output reg [63:0] imd_val_d_o;
+	output reg [1:0] imd_val_we_o;
+	output wire [31:0] adder_result_o;
+	output wire [33:0] adder_result_ext_o;
+	output reg [31:0] result_o;
+	output wire comparison_result_o;
+	output wire is_equal_result_o;
+	wire [31:0] operand_a_rev;
+	wire [32:0] operand_b_neg;
+	genvar _gv_k_2;
+	generate
+		for (_gv_k_2 = 0; _gv_k_2 < 32; _gv_k_2 = _gv_k_2 + 1) begin : gen_rev_operand_a
+			localparam k = _gv_k_2;
+			assign operand_a_rev[k] = operand_a_i[31 - k];
+		end
+	endgenerate
+	reg adder_op_a_shift1;
+	reg adder_op_a_shift2;
+	reg adder_op_a_shift3;
+	reg adder_op_b_negate;
+	reg [32:0] adder_in_a;
+	reg [32:0] adder_in_b;
+	wire [31:0] adder_result;
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		adder_op_a_shift1 = 1'b0;
+		adder_op_a_shift2 = 1'b0;
+		adder_op_a_shift3 = 1'b0;
+		adder_op_b_negate = 1'b0;
+		(* full_case, parallel_case *)
+		case (operator_i)
+			7'd1, 7'd29, 7'd30, 7'd27, 7'd28, 7'd25, 7'd26, 7'd43, 7'd44, 7'd31, 7'd32, 7'd33, 7'd34: adder_op_b_negate = 1'b1;
+			7'd22:
+				if (RV32B != 32'sd0)
+					adder_op_a_shift1 = 1'b1;
+			7'd23:
+				if (RV32B != 32'sd0)
+					adder_op_a_shift2 = 1'b1;
+			7'd24:
+				if (RV32B != 32'sd0)
+					adder_op_a_shift3 = 1'b1;
+			default:
+				;
+		endcase
+	end
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		(* full_case, parallel_case *)
+		case (1'b1)
+			multdiv_sel_i: adder_in_a = multdiv_operand_a_i;
+			adder_op_a_shift1: adder_in_a = {operand_a_i[30:0], 2'b01};
+			adder_op_a_shift2: adder_in_a = {operand_a_i[29:0], 3'b001};
+			adder_op_a_shift3: adder_in_a = {operand_a_i[28:0], 4'b0001};
+			default: adder_in_a = {operand_a_i, 1'b1};
+		endcase
+	end
+	assign operand_b_neg = {operand_b_i, 1'b0} ^ {33 {1'b1}};
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		(* full_case, parallel_case *)
+		case (1'b1)
+			multdiv_sel_i: adder_in_b = multdiv_operand_b_i;
+			adder_op_b_negate: adder_in_b = operand_b_neg;
+			default: adder_in_b = {operand_b_i, 1'b0};
+		endcase
+	end
+	assign adder_result_ext_o = $unsigned(adder_in_a) + $unsigned(adder_in_b);
+	assign adder_result = adder_result_ext_o[32:1];
+	assign adder_result_o = adder_result;
+	wire is_equal;
+	reg is_greater_equal;
+	reg cmp_signed;
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		(* full_case, parallel_case *)
+		case (operator_i)
+			7'd27, 7'd25, 7'd43, 7'd31, 7'd33: cmp_signed = 1'b1;
+			default: cmp_signed = 1'b0;
+		endcase
+	end
+	assign is_equal = adder_result == 32'b00000000000000000000000000000000;
+	assign is_equal_result_o = is_equal;
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		if ((operand_a_i[31] ^ operand_b_i[31]) == 1'b0)
+			is_greater_equal = adder_result[31] == 1'b0;
+		else
+			is_greater_equal = operand_a_i[31] ^ cmp_signed;
+	end
+	reg cmp_result;
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		(* full_case, parallel_case *)
+		case (operator_i)
+			7'd29: cmp_result = is_equal;
+			7'd30: cmp_result = ~is_equal;
+			7'd27, 7'd28, 7'd33, 7'd34: cmp_result = is_greater_equal;
+			7'd25, 7'd26, 7'd31, 7'd32, 7'd43, 7'd44: cmp_result = ~is_greater_equal;
+			default: cmp_result = is_equal;
+		endcase
+	end
+	assign comparison_result_o = cmp_result;
+	reg shift_left;
+	wire shift_ones;
+	wire shift_arith;
+	wire shift_funnel;
+	wire shift_sbmode;
+	reg [5:0] shift_amt;
+	wire [5:0] shift_amt_compl;
+	reg [31:0] shift_operand;
+	reg signed [32:0] shift_result_ext_signed;
+	reg [32:0] shift_result_ext;
+	reg unused_shift_result_ext;
+	reg [31:0] shift_result;
+	reg [31:0] shift_result_rev;
+	wire bfp_op;
+	wire [4:0] bfp_len;
+	wire [4:0] bfp_off;
+	wire [31:0] bfp_mask;
+	wire [31:0] bfp_mask_rev;
+	wire [31:0] bfp_result;
+	assign bfp_op = (RV32B != 32'sd0 ? operator_i == 7'd55 : 1'b0);
+	assign bfp_len = {~(|operand_b_i[27:24]), operand_b_i[27:24]};
+	assign bfp_off = operand_b_i[20:16];
+	assign bfp_mask = (RV32B != 32'sd0 ? ~(32'hffffffff << bfp_len) : {32 {1'sb0}});
+	genvar _gv_i_2;
+	generate
+		for (_gv_i_2 = 0; _gv_i_2 < 32; _gv_i_2 = _gv_i_2 + 1) begin : gen_rev_bfp_mask
+			localparam i = _gv_i_2;
+			assign bfp_mask_rev[i] = bfp_mask[31 - i];
+		end
+	endgenerate
+	assign bfp_result = (RV32B != 32'sd0 ? (~shift_result & operand_a_i) | ((operand_b_i & bfp_mask) << bfp_off) : {32 {1'sb0}});
+	wire [1:1] sv2v_tmp_BA5F8;
+	assign sv2v_tmp_BA5F8 = operand_b_i[5] & shift_funnel;
+	always @(*) shift_amt[5] = sv2v_tmp_BA5F8;
+	assign shift_amt_compl = 32 - operand_b_i[4:0];
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		if (bfp_op)
+			shift_amt[4:0] = bfp_off;
+		else
+			shift_amt[4:0] = (instr_first_cycle_i ? (operand_b_i[5] && shift_funnel ? shift_amt_compl[4:0] : operand_b_i[4:0]) : (operand_b_i[5] && shift_funnel ? operand_b_i[4:0] : shift_amt_compl[4:0]));
+	end
+	assign shift_sbmode = (RV32B != 32'sd0 ? ((operator_i == 7'd49) | (operator_i == 7'd50)) | (operator_i == 7'd51) : 1'b0);
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		(* full_case, parallel_case *)
+		case (operator_i)
+			7'd10: shift_left = 1'b1;
+			7'd12: shift_left = ((RV32B == 32'sd2) || (RV32B == 32'sd3) ? 1'b1 : 1'b0);
+			7'd55: shift_left = (RV32B != 32'sd0 ? 1'b1 : 1'b0);
+			7'd14: shift_left = (RV32B != 32'sd0 ? instr_first_cycle_i : 0);
+			7'd13: shift_left = (RV32B != 32'sd0 ? ~instr_first_cycle_i : 0);
+			7'd47: shift_left = (RV32B != 32'sd0 ? (shift_amt[5] ? ~instr_first_cycle_i : instr_first_cycle_i) : 1'b0);
+			7'd48: shift_left = (RV32B != 32'sd0 ? (shift_amt[5] ? instr_first_cycle_i : ~instr_first_cycle_i) : 1'b0);
+			default: shift_left = 1'b0;
+		endcase
+		if (shift_sbmode)
+			shift_left = 1'b1;
+	end
+	assign shift_arith = operator_i == 7'd8;
+	assign shift_ones = ((RV32B == 32'sd2) || (RV32B == 32'sd3) ? (operator_i == 7'd12) | (operator_i == 7'd11) : 1'b0);
+	assign shift_funnel = (RV32B != 32'sd0 ? (operator_i == 7'd47) | (operator_i == 7'd48) : 1'b0);
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		if (RV32B == 32'sd0)
+			shift_operand = (shift_left ? operand_a_rev : operand_a_i);
+		else
+			(* full_case, parallel_case *)
+			case (1'b1)
+				bfp_op: shift_operand = bfp_mask_rev;
+				shift_sbmode: shift_operand = 32'h80000000;
+				default: shift_operand = (shift_left ? operand_a_rev : operand_a_i);
+			endcase
+		shift_result_ext_signed = $signed({shift_ones | (shift_arith & shift_operand[31]), shift_operand}) >>> shift_amt[4:0];
+		shift_result_ext = $unsigned(shift_result_ext_signed);
+		shift_result = shift_result_ext[31:0];
+		unused_shift_result_ext = shift_result_ext[32];
+		begin : sv2v_autoblock_1
+			reg [31:0] i;
+			for (i = 0; i < 32; i = i + 1)
+				shift_result_rev[i] = shift_result[31 - i];
+		end
+		shift_result = (shift_left ? shift_result_rev : shift_result);
+	end
+	wire bwlogic_or;
+	wire bwlogic_and;
+	wire [31:0] bwlogic_operand_b;
+	wire [31:0] bwlogic_or_result;
+	wire [31:0] bwlogic_and_result;
+	wire [31:0] bwlogic_xor_result;
+	reg [31:0] bwlogic_result;
+	reg bwlogic_op_b_negate;
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		(* full_case, parallel_case *)
+		case (operator_i)
+			7'd5, 7'd6, 7'd7: bwlogic_op_b_negate = (RV32B != 32'sd0 ? 1'b1 : 1'b0);
+			7'd46: bwlogic_op_b_negate = (RV32B != 32'sd0 ? ~instr_first_cycle_i : 1'b0);
+			default: bwlogic_op_b_negate = 1'b0;
+		endcase
+	end
+	assign bwlogic_operand_b = (bwlogic_op_b_negate ? operand_b_neg[32:1] : operand_b_i);
+	assign bwlogic_or_result = operand_a_i | bwlogic_operand_b;
+	assign bwlogic_and_result = operand_a_i & bwlogic_operand_b;
+	assign bwlogic_xor_result = operand_a_i ^ bwlogic_operand_b;
+	assign bwlogic_or = (operator_i == 7'd3) | (operator_i == 7'd6);
+	assign bwlogic_and = (operator_i == 7'd4) | (operator_i == 7'd7);
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		(* full_case, parallel_case *)
+		case (1'b1)
+			bwlogic_or: bwlogic_result = bwlogic_or_result;
+			bwlogic_and: bwlogic_result = bwlogic_and_result;
+			default: bwlogic_result = bwlogic_xor_result;
+		endcase
+	end
+	wire [5:0] bitcnt_result;
+	wire [31:0] minmax_result;
+	reg [31:0] pack_result;
+	wire [31:0] sext_result;
+	reg [31:0] singlebit_result;
+	reg [31:0] rev_result;
+	reg [31:0] shuffle_result;
+	wire [31:0] xperm_result;
+	reg [31:0] butterfly_result;
+	reg [31:0] invbutterfly_result;
+	reg [31:0] clmul_result;
+	reg [31:0] multicycle_result;
+	generate
+		if (RV32B != 32'sd0) begin : g_alu_rvb
+			wire zbe_op;
+			wire bitcnt_ctz;
+			wire bitcnt_clz;
+			wire bitcnt_cz;
+			reg [31:0] bitcnt_bits;
+			wire [31:0] bitcnt_mask_op;
+			reg [31:0] bitcnt_bit_mask;
+			reg [191:0] bitcnt_partial;
+			wire [31:0] bitcnt_partial_lsb_d;
+			wire [31:0] bitcnt_partial_msb_d;
+			assign bitcnt_ctz = operator_i == 7'd41;
+			assign bitcnt_clz = operator_i == 7'd40;
+			assign bitcnt_cz = bitcnt_ctz | bitcnt_clz;
+			assign bitcnt_result = bitcnt_partial[0+:6];
+			assign bitcnt_mask_op = (bitcnt_clz ? operand_a_rev : operand_a_i);
+			always @(*) begin
+				if (_sv2v_0)
+					;
+				bitcnt_bit_mask = bitcnt_mask_op;
+				bitcnt_bit_mask = bitcnt_bit_mask | (bitcnt_bit_mask << 1);
+				bitcnt_bit_mask = bitcnt_bit_mask | (bitcnt_bit_mask << 2);
+				bitcnt_bit_mask = bitcnt_bit_mask | (bitcnt_bit_mask << 4);
+				bitcnt_bit_mask = bitcnt_bit_mask | (bitcnt_bit_mask << 8);
+				bitcnt_bit_mask = bitcnt_bit_mask | (bitcnt_bit_mask << 16);
+				bitcnt_bit_mask = ~bitcnt_bit_mask;
+			end
+			assign zbe_op = (operator_i == 7'd53) | (operator_i == 7'd54);
+			always @(*) begin
+				if (_sv2v_0)
+					;
+				case (1'b1)
+					zbe_op: bitcnt_bits = operand_b_i;
+					bitcnt_cz: bitcnt_bits = bitcnt_bit_mask & ~bitcnt_mask_op;
+					default: bitcnt_bits = operand_a_i;
+				endcase
+			end
+			always @(*) begin
+				if (_sv2v_0)
+					;
+				bitcnt_partial = {32 {6'b000000}};
+				begin : sv2v_autoblock_2
+					reg [31:0] i;
+					for (i = 1; i < 32; i = i + 2)
+						bitcnt_partial[(31 - i) * 6+:6] = {5'h00, bitcnt_bits[i]} + {5'h00, bitcnt_bits[i - 1]};
+				end
+				begin : sv2v_autoblock_3
+					reg [31:0] i;
+					for (i = 3; i < 32; i = i + 4)
+						bitcnt_partial[(31 - i) * 6+:6] = bitcnt_partial[(33 - i) * 6+:6] + bitcnt_partial[(31 - i) * 6+:6];
+				end
+				begin : sv2v_autoblock_4
+					reg [31:0] i;
+					for (i = 7; i < 32; i = i + 8)
+						bitcnt_partial[(31 - i) * 6+:6] = bitcnt_partial[(35 - i) * 6+:6] + bitcnt_partial[(31 - i) * 6+:6];
+				end
+				begin : sv2v_autoblock_5
+					reg [31:0] i;
+					for (i = 15; i < 32; i = i + 16)
+						bitcnt_partial[(31 - i) * 6+:6] = bitcnt_partial[(39 - i) * 6+:6] + bitcnt_partial[(31 - i) * 6+:6];
+				end
+				bitcnt_partial[0+:6] = bitcnt_partial[96+:6] + bitcnt_partial[0+:6];
+				bitcnt_partial[48+:6] = bitcnt_partial[96+:6] + bitcnt_partial[48+:6];
+				begin : sv2v_autoblock_6
+					reg [31:0] i;
+					for (i = 11; i < 32; i = i + 8)
+						bitcnt_partial[(31 - i) * 6+:6] = bitcnt_partial[(35 - i) * 6+:6] + bitcnt_partial[(31 - i) * 6+:6];
+				end
+				begin : sv2v_autoblock_7
+					reg [31:0] i;
+					for (i = 5; i < 32; i = i + 4)
+						bitcnt_partial[(31 - i) * 6+:6] = bitcnt_partial[(33 - i) * 6+:6] + bitcnt_partial[(31 - i) * 6+:6];
+				end
+				bitcnt_partial[186+:6] = {5'h00, bitcnt_bits[0]};
+				begin : sv2v_autoblock_8
+					reg [31:0] i;
+					for (i = 2; i < 32; i = i + 2)
+						bitcnt_partial[(31 - i) * 6+:6] = bitcnt_partial[(32 - i) * 6+:6] + {5'h00, bitcnt_bits[i]};
+				end
+			end
+			assign minmax_result = (cmp_result ? operand_a_i : operand_b_i);
+			wire packu;
+			wire packh;
+			assign packu = operator_i == 7'd36;
+			assign packh = operator_i == 7'd37;
+			always @(*) begin
+				if (_sv2v_0)
+					;
+				(* full_case, parallel_case *)
+				case (1'b1)
+					packu: pack_result = {operand_b_i[31:16], operand_a_i[31:16]};
+					packh: pack_result = {16'h0000, operand_b_i[7:0], operand_a_i[7:0]};
+					default: pack_result = {operand_b_i[15:0], operand_a_i[15:0]};
+				endcase
+			end
+			assign sext_result = (operator_i == 7'd38 ? {{24 {operand_a_i[7]}}, operand_a_i[7:0]} : {{16 {operand_a_i[15]}}, operand_a_i[15:0]});
+			always @(*) begin
+				if (_sv2v_0)
+					;
+				(* full_case, parallel_case *)
+				case (operator_i)
+					7'd49: singlebit_result = operand_a_i | shift_result;
+					7'd50: singlebit_result = operand_a_i & ~shift_result;
+					7'd51: singlebit_result = operand_a_i ^ shift_result;
+					default: singlebit_result = {31'h00000000, shift_result[0]};
+				endcase
+			end
+			wire [4:0] zbp_shift_amt;
+			wire gorc_op;
+			assign gorc_op = operator_i == 7'd16;
+			assign zbp_shift_amt[2:0] = ((RV32B == 32'sd2) || (RV32B == 32'sd3) ? shift_amt[2:0] : {3 {shift_amt[0]}});
+			assign zbp_shift_amt[4:3] = ((RV32B == 32'sd2) || (RV32B == 32'sd3) ? shift_amt[4:3] : {2 {shift_amt[3]}});
+			always @(*) begin
+				if (_sv2v_0)
+					;
+				rev_result = operand_a_i;
+				if (zbp_shift_amt[0])
+					rev_result = ((gorc_op ? rev_result : 32'h00000000) | ((rev_result & 32'h55555555) << 1)) | ((rev_result & 32'haaaaaaaa) >> 1);
+				if (zbp_shift_amt[1])
+					rev_result = ((gorc_op ? rev_result : 32'h00000000) | ((rev_result & 32'h33333333) << 2)) | ((rev_result & 32'hcccccccc) >> 2);
+				if (zbp_shift_amt[2])
+					rev_result = ((gorc_op ? rev_result : 32'h00000000) | ((rev_result & 32'h0f0f0f0f) << 4)) | ((rev_result & 32'hf0f0f0f0) >> 4);
+				if (zbp_shift_amt[3])
+					rev_result = ((((RV32B == 32'sd2) || (RV32B == 32'sd3)) && gorc_op ? rev_result : 32'h00000000) | ((rev_result & 32'h00ff00ff) << 8)) | ((rev_result & 32'hff00ff00) >> 8);
+				if (zbp_shift_amt[4])
+					rev_result = ((((RV32B == 32'sd2) || (RV32B == 32'sd3)) && gorc_op ? rev_result : 32'h00000000) | ((rev_result & 32'h0000ffff) << 16)) | ((rev_result & 32'hffff0000) >> 16);
+			end
+			wire crc_hmode;
+			wire crc_bmode;
+			wire [31:0] clmul_result_rev;
+			if ((RV32B == 32'sd2) || (RV32B == 32'sd3)) begin : gen_alu_rvb_otearlgrey_full
+				localparam [127:0] SHUFFLE_MASK_L = 128'h00ff00000f000f003030303044444444;
+				localparam [127:0] SHUFFLE_MASK_R = 128'h0000ff0000f000f00c0c0c0c22222222;
+				localparam [127:0] FLIP_MASK_L = 128'h22001100004400004411000011000000;
+				localparam [127:0] FLIP_MASK_R = 128'h00880044000022000000882200000088;
+				wire [31:0] SHUFFLE_MASK_NOT [0:3];
+				genvar _gv_i_3;
+				for (_gv_i_3 = 0; _gv_i_3 < 4; _gv_i_3 = _gv_i_3 + 1) begin : gen_shuffle_mask_not
+					localparam i = _gv_i_3;
+					assign SHUFFLE_MASK_NOT[i] = ~(SHUFFLE_MASK_L[(3 - i) * 32+:32] | SHUFFLE_MASK_R[(3 - i) * 32+:32]);
+				end
+				wire shuffle_flip;
+				assign shuffle_flip = operator_i == 7'd18;
+				reg [3:0] shuffle_mode;
+				always @(*) begin
+					if (_sv2v_0)
+						;
+					shuffle_result = operand_a_i;
+					if (shuffle_flip) begin
+						shuffle_mode[3] = shift_amt[0];
+						shuffle_mode[2] = shift_amt[1];
+						shuffle_mode[1] = shift_amt[2];
+						shuffle_mode[0] = shift_amt[3];
+					end
+					else
+						shuffle_mode = shift_amt[3:0];
+					if (shuffle_flip)
+						shuffle_result = ((((((((shuffle_result & 32'h88224411) | ((shuffle_result << 6) & FLIP_MASK_L[96+:32])) | ((shuffle_result >> 6) & FLIP_MASK_R[96+:32])) | ((shuffle_result << 9) & FLIP_MASK_L[64+:32])) | ((shuffle_result >> 9) & FLIP_MASK_R[64+:32])) | ((shuffle_result << 15) & FLIP_MASK_L[32+:32])) | ((shuffle_result >> 15) & FLIP_MASK_R[32+:32])) | ((shuffle_result << 21) & FLIP_MASK_L[0+:32])) | ((shuffle_result >> 21) & FLIP_MASK_R[0+:32]);
+					if (shuffle_mode[3])
+						shuffle_result = (shuffle_result & SHUFFLE_MASK_NOT[0]) | (((shuffle_result << 8) & SHUFFLE_MASK_L[96+:32]) | ((shuffle_result >> 8) & SHUFFLE_MASK_R[96+:32]));
+					if (shuffle_mode[2])
+						shuffle_result = (shuffle_result & SHUFFLE_MASK_NOT[1]) | (((shuffle_result << 4) & SHUFFLE_MASK_L[64+:32]) | ((shuffle_result >> 4) & SHUFFLE_MASK_R[64+:32]));
+					if (shuffle_mode[1])
+						shuffle_result = (shuffle_result & SHUFFLE_MASK_NOT[2]) | (((shuffle_result << 2) & SHUFFLE_MASK_L[32+:32]) | ((shuffle_result >> 2) & SHUFFLE_MASK_R[32+:32]));
+					if (shuffle_mode[0])
+						shuffle_result = (shuffle_result & SHUFFLE_MASK_NOT[3]) | (((shuffle_result << 1) & SHUFFLE_MASK_L[0+:32]) | ((shuffle_result >> 1) & SHUFFLE_MASK_R[0+:32]));
+					if (shuffle_flip)
+						shuffle_result = ((((((((shuffle_result & 32'h88224411) | ((shuffle_result << 6) & FLIP_MASK_L[96+:32])) | ((shuffle_result >> 6) & FLIP_MASK_R[96+:32])) | ((shuffle_result << 9) & FLIP_MASK_L[64+:32])) | ((shuffle_result >> 9) & FLIP_MASK_R[64+:32])) | ((shuffle_result << 15) & FLIP_MASK_L[32+:32])) | ((shuffle_result >> 15) & FLIP_MASK_R[32+:32])) | ((shuffle_result << 21) & FLIP_MASK_L[0+:32])) | ((shuffle_result >> 21) & FLIP_MASK_R[0+:32]);
+				end
+				wire [23:0] sel_n;
+				wire [7:0] vld_n;
+				wire [7:0] sel_b;
+				wire [3:0] vld_b;
+				wire [1:0] sel_h;
+				wire [1:0] vld_h;
+				genvar _gv_i_4;
+				for (_gv_i_4 = 0; _gv_i_4 < 8; _gv_i_4 = _gv_i_4 + 1) begin : gen_sel_vld_n
+					localparam i = _gv_i_4;
+					assign sel_n[i * 3+:3] = operand_b_i[i * 4+:3];
+					assign vld_n[i] = ~|operand_b_i[(i * 4) + 3+:1];
+				end
+				genvar _gv_i_5;
+				for (_gv_i_5 = 0; _gv_i_5 < 4; _gv_i_5 = _gv_i_5 + 1) begin : gen_sel_vld_b
+					localparam i = _gv_i_5;
+					assign sel_b[i * 2+:2] = operand_b_i[i * 8+:2];
+					assign vld_b[i] = ~|operand_b_i[(i * 8) + 2+:6];
+				end
+				genvar _gv_i_6;
+				for (_gv_i_6 = 0; _gv_i_6 < 2; _gv_i_6 = _gv_i_6 + 1) begin : gen_sel_vld_h
+					localparam i = _gv_i_6;
+					assign sel_h[i+:1] = operand_b_i[i * 16+:1];
+					assign vld_h[i] = ~|operand_b_i[(i * 16) + 1+:15];
+				end
+				reg [23:0] sel;
+				reg [7:0] vld;
+				always @(*) begin
+					if (_sv2v_0)
+						;
+					(* full_case, parallel_case *)
+					case (operator_i)
+						7'd19: begin
+							sel = sel_n;
+							vld = vld_n;
+						end
+						7'd20: begin : sv2v_autoblock_9
+							reg signed [31:0] b;
+							for (b = 0; b < 4; b = b + 1)
+								begin
+									sel[((b * 2) + 0) * 3+:3] = {sel_b[b * 2+:2], 1'b0};
+									sel[((b * 2) + 1) * 3+:3] = {sel_b[b * 2+:2], 1'b1};
+									vld[b * 2+:2] = {2 {vld_b[b]}};
+								end
+						end
+						7'd21: begin : sv2v_autoblock_10
+							reg signed [31:0] h;
+							for (h = 0; h < 2; h = h + 1)
+								begin
+									sel[((h * 4) + 0) * 3+:3] = {sel_h[h+:1], 2'b00};
+									sel[((h * 4) + 1) * 3+:3] = {sel_h[h+:1], 2'b01};
+									sel[((h * 4) + 2) * 3+:3] = {sel_h[h+:1], 2'b10};
+									sel[((h * 4) + 3) * 3+:3] = {sel_h[h+:1], 2'b11};
+									vld[h * 4+:4] = {4 {vld_h[h]}};
+								end
+						end
+						default: begin
+							sel = sel_n;
+							vld = 1'sb0;
+						end
+					endcase
+				end
+				wire [31:0] val_n;
+				wire [31:0] xperm_n;
+				assign val_n = operand_a_i;
+				genvar _gv_i_7;
+				for (_gv_i_7 = 0; _gv_i_7 < 8; _gv_i_7 = _gv_i_7 + 1) begin : gen_xperm_n
+					localparam i = _gv_i_7;
+					assign xperm_n[i * 4+:4] = (vld[i] ? val_n[sel[i * 3+:3] * 4+:4] : {4 {1'sb0}});
+				end
+				assign xperm_result = xperm_n;
+				wire clmul_rmode;
+				wire clmul_hmode;
+				reg [31:0] clmul_op_a;
+				reg [31:0] clmul_op_b;
+				wire [31:0] operand_b_rev;
+				wire [31:0] clmul_and_stage [0:31];
+				wire [31:0] clmul_xor_stage1 [0:15];
+				wire [31:0] clmul_xor_stage2 [0:7];
+				wire [31:0] clmul_xor_stage3 [0:3];
+				wire [31:0] clmul_xor_stage4 [0:1];
+				wire [31:0] clmul_result_raw;
+				genvar _gv_i_8;
+				for (_gv_i_8 = 0; _gv_i_8 < 32; _gv_i_8 = _gv_i_8 + 1) begin : gen_rev_operand_b
+					localparam i = _gv_i_8;
+					assign operand_b_rev[i] = operand_b_i[31 - i];
+				end
+				assign clmul_rmode = operator_i == 7'd57;
+				assign clmul_hmode = operator_i == 7'd58;
+				localparam [31:0] CRC32_POLYNOMIAL = 32'h04c11db7;
+				localparam [31:0] CRC32_MU_REV = 32'hf7011641;
+				localparam [31:0] CRC32C_POLYNOMIAL = 32'h1edc6f41;
+				localparam [31:0] CRC32C_MU_REV = 32'hdea713f1;
+				wire crc_op;
+				wire crc_cpoly;
+				reg [31:0] crc_operand;
+				wire [31:0] crc_poly;
+				wire [31:0] crc_mu_rev;
+				assign crc_op = (((((operator_i == 7'd64) | (operator_i == 7'd63)) | (operator_i == 7'd62)) | (operator_i == 7'd61)) | (operator_i == 7'd60)) | (operator_i == 7'd59);
+				assign crc_cpoly = ((operator_i == 7'd64) | (operator_i == 7'd62)) | (operator_i == 7'd60);
+				assign crc_hmode = (operator_i == 7'd61) | (operator_i == 7'd62);
+				assign crc_bmode = (operator_i == 7'd59) | (operator_i == 7'd60);
+				assign crc_poly = (crc_cpoly ? CRC32C_POLYNOMIAL : CRC32_POLYNOMIAL);
+				assign crc_mu_rev = (crc_cpoly ? CRC32C_MU_REV : CRC32_MU_REV);
+				always @(*) begin
+					if (_sv2v_0)
+						;
+					(* full_case, parallel_case *)
+					case (1'b1)
+						crc_bmode: crc_operand = {operand_a_i[7:0], 24'h000000};
+						crc_hmode: crc_operand = {operand_a_i[15:0], 16'h0000};
+						default: crc_operand = operand_a_i;
+					endcase
+				end
+				always @(*) begin
+					if (_sv2v_0)
+						;
+					if (crc_op) begin
+						clmul_op_a = (instr_first_cycle_i ? crc_operand : imd_val_q_i[32+:32]);
+						clmul_op_b = (instr_first_cycle_i ? crc_mu_rev : crc_poly);
+					end
+					else begin
+						clmul_op_a = (clmul_rmode | clmul_hmode ? operand_a_rev : operand_a_i);
+						clmul_op_b = (clmul_rmode | clmul_hmode ? operand_b_rev : operand_b_i);
+					end
+				end
+				genvar _gv_i_9;
+				for (_gv_i_9 = 0; _gv_i_9 < 32; _gv_i_9 = _gv_i_9 + 1) begin : gen_clmul_and_op
+					localparam i = _gv_i_9;
+					assign clmul_and_stage[i] = (clmul_op_b[i] ? clmul_op_a << i : {32 {1'sb0}});
+				end
+				genvar _gv_i_10;
+				for (_gv_i_10 = 0; _gv_i_10 < 16; _gv_i_10 = _gv_i_10 + 1) begin : gen_clmul_xor_op_l1
+					localparam i = _gv_i_10;
+					assign clmul_xor_stage1[i] = clmul_and_stage[2 * i] ^ clmul_and_stage[(2 * i) + 1];
+				end
+				genvar _gv_i_11;
+				for (_gv_i_11 = 0; _gv_i_11 < 8; _gv_i_11 = _gv_i_11 + 1) begin : gen_clmul_xor_op_l2
+					localparam i = _gv_i_11;
+					assign clmul_xor_stage2[i] = clmul_xor_stage1[2 * i] ^ clmul_xor_stage1[(2 * i) + 1];
+				end
+				genvar _gv_i_12;
+				for (_gv_i_12 = 0; _gv_i_12 < 4; _gv_i_12 = _gv_i_12 + 1) begin : gen_clmul_xor_op_l3
+					localparam i = _gv_i_12;
+					assign clmul_xor_stage3[i] = clmul_xor_stage2[2 * i] ^ clmul_xor_stage2[(2 * i) + 1];
+				end
+				genvar _gv_i_13;
+				for (_gv_i_13 = 0; _gv_i_13 < 2; _gv_i_13 = _gv_i_13 + 1) begin : gen_clmul_xor_op_l4
+					localparam i = _gv_i_13;
+					assign clmul_xor_stage4[i] = clmul_xor_stage3[2 * i] ^ clmul_xor_stage3[(2 * i) + 1];
+				end
+				assign clmul_result_raw = clmul_xor_stage4[0] ^ clmul_xor_stage4[1];
+				genvar _gv_i_14;
+				for (_gv_i_14 = 0; _gv_i_14 < 32; _gv_i_14 = _gv_i_14 + 1) begin : gen_rev_clmul_result
+					localparam i = _gv_i_14;
+					assign clmul_result_rev[i] = clmul_result_raw[31 - i];
+				end
+				always @(*) begin
+					if (_sv2v_0)
+						;
+					case (1'b1)
+						clmul_rmode: clmul_result = clmul_result_rev;
+						clmul_hmode: clmul_result = {1'b0, clmul_result_rev[31:1]};
+						default: clmul_result = clmul_result_raw;
+					endcase
+				end
+			end
+			else begin : gen_alu_rvb_not_otearlgrey_full
+				wire [32:1] sv2v_tmp_4A308;
+				assign sv2v_tmp_4A308 = 1'sb0;
+				always @(*) shuffle_result = sv2v_tmp_4A308;
+				assign xperm_result = 1'sb0;
+				wire [32:1] sv2v_tmp_31DA6;
+				assign sv2v_tmp_31DA6 = 1'sb0;
+				always @(*) clmul_result = sv2v_tmp_31DA6;
+				assign clmul_result_rev = 1'sb0;
+				assign crc_bmode = 1'sb0;
+				assign crc_hmode = 1'sb0;
+			end
+			if (RV32B == 32'sd3) begin : gen_alu_rvb_full
+				reg [191:0] bitcnt_partial_q;
+				genvar _gv_i_15;
+				for (_gv_i_15 = 0; _gv_i_15 < 32; _gv_i_15 = _gv_i_15 + 1) begin : gen_bitcnt_reg_in_lsb
+					localparam i = _gv_i_15;
+					assign bitcnt_partial_lsb_d[i] = bitcnt_partial[(31 - i) * 6];
+				end
+				genvar _gv_i_16;
+				for (_gv_i_16 = 0; _gv_i_16 < 16; _gv_i_16 = _gv_i_16 + 1) begin : gen_bitcnt_reg_in_b1
+					localparam i = _gv_i_16;
+					assign bitcnt_partial_msb_d[i] = bitcnt_partial[((31 - ((2 * i) + 1)) * 6) + 1];
+				end
+				genvar _gv_i_17;
+				for (_gv_i_17 = 0; _gv_i_17 < 8; _gv_i_17 = _gv_i_17 + 1) begin : gen_bitcnt_reg_in_b2
+					localparam i = _gv_i_17;
+					assign bitcnt_partial_msb_d[16 + i] = bitcnt_partial[((31 - ((4 * i) + 3)) * 6) + 2];
+				end
+				genvar _gv_i_18;
+				for (_gv_i_18 = 0; _gv_i_18 < 4; _gv_i_18 = _gv_i_18 + 1) begin : gen_bitcnt_reg_in_b3
+					localparam i = _gv_i_18;
+					assign bitcnt_partial_msb_d[24 + i] = bitcnt_partial[((31 - ((8 * i) + 7)) * 6) + 3];
+				end
+				genvar _gv_i_19;
+				for (_gv_i_19 = 0; _gv_i_19 < 2; _gv_i_19 = _gv_i_19 + 1) begin : gen_bitcnt_reg_in_b4
+					localparam i = _gv_i_19;
+					assign bitcnt_partial_msb_d[28 + i] = bitcnt_partial[((31 - ((16 * i) + 15)) * 6) + 4];
+				end
+				assign bitcnt_partial_msb_d[30] = bitcnt_partial[5];
+				assign bitcnt_partial_msb_d[31] = 1'b0;
+				always @(*) begin
+					if (_sv2v_0)
+						;
+					bitcnt_partial_q = {32 {6'b000000}};
+					begin : sv2v_autoblock_11
+						reg [31:0] i;
+						for (i = 0; i < 32; i = i + 1)
+							begin : gen_bitcnt_reg_out_lsb
+								bitcnt_partial_q[(31 - i) * 6] = imd_val_q_i[32 + i];
+							end
+					end
+					begin : sv2v_autoblock_12
+						reg [31:0] i;
+						for (i = 0; i < 16; i = i + 1)
+							begin : gen_bitcnt_reg_out_b1
+								bitcnt_partial_q[((31 - ((2 * i) + 1)) * 6) + 1] = imd_val_q_i[0 + i];
+							end
+					end
+					begin : sv2v_autoblock_13
+						reg [31:0] i;
+						for (i = 0; i < 8; i = i + 1)
+							begin : gen_bitcnt_reg_out_b2
+								bitcnt_partial_q[((31 - ((4 * i) + 3)) * 6) + 2] = imd_val_q_i[16 + i];
+							end
+					end
+					begin : sv2v_autoblock_14
+						reg [31:0] i;
+						for (i = 0; i < 4; i = i + 1)
+							begin : gen_bitcnt_reg_out_b3
+								bitcnt_partial_q[((31 - ((8 * i) + 7)) * 6) + 3] = imd_val_q_i[24 + i];
+							end
+					end
+					begin : sv2v_autoblock_15
+						reg [31:0] i;
+						for (i = 0; i < 2; i = i + 1)
+							begin : gen_bitcnt_reg_out_b4
+								bitcnt_partial_q[((31 - ((16 * i) + 15)) * 6) + 4] = imd_val_q_i[28 + i];
+							end
+					end
+					bitcnt_partial_q[5] = imd_val_q_i[30];
+				end
+				wire [31:0] butterfly_mask_l [0:4];
+				wire [31:0] butterfly_mask_r [0:4];
+				wire [31:0] butterfly_mask_not [0:4];
+				wire [31:0] lrotc_stage [0:4];
+				genvar _gv_stg_1;
+				for (_gv_stg_1 = 0; _gv_stg_1 < 5; _gv_stg_1 = _gv_stg_1 + 1) begin : gen_butterfly_ctrl_stage
+					localparam stg = _gv_stg_1;
+					genvar _gv_seg_1;
+					for (_gv_seg_1 = 0; _gv_seg_1 < (2 ** stg); _gv_seg_1 = _gv_seg_1 + 1) begin : gen_butterfly_ctrl
+						localparam seg = _gv_seg_1;
+						assign lrotc_stage[stg][((2 * (16 >> stg)) * (seg + 1)) - 1:(2 * (16 >> stg)) * seg] = {{16 >> stg {1'b0}}, {16 >> stg {1'b1}}} << bitcnt_partial_q[((32 - ((16 >> stg) * ((2 * seg) + 1))) * 6) + ($clog2(16 >> stg) >= 0 ? $clog2(16 >> stg) : ($clog2(16 >> stg) + ($clog2(16 >> stg) >= 0 ? $clog2(16 >> stg) + 1 : 1 - $clog2(16 >> stg))) - 1)-:($clog2(16 >> stg) >= 0 ? $clog2(16 >> stg) + 1 : 1 - $clog2(16 >> stg))];
+						assign butterfly_mask_l[stg][((16 >> stg) * ((2 * seg) + 2)) - 1:(16 >> stg) * ((2 * seg) + 1)] = ~lrotc_stage[stg][((16 >> stg) * ((2 * seg) + 2)) - 1:(16 >> stg) * ((2 * seg) + 1)];
+						assign butterfly_mask_r[stg][((16 >> stg) * ((2 * seg) + 1)) - 1:(16 >> stg) * (2 * seg)] = ~lrotc_stage[stg][((16 >> stg) * ((2 * seg) + 2)) - 1:(16 >> stg) * ((2 * seg) + 1)];
+						assign butterfly_mask_l[stg][((16 >> stg) * ((2 * seg) + 1)) - 1:(16 >> stg) * (2 * seg)] = 1'sb0;
+						assign butterfly_mask_r[stg][((16 >> stg) * ((2 * seg) + 2)) - 1:(16 >> stg) * ((2 * seg) + 1)] = 1'sb0;
+					end
+				end
+				genvar _gv_stg_2;
+				for (_gv_stg_2 = 0; _gv_stg_2 < 5; _gv_stg_2 = _gv_stg_2 + 1) begin : gen_butterfly_not
+					localparam stg = _gv_stg_2;
+					assign butterfly_mask_not[stg] = ~(butterfly_mask_l[stg] | butterfly_mask_r[stg]);
+				end
+				always @(*) begin
+					if (_sv2v_0)
+						;
+					butterfly_result = operand_a_i;
+					butterfly_result = ((butterfly_result & butterfly_mask_not[0]) | ((butterfly_result & butterfly_mask_l[0]) >> 16)) | ((butterfly_result & butterfly_mask_r[0]) << 16);
+					butterfly_result = ((butterfly_result & butterfly_mask_not[1]) | ((butterfly_result & butterfly_mask_l[1]) >> 8)) | ((butterfly_result & butterfly_mask_r[1]) << 8);
+					butterfly_result = ((butterfly_result & butterfly_mask_not[2]) | ((butterfly_result & butterfly_mask_l[2]) >> 4)) | ((butterfly_result & butterfly_mask_r[2]) << 4);
+					butterfly_result = ((butterfly_result & butterfly_mask_not[3]) | ((butterfly_result & butterfly_mask_l[3]) >> 2)) | ((butterfly_result & butterfly_mask_r[3]) << 2);
+					butterfly_result = ((butterfly_result & butterfly_mask_not[4]) | ((butterfly_result & butterfly_mask_l[4]) >> 1)) | ((butterfly_result & butterfly_mask_r[4]) << 1);
+					butterfly_result = butterfly_result & operand_b_i;
+				end
+				always @(*) begin
+					if (_sv2v_0)
+						;
+					invbutterfly_result = operand_a_i & operand_b_i;
+					invbutterfly_result = ((invbutterfly_result & butterfly_mask_not[4]) | ((invbutterfly_result & butterfly_mask_l[4]) >> 1)) | ((invbutterfly_result & butterfly_mask_r[4]) << 1);
+					invbutterfly_result = ((invbutterfly_result & butterfly_mask_not[3]) | ((invbutterfly_result & butterfly_mask_l[3]) >> 2)) | ((invbutterfly_result & butterfly_mask_r[3]) << 2);
+					invbutterfly_result = ((invbutterfly_result & butterfly_mask_not[2]) | ((invbutterfly_result & butterfly_mask_l[2]) >> 4)) | ((invbutterfly_result & butterfly_mask_r[2]) << 4);
+					invbutterfly_result = ((invbutterfly_result & butterfly_mask_not[1]) | ((invbutterfly_result & butterfly_mask_l[1]) >> 8)) | ((invbutterfly_result & butterfly_mask_r[1]) << 8);
+					invbutterfly_result = ((invbutterfly_result & butterfly_mask_not[0]) | ((invbutterfly_result & butterfly_mask_l[0]) >> 16)) | ((invbutterfly_result & butterfly_mask_r[0]) << 16);
+				end
+			end
+			else begin : gen_alu_rvb_not_full
+				wire [31:0] unused_imd_val_q_1;
+				assign unused_imd_val_q_1 = imd_val_q_i[0+:32];
+				wire [32:1] sv2v_tmp_98122;
+				assign sv2v_tmp_98122 = 1'sb0;
+				always @(*) butterfly_result = sv2v_tmp_98122;
+				wire [32:1] sv2v_tmp_B39E0;
+				assign sv2v_tmp_B39E0 = 1'sb0;
+				always @(*) invbutterfly_result = sv2v_tmp_B39E0;
+				assign bitcnt_partial_lsb_d = 1'sb0;
+				assign bitcnt_partial_msb_d = 1'sb0;
+			end
+			always @(*) begin
+				if (_sv2v_0)
+					;
+				(* full_case, parallel_case *)
+				case (operator_i)
+					7'd45: begin
+						multicycle_result = (operand_b_i == 32'h00000000 ? operand_a_i : imd_val_q_i[32+:32]);
+						imd_val_d_o = {operand_a_i, 32'h00000000};
+						if (instr_first_cycle_i)
+							imd_val_we_o = 2'b01;
+						else
+							imd_val_we_o = 2'b00;
+					end
+					7'd46: begin
+						multicycle_result = imd_val_q_i[32+:32] | bwlogic_and_result;
+						imd_val_d_o = {bwlogic_and_result, 32'h00000000};
+						if (instr_first_cycle_i)
+							imd_val_we_o = 2'b01;
+						else
+							imd_val_we_o = 2'b00;
+					end
+					7'd48, 7'd47, 7'd14, 7'd13: begin
+						if (shift_amt[4:0] == 5'h00)
+							multicycle_result = (shift_amt[5] ? operand_a_i : imd_val_q_i[32+:32]);
+						else
+							multicycle_result = imd_val_q_i[32+:32] | shift_result;
+						imd_val_d_o = {shift_result, 32'h00000000};
+						if (instr_first_cycle_i)
+							imd_val_we_o = 2'b01;
+						else
+							imd_val_we_o = 2'b00;
+					end
+					7'd63, 7'd64, 7'd61, 7'd62, 7'd59, 7'd60:
+						if ((RV32B == 32'sd2) || (RV32B == 32'sd3)) begin
+							(* full_case, parallel_case *)
+							case (1'b1)
+								crc_bmode: multicycle_result = clmul_result_rev ^ (operand_a_i >> 8);
+								crc_hmode: multicycle_result = clmul_result_rev ^ (operand_a_i >> 16);
+								default: multicycle_result = clmul_result_rev;
+							endcase
+							imd_val_d_o = {clmul_result_rev, 32'h00000000};
+							if (instr_first_cycle_i)
+								imd_val_we_o = 2'b01;
+							else
+								imd_val_we_o = 2'b00;
+						end
+						else begin
+							imd_val_d_o = {operand_a_i, 32'h00000000};
+							imd_val_we_o = 2'b00;
+							multicycle_result = 1'sb0;
+						end
+					7'd53, 7'd54:
+						if (RV32B == 32'sd3) begin
+							multicycle_result = (operator_i == 7'd54 ? butterfly_result : invbutterfly_result);
+							imd_val_d_o = {bitcnt_partial_lsb_d, bitcnt_partial_msb_d};
+							if (instr_first_cycle_i)
+								imd_val_we_o = 2'b11;
+							else
+								imd_val_we_o = 2'b00;
+						end
+						else begin
+							imd_val_d_o = {operand_a_i, 32'h00000000};
+							imd_val_we_o = 2'b00;
+							multicycle_result = 1'sb0;
+						end
+					default: begin
+						imd_val_d_o = {operand_a_i, 32'h00000000};
+						imd_val_we_o = 2'b00;
+						multicycle_result = 1'sb0;
+					end
+				endcase
+			end
+		end
+		else begin : g_no_alu_rvb
+			wire [63:0] unused_imd_val_q;
+			assign unused_imd_val_q = imd_val_q_i;
+			wire [31:0] unused_butterfly_result;
+			assign unused_butterfly_result = butterfly_result;
+			wire [31:0] unused_invbutterfly_result;
+			assign unused_invbutterfly_result = invbutterfly_result;
+			assign bitcnt_result = 1'sb0;
+			assign minmax_result = 1'sb0;
+			wire [32:1] sv2v_tmp_A0513;
+			assign sv2v_tmp_A0513 = 1'sb0;
+			always @(*) pack_result = sv2v_tmp_A0513;
+			assign sext_result = 1'sb0;
+			wire [32:1] sv2v_tmp_75CE4;
+			assign sv2v_tmp_75CE4 = 1'sb0;
+			always @(*) singlebit_result = sv2v_tmp_75CE4;
+			wire [32:1] sv2v_tmp_FA09A;
+			assign sv2v_tmp_FA09A = 1'sb0;
+			always @(*) rev_result = sv2v_tmp_FA09A;
+			wire [32:1] sv2v_tmp_4A308;
+			assign sv2v_tmp_4A308 = 1'sb0;
+			always @(*) shuffle_result = sv2v_tmp_4A308;
+			assign xperm_result = 1'sb0;
+			wire [32:1] sv2v_tmp_98122;
+			assign sv2v_tmp_98122 = 1'sb0;
+			always @(*) butterfly_result = sv2v_tmp_98122;
+			wire [32:1] sv2v_tmp_B39E0;
+			assign sv2v_tmp_B39E0 = 1'sb0;
+			always @(*) invbutterfly_result = sv2v_tmp_B39E0;
+			wire [32:1] sv2v_tmp_31DA6;
+			assign sv2v_tmp_31DA6 = 1'sb0;
+			always @(*) clmul_result = sv2v_tmp_31DA6;
+			wire [32:1] sv2v_tmp_BC1B9;
+			assign sv2v_tmp_BC1B9 = 1'sb0;
+			always @(*) multicycle_result = sv2v_tmp_BC1B9;
+			wire [64:1] sv2v_tmp_42A49;
+			assign sv2v_tmp_42A49 = {2 {32'b00000000000000000000000000000000}};
+			always @(*) imd_val_d_o = sv2v_tmp_42A49;
+			wire [2:1] sv2v_tmp_0E15E;
+			assign sv2v_tmp_0E15E = {2 {1'b0}};
+			always @(*) imd_val_we_o = sv2v_tmp_0E15E;
+		end
+	endgenerate
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		result_o = 1'sb0;
+		(* full_case, parallel_case *)
+		case (operator_i)
+			7'd2, 7'd5, 7'd3, 7'd6, 7'd4, 7'd7: result_o = bwlogic_result;
+			7'd0, 7'd1, 7'd22, 7'd23, 7'd24: result_o = adder_result;
+			7'd10, 7'd9, 7'd8, 7'd12, 7'd11: result_o = shift_result;
+			7'd17, 7'd18: result_o = shuffle_result;
+			7'd19, 7'd20, 7'd21: result_o = xperm_result;
+			7'd29, 7'd30, 7'd27, 7'd28, 7'd25, 7'd26, 7'd43, 7'd44: result_o = {31'h00000000, cmp_result};
+			7'd31, 7'd33, 7'd32, 7'd34: result_o = minmax_result;
+			7'd40, 7'd41, 7'd42: result_o = {26'h0000000, bitcnt_result};
+			7'd35, 7'd37, 7'd36: result_o = pack_result;
+			7'd38, 7'd39: result_o = sext_result;
+			7'd46, 7'd45, 7'd47, 7'd48, 7'd14, 7'd13, 7'd63, 7'd64, 7'd61, 7'd62, 7'd59, 7'd60, 7'd53, 7'd54: result_o = multicycle_result;
+			7'd49, 7'd50, 7'd51, 7'd52: result_o = singlebit_result;
+			7'd15, 7'd16: result_o = rev_result;
+			7'd55: result_o = bfp_result;
+			7'd56, 7'd57, 7'd58: result_o = clmul_result;
+			default:
+				;
+		endcase
+	end
+	wire unused_shift_amt_compl;
+	assign unused_shift_amt_compl = shift_amt_compl[5];
+	initial _sv2v_0 = 0;
+endmodule
+module cve2_compressed_decoder (
+	clk_i,
+	rst_ni,
+	valid_i,
+	instr_i,
+	instr_o,
+	is_compressed_o,
+	illegal_instr_o
+);
+	reg _sv2v_0;
+	input wire clk_i;
+	input wire rst_ni;
+	input wire valid_i;
+	input wire [31:0] instr_i;
+	output reg [31:0] instr_o;
+	output wire is_compressed_o;
+	output reg illegal_instr_o;
+	wire unused_valid;
+	assign unused_valid = valid_i;
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		instr_o = instr_i;
+		illegal_instr_o = 1'b0;
+		(* full_case, parallel_case *)
+		case (instr_i[1:0])
+			2'b00:
+				(* full_case, parallel_case *)
+				case (instr_i[15:13])
+					3'b000: begin
+						instr_o = {2'b00, instr_i[10:7], instr_i[12:11], instr_i[5], instr_i[6], 12'h041, instr_i[4:2], 7'h13};
+						if (instr_i[12:5] == 8'b00000000)
+							illegal_instr_o = 1'b1;
+					end
+					3'b010: instr_o = {5'b00000, instr_i[5], instr_i[12:10], instr_i[6], 4'b0001, instr_i[9:7], 5'b01001, instr_i[4:2], 7'h03};
+					3'b110: instr_o = {5'b00000, instr_i[5], instr_i[12], 2'b01, instr_i[4:2], 2'b01, instr_i[9:7], 3'b010, instr_i[11:10], instr_i[6], 9'h023};
+					3'b001, 3'b011, 3'b100, 3'b101, 3'b111: illegal_instr_o = 1'b1;
+					default: illegal_instr_o = 1'b1;
+				endcase
+			2'b01:
+				(* full_case, parallel_case *)
+				case (instr_i[15:13])
+					3'b000: instr_o = {{6 {instr_i[12]}}, instr_i[12], instr_i[6:2], instr_i[11:7], 3'b000, instr_i[11:7], 7'h13};
+					3'b001, 3'b101: instr_o = {instr_i[12], instr_i[8], instr_i[10:9], instr_i[6], instr_i[7], instr_i[2], instr_i[11], instr_i[5:3], {9 {instr_i[12]}}, 4'b0000, ~instr_i[15], 7'h6f};
+					3'b010: instr_o = {{6 {instr_i[12]}}, instr_i[12], instr_i[6:2], 8'b00000000, instr_i[11:7], 7'h13};
+					3'b011: begin
+						instr_o = {{15 {instr_i[12]}}, instr_i[6:2], instr_i[11:7], 7'h37};
+						if (instr_i[11:7] == 5'h02)
+							instr_o = {{3 {instr_i[12]}}, instr_i[4:3], instr_i[5], instr_i[2], instr_i[6], 24'h010113};
+						if ({instr_i[12], instr_i[6:2]} == 6'b000000)
+							illegal_instr_o = 1'b1;
+					end
+					3'b100:
+						(* full_case, parallel_case *)
+						case (instr_i[11:10])
+							2'b00, 2'b01: begin
+								instr_o = {1'b0, instr_i[10], 5'b00000, instr_i[6:2], 2'b01, instr_i[9:7], 5'b10101, instr_i[9:7], 7'h13};
+								if (instr_i[12] == 1'b1)
+									illegal_instr_o = 1'b1;
+							end
+							2'b10: instr_o = {{6 {instr_i[12]}}, instr_i[12], instr_i[6:2], 2'b01, instr_i[9:7], 5'b11101, instr_i[9:7], 7'h13};
+							2'b11:
+								(* full_case, parallel_case *)
+								case ({instr_i[12], instr_i[6:5]})
+									3'b000: instr_o = {9'b010000001, instr_i[4:2], 2'b01, instr_i[9:7], 5'b00001, instr_i[9:7], 7'h33};
+									3'b001: instr_o = {9'b000000001, instr_i[4:2], 2'b01, instr_i[9:7], 5'b10001, instr_i[9:7], 7'h33};
+									3'b010: instr_o = {9'b000000001, instr_i[4:2], 2'b01, instr_i[9:7], 5'b11001, instr_i[9:7], 7'h33};
+									3'b011: instr_o = {9'b000000001, instr_i[4:2], 2'b01, instr_i[9:7], 5'b11101, instr_i[9:7], 7'h33};
+									3'b100, 3'b101, 3'b110, 3'b111: illegal_instr_o = 1'b1;
+									default: illegal_instr_o = 1'b1;
+								endcase
+							default: illegal_instr_o = 1'b1;
+						endcase
+					3'b110, 3'b111: instr_o = {{4 {instr_i[12]}}, instr_i[6:5], instr_i[2], 7'b0000001, instr_i[9:7], 2'b00, instr_i[13], instr_i[11:10], instr_i[4:3], instr_i[12], 7'h63};
+					default: illegal_instr_o = 1'b1;
+				endcase
+			2'b10:
+				(* full_case, parallel_case *)
+				case (instr_i[15:13])
+					3'b000: begin
+						instr_o = {7'b0000000, instr_i[6:2], instr_i[11:7], 3'b001, instr_i[11:7], 7'h13};
+						if (instr_i[12] == 1'b1)
+							illegal_instr_o = 1'b1;
+					end
+					3'b010: begin
+						instr_o = {4'b0000, instr_i[3:2], instr_i[12], instr_i[6:4], 10'h012, instr_i[11:7], 7'h03};
+						if (instr_i[11:7] == 5'b00000)
+							illegal_instr_o = 1'b1;
+					end
+					3'b100:
+						if (instr_i[12] == 1'b0) begin
+							if (instr_i[6:2] != 5'b00000)
+								instr_o = {7'b0000000, instr_i[6:2], 8'b00000000, instr_i[11:7], 7'h33};
+							else begin
+								instr_o = {12'b000000000000, instr_i[11:7], 15'h0067};
+								if (instr_i[11:7] == 5'b00000)
+									illegal_instr_o = 1'b1;
+							end
+						end
+						else if (instr_i[6:2] != 5'b00000)
+							instr_o = {7'b0000000, instr_i[6:2], instr_i[11:7], 3'b000, instr_i[11:7], 7'h33};
+						else if (instr_i[11:7] == 5'b00000)
+							instr_o = 32'h00100073;
+						else
+							instr_o = {12'b000000000000, instr_i[11:7], 15'h00e7};
+					3'b110: instr_o = {4'b0000, instr_i[8:7], instr_i[12], instr_i[6:2], 8'h12, instr_i[11:9], 9'h023};
+					3'b001, 3'b011, 3'b101, 3'b111: illegal_instr_o = 1'b1;
+					default: illegal_instr_o = 1'b1;
+				endcase
+			2'b11:
+				;
+			default: illegal_instr_o = 1'b1;
+		endcase
+	end
+	assign is_compressed_o = instr_i[1:0] != 2'b11;
+	initial _sv2v_0 = 0;
+endmodule
+module cve2_controller (
+	clk_i,
+	rst_ni,
+	fetch_enable_i,
+	ctrl_busy_o,
+	illegal_insn_i,
+	ecall_insn_i,
+	mret_insn_i,
+	dret_insn_i,
+	wfi_insn_i,
+	ebrk_insn_i,
+	csr_pipe_flush_i,
+	xif_scoreboard_busy_i,
+	instr_valid_i,
+	instr_i,
+	instr_compressed_i,
+	instr_is_compressed_i,
+	instr_fetch_err_i,
+	instr_fetch_err_plus2_i,
+	pc_id_i,
+	instr_valid_clear_o,
+	id_in_ready_o,
+	controller_run_o,
+	instr_req_o,
+	pc_set_o,
+	pc_mux_o,
+	exc_pc_mux_o,
+	exc_cause_o,
+	lsu_addr_last_i,
+	load_err_i,
+	store_err_i,
+	branch_set_i,
+	jump_set_i,
+	csr_mstatus_mie_i,
+	irq_pending_i,
+	irqs_i,
+	irq_nm_i,
+	nmi_mode_o,
+	debug_req_i,
+	debug_cause_o,
+	debug_csr_save_o,
+	debug_mode_o,
+	debug_single_step_i,
+	debug_ebreakm_i,
+	debug_ebreaku_i,
+	trigger_match_i,
+	csr_save_if_o,
+	csr_save_id_o,
+	csr_restore_mret_id_o,
+	csr_restore_dret_id_o,
+	csr_save_cause_o,
+	csr_mtval_o,
+	priv_mode_i,
+	csr_mstatus_tw_i,
+	stall_id_i,
+	flush_id_o,
+	perf_jump_o,
+	perf_tbranch_o
+);
+	reg _sv2v_0;
+	input wire clk_i;
+	input wire rst_ni;
+	input wire fetch_enable_i;
+	output reg ctrl_busy_o;
+	input wire illegal_insn_i;
+	input wire ecall_insn_i;
+	input wire mret_insn_i;
+	input wire dret_insn_i;
+	input wire wfi_insn_i;
+	input wire ebrk_insn_i;
+	input wire csr_pipe_flush_i;
+	input wire xif_scoreboard_busy_i;
+	input wire instr_valid_i;
+	input wire [31:0] instr_i;
+	input wire [15:0] instr_compressed_i;
+	input wire instr_is_compressed_i;
+	input wire instr_fetch_err_i;
+	input wire instr_fetch_err_plus2_i;
+	input wire [31:0] pc_id_i;
+	output wire instr_valid_clear_o;
+	output wire id_in_ready_o;
+	output reg controller_run_o;
+	output reg instr_req_o;
+	output reg pc_set_o;
+	output reg [2:0] pc_mux_o;
+	output reg [1:0] exc_pc_mux_o;
+	output reg [6:0] exc_cause_o;
+	input wire [31:0] lsu_addr_last_i;
+	input wire load_err_i;
+	input wire store_err_i;
+	input wire branch_set_i;
+	input wire jump_set_i;
+	input wire csr_mstatus_mie_i;
+	input wire irq_pending_i;
+	input wire [18:0] irqs_i;
+	input wire irq_nm_i;
+	output wire nmi_mode_o;
+	input wire debug_req_i;
+	output reg [2:0] debug_cause_o;
+	output reg debug_csr_save_o;
+	output wire debug_mode_o;
+	input wire debug_single_step_i;
+	input wire debug_ebreakm_i;
+	input wire debug_ebreaku_i;
+	input wire trigger_match_i;
+	output reg csr_save_if_o;
+	output reg csr_save_id_o;
+	output reg csr_restore_mret_id_o;
+	output reg csr_restore_dret_id_o;
+	output reg csr_save_cause_o;
+	output reg [31:0] csr_mtval_o;
+	input wire [1:0] priv_mode_i;
+	input wire csr_mstatus_tw_i;
+	input wire stall_id_i;
+	output wire flush_id_o;
+	output reg perf_jump_o;
+	output reg perf_tbranch_o;
+	reg [3:0] ctrl_fsm_cs;
+	reg [3:0] ctrl_fsm_ns;
+	reg nmi_mode_q;
+	reg nmi_mode_d;
+	reg debug_mode_q;
+	reg debug_mode_d;
+	reg load_err_q;
+	wire load_err_d;
+	reg store_err_q;
+	wire store_err_d;
+	reg exc_req_q;
+	wire exc_req_d;
+	reg illegal_insn_q;
+	wire illegal_insn_d;
+	reg instr_fetch_err_prio;
+	reg illegal_insn_prio;
+	reg ecall_insn_prio;
+	reg ebrk_insn_prio;
+	reg store_err_prio;
+	reg load_err_prio;
+	wire stall;
+	reg halt_if;
+	reg retain_id;
+	reg flush_id;
+	wire illegal_dret;
+	wire illegal_umode;
+	wire exc_req_lsu;
+	wire special_req;
+	wire special_req_pc_change;
+	wire special_req_flush_only;
+	wire do_single_step_d;
+	reg do_single_step_q;
+	wire enter_debug_mode_prio_d;
+	reg enter_debug_mode_prio_q;
+	wire enter_debug_mode;
+	wire ebreak_into_debug;
+	wire handle_irq;
+	reg [3:0] mfip_id;
+	wire unused_irq_timer;
+	wire ecall_insn;
+	wire mret_insn;
+	wire dret_insn;
+	wire wfi_insn;
+	wire ebrk_insn;
+	wire csr_pipe_flush;
+	wire instr_fetch_err;
+	assign load_err_d = load_err_i;
+	assign store_err_d = store_err_i;
+	assign ecall_insn = ecall_insn_i & instr_valid_i;
+	assign mret_insn = mret_insn_i & instr_valid_i;
+	assign dret_insn = dret_insn_i & instr_valid_i;
+	assign wfi_insn = wfi_insn_i & instr_valid_i;
+	assign ebrk_insn = ebrk_insn_i & instr_valid_i;
+	assign csr_pipe_flush = csr_pipe_flush_i & instr_valid_i;
+	assign instr_fetch_err = instr_fetch_err_i & instr_valid_i;
+	assign illegal_dret = dret_insn & ~debug_mode_q;
+	assign illegal_umode = (priv_mode_i != 2'b11) & (mret_insn | (csr_mstatus_tw_i & wfi_insn));
+	assign illegal_insn_d = ((illegal_insn_i | illegal_dret) | illegal_umode) & (ctrl_fsm_cs != 4'd6);
+	assign exc_req_d = (((ecall_insn | ebrk_insn) | illegal_insn_d) | instr_fetch_err) & (ctrl_fsm_cs != 4'd6);
+	assign exc_req_lsu = store_err_i | load_err_i;
+	assign special_req_flush_only = wfi_insn | csr_pipe_flush;
+	assign special_req_pc_change = ((mret_insn | dret_insn) | exc_req_d) | exc_req_lsu;
+	assign special_req = special_req_pc_change | special_req_flush_only;
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		instr_fetch_err_prio = 0;
+		illegal_insn_prio = 0;
+		ecall_insn_prio = 0;
+		ebrk_insn_prio = 0;
+		store_err_prio = 0;
+		load_err_prio = 0;
+		if (instr_fetch_err)
+			instr_fetch_err_prio = 1'b1;
+		else if (illegal_insn_q)
+			illegal_insn_prio = 1'b1;
+		else if (ecall_insn)
+			ecall_insn_prio = 1'b1;
+		else if (ebrk_insn)
+			ebrk_insn_prio = 1'b1;
+		else if (store_err_q)
+			store_err_prio = 1'b1;
+		else if (load_err_q)
+			load_err_prio = 1'b1;
+	end
+	assign do_single_step_d = (instr_valid_i ? ~debug_mode_q & debug_single_step_i : do_single_step_q);
+	assign enter_debug_mode_prio_d = (debug_req_i | do_single_step_d) & ~debug_mode_q;
+	assign enter_debug_mode = enter_debug_mode_prio_d | (trigger_match_i & ~debug_mode_q);
+	assign ebreak_into_debug = (priv_mode_i == 2'b11 ? debug_ebreakm_i : (priv_mode_i == 2'b00 ? debug_ebreaku_i : 1'b0));
+	assign handle_irq = (~debug_mode_q & ~nmi_mode_q) & (irq_nm_i | (irq_pending_i & csr_mstatus_mie_i));
+	always @(*) begin : gen_mfip_id
+		if (_sv2v_0)
+			;
+		mfip_id = 4'd0;
+		begin : sv2v_autoblock_1
+			reg signed [31:0] i;
+			for (i = 15; i >= 0; i = i - 1)
+				if (irqs_i[0 + i])
+					mfip_id = i[3:0];
+		end
+	end
+	assign unused_irq_timer = irqs_i[17];
+	function automatic [6:0] sv2v_cast_7;
+		input reg [6:0] inp;
+		sv2v_cast_7 = inp;
+	endfunction
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		instr_req_o = 1'b1;
+		csr_save_if_o = 1'b0;
+		csr_save_id_o = 1'b0;
+		csr_restore_mret_id_o = 1'b0;
+		csr_restore_dret_id_o = 1'b0;
+		csr_save_cause_o = 1'b0;
+		csr_mtval_o = 1'sb0;
+		pc_mux_o = 3'd0;
+		pc_set_o = 1'b0;
+		exc_pc_mux_o = 2'd1;
+		exc_cause_o = 7'h00;
+		ctrl_fsm_ns = ctrl_fsm_cs;
+		ctrl_busy_o = 1'b1;
+		halt_if = 1'b0;
+		retain_id = 1'b0;
+		flush_id = 1'b0;
+		debug_csr_save_o = 1'b0;
+		debug_cause_o = 3'h1;
+		debug_mode_d = debug_mode_q;
+		nmi_mode_d = nmi_mode_q;
+		perf_tbranch_o = 1'b0;
+		perf_jump_o = 1'b0;
+		controller_run_o = 1'b0;
+		(* full_case, parallel_case *)
+		case (ctrl_fsm_cs)
+			4'd0: begin
+				instr_req_o = 1'b0;
+				pc_mux_o = 3'd0;
+				pc_set_o = 1'b1;
+				if (fetch_enable_i == 1'b1)
+					ctrl_fsm_ns = 4'd1;
+			end
+			4'd1: begin
+				instr_req_o = 1'b1;
+				pc_mux_o = 3'd0;
+				pc_set_o = 1'b1;
+				ctrl_fsm_ns = 4'd4;
+			end
+			4'd2: begin
+				ctrl_busy_o = 1'b0;
+				instr_req_o = 1'b0;
+				halt_if = 1'b1;
+				flush_id = 1'b1;
+				ctrl_fsm_ns = 4'd3;
+			end
+			4'd3: begin
+				instr_req_o = 1'b0;
+				halt_if = 1'b1;
+				flush_id = 1'b1;
+				if ((((irq_nm_i || irq_pending_i) || debug_req_i) || debug_mode_q) || debug_single_step_i)
+					ctrl_fsm_ns = 4'd4;
+				else
+					ctrl_busy_o = 1'b0;
+			end
+			4'd4: begin
+				if (id_in_ready_o)
+					ctrl_fsm_ns = 4'd5;
+				if (handle_irq) begin
+					ctrl_fsm_ns = 4'd7;
+					halt_if = 1'b1;
+				end
+				if (enter_debug_mode) begin
+					ctrl_fsm_ns = 4'd8;
+					halt_if = 1'b1;
+				end
+			end
+			4'd5: begin
+				controller_run_o = 1'b1;
+				pc_mux_o = 3'd1;
+				if (special_req) begin
+					retain_id = 1'b1;
+					ctrl_fsm_ns = (xif_scoreboard_busy_i ? 4'd5 : 4'd6);
+				end
+				if (branch_set_i || jump_set_i) begin
+					pc_set_o = 1'b1;
+					perf_tbranch_o = branch_set_i;
+					perf_jump_o = jump_set_i;
+				end
+				if ((enter_debug_mode || handle_irq) && (stall || instr_valid_i))
+					halt_if = 1'b1;
+				if ((!stall && !special_req) && !instr_valid_i) begin
+					if (enter_debug_mode) begin
+						ctrl_fsm_ns = (xif_scoreboard_busy_i ? 4'd5 : 4'd8);
+						halt_if = 1'b1;
+					end
+					else if (handle_irq) begin
+						ctrl_fsm_ns = (xif_scoreboard_busy_i ? 4'd5 : 4'd7);
+						halt_if = 1'b1;
+					end
+				end
+			end
+			4'd7: begin
+				pc_mux_o = 3'd2;
+				exc_pc_mux_o = 2'd1;
+				if (handle_irq) begin
+					pc_set_o = 1'b1;
+					csr_save_if_o = 1'b1;
+					csr_save_cause_o = 1'b1;
+					if (irq_nm_i && !nmi_mode_q) begin
+						exc_cause_o = 7'h60;
+						nmi_mode_d = 1'b1;
+					end
+					else if (irqs_i[15-:16] != 16'b0000000000000000)
+						exc_cause_o = sv2v_cast_7({3'b101, mfip_id});
+					else if (irqs_i[16])
+						exc_cause_o = 7'h4b;
+					else if (irqs_i[18])
+						exc_cause_o = 7'h43;
+					else
+						exc_cause_o = 7'h47;
+				end
+				ctrl_fsm_ns = 4'd5;
+			end
+			4'd8: begin
+				pc_mux_o = 3'd2;
+				exc_pc_mux_o = 2'd2;
+				flush_id = 1'b1;
+				pc_set_o = 1'b1;
+				csr_save_if_o = 1'b1;
+				debug_csr_save_o = 1'b1;
+				csr_save_cause_o = 1'b1;
+				if (trigger_match_i)
+					debug_cause_o = 3'h2;
+				else if (debug_req_i)
+					debug_cause_o = 3'h3;
+				else
+					debug_cause_o = 3'h4;
+				debug_mode_d = 1'b1;
+				ctrl_fsm_ns = 4'd5;
+			end
+			4'd9: begin
+				flush_id = 1'b1;
+				pc_mux_o = 3'd2;
+				pc_set_o = 1'b1;
+				exc_pc_mux_o = 2'd2;
+				if (ebreak_into_debug && !debug_mode_q) begin
+					csr_save_cause_o = 1'b1;
+					csr_save_id_o = 1'b1;
+					debug_csr_save_o = 1'b1;
+					debug_cause_o = 3'h1;
+				end
+				debug_mode_d = 1'b1;
+				ctrl_fsm_ns = 4'd5;
+			end
+			4'd6: begin
+				halt_if = 1'b1;
+				flush_id = 1'b1;
+				ctrl_fsm_ns = 4'd5;
+				if ((exc_req_q || store_err_q) || load_err_q) begin
+					pc_set_o = 1'b1;
+					pc_mux_o = 3'd2;
+					exc_pc_mux_o = (debug_mode_q ? 2'd3 : 2'd0);
+					begin : g_no_writeback_mepc_save
+						csr_save_id_o = 1'b0;
+					end
+					csr_save_cause_o = 1'b1;
+					(* full_case, parallel_case *)
+					case (1'b1)
+						instr_fetch_err_prio: begin
+							exc_cause_o = 7'h01;
+							csr_mtval_o = (instr_fetch_err_plus2_i ? pc_id_i + 32'd2 : pc_id_i);
+						end
+						illegal_insn_prio: begin
+							exc_cause_o = 7'h02;
+							csr_mtval_o = (instr_is_compressed_i ? {16'b0000000000000000, instr_compressed_i} : instr_i);
+						end
+						ecall_insn_prio: exc_cause_o = (priv_mode_i == 2'b11 ? 7'h0b : 7'h08);
+						ebrk_insn_prio:
+							if (debug_mode_q | ebreak_into_debug) begin
+								pc_set_o = 1'b0;
+								csr_save_id_o = 1'b0;
+								csr_save_cause_o = 1'b0;
+								ctrl_fsm_ns = 4'd9;
+								flush_id = 1'b0;
+							end
+							else
+								exc_cause_o = 7'h03;
+						store_err_prio: begin
+							exc_cause_o = 7'h07;
+							csr_mtval_o = lsu_addr_last_i;
+						end
+						load_err_prio: begin
+							exc_cause_o = 7'h05;
+							csr_mtval_o = lsu_addr_last_i;
+						end
+						default:
+							;
+					endcase
+				end
+				else if (mret_insn) begin
+					pc_mux_o = 3'd3;
+					pc_set_o = 1'b1;
+					csr_restore_mret_id_o = 1'b1;
+					if (nmi_mode_q)
+						nmi_mode_d = 1'b0;
+				end
+				else if (dret_insn) begin
+					pc_mux_o = 3'd4;
+					pc_set_o = 1'b1;
+					debug_mode_d = 1'b0;
+					csr_restore_dret_id_o = 1'b1;
+				end
+				else if (wfi_insn)
+					ctrl_fsm_ns = 4'd2;
+				if (enter_debug_mode_prio_q && !(ebrk_insn_prio && ebreak_into_debug))
+					ctrl_fsm_ns = 4'd8;
+			end
+			default: begin
+				instr_req_o = 1'b0;
+				ctrl_fsm_ns = 4'd0;
+			end
+		endcase
+	end
+	assign flush_id_o = flush_id;
+	assign debug_mode_o = debug_mode_q;
+	assign nmi_mode_o = nmi_mode_q;
+	assign stall = stall_id_i;
+	assign id_in_ready_o = (~stall & ~halt_if) & ~retain_id;
+	assign instr_valid_clear_o = ~(stall | retain_id) | flush_id;
+	always @(posedge clk_i or negedge rst_ni) begin : update_regs
+		if (!rst_ni) begin
+			ctrl_fsm_cs <= 4'd0;
+			nmi_mode_q <= 1'b0;
+			do_single_step_q <= 1'b0;
+			debug_mode_q <= 1'b0;
+			enter_debug_mode_prio_q <= 1'b0;
+			load_err_q <= 1'b0;
+			store_err_q <= 1'b0;
+			exc_req_q <= 1'b0;
+			illegal_insn_q <= 1'b0;
+		end
+		else begin
+			ctrl_fsm_cs <= ctrl_fsm_ns;
+			nmi_mode_q <= nmi_mode_d;
+			do_single_step_q <= do_single_step_d;
+			debug_mode_q <= debug_mode_d;
+			enter_debug_mode_prio_q <= enter_debug_mode_prio_d;
+			load_err_q <= load_err_d;
+			store_err_q <= store_err_d;
+			exc_req_q <= exc_req_d;
+			illegal_insn_q <= illegal_insn_d;
+		end
+	end
+	initial _sv2v_0 = 0;
+endmodule
+module cve2_cs_registers (
+	clk_i,
+	rst_ni,
+	hart_id_i,
+	priv_mode_id_o,
+	priv_mode_lsu_o,
+	csr_mstatus_tw_o,
+	csr_mtvec_o,
+	csr_mtvec_init_i,
+	boot_addr_i,
+	csr_access_i,
+	csr_addr_i,
+	csr_wdata_i,
+	csr_op_i,
+	csr_op_en_i,
+	csr_rdata_o,
+	irq_software_i,
+	irq_timer_i,
+	irq_external_i,
+	irq_fast_i,
+	nmi_mode_i,
+	irq_pending_o,
+	irqs_o,
+	csr_mstatus_mie_o,
+	csr_mepc_o,
+	csr_pmp_cfg_o,
+	csr_pmp_addr_o,
+	csr_pmp_mseccfg_o,
+	debug_mode_i,
+	debug_cause_i,
+	debug_csr_save_i,
+	csr_depc_o,
+	debug_single_step_o,
+	debug_ebreakm_o,
+	debug_ebreaku_o,
+	trigger_match_o,
+	pc_if_i,
+	pc_id_i,
+	csr_save_if_i,
+	csr_save_id_i,
+	csr_restore_mret_i,
+	csr_restore_dret_i,
+	csr_save_cause_i,
+	csr_mcause_i,
+	csr_mtval_i,
+	illegal_csr_insn_o,
+	instr_ret_i,
+	instr_ret_compressed_i,
+	iside_wait_i,
+	jump_i,
+	branch_i,
+	branch_taken_i,
+	mem_load_i,
+	mem_store_i,
+	dside_wait_i,
+	wfi_wait_i,
+	div_wait_i
+);
+	reg _sv2v_0;
+	parameter [0:0] DbgTriggerEn = 0;
+	parameter [31:0] DbgHwBreakNum = 1;
+	parameter [31:0] MHPMCounterNum = 10;
+	parameter [31:0] MHPMCounterWidth = 40;
+	parameter [0:0] PMPEnable = 0;
+	parameter [31:0] PMPGranularity = 0;
+	parameter [31:0] PMPNumRegions = 4;
+	parameter [0:0] RV32E = 0;
+	parameter integer RV32M = 32'sd2;
+	parameter integer RV32B = 32'sd0;
+	input wire clk_i;
+	input wire rst_ni;
+	input wire [31:0] hart_id_i;
+	output wire [1:0] priv_mode_id_o;
+	output wire [1:0] priv_mode_lsu_o;
+	output wire csr_mstatus_tw_o;
+	output wire [31:0] csr_mtvec_o;
+	input wire csr_mtvec_init_i;
+	input wire [31:0] boot_addr_i;
+	input wire csr_access_i;
+	input wire [11:0] csr_addr_i;
+	input wire [31:0] csr_wdata_i;
+	input wire [1:0] csr_op_i;
+	input csr_op_en_i;
+	output wire [31:0] csr_rdata_o;
+	input wire irq_software_i;
+	input wire irq_timer_i;
+	input wire irq_external_i;
+	input wire [15:0] irq_fast_i;
+	input wire nmi_mode_i;
+	output wire irq_pending_o;
+	output wire [18:0] irqs_o;
+	output wire csr_mstatus_mie_o;
+	output wire [31:0] csr_mepc_o;
+	output wire [(PMPNumRegions * 6) - 1:0] csr_pmp_cfg_o;
+	output wire [(PMPNumRegions * 34) - 1:0] csr_pmp_addr_o;
+	output wire [2:0] csr_pmp_mseccfg_o;
+	input wire debug_mode_i;
+	input wire [2:0] debug_cause_i;
+	input wire debug_csr_save_i;
+	output wire [31:0] csr_depc_o;
+	output wire debug_single_step_o;
+	output wire debug_ebreakm_o;
+	output wire debug_ebreaku_o;
+	output wire trigger_match_o;
+	input wire [31:0] pc_if_i;
+	input wire [31:0] pc_id_i;
+	input wire csr_save_if_i;
+	input wire csr_save_id_i;
+	input wire csr_restore_mret_i;
+	input wire csr_restore_dret_i;
+	input wire csr_save_cause_i;
+	input wire [6:0] csr_mcause_i;
+	input wire [31:0] csr_mtval_i;
+	output wire illegal_csr_insn_o;
+	input wire instr_ret_i;
+	input wire instr_ret_compressed_i;
+	input wire iside_wait_i;
+	input wire jump_i;
+	input wire branch_i;
+	input wire branch_taken_i;
+	input wire mem_load_i;
+	input wire mem_store_i;
+	input wire dside_wait_i;
+	input wire wfi_wait_i;
+	input wire div_wait_i;
+	localparam [31:0] RV32BEnabled = (RV32B == 32'sd0 ? 0 : 1);
+	localparam [31:0] RV32MEnabled = (RV32M == 32'sd0 ? 0 : 1);
+	localparam [31:0] PMPAddrWidth = (PMPGranularity > 0 ? 33 - PMPGranularity : 32);
+	localparam [31:0] UmodeEnabled = 0;
+	wire umode_control;
+	function automatic [0:0] sv2v_cast_1;
+		input reg [0:0] inp;
+		sv2v_cast_1 = inp;
+	endfunction
+	assign umode_control = sv2v_cast_1(UmodeEnabled);
+	localparam [1:0] cve2_pkg_CSR_MISA_MXL = 2'd1;
+	function automatic [31:0] sv2v_cast_32;
+		input reg [31:0] inp;
+		sv2v_cast_32 = inp;
+	endfunction
+	localparam [31:0] MISA_VALUE = (((((((((((0 | (RV32BEnabled << 1)) | 4) | 0) | (sv2v_cast_32(RV32E) << 4)) | 0) | (sv2v_cast_32(!RV32E) << 8)) | (RV32MEnabled << 12)) | 0) | 0) | (UmodeEnabled << 20)) | 0) | (sv2v_cast_32(cve2_pkg_CSR_MISA_MXL) << 30);
+	reg [31:0] exception_pc;
+	reg [1:0] priv_lvl_q;
+	reg [1:0] priv_lvl_d;
+	wire [5:0] mstatus_q;
+	reg [5:0] mstatus_d;
+	reg mstatus_en;
+	wire [18:0] mie_q;
+	wire [18:0] mie_d;
+	reg mie_en;
+	wire [31:0] mscratch_q;
+	reg mscratch_en;
+	wire [31:0] mepc_q;
+	reg [31:0] mepc_d;
+	reg mepc_en;
+	wire [6:0] mcause_q;
+	reg [6:0] mcause_d;
+	reg mcause_en;
+	wire [31:0] mtval_q;
+	reg [31:0] mtval_d;
+	reg mtval_en;
+	wire [31:0] mtvec_q;
+	reg [31:0] mtvec_d;
+	reg mtvec_en;
+	wire [18:0] mip;
+	wire [31:0] dcsr_q;
+	reg [31:0] dcsr_d;
+	reg dcsr_en;
+	wire [31:0] depc_q;
+	reg [31:0] depc_d;
+	reg depc_en;
+	wire [31:0] dscratch0_q;
+	wire [31:0] dscratch1_q;
+	reg dscratch0_en;
+	reg dscratch1_en;
+	wire [2:0] mstack_q;
+	reg [2:0] mstack_d;
+	reg mstack_en;
+	wire [31:0] mstack_epc_q;
+	reg [31:0] mstack_epc_d;
+	wire [6:0] mstack_cause_q;
+	reg [6:0] mstack_cause_d;
+	localparam [31:0] cve2_pkg_PMP_MAX_REGIONS = 16;
+	reg [31:0] pmp_addr_rdata [0:15];
+	localparam [31:0] cve2_pkg_PMP_CFG_W = 8;
+	wire [7:0] pmp_cfg_rdata [0:15];
+	wire [2:0] pmp_mseccfg;
+	wire [31:0] mcountinhibit;
+	reg [MHPMCounterNum + 2:0] mcountinhibit_d;
+	reg [MHPMCounterNum + 2:0] mcountinhibit_q;
+	reg mcountinhibit_we;
+	wire [63:0] mhpmcounter [0:31];
+	reg [31:0] mhpmcounter_we;
+	reg [31:0] mhpmcounterh_we;
+	reg [31:0] mhpmcounter_incr;
+	reg [31:0] mhpmevent [0:31];
+	wire [4:0] mhpmcounter_idx;
+	wire unused_mhpmcounter_we_1;
+	wire unused_mhpmcounterh_we_1;
+	wire unused_mhpmcounter_incr_1;
+	wire [63:0] minstret_raw;
+	wire [31:0] tselect_rdata;
+	wire [31:0] tmatch_control_rdata;
+	wire [31:0] tmatch_value_rdata;
+	reg [31:0] csr_wdata_int;
+	reg [31:0] csr_rdata_int;
+	wire csr_we_int;
+	wire csr_wr;
+	reg illegal_csr;
+	wire illegal_csr_priv;
+	wire illegal_csr_write;
+	wire [7:0] unused_boot_addr;
+	wire [2:0] unused_csr_addr;
+	assign unused_boot_addr = boot_addr_i[7:0];
+	wire [11:0] csr_addr;
+	assign csr_addr = {csr_addr_i};
+	assign unused_csr_addr = csr_addr[7:5];
+	assign mhpmcounter_idx = csr_addr[4:0];
+	assign illegal_csr_priv = csr_addr[9:8] > {priv_lvl_q};
+	assign illegal_csr_write = (csr_addr[11:10] == 2'b11) && csr_wr;
+	assign illegal_csr_insn_o = csr_access_i & ((illegal_csr | illegal_csr_write) | illegal_csr_priv);
+	assign mip[18] = irq_software_i;
+	assign mip[17] = irq_timer_i;
+	assign mip[16] = irq_external_i;
+	assign mip[15-:16] = irq_fast_i;
+	localparam cve2_pkg_MARCHID = 32'd35;
+	localparam [31:0] cve2_pkg_CSR_MARCHID_VALUE = cve2_pkg_MARCHID;
+	localparam [31:0] cve2_pkg_CSR_MCONFIGPTR_VALUE = 32'b00000000000000000000000000000000;
+	localparam [31:0] cve2_pkg_CSR_MEIX_BIT = 11;
+	localparam [31:0] cve2_pkg_CSR_MFIX_BIT_HIGH = 31;
+	localparam [31:0] cve2_pkg_CSR_MFIX_BIT_LOW = 16;
+	localparam [31:0] cve2_pkg_CSR_MIMPID_VALUE = 32'b00000000000000000000000000000000;
+	localparam [31:0] cve2_pkg_CSR_MSECCFG_MML_BIT = 0;
+	localparam [31:0] cve2_pkg_CSR_MSECCFG_MMWP_BIT = 1;
+	localparam [31:0] cve2_pkg_CSR_MSECCFG_RLB_BIT = 2;
+	localparam [31:0] cve2_pkg_CSR_MSIX_BIT = 3;
+	localparam [31:0] cve2_pkg_CSR_MSTATUS_MIE_BIT = 3;
+	localparam [31:0] cve2_pkg_CSR_MSTATUS_MPIE_BIT = 7;
+	localparam [31:0] cve2_pkg_CSR_MSTATUS_MPP_BIT_HIGH = 12;
+	localparam [31:0] cve2_pkg_CSR_MSTATUS_MPP_BIT_LOW = 11;
+	localparam [31:0] cve2_pkg_CSR_MSTATUS_MPRV_BIT = 17;
+	localparam [31:0] cve2_pkg_CSR_MSTATUS_TW_BIT = 21;
+	localparam [31:0] cve2_pkg_CSR_MTIX_BIT = 7;
+	localparam cve2_pkg_MVENDORID_BANK = 25'h000000c;
+	localparam cve2_pkg_MVENDORID_OFFSET = 7'h02;
+	localparam [31:0] cve2_pkg_CSR_MVENDORID_VALUE = {cve2_pkg_MVENDORID_BANK, cve2_pkg_MVENDORID_OFFSET};
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		csr_rdata_int = 1'sb0;
+		illegal_csr = 1'b0;
+		(* full_case, parallel_case *)
+		case (csr_addr_i)
+			12'hf11: csr_rdata_int = cve2_pkg_CSR_MVENDORID_VALUE;
+			12'hf12: csr_rdata_int = cve2_pkg_CSR_MARCHID_VALUE;
+			12'hf13: csr_rdata_int = cve2_pkg_CSR_MIMPID_VALUE;
+			12'hf14: csr_rdata_int = hart_id_i;
+			12'hf15: csr_rdata_int = cve2_pkg_CSR_MCONFIGPTR_VALUE;
+			12'h300: begin
+				csr_rdata_int = 1'sb0;
+				csr_rdata_int[cve2_pkg_CSR_MSTATUS_MIE_BIT] = mstatus_q[5];
+				csr_rdata_int[cve2_pkg_CSR_MSTATUS_MPIE_BIT] = mstatus_q[4];
+				csr_rdata_int[cve2_pkg_CSR_MSTATUS_MPP_BIT_HIGH:cve2_pkg_CSR_MSTATUS_MPP_BIT_LOW] = mstatus_q[3-:2];
+				csr_rdata_int[cve2_pkg_CSR_MSTATUS_MPRV_BIT] = mstatus_q[1];
+				csr_rdata_int[cve2_pkg_CSR_MSTATUS_TW_BIT] = mstatus_q[0];
+			end
+			12'h310: csr_rdata_int = 1'sb0;
+			12'h30a, 12'h31a:
+				if (umode_control)
+					csr_rdata_int = 1'sb0;
+				else
+					illegal_csr = 1'b1;
+			12'h301: csr_rdata_int = MISA_VALUE;
+			12'h304: begin
+				csr_rdata_int = 1'sb0;
+				csr_rdata_int[cve2_pkg_CSR_MSIX_BIT] = mie_q[18];
+				csr_rdata_int[cve2_pkg_CSR_MTIX_BIT] = mie_q[17];
+				csr_rdata_int[cve2_pkg_CSR_MEIX_BIT] = mie_q[16];
+				csr_rdata_int[cve2_pkg_CSR_MFIX_BIT_HIGH:cve2_pkg_CSR_MFIX_BIT_LOW] = mie_q[15-:16];
+			end
+			12'h306:
+				if (umode_control)
+					csr_rdata_int = 1'sb0;
+				else
+					illegal_csr = 1'b1;
+			12'h340: csr_rdata_int = mscratch_q;
+			12'h305: csr_rdata_int = mtvec_q;
+			12'h341: csr_rdata_int = mepc_q;
+			12'h342: csr_rdata_int = {mcause_q[6], 25'b0000000000000000000000000, mcause_q[5:0]};
+			12'h343: csr_rdata_int = mtval_q;
+			12'h344: begin
+				csr_rdata_int = 1'sb0;
+				csr_rdata_int[cve2_pkg_CSR_MSIX_BIT] = mip[18];
+				csr_rdata_int[cve2_pkg_CSR_MTIX_BIT] = mip[17];
+				csr_rdata_int[cve2_pkg_CSR_MEIX_BIT] = mip[16];
+				csr_rdata_int[cve2_pkg_CSR_MFIX_BIT_HIGH:cve2_pkg_CSR_MFIX_BIT_LOW] = mip[15-:16];
+			end
+			12'h747:
+				if (PMPEnable) begin
+					csr_rdata_int = 1'sb0;
+					csr_rdata_int[cve2_pkg_CSR_MSECCFG_MML_BIT] = pmp_mseccfg[0];
+					csr_rdata_int[cve2_pkg_CSR_MSECCFG_MMWP_BIT] = pmp_mseccfg[1];
+					csr_rdata_int[cve2_pkg_CSR_MSECCFG_RLB_BIT] = pmp_mseccfg[2];
+				end
+				else
+					illegal_csr = 1'b1;
+			12'h757:
+				if (PMPEnable)
+					csr_rdata_int = 1'sb0;
+				else
+					illegal_csr = 1'b1;
+			12'h3a0: csr_rdata_int = {pmp_cfg_rdata[3], pmp_cfg_rdata[2], pmp_cfg_rdata[1], pmp_cfg_rdata[0]};
+			12'h3a1: csr_rdata_int = {pmp_cfg_rdata[7], pmp_cfg_rdata[6], pmp_cfg_rdata[5], pmp_cfg_rdata[4]};
+			12'h3a2: csr_rdata_int = {pmp_cfg_rdata[11], pmp_cfg_rdata[10], pmp_cfg_rdata[9], pmp_cfg_rdata[8]};
+			12'h3a3: csr_rdata_int = {pmp_cfg_rdata[15], pmp_cfg_rdata[14], pmp_cfg_rdata[13], pmp_cfg_rdata[12]};
+			12'h3b0: csr_rdata_int = pmp_addr_rdata[0];
+			12'h3b1: csr_rdata_int = pmp_addr_rdata[1];
+			12'h3b2: csr_rdata_int = pmp_addr_rdata[2];
+			12'h3b3: csr_rdata_int = pmp_addr_rdata[3];
+			12'h3b4: csr_rdata_int = pmp_addr_rdata[4];
+			12'h3b5: csr_rdata_int = pmp_addr_rdata[5];
+			12'h3b6: csr_rdata_int = pmp_addr_rdata[6];
+			12'h3b7: csr_rdata_int = pmp_addr_rdata[7];
+			12'h3b8: csr_rdata_int = pmp_addr_rdata[8];
+			12'h3b9: csr_rdata_int = pmp_addr_rdata[9];
+			12'h3ba: csr_rdata_int = pmp_addr_rdata[10];
+			12'h3bb: csr_rdata_int = pmp_addr_rdata[11];
+			12'h3bc: csr_rdata_int = pmp_addr_rdata[12];
+			12'h3bd: csr_rdata_int = pmp_addr_rdata[13];
+			12'h3be: csr_rdata_int = pmp_addr_rdata[14];
+			12'h3bf: csr_rdata_int = pmp_addr_rdata[15];
+			12'h7b0: begin
+				csr_rdata_int = dcsr_q;
+				illegal_csr = ~debug_mode_i;
+			end
+			12'h7b1: begin
+				csr_rdata_int = depc_q;
+				illegal_csr = ~debug_mode_i;
+			end
+			12'h7b2: begin
+				csr_rdata_int = dscratch0_q;
+				illegal_csr = ~debug_mode_i;
+			end
+			12'h7b3: begin
+				csr_rdata_int = dscratch1_q;
+				illegal_csr = ~debug_mode_i;
+			end
+			12'h320: csr_rdata_int = mcountinhibit;
+			12'h323, 12'h324, 12'h325, 12'h326, 12'h327, 12'h328, 12'h329, 12'h32a, 12'h32b, 12'h32c, 12'h32d, 12'h32e, 12'h32f, 12'h330, 12'h331, 12'h332, 12'h333, 12'h334, 12'h335, 12'h336, 12'h337, 12'h338, 12'h339, 12'h33a, 12'h33b, 12'h33c, 12'h33d, 12'h33e, 12'h33f: csr_rdata_int = mhpmevent[mhpmcounter_idx];
+			12'hb00, 12'hb02, 12'hb03, 12'hb04, 12'hb05, 12'hb06, 12'hb07, 12'hb08, 12'hb09, 12'hb0a, 12'hb0b, 12'hb0c, 12'hb0d, 12'hb0e, 12'hb0f, 12'hb10, 12'hb11, 12'hb12, 12'hb13, 12'hb14, 12'hb15, 12'hb16, 12'hb17, 12'hb18, 12'hb19, 12'hb1a, 12'hb1b, 12'hb1c, 12'hb1d, 12'hb1e, 12'hb1f: csr_rdata_int = mhpmcounter[mhpmcounter_idx][31:0];
+			12'hb80, 12'hb82, 12'hb83, 12'hb84, 12'hb85, 12'hb86, 12'hb87, 12'hb88, 12'hb89, 12'hb8a, 12'hb8b, 12'hb8c, 12'hb8d, 12'hb8e, 12'hb8f, 12'hb90, 12'hb91, 12'hb92, 12'hb93, 12'hb94, 12'hb95, 12'hb96, 12'hb97, 12'hb98, 12'hb99, 12'hb9a, 12'hb9b, 12'hb9c, 12'hb9d, 12'hb9e, 12'hb9f: csr_rdata_int = mhpmcounter[mhpmcounter_idx][63:32];
+			12'h7a0: begin
+				csr_rdata_int = tselect_rdata;
+				illegal_csr = ~DbgTriggerEn;
+			end
+			12'h7a1: begin
+				csr_rdata_int = tmatch_control_rdata;
+				illegal_csr = ~DbgTriggerEn;
+			end
+			12'h7a2: begin
+				csr_rdata_int = tmatch_value_rdata;
+				illegal_csr = ~DbgTriggerEn;
+			end
+			12'h7a3: begin
+				csr_rdata_int = 1'sb0;
+				illegal_csr = ~DbgTriggerEn;
+			end
+			12'h7a8: begin
+				csr_rdata_int = 1'sb0;
+				illegal_csr = ~DbgTriggerEn;
+			end
+			12'h7aa: begin
+				csr_rdata_int = 1'sb0;
+				illegal_csr = ~DbgTriggerEn;
+			end
+			12'h7c1: csr_rdata_int = 1'sb0;
+			default: illegal_csr = 1'b1;
+		endcase
+		if (!PMPEnable) begin
+			if (|{csr_addr == 12'h3a0, csr_addr == 12'h3a1, csr_addr == 12'h3a2, csr_addr == 12'h3a3, csr_addr == 12'h3b0, csr_addr == 12'h3b1, csr_addr == 12'h3b2, csr_addr == 12'h3b3, csr_addr == 12'h3b4, csr_addr == 12'h3b5, csr_addr == 12'h3b6, csr_addr == 12'h3b7, csr_addr == 12'h3b8, csr_addr == 12'h3b9, csr_addr == 12'h3ba, csr_addr == 12'h3bb, csr_addr == 12'h3bc, csr_addr == 12'h3bd, csr_addr == 12'h3be, csr_addr == 12'h3bf})
+				illegal_csr = 1'b1;
+		end
+	end
+	function automatic [1:0] sv2v_cast_2;
+		input reg [1:0] inp;
+		sv2v_cast_2 = inp;
+	endfunction
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		exception_pc = pc_id_i;
+		priv_lvl_d = priv_lvl_q;
+		mstatus_en = 1'b0;
+		mstatus_d = mstatus_q;
+		mie_en = 1'b0;
+		mscratch_en = 1'b0;
+		mepc_en = 1'b0;
+		mepc_d = {csr_wdata_int[31:1], 1'b0};
+		mcause_en = 1'b0;
+		mcause_d = {csr_wdata_int[31], csr_wdata_int[5:0]};
+		mtval_en = 1'b0;
+		mtval_d = csr_wdata_int;
+		mtvec_en = csr_mtvec_init_i;
+		mtvec_d = (csr_mtvec_init_i ? {boot_addr_i[31:8], 8'b00000001} : {csr_wdata_int[31:8], 8'b00000001});
+		dcsr_en = 1'b0;
+		dcsr_d = dcsr_q;
+		depc_d = {csr_wdata_int[31:1], 1'b0};
+		depc_en = 1'b0;
+		dscratch0_en = 1'b0;
+		dscratch1_en = 1'b0;
+		mstack_en = 1'b0;
+		mstack_d[2] = mstatus_q[4];
+		mstack_d[1-:2] = mstatus_q[3-:2];
+		mstack_epc_d = mepc_q;
+		mstack_cause_d = mcause_q;
+		mcountinhibit_we = 1'b0;
+		mhpmcounter_we = 1'sb0;
+		mhpmcounterh_we = 1'sb0;
+		if (csr_we_int)
+			(* full_case, parallel_case *)
+			case (csr_addr_i)
+				12'h300: begin
+					mstatus_en = 1'b1;
+					mstatus_d = {csr_wdata_int[cve2_pkg_CSR_MSTATUS_MIE_BIT], csr_wdata_int[cve2_pkg_CSR_MSTATUS_MPIE_BIT], sv2v_cast_2(csr_wdata_int[cve2_pkg_CSR_MSTATUS_MPP_BIT_HIGH:cve2_pkg_CSR_MSTATUS_MPP_BIT_LOW]), sv2v_cast_1(csr_wdata_int[cve2_pkg_CSR_MSTATUS_MPRV_BIT] & umode_control), sv2v_cast_1(csr_wdata_int[cve2_pkg_CSR_MSTATUS_TW_BIT] & umode_control)};
+					if ((mstatus_d[3-:2] != 2'b11) && !(umode_control && (mstatus_d[3-:2] == 2'b00)))
+						mstatus_d[3-:2] = 2'b11;
+				end
+				12'h304: mie_en = 1'b1;
+				12'h340: mscratch_en = 1'b1;
+				12'h341: mepc_en = 1'b1;
+				12'h342: mcause_en = 1'b1;
+				12'h343: mtval_en = 1'b1;
+				12'h305: mtvec_en = 1'b1;
+				12'h7b0: begin
+					dcsr_d = csr_wdata_int;
+					dcsr_d[31-:4] = 4'd4;
+					if ((dcsr_d[1-:2] != 2'b11) && !(umode_control && (dcsr_d[1-:2] == 2'b00)))
+						dcsr_d[1-:2] = 2'b11;
+					dcsr_d[8-:3] = dcsr_q[8-:3];
+					dcsr_d[11] = 1'b0;
+					dcsr_d[3] = 1'b0;
+					dcsr_d[4] = 1'b0;
+					dcsr_d[10] = 1'b0;
+					dcsr_d[9] = 1'b0;
+					dcsr_d[5] = 1'b0;
+					dcsr_d[14] = 1'b0;
+					dcsr_d[27-:12] = 12'h000;
+					dcsr_en = 1'b1;
+				end
+				12'h7b1: depc_en = 1'b1;
+				12'h7b2: dscratch0_en = 1'b1;
+				12'h7b3: dscratch1_en = 1'b1;
+				12'h320: mcountinhibit_we = 1'b1;
+				12'hb00, 12'hb02, 12'hb03, 12'hb04, 12'hb05, 12'hb06, 12'hb07, 12'hb08, 12'hb09, 12'hb0a, 12'hb0b, 12'hb0c, 12'hb0d, 12'hb0e, 12'hb0f, 12'hb10, 12'hb11, 12'hb12, 12'hb13, 12'hb14, 12'hb15, 12'hb16, 12'hb17, 12'hb18, 12'hb19, 12'hb1a, 12'hb1b, 12'hb1c, 12'hb1d, 12'hb1e, 12'hb1f: mhpmcounter_we[mhpmcounter_idx] = 1'b1;
+				12'hb80, 12'hb82, 12'hb83, 12'hb84, 12'hb85, 12'hb86, 12'hb87, 12'hb88, 12'hb89, 12'hb8a, 12'hb8b, 12'hb8c, 12'hb8d, 12'hb8e, 12'hb8f, 12'hb90, 12'hb91, 12'hb92, 12'hb93, 12'hb94, 12'hb95, 12'hb96, 12'hb97, 12'hb98, 12'hb99, 12'hb9a, 12'hb9b, 12'hb9c, 12'hb9d, 12'hb9e, 12'hb9f: mhpmcounterh_we[mhpmcounter_idx] = 1'b1;
+				default:
+					;
+			endcase
+		(* full_case, parallel_case *)
+		case (1'b1)
+			csr_save_cause_i: begin
+				(* full_case, parallel_case *)
+				case (1'b1)
+					csr_save_if_i: exception_pc = pc_if_i;
+					csr_save_id_i: exception_pc = pc_id_i;
+					default:
+						;
+				endcase
+				priv_lvl_d = 2'b11;
+				if (debug_csr_save_i) begin
+					dcsr_d[1-:2] = priv_lvl_q;
+					dcsr_d[8-:3] = debug_cause_i;
+					dcsr_en = 1'b1;
+					depc_d = exception_pc;
+					depc_en = 1'b1;
+				end
+				else if (!debug_mode_i) begin
+					mtval_en = 1'b1;
+					mtval_d = csr_mtval_i;
+					mstatus_en = 1'b1;
+					mstatus_d[5] = 1'b0;
+					mstatus_d[4] = mstatus_q[5];
+					mstatus_d[3-:2] = priv_lvl_q;
+					mepc_en = 1'b1;
+					mepc_d = exception_pc;
+					mcause_en = 1'b1;
+					mcause_d = {csr_mcause_i};
+					mstack_en = 1'b1;
+				end
+			end
+			csr_restore_dret_i: priv_lvl_d = dcsr_q[1-:2];
+			csr_restore_mret_i: begin
+				priv_lvl_d = mstatus_q[3-:2];
+				mstatus_en = 1'b1;
+				mstatus_d[5] = mstatus_q[4];
+				if (mstatus_q[3-:2] != 2'b11)
+					mstatus_d[1] = 1'b0;
+				if (nmi_mode_i) begin
+					mstatus_d[4] = mstack_q[2];
+					mstatus_d[3-:2] = mstack_q[1-:2];
+					mepc_en = 1'b1;
+					mepc_d = mstack_epc_q;
+					mcause_en = 1'b1;
+					mcause_d = mstack_cause_q;
+				end
+				else begin
+					mstatus_d[4] = 1'b1;
+					mstatus_d[3-:2] = (umode_control ? 2'b00 : 2'b11);
+				end
+			end
+			default:
+				;
+		endcase
+	end
+	always @(posedge clk_i or negedge rst_ni)
+		if (!rst_ni)
+			priv_lvl_q <= 2'b11;
+		else
+			priv_lvl_q <= priv_lvl_d;
+	assign priv_mode_id_o = priv_lvl_q;
+	assign priv_mode_lsu_o = (mstatus_q[1] ? mstatus_q[3-:2] : priv_lvl_q);
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		(* full_case, parallel_case *)
+		case (csr_op_i)
+			2'd1: csr_wdata_int = csr_wdata_i;
+			2'd2: csr_wdata_int = csr_wdata_i | csr_rdata_o;
+			2'd3: csr_wdata_int = ~csr_wdata_i & csr_rdata_o;
+			2'd0: csr_wdata_int = csr_wdata_i;
+			default: csr_wdata_int = csr_wdata_i;
+		endcase
+	end
+	assign csr_wr = |{csr_op_i == 2'd1, csr_op_i == 2'd2, csr_op_i == 2'd3};
+	assign csr_we_int = (csr_wr & csr_op_en_i) & ~illegal_csr_insn_o;
+	assign csr_rdata_o = csr_rdata_int;
+	assign csr_mepc_o = mepc_q;
+	assign csr_depc_o = depc_q;
+	assign csr_mtvec_o = mtvec_q;
+	assign csr_mstatus_mie_o = mstatus_q[5];
+	assign csr_mstatus_tw_o = mstatus_q[0];
+	assign debug_single_step_o = dcsr_q[2];
+	assign debug_ebreakm_o = dcsr_q[15];
+	assign debug_ebreaku_o = dcsr_q[12];
+	assign irqs_o = mip & mie_q;
+	assign irq_pending_o = |irqs_o;
+	localparam [5:0] MSTATUS_RST_VAL = 6'b001100;
+	cve2_csr #(
+		.Width(6),
+		.ResetValue({MSTATUS_RST_VAL})
+	) u_mstatus_csr(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.wr_data_i({mstatus_d}),
+		.wr_en_i(mstatus_en),
+		.rd_data_o(mstatus_q),
+		.rd_error_o()
+	);
+	cve2_csr #(
+		.Width(32),
+		.ShadowCopy(1'b0),
+		.ResetValue(1'sb0)
+	) u_mepc_csr(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.wr_data_i(mepc_d),
+		.wr_en_i(mepc_en),
+		.rd_data_o(mepc_q),
+		.rd_error_o()
+	);
+	assign mie_d[18] = csr_wdata_int[cve2_pkg_CSR_MSIX_BIT];
+	assign mie_d[17] = csr_wdata_int[cve2_pkg_CSR_MTIX_BIT];
+	assign mie_d[16] = csr_wdata_int[cve2_pkg_CSR_MEIX_BIT];
+	assign mie_d[15-:16] = csr_wdata_int[cve2_pkg_CSR_MFIX_BIT_HIGH:cve2_pkg_CSR_MFIX_BIT_LOW];
+	cve2_csr #(
+		.Width(19),
+		.ShadowCopy(1'b0),
+		.ResetValue(1'sb0)
+	) u_mie_csr(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.wr_data_i({mie_d}),
+		.wr_en_i(mie_en),
+		.rd_data_o(mie_q),
+		.rd_error_o()
+	);
+	cve2_csr #(
+		.Width(32),
+		.ShadowCopy(1'b0),
+		.ResetValue(1'sb0)
+	) u_mscratch_csr(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.wr_data_i(csr_wdata_int),
+		.wr_en_i(mscratch_en),
+		.rd_data_o(mscratch_q),
+		.rd_error_o()
+	);
+	cve2_csr #(
+		.Width(7),
+		.ShadowCopy(1'b0),
+		.ResetValue(1'sb0)
+	) u_mcause_csr(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.wr_data_i(mcause_d),
+		.wr_en_i(mcause_en),
+		.rd_data_o(mcause_q),
+		.rd_error_o()
+	);
+	cve2_csr #(
+		.Width(32),
+		.ShadowCopy(1'b0),
+		.ResetValue(1'sb0)
+	) u_mtval_csr(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.wr_data_i(mtval_d),
+		.wr_en_i(mtval_en),
+		.rd_data_o(mtval_q),
+		.rd_error_o()
+	);
+	cve2_csr #(
+		.Width(32),
+		.ResetValue(32'd1)
+	) u_mtvec_csr(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.wr_data_i(mtvec_d),
+		.wr_en_i(mtvec_en),
+		.rd_data_o(mtvec_q),
+		.rd_error_o()
+	);
+	localparam [31:0] DCSR_RESET_VAL = 32'h40000003;
+	cve2_csr #(
+		.Width(32),
+		.ShadowCopy(1'b0),
+		.ResetValue({DCSR_RESET_VAL})
+	) u_dcsr_csr(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.wr_data_i({dcsr_d}),
+		.wr_en_i(dcsr_en),
+		.rd_data_o(dcsr_q),
+		.rd_error_o()
+	);
+	cve2_csr #(
+		.Width(32),
+		.ShadowCopy(1'b0),
+		.ResetValue(1'sb0)
+	) u_depc_csr(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.wr_data_i(depc_d),
+		.wr_en_i(depc_en),
+		.rd_data_o(depc_q),
+		.rd_error_o()
+	);
+	cve2_csr #(
+		.Width(32),
+		.ShadowCopy(1'b0),
+		.ResetValue(1'sb0)
+	) u_dscratch0_csr(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.wr_data_i(csr_wdata_int),
+		.wr_en_i(dscratch0_en),
+		.rd_data_o(dscratch0_q),
+		.rd_error_o()
+	);
+	cve2_csr #(
+		.Width(32),
+		.ShadowCopy(1'b0),
+		.ResetValue(1'sb0)
+	) u_dscratch1_csr(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.wr_data_i(csr_wdata_int),
+		.wr_en_i(dscratch1_en),
+		.rd_data_o(dscratch1_q),
+		.rd_error_o()
+	);
+	localparam [2:0] MSTACK_RESET_VAL = {1'b1, (UmodeEnabled ? 2'b00 : 2'b11)};
+	cve2_csr #(
+		.Width(3),
+		.ShadowCopy(1'b0),
+		.ResetValue({MSTACK_RESET_VAL})
+	) u_mstack_csr(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.wr_data_i({mstack_d}),
+		.wr_en_i(mstack_en),
+		.rd_data_o(mstack_q),
+		.rd_error_o()
+	);
+	cve2_csr #(
+		.Width(32),
+		.ShadowCopy(1'b0),
+		.ResetValue(1'sb0)
+	) u_mstack_epc_csr(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.wr_data_i(mstack_epc_d),
+		.wr_en_i(mstack_en),
+		.rd_data_o(mstack_epc_q),
+		.rd_error_o()
+	);
+	cve2_csr #(
+		.Width(7),
+		.ShadowCopy(1'b0),
+		.ResetValue(1'sb0)
+	) u_mstack_cause_csr(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.wr_data_i(mstack_cause_d),
+		.wr_en_i(mstack_en),
+		.rd_data_o(mstack_cause_q),
+		.rd_error_o()
+	);
+	localparam [11:0] cve2_pkg_CSR_OFF_PMP_ADDR = 12'h3b0;
+	localparam [11:0] cve2_pkg_CSR_OFF_PMP_CFG = 12'h3a0;
+	generate
+		if (PMPEnable) begin : g_pmp_registers
+			localparam [95:0] pmp_cfg_rst = 96'b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000;
+			localparam [543:0] pmp_addr_rst = 544'h0;
+			localparam [2:0] pmp_mseccfg_rst = 3'b000;
+			wire [2:0] pmp_mseccfg_q;
+			wire [2:0] pmp_mseccfg_d;
+			wire pmp_mseccfg_we;
+			wire pmp_mseccfg_err;
+			wire [5:0] pmp_cfg [0:PMPNumRegions - 1];
+			wire [PMPNumRegions - 1:0] pmp_cfg_locked;
+			reg [5:0] pmp_cfg_wdata [0:PMPNumRegions - 1];
+			wire [PMPAddrWidth - 1:0] pmp_addr [0:PMPNumRegions - 1];
+			wire [PMPNumRegions - 1:0] pmp_cfg_we;
+			wire [PMPNumRegions - 1:0] pmp_cfg_err;
+			wire [PMPNumRegions - 1:0] pmp_addr_we;
+			wire [PMPNumRegions - 1:0] pmp_addr_err;
+			wire any_pmp_entry_locked;
+			genvar _gv_i_20;
+			for (_gv_i_20 = 0; _gv_i_20 < cve2_pkg_PMP_MAX_REGIONS; _gv_i_20 = _gv_i_20 + 1) begin : g_exp_rd_data
+				localparam i = _gv_i_20;
+				if (i < PMPNumRegions) begin : g_implemented_regions
+					assign pmp_cfg_rdata[i] = {pmp_cfg[i][5], 2'b00, pmp_cfg[i][4-:2], pmp_cfg[i][2], pmp_cfg[i][1], pmp_cfg[i][0]};
+					if (PMPGranularity == 0) begin : g_pmp_g0
+						wire [32:1] sv2v_tmp_2683A;
+						assign sv2v_tmp_2683A = pmp_addr[i];
+						always @(*) pmp_addr_rdata[i] = sv2v_tmp_2683A;
+					end
+					else if (PMPGranularity == 1) begin : g_pmp_g1
+						always @(*) begin
+							if (_sv2v_0)
+								;
+							pmp_addr_rdata[i] = pmp_addr[i];
+							if ((pmp_cfg[i][4-:2] == 2'b00) || (pmp_cfg[i][4-:2] == 2'b01))
+								pmp_addr_rdata[i][PMPGranularity - 1:0] = 1'sb0;
+						end
+					end
+					else begin : g_pmp_g2
+						always @(*) begin
+							if (_sv2v_0)
+								;
+							pmp_addr_rdata[i] = {pmp_addr[i], {PMPGranularity - 1 {1'b1}}};
+							if ((pmp_cfg[i][4-:2] == 2'b00) || (pmp_cfg[i][4-:2] == 2'b01))
+								pmp_addr_rdata[i][PMPGranularity - 1:0] = 1'sb0;
+						end
+					end
+				end
+				else begin : g_other_regions
+					assign pmp_cfg_rdata[i] = 1'sb0;
+					wire [32:1] sv2v_tmp_D50E5;
+					assign sv2v_tmp_D50E5 = 1'sb0;
+					always @(*) pmp_addr_rdata[i] = sv2v_tmp_D50E5;
+				end
+			end
+			genvar _gv_i_21;
+			for (_gv_i_21 = 0; _gv_i_21 < PMPNumRegions; _gv_i_21 = _gv_i_21 + 1) begin : g_pmp_csrs
+				localparam i = _gv_i_21;
+				assign pmp_cfg_we[i] = (csr_we_int & ~pmp_cfg_locked[i]) & (csr_addr == (cve2_pkg_CSR_OFF_PMP_CFG + (i[11:0] >> 2)));
+				wire [1:1] sv2v_tmp_46013;
+				assign sv2v_tmp_46013 = csr_wdata_int[((i % 4) * cve2_pkg_PMP_CFG_W) + 7];
+				always @(*) pmp_cfg_wdata[i][5] = sv2v_tmp_46013;
+				always @(*) begin
+					if (_sv2v_0)
+						;
+					(* full_case, parallel_case *)
+					case (csr_wdata_int[((i % 4) * cve2_pkg_PMP_CFG_W) + 3+:2])
+						2'b00: pmp_cfg_wdata[i][4-:2] = 2'b00;
+						2'b01: pmp_cfg_wdata[i][4-:2] = 2'b01;
+						2'b10: pmp_cfg_wdata[i][4-:2] = (PMPGranularity == 0 ? 2'b10 : 2'b00);
+						2'b11: pmp_cfg_wdata[i][4-:2] = 2'b11;
+						default: pmp_cfg_wdata[i][4-:2] = 2'b00;
+					endcase
+				end
+				wire [1:1] sv2v_tmp_C83F1;
+				assign sv2v_tmp_C83F1 = csr_wdata_int[((i % 4) * cve2_pkg_PMP_CFG_W) + 2];
+				always @(*) pmp_cfg_wdata[i][2] = sv2v_tmp_C83F1;
+				wire [1:1] sv2v_tmp_5352C;
+				assign sv2v_tmp_5352C = (pmp_mseccfg_q[0] ? csr_wdata_int[((i % 4) * cve2_pkg_PMP_CFG_W) + 1] : &csr_wdata_int[(i % 4) * cve2_pkg_PMP_CFG_W+:2]);
+				always @(*) pmp_cfg_wdata[i][1] = sv2v_tmp_5352C;
+				wire [1:1] sv2v_tmp_113BD;
+				assign sv2v_tmp_113BD = csr_wdata_int[(i % 4) * cve2_pkg_PMP_CFG_W];
+				always @(*) pmp_cfg_wdata[i][0] = sv2v_tmp_113BD;
+				cve2_csr #(
+					.Width(6),
+					.ResetValue(pmp_cfg_rst[(15 - i) * 6+:6])
+				) u_pmp_cfg_csr(
+					.clk_i(clk_i),
+					.rst_ni(rst_ni),
+					.wr_data_i({pmp_cfg_wdata[i]}),
+					.wr_en_i(pmp_cfg_we[i]),
+					.rd_data_o(pmp_cfg[i]),
+					.rd_error_o(pmp_cfg_err[i])
+				);
+				assign pmp_cfg_locked[i] = pmp_cfg[i][5] & ~pmp_mseccfg_q[2];
+				if (i < (PMPNumRegions - 1)) begin : g_lower
+					assign pmp_addr_we[i] = ((csr_we_int & ~pmp_cfg_locked[i]) & (~pmp_cfg_locked[i + 1] | (pmp_cfg[i + 1][4-:2] != 2'b01))) & (csr_addr == (cve2_pkg_CSR_OFF_PMP_ADDR + i[11:0]));
+				end
+				else begin : g_upper
+					assign pmp_addr_we[i] = (csr_we_int & ~pmp_cfg_locked[i]) & (csr_addr == (cve2_pkg_CSR_OFF_PMP_ADDR + i[11:0]));
+				end
+				cve2_csr #(
+					.Width(PMPAddrWidth),
+					.ResetValue(pmp_addr_rst[((15 - i) * 34) + 33-:PMPAddrWidth])
+				) u_pmp_addr_csr(
+					.clk_i(clk_i),
+					.rst_ni(rst_ni),
+					.wr_data_i(csr_wdata_int[31-:PMPAddrWidth]),
+					.wr_en_i(pmp_addr_we[i]),
+					.rd_data_o(pmp_addr[i]),
+					.rd_error_o(pmp_addr_err[i])
+				);
+				assign csr_pmp_cfg_o[((PMPNumRegions - 1) - i) * 6+:6] = pmp_cfg[i];
+				assign csr_pmp_addr_o[((PMPNumRegions - 1) - i) * 34+:34] = {pmp_addr_rdata[i], 2'b00};
+			end
+			assign pmp_mseccfg_we = csr_we_int & (csr_addr == 12'h747);
+			assign pmp_mseccfg_d[0] = (pmp_mseccfg_q[0] ? 1'b1 : csr_wdata_int[cve2_pkg_CSR_MSECCFG_MML_BIT]);
+			assign pmp_mseccfg_d[1] = (pmp_mseccfg_q[1] ? 1'b1 : csr_wdata_int[cve2_pkg_CSR_MSECCFG_MMWP_BIT]);
+			assign any_pmp_entry_locked = |pmp_cfg_locked;
+			assign pmp_mseccfg_d[2] = (any_pmp_entry_locked ? 1'b0 : csr_wdata_int[cve2_pkg_CSR_MSECCFG_RLB_BIT]);
+			cve2_csr #(
+				.Width(3),
+				.ResetValue(pmp_mseccfg_rst)
+			) u_pmp_mseccfg(
+				.clk_i(clk_i),
+				.rst_ni(rst_ni),
+				.wr_data_i(pmp_mseccfg_d),
+				.wr_en_i(pmp_mseccfg_we),
+				.rd_data_o(pmp_mseccfg_q),
+				.rd_error_o(pmp_mseccfg_err)
+			);
+			assign pmp_mseccfg = pmp_mseccfg_q;
+		end
+		else begin : g_no_pmp_tieoffs
+			genvar _gv_i_22;
+			for (_gv_i_22 = 0; _gv_i_22 < cve2_pkg_PMP_MAX_REGIONS; _gv_i_22 = _gv_i_22 + 1) begin : g_rdata
+				localparam i = _gv_i_22;
+				wire [32:1] sv2v_tmp_D50E5;
+				assign sv2v_tmp_D50E5 = 1'sb0;
+				always @(*) pmp_addr_rdata[i] = sv2v_tmp_D50E5;
+				assign pmp_cfg_rdata[i] = 1'sb0;
+			end
+			genvar _gv_i_23;
+			for (_gv_i_23 = 0; _gv_i_23 < PMPNumRegions; _gv_i_23 = _gv_i_23 + 1) begin : g_outputs
+				localparam i = _gv_i_23;
+				assign csr_pmp_cfg_o[((PMPNumRegions - 1) - i) * 6+:6] = 6'b000000;
+				assign csr_pmp_addr_o[((PMPNumRegions - 1) - i) * 34+:34] = 1'sb0;
+			end
+			assign pmp_mseccfg = 1'sb0;
+		end
+	endgenerate
+	assign csr_pmp_mseccfg_o = pmp_mseccfg;
+	always @(*) begin : mcountinhibit_update
+		if (_sv2v_0)
+			;
+		if (mcountinhibit_we == 1'b1)
+			mcountinhibit_d = {csr_wdata_int[MHPMCounterNum + 2:2], 1'b0, csr_wdata_int[0]};
+		else
+			mcountinhibit_d = mcountinhibit_q;
+	end
+	always @(*) begin : gen_mhpmcounter_incr
+		if (_sv2v_0)
+			;
+		begin : sv2v_autoblock_1
+			reg [31:0] i;
+			for (i = 0; i < 32; i = i + 1)
+				begin : gen_mhpmcounter_incr_inactive
+					mhpmcounter_incr[i] = 1'b0;
+				end
+		end
+		mhpmcounter_incr[0] = 1'b1;
+		mhpmcounter_incr[1] = 1'b0;
+		mhpmcounter_incr[2] = instr_ret_i;
+		mhpmcounter_incr[3] = dside_wait_i;
+		mhpmcounter_incr[4] = iside_wait_i;
+		mhpmcounter_incr[5] = mem_load_i;
+		mhpmcounter_incr[6] = mem_store_i;
+		mhpmcounter_incr[7] = jump_i;
+		mhpmcounter_incr[8] = branch_i;
+		mhpmcounter_incr[9] = branch_taken_i;
+		mhpmcounter_incr[10] = instr_ret_compressed_i;
+		mhpmcounter_incr[11] = wfi_wait_i;
+		mhpmcounter_incr[12] = div_wait_i;
+	end
+	always @(*) begin : gen_mhpmevent
+		if (_sv2v_0)
+			;
+		begin : sv2v_autoblock_2
+			reg signed [31:0] i;
+			for (i = 0; i < 32; i = i + 1)
+				begin : gen_mhpmevent_active
+					mhpmevent[i] = 1'sb0;
+					mhpmevent[i][i] = 1'b1;
+				end
+		end
+		mhpmevent[1] = 1'sb0;
+		begin : sv2v_autoblock_3
+			reg [31:0] i;
+			for (i = 3 + MHPMCounterNum; i < 32; i = i + 1)
+				begin : gen_mhpmevent_inactive
+					mhpmevent[i] = 1'sb0;
+				end
+		end
+	end
+	cve2_counter #(.CounterWidth(64)) mcycle_counter_i(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.counter_inc_i(mhpmcounter_incr[0] & ~mcountinhibit[0]),
+		.counterh_we_i(mhpmcounterh_we[0]),
+		.counter_we_i(mhpmcounter_we[0]),
+		.counter_val_i(csr_wdata_int),
+		.counter_val_o(mhpmcounter[0]),
+		.counter_val_upd_o()
+	);
+	cve2_counter #(
+		.CounterWidth(64),
+		.ProvideValUpd(1)
+	) minstret_counter_i(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.counter_inc_i(mhpmcounter_incr[2] & ~mcountinhibit[2]),
+		.counterh_we_i(mhpmcounterh_we[2]),
+		.counter_we_i(mhpmcounter_we[2]),
+		.counter_val_i(csr_wdata_int),
+		.counter_val_o(minstret_raw),
+		.counter_val_upd_o()
+	);
+	assign mhpmcounter[2] = minstret_raw;
+	assign mhpmcounter[1] = 1'sb0;
+	assign unused_mhpmcounter_we_1 = mhpmcounter_we[1];
+	assign unused_mhpmcounterh_we_1 = mhpmcounterh_we[1];
+	assign unused_mhpmcounter_incr_1 = mhpmcounter_incr[1];
+	genvar _gv_i_24;
+	generate
+		for (_gv_i_24 = 0; _gv_i_24 < 29; _gv_i_24 = _gv_i_24 + 1) begin : gen_cntrs
+			localparam i = _gv_i_24;
+			localparam signed [31:0] Cnt = i + 3;
+			if (i < MHPMCounterNum) begin : gen_imp
+				wire [63:0] mhpmcounter_raw;
+				wire [63:0] mhpmcounter_next;
+				cve2_counter #(
+					.CounterWidth(MHPMCounterWidth),
+					.ProvideValUpd(Cnt == 10)
+				) mcounters_variable_i(
+					.clk_i(clk_i),
+					.rst_ni(rst_ni),
+					.counter_inc_i(mhpmcounter_incr[Cnt] & ~mcountinhibit[Cnt]),
+					.counterh_we_i(mhpmcounterh_we[Cnt]),
+					.counter_we_i(mhpmcounter_we[Cnt]),
+					.counter_val_i(csr_wdata_int),
+					.counter_val_o(mhpmcounter_raw),
+					.counter_val_upd_o(mhpmcounter_next)
+				);
+				if (Cnt == 10) begin : gen_compressed_instr_cnt
+					assign mhpmcounter[Cnt] = mhpmcounter_raw;
+				end
+				else begin : gen_other_cnts
+					wire [63:0] unused_mhpmcounter_next;
+					assign mhpmcounter[Cnt] = mhpmcounter_raw;
+					assign unused_mhpmcounter_next = mhpmcounter_next;
+				end
+			end
+			else begin : gen_unimp
+				assign mhpmcounter[Cnt] = 1'sb0;
+			end
+		end
+		if (MHPMCounterNum < 29) begin : g_mcountinhibit_reduced
+			wire [(29 - MHPMCounterNum) - 1:0] unused_mhphcounter_we;
+			wire [(29 - MHPMCounterNum) - 1:0] unused_mhphcounterh_we;
+			wire [(29 - MHPMCounterNum) - 1:0] unused_mhphcounter_incr;
+			assign mcountinhibit = {{29 - MHPMCounterNum {1'b1}}, mcountinhibit_q};
+			assign unused_mhphcounter_we = mhpmcounter_we[31:MHPMCounterNum + 3];
+			assign unused_mhphcounterh_we = mhpmcounterh_we[31:MHPMCounterNum + 3];
+			assign unused_mhphcounter_incr = mhpmcounter_incr[31:MHPMCounterNum + 3];
+		end
+		else begin : g_mcountinhibit_full
+			assign mcountinhibit = mcountinhibit_q;
+		end
+	endgenerate
+	always @(posedge clk_i or negedge rst_ni)
+		if (!rst_ni)
+			mcountinhibit_q <= 1'sb0;
+		else
+			mcountinhibit_q <= mcountinhibit_d;
+	generate
+		if (DbgTriggerEn) begin : gen_trigger_regs
+			localparam [31:0] DbgHwNumLen = (DbgHwBreakNum > 1 ? $clog2(DbgHwBreakNum) : 1);
+			localparam [31:0] MaxTselect = DbgHwBreakNum - 1;
+			wire [DbgHwNumLen - 1:0] tselect_d;
+			wire [DbgHwNumLen - 1:0] tselect_q;
+			wire tmatch_control_d;
+			wire [DbgHwBreakNum - 1:0] tmatch_control_q;
+			wire [31:0] tmatch_value_d;
+			wire [31:0] tmatch_value_q [0:DbgHwBreakNum - 1];
+			wire selected_tmatch_control;
+			wire [31:0] selected_tmatch_value;
+			wire tselect_we;
+			wire [DbgHwBreakNum - 1:0] tmatch_control_we;
+			wire [DbgHwBreakNum - 1:0] tmatch_value_we;
+			wire [DbgHwBreakNum - 1:0] trigger_match;
+			assign tselect_we = (csr_we_int & debug_mode_i) & (csr_addr_i == 12'h7a0);
+			genvar _gv_i_25;
+			for (_gv_i_25 = 0; _gv_i_25 < DbgHwBreakNum; _gv_i_25 = _gv_i_25 + 1) begin : g_dbg_tmatch_we
+				localparam i = _gv_i_25;
+				assign tmatch_control_we[i] = (((i[DbgHwNumLen - 1:0] == tselect_q) & csr_we_int) & debug_mode_i) & (csr_addr_i == 12'h7a1);
+				assign tmatch_value_we[i] = (((i[DbgHwNumLen - 1:0] == tselect_q) & csr_we_int) & debug_mode_i) & (csr_addr_i == 12'h7a2);
+			end
+			assign tselect_d = (csr_wdata_int < DbgHwBreakNum ? csr_wdata_int[DbgHwNumLen - 1:0] : MaxTselect[DbgHwNumLen - 1:0]);
+			assign tmatch_control_d = csr_wdata_int[2];
+			assign tmatch_value_d = csr_wdata_int[31:0];
+			cve2_csr #(
+				.Width(DbgHwNumLen),
+				.ShadowCopy(1'b0),
+				.ResetValue(1'sb0)
+			) u_tselect_csr(
+				.clk_i(clk_i),
+				.rst_ni(rst_ni),
+				.wr_data_i(tselect_d),
+				.wr_en_i(tselect_we),
+				.rd_data_o(tselect_q),
+				.rd_error_o()
+			);
+			genvar _gv_i_26;
+			for (_gv_i_26 = 0; _gv_i_26 < DbgHwBreakNum; _gv_i_26 = _gv_i_26 + 1) begin : g_dbg_tmatch_reg
+				localparam i = _gv_i_26;
+				cve2_csr #(
+					.Width(1),
+					.ShadowCopy(1'b0),
+					.ResetValue(1'sb0)
+				) u_tmatch_control_csr(
+					.clk_i(clk_i),
+					.rst_ni(rst_ni),
+					.wr_data_i(tmatch_control_d),
+					.wr_en_i(tmatch_control_we[i]),
+					.rd_data_o(tmatch_control_q[i]),
+					.rd_error_o()
+				);
+				cve2_csr #(
+					.Width(32),
+					.ShadowCopy(1'b0),
+					.ResetValue(1'sb0)
+				) u_tmatch_value_csr(
+					.clk_i(clk_i),
+					.rst_ni(rst_ni),
+					.wr_data_i(tmatch_value_d),
+					.wr_en_i(tmatch_value_we[i]),
+					.rd_data_o(tmatch_value_q[i]),
+					.rd_error_o()
+				);
+			end
+			localparam [31:0] TSelectRdataPadlen = (DbgHwNumLen >= 32 ? 0 : 32 - DbgHwNumLen);
+			assign tselect_rdata = {{TSelectRdataPadlen {1'b0}}, tselect_q};
+			if (DbgHwBreakNum > 1) begin : g_dbg_tmatch_multiple_select
+				assign selected_tmatch_control = tmatch_control_q[tselect_q];
+				assign selected_tmatch_value = tmatch_value_q[tselect_q];
+			end
+			else begin : g_dbg_tmatch_single_select
+				assign selected_tmatch_control = tmatch_control_q[0];
+				assign selected_tmatch_value = tmatch_value_q[0];
+			end
+			assign tmatch_control_rdata = {28'h2800104, umode_control, selected_tmatch_control, 2'b00};
+			assign tmatch_value_rdata = selected_tmatch_value;
+			genvar _gv_i_27;
+			for (_gv_i_27 = 0; _gv_i_27 < DbgHwBreakNum; _gv_i_27 = _gv_i_27 + 1) begin : g_dbg_trigger_match
+				localparam i = _gv_i_27;
+				assign trigger_match[i] = tmatch_control_q[i] & (pc_if_i[31:0] == tmatch_value_q[i]);
+			end
+			assign trigger_match_o = |trigger_match;
+		end
+		else begin : gen_no_trigger_regs
+			assign tselect_rdata = 'b0;
+			assign tmatch_control_rdata = 'b0;
+			assign tmatch_value_rdata = 'b0;
+			assign trigger_match_o = 'b0;
+		end
+	endgenerate
+	initial _sv2v_0 = 0;
+endmodule
+module cve2_csr (
+	clk_i,
+	rst_ni,
+	wr_data_i,
+	wr_en_i,
+	rd_data_o,
+	rd_error_o
+);
+	parameter [31:0] Width = 32;
+	parameter [0:0] ShadowCopy = 1'b0;
+	parameter [Width - 1:0] ResetValue = 1'sb0;
+	input wire clk_i;
+	input wire rst_ni;
+	input wire [Width - 1:0] wr_data_i;
+	input wire wr_en_i;
+	output wire [Width - 1:0] rd_data_o;
+	output wire rd_error_o;
+	reg [Width - 1:0] rdata_q;
+	always @(posedge clk_i or negedge rst_ni)
+		if (!rst_ni)
+			rdata_q <= ResetValue;
+		else if (wr_en_i)
+			rdata_q <= wr_data_i;
+	assign rd_data_o = rdata_q;
+	generate
+		if (ShadowCopy) begin : gen_shadow
+			reg [Width - 1:0] shadow_q;
+			always @(posedge clk_i or negedge rst_ni)
+				if (!rst_ni)
+					shadow_q <= ~ResetValue;
+				else if (wr_en_i)
+					shadow_q <= ~wr_data_i;
+			assign rd_error_o = rdata_q != ~shadow_q;
+		end
+		else begin : gen_no_shadow
+			assign rd_error_o = 1'b0;
+		end
+	endgenerate
+endmodule
+module cve2_counter (
+	clk_i,
+	rst_ni,
+	counter_inc_i,
+	counterh_we_i,
+	counter_we_i,
+	counter_val_i,
+	counter_val_o,
+	counter_val_upd_o
+);
+	reg _sv2v_0;
+	parameter signed [31:0] CounterWidth = 32;
+	parameter [0:0] ProvideValUpd = 0;
+	input wire clk_i;
+	input wire rst_ni;
+	input wire counter_inc_i;
+	input wire counterh_we_i;
+	input wire counter_we_i;
+	input wire [31:0] counter_val_i;
+	output wire [63:0] counter_val_o;
+	output wire [63:0] counter_val_upd_o;
+	wire [63:0] counter;
+	wire [CounterWidth - 1:0] counter_upd;
+	reg [63:0] counter_load;
+	reg we;
+	reg [CounterWidth - 1:0] counter_d;
+	assign counter_upd = counter[CounterWidth - 1:0] + {{CounterWidth - 1 {1'b0}}, 1'b1};
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		we = counter_we_i | counterh_we_i;
+		counter_load[63:32] = counter[63:32];
+		counter_load[31:0] = counter_val_i;
+		if (counterh_we_i) begin
+			counter_load[63:32] = counter_val_i;
+			counter_load[31:0] = counter[31:0];
+		end
+		if (we)
+			counter_d = counter_load[CounterWidth - 1:0];
+		else if (counter_inc_i)
+			counter_d = counter_upd[CounterWidth - 1:0];
+		else
+			counter_d = counter[CounterWidth - 1:0];
+	end
+	reg [CounterWidth - 1:0] counter_q;
+	always @(posedge clk_i or negedge rst_ni)
+		if (!rst_ni)
+			counter_q <= 1'sb0;
+		else
+			counter_q <= counter_d;
+	generate
+		if (CounterWidth < 64) begin : g_counter_narrow
+			wire [63:CounterWidth] unused_counter_load;
+			assign counter[CounterWidth - 1:0] = counter_q;
+			assign counter[63:CounterWidth] = 1'sb0;
+			if (ProvideValUpd) begin : g_counter_val_upd_o
+				assign counter_val_upd_o[CounterWidth - 1:0] = counter_upd;
+			end
+			else begin : g_no_counter_val_upd_o
+				assign counter_val_upd_o[CounterWidth - 1:0] = 1'sb0;
+			end
+			assign counter_val_upd_o[63:CounterWidth] = 1'sb0;
+			assign unused_counter_load = counter_load[63:CounterWidth];
+		end
+		else begin : g_counter_full
+			assign counter = counter_q;
+			if (ProvideValUpd) begin : g_counter_val_upd_o
+				assign counter_val_upd_o = counter_upd;
+			end
+			else begin : g_no_counter_val_upd_o
+				assign counter_val_upd_o = 1'sb0;
+			end
+		end
+	endgenerate
+	assign counter_val_o = counter;
+	initial _sv2v_0 = 0;
+endmodule
+module cve2_decoder (
+	clk_i,
+	rst_ni,
+	illegal_insn_o,
+	ebrk_insn_o,
+	mret_insn_o,
+	dret_insn_o,
+	ecall_insn_o,
+	wfi_insn_o,
+	jump_set_o,
+	instr_first_cycle_i,
+	instr_rdata_i,
+	instr_rdata_alu_i,
+	illegal_c_insn_i,
+	imm_a_mux_sel_o,
+	imm_b_mux_sel_o,
+	imm_i_type_o,
+	imm_s_type_o,
+	imm_b_type_o,
+	imm_u_type_o,
+	imm_j_type_o,
+	zimm_rs1_type_o,
+	rf_wdata_sel_o,
+	rf_we_o,
+	rf_raddr_a_o,
+	rf_raddr_b_o,
+	rf_raddr_c_o,
+	rf_waddr_o,
+	rf_ren_a_o,
+	rf_ren_b_o,
+	rf_ren_c_o,
+	alu_operator_o,
+	alu_op_a_mux_sel_o,
+	alu_op_b_mux_sel_o,
+	alu_multicycle_o,
+	mult_en_o,
+	div_en_o,
+	mult_sel_o,
+	div_sel_o,
+	multdiv_operator_o,
+	multdiv_signed_mode_o,
+	csr_access_o,
+	csr_op_o,
+	data_req_o,
+	data_we_o,
+	data_type_o,
+	data_sign_extension_o,
+	x_issue_resp_register_read_i,
+	jump_in_dec_o,
+	branch_in_dec_o
+);
+	reg _sv2v_0;
+	parameter [0:0] RV32E = 0;
+	parameter integer RV32M = 32'sd2;
+	parameter integer RV32B = 32'sd0;
+	parameter [0:0] XInterface = 1'b0;
+	input wire clk_i;
+	input wire rst_ni;
+	output wire illegal_insn_o;
+	output reg ebrk_insn_o;
+	output reg mret_insn_o;
+	output reg dret_insn_o;
+	output reg ecall_insn_o;
+	output reg wfi_insn_o;
+	output reg jump_set_o;
+	input wire instr_first_cycle_i;
+	input wire [31:0] instr_rdata_i;
+	input wire [31:0] instr_rdata_alu_i;
+	input wire illegal_c_insn_i;
+	output reg imm_a_mux_sel_o;
+	output reg [2:0] imm_b_mux_sel_o;
+	output wire [31:0] imm_i_type_o;
+	output wire [31:0] imm_s_type_o;
+	output wire [31:0] imm_b_type_o;
+	output wire [31:0] imm_u_type_o;
+	output wire [31:0] imm_j_type_o;
+	output wire [31:0] zimm_rs1_type_o;
+	output reg [XInterface:0] rf_wdata_sel_o;
+	output wire rf_we_o;
+	output wire [4:0] rf_raddr_a_o;
+	output wire [4:0] rf_raddr_b_o;
+	output wire [4:0] rf_raddr_c_o;
+	output wire [4:0] rf_waddr_o;
+	output reg rf_ren_a_o;
+	output reg rf_ren_b_o;
+	output reg rf_ren_c_o;
+	output reg [6:0] alu_operator_o;
+	output reg [1:0] alu_op_a_mux_sel_o;
+	output reg alu_op_b_mux_sel_o;
+	output reg alu_multicycle_o;
+	output wire mult_en_o;
+	output wire div_en_o;
+	output reg mult_sel_o;
+	output reg div_sel_o;
+	output reg [1:0] multdiv_operator_o;
+	output reg [1:0] multdiv_signed_mode_o;
+	output reg csr_access_o;
+	output reg [1:0] csr_op_o;
+	output reg data_req_o;
+	output reg data_we_o;
+	output reg [1:0] data_type_o;
+	output reg data_sign_extension_o;
+	localparam [31:0] cve2_pkg_X_DUAL_READ = 0;
+	localparam [31:0] cve2_pkg_X_NUM_RS = 3;
+	input wire [(cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) - 1:0] x_issue_resp_register_read_i;
+	output reg jump_in_dec_o;
+	output reg branch_in_dec_o;
+	reg illegal_insn;
+	wire illegal_reg_rv32e;
+	reg csr_illegal;
+	reg rf_we;
+	wire [31:0] instr;
+	wire [31:0] instr_alu;
+	wire [9:0] unused_instr_alu;
+	wire [4:0] instr_rs1;
+	wire [4:0] instr_rs2;
+	wire [4:0] instr_rs3;
+	wire [4:0] instr_rd;
+	reg use_rs3_d;
+	reg use_rs3_q;
+	reg [1:0] csr_op;
+	reg [6:0] opcode;
+	reg [6:0] opcode_alu;
+	assign instr = instr_rdata_i;
+	assign instr_alu = instr_rdata_alu_i;
+	assign imm_i_type_o = {{20 {instr[31]}}, instr[31:20]};
+	assign imm_s_type_o = {{20 {instr[31]}}, instr[31:25], instr[11:7]};
+	assign imm_b_type_o = {{19 {instr[31]}}, instr[31], instr[7], instr[30:25], instr[11:8], 1'b0};
+	assign imm_u_type_o = {instr[31:12], 12'b000000000000};
+	assign imm_j_type_o = {{12 {instr[31]}}, instr[19:12], instr[20], instr[30:21], 1'b0};
+	assign zimm_rs1_type_o = {27'b000000000000000000000000000, instr_rs1};
+	generate
+		if (RV32B != 32'sd0) begin : gen_rs3_flop
+			always @(posedge clk_i or negedge rst_ni)
+				if (!rst_ni)
+					use_rs3_q <= 1'b0;
+				else
+					use_rs3_q <= use_rs3_d;
+		end
+		else begin : gen_no_rs3_flop
+			wire unused_clk;
+			wire unused_rst_n;
+			assign unused_clk = clk_i;
+			assign unused_rst_n = rst_ni;
+			wire [1:1] sv2v_tmp_12378;
+			assign sv2v_tmp_12378 = use_rs3_d;
+			always @(*) use_rs3_q = sv2v_tmp_12378;
+		end
+	endgenerate
+	assign instr_rs1 = instr[19:15];
+	assign instr_rs2 = instr[24:20];
+	assign instr_rs3 = instr[31:27];
+	assign rf_raddr_a_o = (use_rs3_q & ~instr_first_cycle_i ? instr_rs3 : instr_rs1);
+	assign rf_raddr_b_o = instr_rs2;
+	assign rf_raddr_c_o = (XInterface ? instr_rs3 : {5 {1'sb0}});
+	assign instr_rd = instr[11:7];
+	assign rf_waddr_o = instr_rd;
+	generate
+		if (RV32E) begin : gen_rv32e_reg_check_active
+			assign illegal_reg_rv32e = ((rf_raddr_a_o[4] & (alu_op_a_mux_sel_o == 2'd0)) | (rf_raddr_b_o[4] & (alu_op_b_mux_sel_o == 1'd0))) | (rf_waddr_o[4] & rf_we);
+		end
+		else begin : gen_rv32e_reg_check_inactive
+			assign illegal_reg_rv32e = 1'b0;
+		end
+	endgenerate
+	always @(*) begin : csr_operand_check
+		if (_sv2v_0)
+			;
+		csr_op_o = csr_op;
+		if (((csr_op == 2'd2) || (csr_op == 2'd3)) && (instr_rs1 == {5 {1'sb0}}))
+			csr_op_o = 2'd0;
+	end
+	function automatic [(XInterface >= 0 ? XInterface + 1 : 1 - XInterface) - 1:0] sv2v_cast_020D8;
+		input reg [(XInterface >= 0 ? XInterface + 1 : 1 - XInterface) - 1:0] inp;
+		sv2v_cast_020D8 = inp;
+	endfunction
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		jump_in_dec_o = 1'b0;
+		jump_set_o = 1'b0;
+		branch_in_dec_o = 1'b0;
+		multdiv_operator_o = 2'd0;
+		multdiv_signed_mode_o = 2'b00;
+		rf_wdata_sel_o = sv2v_cast_020D8(32'd0);
+		rf_we = 1'b0;
+		rf_ren_a_o = 1'b0;
+		rf_ren_b_o = 1'b0;
+		rf_ren_c_o = 1'b0;
+		csr_access_o = 1'b0;
+		csr_illegal = 1'b0;
+		csr_op = 2'd0;
+		data_we_o = 1'b0;
+		data_type_o = 2'b00;
+		data_sign_extension_o = 1'b0;
+		data_req_o = 1'b0;
+		illegal_insn = 1'b0;
+		ebrk_insn_o = 1'b0;
+		mret_insn_o = 1'b0;
+		dret_insn_o = 1'b0;
+		ecall_insn_o = 1'b0;
+		wfi_insn_o = 1'b0;
+		opcode = instr[6:0];
+		(* full_case, parallel_case *)
+		case (opcode)
+			7'h6f: begin
+				jump_in_dec_o = 1'b1;
+				if (instr_first_cycle_i) begin
+					rf_we = 1'b0;
+					jump_set_o = 1'b1;
+				end
+				else
+					rf_we = 1'b1;
+			end
+			7'h67: begin
+				jump_in_dec_o = 1'b1;
+				if (instr_first_cycle_i) begin
+					rf_we = 1'b0;
+					jump_set_o = 1'b1;
+				end
+				else
+					rf_we = 1'b1;
+				if (instr[14:12] != 3'b000)
+					illegal_insn = 1'b1;
+				rf_ren_a_o = 1'b1;
+			end
+			7'h63: begin
+				branch_in_dec_o = 1'b1;
+				(* full_case, parallel_case *)
+				case (instr[14:12])
+					3'b000, 3'b001, 3'b100, 3'b101, 3'b110, 3'b111: illegal_insn = 1'b0;
+					default: illegal_insn = 1'b1;
+				endcase
+				rf_ren_a_o = 1'b1;
+				rf_ren_b_o = 1'b1;
+			end
+			7'h23: begin
+				rf_ren_a_o = 1'b1;
+				rf_ren_b_o = 1'b1;
+				data_req_o = 1'b1;
+				data_we_o = 1'b1;
+				if (instr[14])
+					illegal_insn = 1'b1;
+				(* full_case, parallel_case *)
+				case (instr[13:12])
+					2'b00: data_type_o = 2'b10;
+					2'b01: data_type_o = 2'b01;
+					2'b10: data_type_o = 2'b00;
+					default: illegal_insn = 1'b1;
+				endcase
+			end
+			7'h03: begin
+				rf_ren_a_o = 1'b1;
+				data_req_o = 1'b1;
+				data_type_o = 2'b00;
+				data_sign_extension_o = ~instr[14];
+				(* full_case, parallel_case *)
+				case (instr[13:12])
+					2'b00: data_type_o = 2'b10;
+					2'b01: data_type_o = 2'b01;
+					2'b10: begin
+						data_type_o = 2'b00;
+						if (instr[14])
+							illegal_insn = 1'b1;
+					end
+					default: illegal_insn = 1'b1;
+				endcase
+			end
+			7'h37: rf_we = 1'b1;
+			7'h17: rf_we = 1'b1;
+			7'h13: begin
+				rf_ren_a_o = 1'b1;
+				rf_we = 1'b1;
+				(* full_case, parallel_case *)
+				case (instr[14:12])
+					3'b000, 3'b010, 3'b011, 3'b100, 3'b110, 3'b111: illegal_insn = 1'b0;
+					3'b001:
+						(* full_case, parallel_case *)
+						case (instr[31:27])
+							5'b00000: illegal_insn = (instr[26:25] == 2'b00 ? 1'b0 : 1'b1);
+							5'b00100: illegal_insn = ((RV32B == 32'sd2) || (RV32B == 32'sd3) ? 1'b0 : 1'b1);
+							5'b01001, 5'b00101, 5'b01101: illegal_insn = (RV32B != 32'sd0 ? 1'b0 : 1'b1);
+							5'b00001:
+								if (instr[26] == 1'b0)
+									illegal_insn = ((RV32B == 32'sd2) || (RV32B == 32'sd3) ? 1'b0 : 1'b1);
+								else
+									illegal_insn = 1'b1;
+							5'b01100:
+								(* full_case, parallel_case *)
+								case (instr[26:20])
+									7'b0000000, 7'b0000001, 7'b0000010, 7'b0000100, 7'b0000101: illegal_insn = (RV32B != 32'sd0 ? 1'b0 : 1'b1);
+									7'b0010000, 7'b0010001, 7'b0010010, 7'b0011000, 7'b0011001, 7'b0011010: illegal_insn = ((RV32B == 32'sd2) || (RV32B == 32'sd3) ? 1'b0 : 1'b1);
+									default: illegal_insn = 1'b1;
+								endcase
+							default: illegal_insn = 1'b1;
+						endcase
+					3'b101:
+						if (instr[26])
+							illegal_insn = (RV32B != 32'sd0 ? 1'b0 : 1'b1);
+						else
+							(* full_case, parallel_case *)
+							case (instr[31:27])
+								5'b00000, 5'b01000: illegal_insn = (instr[26:25] == 2'b00 ? 1'b0 : 1'b1);
+								5'b00100: illegal_insn = ((RV32B == 32'sd2) || (RV32B == 32'sd3) ? 1'b0 : 1'b1);
+								5'b01100, 5'b01001: illegal_insn = (RV32B != 32'sd0 ? 1'b0 : 1'b1);
+								5'b01101:
+									if ((RV32B == 32'sd2) || (RV32B == 32'sd3))
+										illegal_insn = 1'b0;
+									else if (RV32B == 32'sd1)
+										illegal_insn = (instr[24:20] == 5'b11000 ? 1'b0 : 1'b1);
+									else
+										illegal_insn = 1'b1;
+								5'b00101:
+									if ((RV32B == 32'sd2) || (RV32B == 32'sd3))
+										illegal_insn = 1'b0;
+									else if (instr[24:20] == 5'b00111)
+										illegal_insn = (RV32B == 32'sd1 ? 1'b0 : 1'b1);
+									else
+										illegal_insn = 1'b1;
+								5'b00001:
+									if (instr[26] == 1'b0)
+										illegal_insn = ((RV32B == 32'sd2) || (RV32B == 32'sd3) ? 1'b0 : 1'b1);
+									else
+										illegal_insn = 1'b1;
+								default: illegal_insn = 1'b1;
+							endcase
+					default: illegal_insn = 1'b1;
+				endcase
+			end
+			7'h33: begin
+				rf_ren_a_o = 1'b1;
+				rf_ren_b_o = 1'b1;
+				rf_we = 1'b1;
+				if ({instr[26], instr[13:12]} == 3'b101)
+					illegal_insn = (RV32B != 32'sd0 ? 1'b0 : 1'b1);
+				else
+					(* full_case, parallel_case *)
+					case ({instr[31:25], instr[14:12]})
+						10'b0000000000, 10'b0100000000, 10'b0000000010, 10'b0000000011, 10'b0000000100, 10'b0000000110, 10'b0000000111, 10'b0000000001, 10'b0000000101, 10'b0100000101: illegal_insn = 1'b0;
+						10'b0010000010, 10'b0010000100, 10'b0010000110, 10'b0100000111, 10'b0100000110, 10'b0100000100, 10'b0110000001, 10'b0110000101, 10'b0000101100, 10'b0000101110, 10'b0000101101, 10'b0000101111, 10'b0000100100, 10'b0100100100, 10'b0000100111, 10'b0100100001, 10'b0010100001, 10'b0110100001, 10'b0100100101, 10'b0100100111: illegal_insn = (RV32B != 32'sd0 ? 1'b0 : 1'b1);
+						10'b0110100101, 10'b0010100101, 10'b0000100001, 10'b0000100101, 10'b0010100010, 10'b0010100100, 10'b0010100110, 10'b0010000001, 10'b0010000101, 10'b0000101001, 10'b0000101010, 10'b0000101011: illegal_insn = ((RV32B == 32'sd2) || (RV32B == 32'sd3) ? 1'b0 : 1'b1);
+						10'b0100100110, 10'b0000100110: illegal_insn = (RV32B == 32'sd3 ? 1'b0 : 1'b1);
+						10'b0000001000: begin
+							multdiv_operator_o = 2'd0;
+							multdiv_signed_mode_o = 2'b00;
+							illegal_insn = (RV32M == 32'sd0 ? 1'b1 : 1'b0);
+						end
+						10'b0000001001: begin
+							multdiv_operator_o = 2'd1;
+							multdiv_signed_mode_o = 2'b11;
+							illegal_insn = (RV32M == 32'sd0 ? 1'b1 : 1'b0);
+						end
+						10'b0000001010: begin
+							multdiv_operator_o = 2'd1;
+							multdiv_signed_mode_o = 2'b01;
+							illegal_insn = (RV32M == 32'sd0 ? 1'b1 : 1'b0);
+						end
+						10'b0000001011: begin
+							multdiv_operator_o = 2'd1;
+							multdiv_signed_mode_o = 2'b00;
+							illegal_insn = (RV32M == 32'sd0 ? 1'b1 : 1'b0);
+						end
+						10'b0000001100: begin
+							multdiv_operator_o = 2'd2;
+							multdiv_signed_mode_o = 2'b11;
+							illegal_insn = (RV32M == 32'sd0 ? 1'b1 : 1'b0);
+						end
+						10'b0000001101: begin
+							multdiv_operator_o = 2'd2;
+							multdiv_signed_mode_o = 2'b00;
+							illegal_insn = (RV32M == 32'sd0 ? 1'b1 : 1'b0);
+						end
+						10'b0000001110: begin
+							multdiv_operator_o = 2'd3;
+							multdiv_signed_mode_o = 2'b11;
+							illegal_insn = (RV32M == 32'sd0 ? 1'b1 : 1'b0);
+						end
+						10'b0000001111: begin
+							multdiv_operator_o = 2'd3;
+							multdiv_signed_mode_o = 2'b00;
+							illegal_insn = (RV32M == 32'sd0 ? 1'b1 : 1'b0);
+						end
+						default: illegal_insn = 1'b1;
+					endcase
+			end
+			7'h0f:
+				(* full_case, parallel_case *)
+				case (instr[14:12])
+					3'b000: rf_we = 1'b0;
+					3'b001: begin
+						jump_in_dec_o = 1'b1;
+						rf_we = 1'b0;
+						if (instr_first_cycle_i)
+							jump_set_o = 1'b1;
+					end
+					default: illegal_insn = 1'b1;
+				endcase
+			7'h73:
+				if (instr[14:12] == 3'b000) begin
+					(* full_case, parallel_case *)
+					case (instr[31:20])
+						12'h000: ecall_insn_o = 1'b1;
+						12'h001: ebrk_insn_o = 1'b1;
+						12'h302: mret_insn_o = 1'b1;
+						12'h7b2: dret_insn_o = 1'b1;
+						12'h105: wfi_insn_o = 1'b1;
+						default: illegal_insn = 1'b1;
+					endcase
+					if ((instr_rs1 != 5'b00000) || (instr_rd != 5'b00000))
+						illegal_insn = 1'b1;
+				end
+				else begin
+					csr_access_o = 1'b1;
+					rf_wdata_sel_o = sv2v_cast_020D8(32'd1);
+					rf_we = 1'b1;
+					if (~instr[14])
+						rf_ren_a_o = 1'b1;
+					(* full_case, parallel_case *)
+					case (instr[13:12])
+						2'b01: csr_op = 2'd1;
+						2'b10: csr_op = 2'd2;
+						2'b11: csr_op = 2'd3;
+						default: csr_illegal = 1'b1;
+					endcase
+					illegal_insn = csr_illegal;
+				end
+			default: illegal_insn = 1'b1;
+		endcase
+		if (illegal_c_insn_i)
+			illegal_insn = 1'b1;
+		if (illegal_insn) begin
+			rf_we = 1'b0;
+			data_req_o = 1'b0;
+			data_we_o = 1'b0;
+			jump_in_dec_o = 1'b0;
+			jump_set_o = 1'b0;
+			branch_in_dec_o = 1'b0;
+			csr_access_o = 1'b0;
+			if (XInterface) begin
+				rf_ren_a_o = x_issue_resp_register_read_i[0];
+				rf_ren_b_o = x_issue_resp_register_read_i[1];
+				rf_ren_c_o = x_issue_resp_register_read_i[2];
+				rf_wdata_sel_o = sv2v_cast_020D8(32'd2);
+			end
+		end
+	end
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		alu_operator_o = 7'd44;
+		alu_op_a_mux_sel_o = 2'd3;
+		alu_op_b_mux_sel_o = 1'd1;
+		imm_a_mux_sel_o = 1'd1;
+		imm_b_mux_sel_o = 3'd0;
+		opcode_alu = instr_alu[6:0];
+		use_rs3_d = 1'b0;
+		alu_multicycle_o = 1'b0;
+		mult_sel_o = 1'b0;
+		div_sel_o = 1'b0;
+		(* full_case, parallel_case *)
+		case (opcode_alu)
+			7'h6f:
+				if (instr_first_cycle_i) begin
+					alu_op_a_mux_sel_o = 2'd2;
+					alu_op_b_mux_sel_o = 1'd1;
+					imm_b_mux_sel_o = 3'd4;
+					alu_operator_o = 7'd0;
+				end
+				else begin
+					alu_op_a_mux_sel_o = 2'd2;
+					alu_op_b_mux_sel_o = 1'd1;
+					imm_b_mux_sel_o = 3'd5;
+					alu_operator_o = 7'd0;
+				end
+			7'h67:
+				if (instr_first_cycle_i) begin
+					alu_op_a_mux_sel_o = 2'd0;
+					alu_op_b_mux_sel_o = 1'd1;
+					imm_b_mux_sel_o = 3'd0;
+					alu_operator_o = 7'd0;
+				end
+				else begin
+					alu_op_a_mux_sel_o = 2'd2;
+					alu_op_b_mux_sel_o = 1'd1;
+					imm_b_mux_sel_o = 3'd5;
+					alu_operator_o = 7'd0;
+				end
+			7'h63: begin
+				(* full_case, parallel_case *)
+				case (instr_alu[14:12])
+					3'b000: alu_operator_o = 7'd29;
+					3'b001: alu_operator_o = 7'd30;
+					3'b100: alu_operator_o = 7'd25;
+					3'b101: alu_operator_o = 7'd27;
+					3'b110: alu_operator_o = 7'd26;
+					3'b111: alu_operator_o = 7'd28;
+					default:
+						;
+				endcase
+				if (instr_first_cycle_i) begin
+					alu_op_a_mux_sel_o = 2'd0;
+					alu_op_b_mux_sel_o = 1'd0;
+				end
+				else begin
+					alu_op_a_mux_sel_o = 2'd2;
+					alu_op_b_mux_sel_o = 1'd1;
+					imm_b_mux_sel_o = 3'd2;
+					alu_operator_o = 7'd0;
+				end
+			end
+			7'h23: begin
+				alu_op_a_mux_sel_o = 2'd0;
+				alu_op_b_mux_sel_o = 1'd0;
+				alu_operator_o = 7'd0;
+				if (!instr_alu[14]) begin
+					imm_b_mux_sel_o = 3'd1;
+					alu_op_b_mux_sel_o = 1'd1;
+				end
+			end
+			7'h03: begin
+				alu_op_a_mux_sel_o = 2'd0;
+				alu_operator_o = 7'd0;
+				alu_op_b_mux_sel_o = 1'd1;
+				imm_b_mux_sel_o = 3'd0;
+			end
+			7'h37: begin
+				alu_op_a_mux_sel_o = 2'd3;
+				alu_op_b_mux_sel_o = 1'd1;
+				imm_a_mux_sel_o = 1'd1;
+				imm_b_mux_sel_o = 3'd3;
+				alu_operator_o = 7'd0;
+			end
+			7'h17: begin
+				alu_op_a_mux_sel_o = 2'd2;
+				alu_op_b_mux_sel_o = 1'd1;
+				imm_b_mux_sel_o = 3'd3;
+				alu_operator_o = 7'd0;
+			end
+			7'h13: begin
+				alu_op_a_mux_sel_o = 2'd0;
+				alu_op_b_mux_sel_o = 1'd1;
+				imm_b_mux_sel_o = 3'd0;
+				(* full_case, parallel_case *)
+				case (instr_alu[14:12])
+					3'b000: alu_operator_o = 7'd0;
+					3'b010: alu_operator_o = 7'd43;
+					3'b011: alu_operator_o = 7'd44;
+					3'b100: alu_operator_o = 7'd2;
+					3'b110: alu_operator_o = 7'd3;
+					3'b111: alu_operator_o = 7'd4;
+					3'b001:
+						if (RV32B != 32'sd0)
+							(* full_case, parallel_case *)
+							case (instr_alu[31:27])
+								5'b00000: alu_operator_o = 7'd10;
+								5'b00100:
+									if ((RV32B == 32'sd2) || (RV32B == 32'sd3))
+										alu_operator_o = 7'd12;
+								5'b01001: alu_operator_o = 7'd50;
+								5'b00101: alu_operator_o = 7'd49;
+								5'b01101: alu_operator_o = 7'd51;
+								5'b00001:
+									if (instr_alu[26] == 0)
+										alu_operator_o = 7'd17;
+								5'b01100:
+									(* full_case, parallel_case *)
+									case (instr_alu[26:20])
+										7'b0000000: alu_operator_o = 7'd40;
+										7'b0000001: alu_operator_o = 7'd41;
+										7'b0000010: alu_operator_o = 7'd42;
+										7'b0000100: alu_operator_o = 7'd38;
+										7'b0000101: alu_operator_o = 7'd39;
+										7'b0010000:
+											if ((RV32B == 32'sd2) || (RV32B == 32'sd3)) begin
+												alu_operator_o = 7'd59;
+												alu_multicycle_o = 1'b1;
+											end
+										7'b0010001:
+											if ((RV32B == 32'sd2) || (RV32B == 32'sd3)) begin
+												alu_operator_o = 7'd61;
+												alu_multicycle_o = 1'b1;
+											end
+										7'b0010010:
+											if ((RV32B == 32'sd2) || (RV32B == 32'sd3)) begin
+												alu_operator_o = 7'd63;
+												alu_multicycle_o = 1'b1;
+											end
+										7'b0011000:
+											if ((RV32B == 32'sd2) || (RV32B == 32'sd3)) begin
+												alu_operator_o = 7'd60;
+												alu_multicycle_o = 1'b1;
+											end
+										7'b0011001:
+											if ((RV32B == 32'sd2) || (RV32B == 32'sd3)) begin
+												alu_operator_o = 7'd62;
+												alu_multicycle_o = 1'b1;
+											end
+										7'b0011010:
+											if ((RV32B == 32'sd2) || (RV32B == 32'sd3)) begin
+												alu_operator_o = 7'd64;
+												alu_multicycle_o = 1'b1;
+											end
+										default:
+											;
+									endcase
+								default:
+									;
+							endcase
+						else
+							alu_operator_o = 7'd10;
+					3'b101:
+						if (RV32B != 32'sd0) begin
+							if (instr_alu[26] == 1'b1) begin
+								alu_operator_o = 7'd48;
+								alu_multicycle_o = 1'b1;
+								if (instr_first_cycle_i)
+									use_rs3_d = 1'b1;
+								else
+									use_rs3_d = 1'b0;
+							end
+							else
+								(* full_case, parallel_case *)
+								case (instr_alu[31:27])
+									5'b00000: alu_operator_o = 7'd9;
+									5'b01000: alu_operator_o = 7'd8;
+									5'b00100:
+										if ((RV32B == 32'sd2) || (RV32B == 32'sd3))
+											alu_operator_o = 7'd11;
+									5'b01001: alu_operator_o = 7'd52;
+									5'b01100: begin
+										alu_operator_o = 7'd13;
+										alu_multicycle_o = 1'b1;
+									end
+									5'b01101: alu_operator_o = 7'd15;
+									5'b00101: alu_operator_o = 7'd16;
+									5'b00001:
+										if ((RV32B == 32'sd2) || (RV32B == 32'sd3)) begin
+											if (instr_alu[26] == 1'b0)
+												alu_operator_o = 7'd18;
+										end
+									default:
+										;
+								endcase
+						end
+						else if (instr_alu[31:27] == 5'b00000)
+							alu_operator_o = 7'd9;
+						else if (instr_alu[31:27] == 5'b01000)
+							alu_operator_o = 7'd8;
+					default:
+						;
+				endcase
+			end
+			7'h33: begin
+				alu_op_a_mux_sel_o = 2'd0;
+				alu_op_b_mux_sel_o = 1'd0;
+				if (instr_alu[26]) begin
+					if (RV32B != 32'sd0)
+						(* full_case, parallel_case *)
+						case ({instr_alu[26:25], instr_alu[14:12]})
+							5'b11001: begin
+								alu_operator_o = 7'd46;
+								alu_multicycle_o = 1'b1;
+								if (instr_first_cycle_i)
+									use_rs3_d = 1'b1;
+								else
+									use_rs3_d = 1'b0;
+							end
+							5'b11101: begin
+								alu_operator_o = 7'd45;
+								alu_multicycle_o = 1'b1;
+								if (instr_first_cycle_i)
+									use_rs3_d = 1'b1;
+								else
+									use_rs3_d = 1'b0;
+							end
+							5'b10001: begin
+								alu_operator_o = 7'd47;
+								alu_multicycle_o = 1'b1;
+								if (instr_first_cycle_i)
+									use_rs3_d = 1'b1;
+								else
+									use_rs3_d = 1'b0;
+							end
+							5'b10101: begin
+								alu_operator_o = 7'd48;
+								alu_multicycle_o = 1'b1;
+								if (instr_first_cycle_i)
+									use_rs3_d = 1'b1;
+								else
+									use_rs3_d = 1'b0;
+							end
+							default:
+								;
+						endcase
+				end
+				else
+					(* full_case, parallel_case *)
+					case ({instr_alu[31:25], instr_alu[14:12]})
+						10'b0000000000: alu_operator_o = 7'd0;
+						10'b0100000000: alu_operator_o = 7'd1;
+						10'b0000000010: alu_operator_o = 7'd43;
+						10'b0000000011: alu_operator_o = 7'd44;
+						10'b0000000100: alu_operator_o = 7'd2;
+						10'b0000000110: alu_operator_o = 7'd3;
+						10'b0000000111: alu_operator_o = 7'd4;
+						10'b0000000001: alu_operator_o = 7'd10;
+						10'b0000000101: alu_operator_o = 7'd9;
+						10'b0100000101: alu_operator_o = 7'd8;
+						10'b0110000001:
+							if (RV32B != 32'sd0) begin
+								alu_operator_o = 7'd14;
+								alu_multicycle_o = 1'b1;
+							end
+						10'b0110000101:
+							if (RV32B != 32'sd0) begin
+								alu_operator_o = 7'd13;
+								alu_multicycle_o = 1'b1;
+							end
+						10'b0000101100:
+							if (RV32B != 32'sd0)
+								alu_operator_o = 7'd31;
+						10'b0000101110:
+							if (RV32B != 32'sd0)
+								alu_operator_o = 7'd33;
+						10'b0000101101:
+							if (RV32B != 32'sd0)
+								alu_operator_o = 7'd32;
+						10'b0000101111:
+							if (RV32B != 32'sd0)
+								alu_operator_o = 7'd34;
+						10'b0000100100:
+							if (RV32B != 32'sd0)
+								alu_operator_o = 7'd35;
+						10'b0100100100:
+							if (RV32B != 32'sd0)
+								alu_operator_o = 7'd36;
+						10'b0000100111:
+							if (RV32B != 32'sd0)
+								alu_operator_o = 7'd37;
+						10'b0100000100:
+							if (RV32B != 32'sd0)
+								alu_operator_o = 7'd5;
+						10'b0100000110:
+							if (RV32B != 32'sd0)
+								alu_operator_o = 7'd6;
+						10'b0100000111:
+							if (RV32B != 32'sd0)
+								alu_operator_o = 7'd7;
+						10'b0010000010:
+							if (RV32B != 32'sd0)
+								alu_operator_o = 7'd22;
+						10'b0010000100:
+							if (RV32B != 32'sd0)
+								alu_operator_o = 7'd23;
+						10'b0010000110:
+							if (RV32B != 32'sd0)
+								alu_operator_o = 7'd24;
+						10'b0100100001:
+							if (RV32B != 32'sd0)
+								alu_operator_o = 7'd50;
+						10'b0010100001:
+							if (RV32B != 32'sd0)
+								alu_operator_o = 7'd49;
+						10'b0110100001:
+							if (RV32B != 32'sd0)
+								alu_operator_o = 7'd51;
+						10'b0100100101:
+							if (RV32B != 32'sd0)
+								alu_operator_o = 7'd52;
+						10'b0100100111:
+							if (RV32B != 32'sd0)
+								alu_operator_o = 7'd55;
+						10'b0110100101:
+							if (RV32B != 32'sd0)
+								alu_operator_o = 7'd15;
+						10'b0010100101:
+							if (RV32B != 32'sd0)
+								alu_operator_o = 7'd16;
+						10'b0000100001:
+							if ((RV32B == 32'sd2) || (RV32B == 32'sd3))
+								alu_operator_o = 7'd17;
+						10'b0000100101:
+							if ((RV32B == 32'sd2) || (RV32B == 32'sd3))
+								alu_operator_o = 7'd18;
+						10'b0010100010:
+							if ((RV32B == 32'sd2) || (RV32B == 32'sd3))
+								alu_operator_o = 7'd19;
+						10'b0010100100:
+							if ((RV32B == 32'sd2) || (RV32B == 32'sd3))
+								alu_operator_o = 7'd20;
+						10'b0010100110:
+							if ((RV32B == 32'sd2) || (RV32B == 32'sd3))
+								alu_operator_o = 7'd21;
+						10'b0010000001:
+							if ((RV32B == 32'sd2) || (RV32B == 32'sd3))
+								alu_operator_o = 7'd12;
+						10'b0010000101:
+							if ((RV32B == 32'sd2) || (RV32B == 32'sd3))
+								alu_operator_o = 7'd11;
+						10'b0000101001:
+							if ((RV32B == 32'sd2) || (RV32B == 32'sd3))
+								alu_operator_o = 7'd56;
+						10'b0000101010:
+							if ((RV32B == 32'sd2) || (RV32B == 32'sd3))
+								alu_operator_o = 7'd57;
+						10'b0000101011:
+							if ((RV32B == 32'sd2) || (RV32B == 32'sd3))
+								alu_operator_o = 7'd58;
+						10'b0100100110:
+							if (RV32B == 32'sd3) begin
+								alu_operator_o = 7'd54;
+								alu_multicycle_o = 1'b1;
+							end
+						10'b0000100110:
+							if (RV32B == 32'sd3) begin
+								alu_operator_o = 7'd53;
+								alu_multicycle_o = 1'b1;
+							end
+						10'b0000001000: begin
+							alu_operator_o = 7'd0;
+							mult_sel_o = (RV32M == 32'sd0 ? 1'b0 : 1'b1);
+						end
+						10'b0000001001: begin
+							alu_operator_o = 7'd0;
+							mult_sel_o = (RV32M == 32'sd0 ? 1'b0 : 1'b1);
+						end
+						10'b0000001010: begin
+							alu_operator_o = 7'd0;
+							mult_sel_o = (RV32M == 32'sd0 ? 1'b0 : 1'b1);
+						end
+						10'b0000001011: begin
+							alu_operator_o = 7'd0;
+							mult_sel_o = (RV32M == 32'sd0 ? 1'b0 : 1'b1);
+						end
+						10'b0000001100: begin
+							alu_operator_o = 7'd0;
+							div_sel_o = (RV32M == 32'sd0 ? 1'b0 : 1'b1);
+						end
+						10'b0000001101: begin
+							alu_operator_o = 7'd0;
+							div_sel_o = (RV32M == 32'sd0 ? 1'b0 : 1'b1);
+						end
+						10'b0000001110: begin
+							alu_operator_o = 7'd0;
+							div_sel_o = (RV32M == 32'sd0 ? 1'b0 : 1'b1);
+						end
+						10'b0000001111: begin
+							alu_operator_o = 7'd0;
+							div_sel_o = (RV32M == 32'sd0 ? 1'b0 : 1'b1);
+						end
+						default:
+							;
+					endcase
+			end
+			7'h0f:
+				(* full_case, parallel_case *)
+				case (instr_alu[14:12])
+					3'b000: begin
+						alu_operator_o = 7'd0;
+						alu_op_a_mux_sel_o = 2'd0;
+						alu_op_b_mux_sel_o = 1'd1;
+					end
+					3'b001: begin
+						alu_op_a_mux_sel_o = 2'd2;
+						alu_op_b_mux_sel_o = 1'd1;
+						imm_b_mux_sel_o = 3'd5;
+						alu_operator_o = 7'd0;
+					end
+					default:
+						;
+				endcase
+			7'h73:
+				if (instr_alu[14:12] == 3'b000) begin
+					alu_op_a_mux_sel_o = 2'd0;
+					alu_op_b_mux_sel_o = 1'd1;
+				end
+				else begin
+					alu_op_b_mux_sel_o = 1'd1;
+					imm_a_mux_sel_o = 1'd0;
+					imm_b_mux_sel_o = 3'd0;
+					if (instr_alu[14])
+						alu_op_a_mux_sel_o = 2'd3;
+					else
+						alu_op_a_mux_sel_o = 2'd0;
+				end
+			default:
+				;
+		endcase
+	end
+	assign mult_en_o = (illegal_insn ? 1'b0 : mult_sel_o);
+	assign div_en_o = (illegal_insn ? 1'b0 : div_sel_o);
+	assign illegal_insn_o = illegal_insn | illegal_reg_rv32e;
+	assign rf_we_o = rf_we & ~illegal_reg_rv32e;
+	assign unused_instr_alu = {instr_alu[19:15], instr_alu[11:7]};
+	initial _sv2v_0 = 0;
+endmodule
+module cve2_ex_block (
+	clk_i,
+	rst_ni,
+	alu_operator_i,
+	alu_operand_a_i,
+	alu_operand_b_i,
+	alu_instr_first_cycle_i,
+	multdiv_operator_i,
+	mult_en_i,
+	div_en_i,
+	mult_sel_i,
+	div_sel_i,
+	multdiv_signed_mode_i,
+	multdiv_operand_a_i,
+	multdiv_operand_b_i,
+	imd_val_we_o,
+	imd_val_d_o,
+	imd_val_q_i,
+	alu_adder_result_ex_o,
+	result_ex_o,
+	branch_target_o,
+	branch_decision_o,
+	ex_valid_o
+);
+	parameter integer RV32M = 32'sd2;
+	parameter integer RV32B = 32'sd0;
+	input wire clk_i;
+	input wire rst_ni;
+	input wire [6:0] alu_operator_i;
+	input wire [31:0] alu_operand_a_i;
+	input wire [31:0] alu_operand_b_i;
+	input wire alu_instr_first_cycle_i;
+	input wire [1:0] multdiv_operator_i;
+	input wire mult_en_i;
+	input wire div_en_i;
+	input wire mult_sel_i;
+	input wire div_sel_i;
+	input wire [1:0] multdiv_signed_mode_i;
+	input wire [31:0] multdiv_operand_a_i;
+	input wire [31:0] multdiv_operand_b_i;
+	output wire [1:0] imd_val_we_o;
+	output wire [67:0] imd_val_d_o;
+	input wire [67:0] imd_val_q_i;
+	output wire [31:0] alu_adder_result_ex_o;
+	output wire [31:0] result_ex_o;
+	output wire [31:0] branch_target_o;
+	output wire branch_decision_o;
+	output wire ex_valid_o;
+	wire [31:0] alu_result;
+	wire [31:0] multdiv_result;
+	wire [32:0] multdiv_alu_operand_b;
+	wire [32:0] multdiv_alu_operand_a;
+	wire [33:0] alu_adder_result_ext;
+	wire alu_cmp_result;
+	wire alu_is_equal_result;
+	wire multdiv_valid;
+	wire multdiv_sel;
+	wire [63:0] alu_imd_val_q;
+	wire [63:0] alu_imd_val_d;
+	wire [1:0] alu_imd_val_we;
+	wire [67:0] multdiv_imd_val_d;
+	wire [1:0] multdiv_imd_val_we;
+	generate
+		if (RV32M != 32'sd0) begin : gen_multdiv_m
+			assign multdiv_sel = mult_sel_i | div_sel_i;
+		end
+		else begin : gen_multdiv_no_m
+			assign multdiv_sel = 1'b0;
+		end
+	endgenerate
+	assign imd_val_d_o[34+:34] = (multdiv_sel ? multdiv_imd_val_d[34+:34] : {2'b00, alu_imd_val_d[32+:32]});
+	assign imd_val_d_o[0+:34] = (multdiv_sel ? multdiv_imd_val_d[0+:34] : {2'b00, alu_imd_val_d[0+:32]});
+	assign imd_val_we_o = (multdiv_sel ? multdiv_imd_val_we : alu_imd_val_we);
+	assign alu_imd_val_q = {imd_val_q_i[65-:32], imd_val_q_i[31-:32]};
+	assign result_ex_o = (multdiv_sel ? multdiv_result : alu_result);
+	assign branch_decision_o = alu_cmp_result;
+	assign branch_target_o = alu_adder_result_ex_o;
+	cve2_alu #(.RV32B(RV32B)) alu_i(
+		.operator_i(alu_operator_i),
+		.operand_a_i(alu_operand_a_i),
+		.operand_b_i(alu_operand_b_i),
+		.instr_first_cycle_i(alu_instr_first_cycle_i),
+		.imd_val_q_i(alu_imd_val_q),
+		.imd_val_we_o(alu_imd_val_we),
+		.imd_val_d_o(alu_imd_val_d),
+		.multdiv_operand_a_i(multdiv_alu_operand_a),
+		.multdiv_operand_b_i(multdiv_alu_operand_b),
+		.multdiv_sel_i(multdiv_sel),
+		.adder_result_o(alu_adder_result_ex_o),
+		.adder_result_ext_o(alu_adder_result_ext),
+		.result_o(alu_result),
+		.comparison_result_o(alu_cmp_result),
+		.is_equal_result_o(alu_is_equal_result)
+	);
+	generate
+		if (RV32M == 32'sd1) begin : gen_multdiv_slow
+			cve2_multdiv_slow multdiv_i(
+				.clk_i(clk_i),
+				.rst_ni(rst_ni),
+				.mult_en_i(mult_en_i),
+				.div_en_i(div_en_i),
+				.mult_sel_i(mult_sel_i),
+				.div_sel_i(div_sel_i),
+				.operator_i(multdiv_operator_i),
+				.signed_mode_i(multdiv_signed_mode_i),
+				.op_a_i(multdiv_operand_a_i),
+				.op_b_i(multdiv_operand_b_i),
+				.alu_adder_ext_i(alu_adder_result_ext),
+				.alu_adder_i(alu_adder_result_ex_o),
+				.equal_to_zero_i(alu_is_equal_result),
+				.valid_o(multdiv_valid),
+				.alu_operand_a_o(multdiv_alu_operand_a),
+				.alu_operand_b_o(multdiv_alu_operand_b),
+				.imd_val_q_i(imd_val_q_i),
+				.imd_val_d_o(multdiv_imd_val_d),
+				.imd_val_we_o(multdiv_imd_val_we),
+				.multdiv_ready_id_i(1'b1),
+				.multdiv_result_o(multdiv_result)
+			);
+		end
+		else if ((RV32M == 32'sd2) || (RV32M == 32'sd3)) begin : gen_multdiv_fast
+			cve2_multdiv_fast #(.RV32M(RV32M)) multdiv_i(
+				.clk_i(clk_i),
+				.rst_ni(rst_ni),
+				.mult_en_i(mult_en_i),
+				.div_en_i(div_en_i),
+				.mult_sel_i(mult_sel_i),
+				.div_sel_i(div_sel_i),
+				.operator_i(multdiv_operator_i),
+				.signed_mode_i(multdiv_signed_mode_i),
+				.op_a_i(multdiv_operand_a_i),
+				.op_b_i(multdiv_operand_b_i),
+				.alu_operand_a_o(multdiv_alu_operand_a),
+				.alu_operand_b_o(multdiv_alu_operand_b),
+				.alu_adder_ext_i(alu_adder_result_ext),
+				.alu_adder_i(alu_adder_result_ex_o),
+				.equal_to_zero_i(alu_is_equal_result),
+				.imd_val_q_i(imd_val_q_i),
+				.imd_val_d_o(multdiv_imd_val_d),
+				.imd_val_we_o(multdiv_imd_val_we),
+				.valid_o(multdiv_valid),
+				.multdiv_result_o(multdiv_result)
+			);
+		end
+		else begin : gen_no_multdiv
+			assign multdiv_result = 1'sb0;
+			assign multdiv_alu_operand_a = 1'sb0;
+			assign multdiv_alu_operand_b = 1'sb0;
+			assign multdiv_valid = 1'sb0;
+			assign multdiv_imd_val_d = 68'b00000000000000000000000000000000000000000000000000000000000000000000;
+			assign multdiv_imd_val_we = 1'sb0;
+		end
+	endgenerate
+	assign ex_valid_o = (multdiv_sel ? multdiv_valid : ~(|alu_imd_val_we));
+endmodule
+module cve2_fetch_fifo (
+	clk_i,
+	rst_ni,
+	clear_i,
+	busy_o,
+	in_valid_i,
+	in_addr_i,
+	in_rdata_i,
+	in_err_i,
+	out_valid_o,
+	out_ready_i,
+	out_addr_o,
+	out_rdata_o,
+	out_err_o,
+	out_err_plus2_o
+);
+	reg _sv2v_0;
+	parameter [31:0] NUM_REQS = 2;
+	input wire clk_i;
+	input wire rst_ni;
+	input wire clear_i;
+	output wire [NUM_REQS - 1:0] busy_o;
+	input wire in_valid_i;
+	input wire [31:0] in_addr_i;
+	input wire [31:0] in_rdata_i;
+	input wire in_err_i;
+	output reg out_valid_o;
+	input wire out_ready_i;
+	output wire [31:0] out_addr_o;
+	output reg [31:0] out_rdata_o;
+	output reg out_err_o;
+	output reg out_err_plus2_o;
+	localparam [31:0] DEPTH = NUM_REQS + 1;
+	wire [(DEPTH * 32) - 1:0] rdata_d;
+	reg [(DEPTH * 32) - 1:0] rdata_q;
+	wire [DEPTH - 1:0] err_d;
+	reg [DEPTH - 1:0] err_q;
+	wire [DEPTH - 1:0] valid_d;
+	reg [DEPTH - 1:0] valid_q;
+	wire [DEPTH - 1:0] lowest_free_entry;
+	wire [DEPTH - 1:0] valid_pushed;
+	wire [DEPTH - 1:0] valid_popped;
+	wire [DEPTH - 1:0] entry_en;
+	wire pop_fifo;
+	wire [31:0] rdata;
+	wire [31:0] rdata_unaligned;
+	wire err;
+	wire err_unaligned;
+	wire err_plus2;
+	wire valid;
+	wire valid_unaligned;
+	wire aligned_is_compressed;
+	wire unaligned_is_compressed;
+	wire addr_incr_two;
+	wire [31:1] instr_addr_next;
+	wire [31:1] instr_addr_d;
+	reg [31:1] instr_addr_q;
+	wire instr_addr_en;
+	wire unused_addr_in;
+	assign rdata = (valid_q[0] ? rdata_q[0+:32] : in_rdata_i);
+	assign err = (valid_q[0] ? err_q[0] : in_err_i);
+	assign valid = valid_q[0] | in_valid_i;
+	assign rdata_unaligned = (valid_q[1] ? {rdata_q[47-:16], rdata[31:16]} : {in_rdata_i[15:0], rdata[31:16]});
+	assign err_unaligned = (valid_q[1] ? (err_q[1] & ~unaligned_is_compressed) | err_q[0] : (valid_q[0] & err_q[0]) | (in_err_i & (~valid_q[0] | ~unaligned_is_compressed)));
+	assign err_plus2 = (valid_q[1] ? err_q[1] & ~err_q[0] : (in_err_i & valid_q[0]) & ~err_q[0]);
+	assign valid_unaligned = (valid_q[1] ? 1'b1 : valid_q[0] & in_valid_i);
+	assign unaligned_is_compressed = (rdata[17:16] != 2'b11) & ~err;
+	assign aligned_is_compressed = (rdata[1:0] != 2'b11) & ~err;
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		if (out_addr_o[1]) begin
+			out_rdata_o = rdata_unaligned;
+			out_err_o = err_unaligned;
+			out_err_plus2_o = err_plus2;
+			if (unaligned_is_compressed)
+				out_valid_o = valid;
+			else
+				out_valid_o = valid_unaligned;
+		end
+		else begin
+			out_rdata_o = rdata;
+			out_err_o = err;
+			out_err_plus2_o = 1'b0;
+			out_valid_o = valid;
+		end
+	end
+	assign instr_addr_en = clear_i | (out_ready_i & out_valid_o);
+	assign addr_incr_two = (instr_addr_q[1] ? unaligned_is_compressed : aligned_is_compressed);
+	assign instr_addr_next = instr_addr_q[31:1] + {29'd0, ~addr_incr_two, addr_incr_two};
+	assign instr_addr_d = (clear_i ? in_addr_i[31:1] : instr_addr_next);
+	always @(posedge clk_i or negedge rst_ni)
+		if (!rst_ni)
+			instr_addr_q <= 1'sb0;
+		else if (instr_addr_en)
+			instr_addr_q <= instr_addr_d;
+	assign out_addr_o = {instr_addr_q, 1'b0};
+	assign unused_addr_in = in_addr_i[0];
+	assign busy_o = valid_q[DEPTH - 1:DEPTH - NUM_REQS];
+	assign pop_fifo = (out_ready_i & out_valid_o) & (~aligned_is_compressed | out_addr_o[1]);
+	genvar _gv_i_28;
+	generate
+		for (_gv_i_28 = 0; _gv_i_28 < (DEPTH - 1); _gv_i_28 = _gv_i_28 + 1) begin : g_fifo_next
+			localparam i = _gv_i_28;
+			if (i == 0) begin : g_ent0
+				assign lowest_free_entry[i] = ~valid_q[i];
+			end
+			else begin : g_ent_others
+				assign lowest_free_entry[i] = ~valid_q[i] & valid_q[i - 1];
+			end
+			assign valid_pushed[i] = (in_valid_i & lowest_free_entry[i]) | valid_q[i];
+			assign valid_popped[i] = (pop_fifo ? valid_pushed[i + 1] : valid_pushed[i]);
+			assign valid_d[i] = valid_popped[i] & ~clear_i;
+			assign entry_en[i] = (valid_pushed[i + 1] & pop_fifo) | ((in_valid_i & lowest_free_entry[i]) & ~pop_fifo);
+			assign rdata_d[i * 32+:32] = (valid_q[i + 1] ? rdata_q[(i + 1) * 32+:32] : in_rdata_i);
+			assign err_d[i] = (valid_q[i + 1] ? err_q[i + 1] : in_err_i);
+		end
+	endgenerate
+	assign lowest_free_entry[DEPTH - 1] = ~valid_q[DEPTH - 1] & valid_q[DEPTH - 2];
+	assign valid_pushed[DEPTH - 1] = valid_q[DEPTH - 1] | (in_valid_i & lowest_free_entry[DEPTH - 1]);
+	assign valid_popped[DEPTH - 1] = (pop_fifo ? 1'b0 : valid_pushed[DEPTH - 1]);
+	assign valid_d[DEPTH - 1] = valid_popped[DEPTH - 1] & ~clear_i;
+	assign entry_en[DEPTH - 1] = in_valid_i & lowest_free_entry[DEPTH - 1];
+	assign rdata_d[(DEPTH - 1) * 32+:32] = in_rdata_i;
+	assign err_d[DEPTH - 1] = in_err_i;
+	always @(posedge clk_i or negedge rst_ni)
+		if (!rst_ni)
+			valid_q <= 1'sb0;
+		else
+			valid_q <= valid_d;
+	genvar _gv_i_29;
+	generate
+		for (_gv_i_29 = 0; _gv_i_29 < DEPTH; _gv_i_29 = _gv_i_29 + 1) begin : g_fifo_regs
+			localparam i = _gv_i_29;
+			always @(posedge clk_i or negedge rst_ni)
+				if (!rst_ni) begin
+					rdata_q[i * 32+:32] <= 1'sb0;
+					err_q[i] <= 1'sb0;
+				end
+				else if (entry_en[i]) begin
+					rdata_q[i * 32+:32] <= rdata_d[i * 32+:32];
+					err_q[i] <= err_d[i];
+				end
+		end
+	endgenerate
+	initial _sv2v_0 = 0;
+endmodule
+module cve2_id_stage (
+	clk_i,
+	rst_ni,
+	fetch_enable_i,
+	ctrl_busy_o,
+	illegal_insn_o,
+	instr_valid_i,
+	instr_rdata_i,
+	instr_rdata_alu_i,
+	instr_rdata_c_i,
+	instr_is_compressed_i,
+	instr_req_o,
+	instr_first_cycle_id_o,
+	instr_valid_clear_o,
+	id_in_ready_o,
+	branch_decision_i,
+	pc_set_o,
+	pc_mux_o,
+	exc_pc_mux_o,
+	exc_cause_o,
+	illegal_c_insn_i,
+	instr_fetch_err_i,
+	instr_fetch_err_plus2_i,
+	pc_id_i,
+	ex_valid_i,
+	lsu_resp_valid_i,
+	alu_operator_ex_o,
+	alu_operand_a_ex_o,
+	alu_operand_b_ex_o,
+	imd_val_we_ex_i,
+	imd_val_d_ex_i,
+	imd_val_q_ex_o,
+	mult_en_ex_o,
+	div_en_ex_o,
+	mult_sel_ex_o,
+	div_sel_ex_o,
+	multdiv_operator_ex_o,
+	multdiv_signed_mode_ex_o,
+	multdiv_operand_a_ex_o,
+	multdiv_operand_b_ex_o,
+	csr_access_o,
+	csr_op_o,
+	csr_op_en_o,
+	csr_save_if_o,
+	csr_save_id_o,
+	csr_restore_mret_id_o,
+	csr_restore_dret_id_o,
+	csr_save_cause_o,
+	csr_mtval_o,
+	priv_mode_i,
+	csr_mstatus_tw_i,
+	illegal_csr_insn_i,
+	lsu_req_o,
+	lsu_we_o,
+	lsu_type_o,
+	lsu_sign_ext_o,
+	lsu_wdata_o,
+	lsu_addr_incr_req_i,
+	lsu_addr_last_i,
+	hart_id_i,
+	x_issue_valid_o,
+	x_issue_ready_i,
+	x_issue_req_o,
+	x_issue_resp_i,
+	x_register_o,
+	x_commit_valid_o,
+	x_commit_o,
+	x_result_valid_i,
+	x_result_ready_o,
+	x_result_i,
+	csr_mstatus_mie_i,
+	irq_pending_i,
+	irqs_i,
+	irq_nm_i,
+	nmi_mode_o,
+	lsu_load_err_i,
+	lsu_store_err_i,
+	debug_mode_o,
+	debug_cause_o,
+	debug_csr_save_o,
+	debug_req_i,
+	debug_single_step_i,
+	debug_ebreakm_i,
+	debug_ebreaku_i,
+	trigger_match_i,
+	result_ex_i,
+	csr_rdata_i,
+	rf_raddr_a_o,
+	rf_rdata_a_i,
+	rf_raddr_b_o,
+	rf_rdata_b_i,
+	rf_raddr_c_o,
+	rf_rdata_c_i,
+	rf_ren_a_o,
+	rf_ren_b_o,
+	rf_ren_c_o,
+	rf_waddr_id_o,
+	rf_wdata_id_o,
+	rf_we_id_o,
+	en_wb_o,
+	instr_perf_count_id_o,
+	perf_jump_o,
+	perf_branch_o,
+	perf_tbranch_o,
+	perf_dside_wait_o,
+	perf_wfi_wait_o,
+	perf_div_wait_o,
+	instr_id_done_o
+);
+	reg _sv2v_0;
+	parameter [0:0] RV32E = 0;
+	parameter integer RV32M = 32'sd2;
+	parameter integer RV32B = 32'sd0;
+	parameter [0:0] XInterface = 1'b0;
+	input wire clk_i;
+	input wire rst_ni;
+	input wire fetch_enable_i;
+	output wire ctrl_busy_o;
+	output wire illegal_insn_o;
+	input wire instr_valid_i;
+	input wire [31:0] instr_rdata_i;
+	input wire [31:0] instr_rdata_alu_i;
+	input wire [15:0] instr_rdata_c_i;
+	input wire instr_is_compressed_i;
+	output wire instr_req_o;
+	output wire instr_first_cycle_id_o;
+	output wire instr_valid_clear_o;
+	output wire id_in_ready_o;
+	input wire branch_decision_i;
+	output wire pc_set_o;
+	output wire [2:0] pc_mux_o;
+	output wire [1:0] exc_pc_mux_o;
+	output wire [6:0] exc_cause_o;
+	input wire illegal_c_insn_i;
+	input wire instr_fetch_err_i;
+	input wire instr_fetch_err_plus2_i;
+	input wire [31:0] pc_id_i;
+	input wire ex_valid_i;
+	input wire lsu_resp_valid_i;
+	output wire [6:0] alu_operator_ex_o;
+	output wire [31:0] alu_operand_a_ex_o;
+	output wire [31:0] alu_operand_b_ex_o;
+	input wire [1:0] imd_val_we_ex_i;
+	input wire [67:0] imd_val_d_ex_i;
+	output wire [67:0] imd_val_q_ex_o;
+	output wire mult_en_ex_o;
+	output wire div_en_ex_o;
+	output wire mult_sel_ex_o;
+	output wire div_sel_ex_o;
+	output wire [1:0] multdiv_operator_ex_o;
+	output wire [1:0] multdiv_signed_mode_ex_o;
+	output wire [31:0] multdiv_operand_a_ex_o;
+	output wire [31:0] multdiv_operand_b_ex_o;
+	output wire csr_access_o;
+	output wire [1:0] csr_op_o;
+	output wire csr_op_en_o;
+	output wire csr_save_if_o;
+	output wire csr_save_id_o;
+	output wire csr_restore_mret_id_o;
+	output wire csr_restore_dret_id_o;
+	output wire csr_save_cause_o;
+	output wire [31:0] csr_mtval_o;
+	input wire [1:0] priv_mode_i;
+	input wire csr_mstatus_tw_i;
+	input wire illegal_csr_insn_i;
+	output wire lsu_req_o;
+	output wire lsu_we_o;
+	output wire [1:0] lsu_type_o;
+	output wire lsu_sign_ext_o;
+	output wire [31:0] lsu_wdata_o;
+	input wire lsu_addr_incr_req_i;
+	input wire [31:0] lsu_addr_last_i;
+	input wire [31:0] hart_id_i;
+	output wire x_issue_valid_o;
+	input wire x_issue_ready_i;
+	localparam [31:0] cve2_pkg_X_HARTID_WIDTH = 32;
+	localparam [31:0] cve2_pkg_X_ID_WIDTH = 4;
+	output wire [67:0] x_issue_req_o;
+	localparam [31:0] cve2_pkg_X_DUAL_READ = 0;
+	localparam [31:0] cve2_pkg_X_NUM_RS = 3;
+	localparam [31:0] cve2_pkg_X_DUAL_WRITE = 0;
+	input wire [(2 + (cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ)) - 1:0] x_issue_resp_i;
+	localparam [31:0] cve2_pkg_X_RFR_WIDTH = 32;
+	output wire [(((cve2_pkg_X_HARTID_WIDTH + cve2_pkg_X_ID_WIDTH) + (cve2_pkg_X_NUM_RS * cve2_pkg_X_RFR_WIDTH)) + (cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ)) - 1:0] x_register_o;
+	output wire x_commit_valid_o;
+	output wire [(cve2_pkg_X_HARTID_WIDTH + cve2_pkg_X_ID_WIDTH) + 0:0] x_commit_o;
+	input wire x_result_valid_i;
+	output wire x_result_ready_o;
+	localparam [31:0] cve2_pkg_X_RFW_WIDTH = 32;
+	input wire [((cve2_pkg_X_HARTID_WIDTH + cve2_pkg_X_ID_WIDTH) + cve2_pkg_X_RFW_WIDTH) + 5:0] x_result_i;
+	input wire csr_mstatus_mie_i;
+	input wire irq_pending_i;
+	input wire [18:0] irqs_i;
+	input wire irq_nm_i;
+	output wire nmi_mode_o;
+	input wire lsu_load_err_i;
+	input wire lsu_store_err_i;
+	output wire debug_mode_o;
+	output wire [2:0] debug_cause_o;
+	output wire debug_csr_save_o;
+	input wire debug_req_i;
+	input wire debug_single_step_i;
+	input wire debug_ebreakm_i;
+	input wire debug_ebreaku_i;
+	input wire trigger_match_i;
+	input wire [31:0] result_ex_i;
+	input wire [31:0] csr_rdata_i;
+	output wire [4:0] rf_raddr_a_o;
+	input wire [31:0] rf_rdata_a_i;
+	output wire [4:0] rf_raddr_b_o;
+	input wire [31:0] rf_rdata_b_i;
+	output wire [4:0] rf_raddr_c_o;
+	input wire [31:0] rf_rdata_c_i;
+	output wire rf_ren_a_o;
+	output wire rf_ren_b_o;
+	output wire rf_ren_c_o;
+	output reg [4:0] rf_waddr_id_o;
+	output reg [31:0] rf_wdata_id_o;
+	output wire rf_we_id_o;
+	output wire en_wb_o;
+	output wire instr_perf_count_id_o;
+	output wire perf_jump_o;
+	output reg perf_branch_o;
+	output wire perf_tbranch_o;
+	output wire perf_dside_wait_o;
+	output wire perf_wfi_wait_o;
+	output wire perf_div_wait_o;
+	output wire instr_id_done_o;
+	wire illegal_insn_dec;
+	wire ebrk_insn;
+	wire mret_insn_dec;
+	wire dret_insn_dec;
+	wire ecall_insn_dec;
+	wire wfi_insn_dec;
+	wire branch_in_dec;
+	wire branch_set;
+	wire branch_set_raw;
+	reg branch_set_raw_d;
+	reg branch_jump_set_done_q;
+	wire branch_jump_set_done_d;
+	wire jump_in_dec;
+	wire jump_set_dec;
+	wire jump_set;
+	reg jump_set_raw;
+	wire instr_first_cycle;
+	wire instr_executing_spec;
+	wire instr_executing;
+	wire instr_done;
+	wire controller_run;
+	wire stall_mem;
+	reg stall_multdiv;
+	reg stall_branch;
+	reg stall_jump;
+	wire stall_id;
+	wire flush_id;
+	wire multicycle_done;
+	wire [31:0] imm_i_type;
+	wire [31:0] imm_s_type;
+	wire [31:0] imm_b_type;
+	wire [31:0] imm_u_type;
+	wire [31:0] imm_j_type;
+	wire [31:0] zimm_rs1_type;
+	wire [31:0] imm_a;
+	reg [31:0] imm_b;
+	wire [XInterface:0] rf_wdata_sel;
+	wire rf_we_dec;
+	reg rf_we_raw;
+	wire rf_ren_a;
+	wire rf_ren_b;
+	wire rf_ren_c;
+	wire rf_ren_a_dec;
+	wire rf_ren_b_dec;
+	wire rf_ren_c_dec;
+	wire [4:0] rf_waddr_id;
+	assign rf_ren_a = ((instr_valid_i & ~instr_fetch_err_i) & ~illegal_insn_o) & rf_ren_a_dec;
+	assign rf_ren_b = ((instr_valid_i & ~instr_fetch_err_i) & ~illegal_insn_o) & rf_ren_b_dec;
+	assign rf_ren_c = ((instr_valid_i & ~instr_fetch_err_i) & ~illegal_insn_o) & rf_ren_c_dec;
+	assign rf_ren_a_o = rf_ren_a;
+	assign rf_ren_b_o = rf_ren_b;
+	assign rf_ren_c_o = (XInterface ? rf_ren_c : 1'b0);
+	wire [31:0] rf_rdata_a_fwd;
+	wire [31:0] rf_rdata_b_fwd;
+	wire [31:0] rf_rdata_c_fwd;
+	wire [6:0] alu_operator;
+	wire [1:0] alu_op_a_mux_sel;
+	wire [1:0] alu_op_a_mux_sel_dec;
+	wire alu_op_b_mux_sel;
+	wire alu_op_b_mux_sel_dec;
+	wire alu_multicycle_dec;
+	reg stall_alu;
+	reg [67:0] imd_val_q;
+	wire imm_a_mux_sel;
+	wire [2:0] imm_b_mux_sel;
+	wire [2:0] imm_b_mux_sel_dec;
+	wire mult_en_id;
+	wire mult_en_dec;
+	wire div_en_id;
+	wire div_en_dec;
+	wire multdiv_en_dec;
+	wire [1:0] multdiv_operator;
+	wire [1:0] multdiv_signed_mode;
+	wire lsu_we;
+	wire [1:0] lsu_type;
+	wire lsu_sign_ext;
+	wire lsu_req;
+	wire lsu_req_dec;
+	wire data_req_allowed;
+	reg csr_pipe_flush;
+	reg [31:0] alu_operand_a;
+	wire [31:0] alu_operand_b;
+	reg stall_coproc;
+	wire scoreboard_busy;
+	reg id_fsm_q;
+	reg id_fsm_d;
+	always @(posedge clk_i or negedge rst_ni) begin : id_pipeline_reg
+		if (!rst_ni)
+			id_fsm_q <= 1'd0;
+		else if (instr_executing)
+			id_fsm_q <= id_fsm_d;
+	end
+	reg coproc_done;
+	localparam [31:0] cve2_pkg_X_INSTR_INFLIGHT = 16;
+	generate
+		if (XInterface) begin : gen_xif
+			reg [15:0] scoreboard_d;
+			reg [15:0] scoreboard_q;
+			reg [3:0] x_instr_id_d;
+			reg [3:0] x_instr_id_q;
+			wire scoreboard_free;
+			assign scoreboard_free = ~scoreboard_q[x_instr_id_q];
+			assign scoreboard_busy = scoreboard_q != {16 {1'sb0}};
+			always @(*) begin
+				if (_sv2v_0)
+					;
+				scoreboard_d = scoreboard_q;
+				x_instr_id_d = x_instr_id_q;
+				if ((x_issue_valid_o && x_issue_ready_i) && x_issue_resp_i[1 + ((cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) + 0)]) begin
+					scoreboard_d[x_instr_id_q] = 1'b1;
+					x_instr_id_d = x_instr_id_q + 1'b1;
+				end
+				if (x_result_valid_i)
+					scoreboard_d[x_result_i[41-:4]] = 1'b0;
+			end
+			always @(posedge clk_i or negedge rst_ni) begin : x_scoreboard
+				if (!rst_ni) begin
+					scoreboard_q <= 1'sb0;
+					x_instr_id_q <= 1'sb0;
+				end
+				else begin
+					scoreboard_q <= scoreboard_d;
+					x_instr_id_q <= x_instr_id_d;
+				end
+			end
+			assign multicycle_done = (lsu_req_dec ? lsu_resp_valid_i : (illegal_insn_dec ? coproc_done : ex_valid_i));
+			assign x_issue_valid_o = ((instr_executing & illegal_insn_dec) & (id_fsm_q == 1'd0)) & scoreboard_free;
+			assign x_issue_req_o[67-:32] = instr_rdata_i;
+			assign x_issue_req_o[3-:cve2_pkg_X_ID_WIDTH] = x_instr_id_q;
+			assign x_issue_req_o[35-:32] = hart_id_i;
+			assign x_register_o[((cve2_pkg_X_NUM_RS * cve2_pkg_X_RFR_WIDTH) + ((cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) - 1)) - ((cve2_pkg_X_NUM_RS * cve2_pkg_X_RFR_WIDTH) - 1)+:cve2_pkg_X_RFR_WIDTH] = rf_rdata_a_fwd;
+			assign x_register_o[((cve2_pkg_X_NUM_RS * cve2_pkg_X_RFR_WIDTH) + ((cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) - 1)) - (((cve2_pkg_X_NUM_RS * cve2_pkg_X_RFR_WIDTH) - 1) - cve2_pkg_X_RFR_WIDTH)+:cve2_pkg_X_RFR_WIDTH] = rf_rdata_b_fwd;
+			assign x_register_o[((cve2_pkg_X_NUM_RS * cve2_pkg_X_RFR_WIDTH) + ((cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) - 1)) - ((cve2_pkg_X_NUM_RS * cve2_pkg_X_RFR_WIDTH) - 65)+:cve2_pkg_X_RFR_WIDTH] = rf_rdata_c_fwd;
+			assign x_register_o[(cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) - 1-:cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ] = 1'sb1;
+			assign x_register_o[cve2_pkg_X_ID_WIDTH + ((cve2_pkg_X_NUM_RS * cve2_pkg_X_RFR_WIDTH) + ((cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) - 1))-:((cve2_pkg_X_ID_WIDTH + ((cve2_pkg_X_NUM_RS * cve2_pkg_X_RFR_WIDTH) + ((cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) - 1))) >= ((cve2_pkg_X_NUM_RS * cve2_pkg_X_RFR_WIDTH) + ((cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) + 0)) ? ((cve2_pkg_X_ID_WIDTH + ((cve2_pkg_X_NUM_RS * cve2_pkg_X_RFR_WIDTH) + ((cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) - 1))) - ((cve2_pkg_X_NUM_RS * cve2_pkg_X_RFR_WIDTH) + ((cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) + 0))) + 1 : (((cve2_pkg_X_NUM_RS * cve2_pkg_X_RFR_WIDTH) + ((cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) + 0)) - (cve2_pkg_X_ID_WIDTH + ((cve2_pkg_X_NUM_RS * cve2_pkg_X_RFR_WIDTH) + ((cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) - 1)))) + 1)] = x_instr_id_q;
+			assign x_register_o[cve2_pkg_X_HARTID_WIDTH + (cve2_pkg_X_ID_WIDTH + ((cve2_pkg_X_NUM_RS * cve2_pkg_X_RFR_WIDTH) + ((cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) - 1)))-:(((32'd32 + 32'd4) + ((32'd3 * 32'd32) + ((32'd3 + 32'd0) - 1))) >= (32'd4 + ((32'd3 * 32'd32) + ((32'd3 + 32'd0) + 0))) ? ((cve2_pkg_X_HARTID_WIDTH + (cve2_pkg_X_ID_WIDTH + ((cve2_pkg_X_NUM_RS * cve2_pkg_X_RFR_WIDTH) + ((cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) - 1)))) - (cve2_pkg_X_ID_WIDTH + ((cve2_pkg_X_NUM_RS * cve2_pkg_X_RFR_WIDTH) + ((cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) + 0)))) + 1 : ((cve2_pkg_X_ID_WIDTH + ((cve2_pkg_X_NUM_RS * cve2_pkg_X_RFR_WIDTH) + ((cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) + 0))) - (cve2_pkg_X_HARTID_WIDTH + (cve2_pkg_X_ID_WIDTH + ((cve2_pkg_X_NUM_RS * cve2_pkg_X_RFR_WIDTH) + ((cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) - 1))))) + 1)] = hart_id_i;
+			assign x_commit_valid_o = x_issue_valid_o & x_issue_ready_i;
+			assign x_commit_o[0] = 1'b0;
+			assign x_commit_o[4-:4] = x_instr_id_q;
+			assign x_commit_o[36-:32] = hart_id_i;
+			assign x_result_ready_o = 1'b1;
+			assign illegal_insn_o = instr_valid_i & (illegal_csr_insn_i | ((x_issue_valid_o & x_issue_ready_i) & ~x_issue_resp_i[1 + ((cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) + 0)]));
+		end
+		else begin : no_gen_xif
+			wire unused_x_issue_ready;
+			wire [(2 + (cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ)) - 1:0] unused_x_issue_resp;
+			wire unused_x_result_valid;
+			wire [((cve2_pkg_X_HARTID_WIDTH + cve2_pkg_X_ID_WIDTH) + cve2_pkg_X_RFW_WIDTH) + 5:0] unused_x_result;
+			wire unused_coproc_done;
+			wire [31:0] unused_rf_rdata_c_fwd;
+			assign unused_coproc_done = coproc_done;
+			assign unused_rf_rdata_c_fwd = rf_rdata_c_fwd;
+			assign multicycle_done = (lsu_req_dec ? lsu_resp_valid_i : ex_valid_i);
+			assign scoreboard_busy = 1'b0;
+			assign x_issue_valid_o = 1'b0;
+			assign unused_x_issue_ready = x_issue_ready_i;
+			assign x_issue_req_o = 1'sb0;
+			assign unused_x_issue_resp = x_issue_resp_i;
+			assign x_register_o = 1'sb0;
+			assign x_commit_valid_o = 1'b0;
+			assign x_commit_o = 1'sb0;
+			assign x_result_ready_o = 1'b0;
+			assign unused_x_result_valid = x_result_valid_i;
+			assign unused_x_result = x_result_i;
+			assign illegal_insn_o = instr_valid_i & (illegal_csr_insn_i | illegal_insn_dec);
+		end
+	endgenerate
+	assign alu_op_a_mux_sel = (lsu_addr_incr_req_i ? 2'd1 : alu_op_a_mux_sel_dec);
+	assign alu_op_b_mux_sel = (lsu_addr_incr_req_i ? 1'd1 : alu_op_b_mux_sel_dec);
+	assign imm_b_mux_sel = (lsu_addr_incr_req_i ? 3'd6 : imm_b_mux_sel_dec);
+	assign imm_a = (imm_a_mux_sel == 1'd0 ? zimm_rs1_type : {32 {1'sb0}});
+	always @(*) begin : alu_operand_a_mux
+		if (_sv2v_0)
+			;
+		(* full_case, parallel_case *)
+		case (alu_op_a_mux_sel)
+			2'd0: alu_operand_a = rf_rdata_a_fwd;
+			2'd1: alu_operand_a = lsu_addr_last_i;
+			2'd2: alu_operand_a = pc_id_i;
+			2'd3: alu_operand_a = imm_a;
+			default: alu_operand_a = pc_id_i;
+		endcase
+	end
+	wire [1:0] unused_a_mux_sel;
+	wire [2:0] unused_b_mux_sel;
+	always @(*) begin : immediate_b_mux
+		if (_sv2v_0)
+			;
+		(* full_case, parallel_case *)
+		case (imm_b_mux_sel)
+			3'd0: imm_b = imm_i_type;
+			3'd1: imm_b = imm_s_type;
+			3'd2: imm_b = imm_b_type;
+			3'd3: imm_b = imm_u_type;
+			3'd4: imm_b = imm_j_type;
+			3'd5: imm_b = (instr_is_compressed_i ? 32'h00000002 : 32'h00000004);
+			3'd6: imm_b = 32'h00000004;
+			default: imm_b = 32'h00000004;
+		endcase
+	end
+	assign alu_operand_b = (alu_op_b_mux_sel == 1'd1 ? imm_b : rf_rdata_b_fwd);
+	genvar _gv_i_30;
+	generate
+		for (_gv_i_30 = 0; _gv_i_30 < 2; _gv_i_30 = _gv_i_30 + 1) begin : gen_intermediate_val_reg
+			localparam i = _gv_i_30;
+			always @(posedge clk_i or negedge rst_ni) begin : intermediate_val_reg
+				if (!rst_ni)
+					imd_val_q[(1 - i) * 34+:34] <= 1'sb0;
+				else if (imd_val_we_ex_i[i])
+					imd_val_q[(1 - i) * 34+:34] <= imd_val_d_ex_i[(1 - i) * 34+:34];
+			end
+		end
+	endgenerate
+	assign imd_val_q_ex_o = imd_val_q;
+	assign rf_we_id_o = (rf_we_raw & instr_executing) & ~illegal_csr_insn_i;
+	function automatic [31:0] sv2v_cast_32;
+		input reg [31:0] inp;
+		sv2v_cast_32 = inp;
+	endfunction
+	always @(*) begin : rf_wdata_id_mux
+		if (_sv2v_0)
+			;
+		(* full_case, parallel_case *)
+		case (sv2v_cast_32({rf_wdata_sel}))
+			32'd0: rf_wdata_id_o = result_ex_i;
+			32'd1: rf_wdata_id_o = csr_rdata_i;
+			32'd2: rf_wdata_id_o = (XInterface ? x_result_i[37-:32] : result_ex_i);
+			default: rf_wdata_id_o = result_ex_i;
+		endcase
+	end
+	always @(*) begin : rf_waddr_id_mux
+		if (_sv2v_0)
+			;
+		(* full_case, parallel_case *)
+		case (sv2v_cast_32({rf_wdata_sel}))
+			32'd2: rf_waddr_id_o = (XInterface ? x_result_i[5-:5] : rf_waddr_id);
+			default: rf_waddr_id_o = rf_waddr_id;
+		endcase
+	end
+	cve2_decoder #(
+		.RV32E(RV32E),
+		.RV32M(RV32M),
+		.RV32B(RV32B),
+		.XInterface(XInterface)
+	) decoder_i(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.illegal_insn_o(illegal_insn_dec),
+		.ebrk_insn_o(ebrk_insn),
+		.mret_insn_o(mret_insn_dec),
+		.dret_insn_o(dret_insn_dec),
+		.ecall_insn_o(ecall_insn_dec),
+		.wfi_insn_o(wfi_insn_dec),
+		.jump_set_o(jump_set_dec),
+		.instr_first_cycle_i(instr_first_cycle),
+		.instr_rdata_i(instr_rdata_i),
+		.instr_rdata_alu_i(instr_rdata_alu_i),
+		.illegal_c_insn_i(illegal_c_insn_i),
+		.imm_a_mux_sel_o(imm_a_mux_sel),
+		.imm_b_mux_sel_o(imm_b_mux_sel_dec),
+		.imm_i_type_o(imm_i_type),
+		.imm_s_type_o(imm_s_type),
+		.imm_b_type_o(imm_b_type),
+		.imm_u_type_o(imm_u_type),
+		.imm_j_type_o(imm_j_type),
+		.zimm_rs1_type_o(zimm_rs1_type),
+		.rf_wdata_sel_o(rf_wdata_sel),
+		.rf_we_o(rf_we_dec),
+		.rf_raddr_a_o(rf_raddr_a_o),
+		.rf_raddr_b_o(rf_raddr_b_o),
+		.rf_raddr_c_o(rf_raddr_c_o),
+		.rf_waddr_o(rf_waddr_id),
+		.rf_ren_a_o(rf_ren_a_dec),
+		.rf_ren_b_o(rf_ren_b_dec),
+		.rf_ren_c_o(rf_ren_c_dec),
+		.alu_operator_o(alu_operator),
+		.alu_op_a_mux_sel_o(alu_op_a_mux_sel_dec),
+		.alu_op_b_mux_sel_o(alu_op_b_mux_sel_dec),
+		.alu_multicycle_o(alu_multicycle_dec),
+		.mult_en_o(mult_en_dec),
+		.div_en_o(div_en_dec),
+		.mult_sel_o(mult_sel_ex_o),
+		.div_sel_o(div_sel_ex_o),
+		.multdiv_operator_o(multdiv_operator),
+		.multdiv_signed_mode_o(multdiv_signed_mode),
+		.csr_access_o(csr_access_o),
+		.csr_op_o(csr_op_o),
+		.data_req_o(lsu_req_dec),
+		.data_we_o(lsu_we),
+		.data_type_o(lsu_type),
+		.data_sign_extension_o(lsu_sign_ext),
+		.x_issue_resp_register_read_i(x_issue_resp_i[(cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) - 1-:cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ]),
+		.jump_in_dec_o(jump_in_dec),
+		.branch_in_dec_o(branch_in_dec)
+	);
+	always @(*) begin : csr_pipeline_flushes
+		if (_sv2v_0)
+			;
+		csr_pipe_flush = 1'b0;
+		if ((csr_op_en_o == 1'b1) && ((csr_op_o == 2'd1) || (csr_op_o == 2'd2))) begin
+			if ((((instr_rdata_i[31:20] == 12'h300) || (instr_rdata_i[31:20] == 12'h304)) || (instr_rdata_i[31:20] == 12'h747)) || (instr_rdata_i[31:25] == 7'h1d))
+				csr_pipe_flush = 1'b1;
+		end
+		else if ((csr_op_en_o == 1'b1) && (csr_op_o != 2'd0)) begin
+			if ((((instr_rdata_i[31:20] == 12'h7b0) || (instr_rdata_i[31:20] == 12'h7b1)) || (instr_rdata_i[31:20] == 12'h7b2)) || (instr_rdata_i[31:20] == 12'h7b3))
+				csr_pipe_flush = 1'b1;
+		end
+	end
+	cve2_controller controller_i(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.fetch_enable_i(fetch_enable_i),
+		.ctrl_busy_o(ctrl_busy_o),
+		.illegal_insn_i(illegal_insn_o),
+		.ecall_insn_i(ecall_insn_dec),
+		.mret_insn_i(mret_insn_dec),
+		.dret_insn_i(dret_insn_dec),
+		.wfi_insn_i(wfi_insn_dec),
+		.ebrk_insn_i(ebrk_insn),
+		.csr_pipe_flush_i(csr_pipe_flush),
+		.xif_scoreboard_busy_i(scoreboard_busy),
+		.instr_valid_i(instr_valid_i),
+		.instr_i(instr_rdata_i),
+		.instr_compressed_i(instr_rdata_c_i),
+		.instr_is_compressed_i(instr_is_compressed_i),
+		.instr_fetch_err_i(instr_fetch_err_i),
+		.instr_fetch_err_plus2_i(instr_fetch_err_plus2_i),
+		.pc_id_i(pc_id_i),
+		.instr_valid_clear_o(instr_valid_clear_o),
+		.id_in_ready_o(id_in_ready_o),
+		.controller_run_o(controller_run),
+		.instr_req_o(instr_req_o),
+		.pc_set_o(pc_set_o),
+		.pc_mux_o(pc_mux_o),
+		.exc_pc_mux_o(exc_pc_mux_o),
+		.exc_cause_o(exc_cause_o),
+		.lsu_addr_last_i(lsu_addr_last_i),
+		.load_err_i(lsu_load_err_i),
+		.store_err_i(lsu_store_err_i),
+		.branch_set_i(branch_set),
+		.jump_set_i(jump_set),
+		.csr_mstatus_mie_i(csr_mstatus_mie_i),
+		.irq_pending_i(irq_pending_i),
+		.irqs_i(irqs_i),
+		.irq_nm_i(irq_nm_i),
+		.nmi_mode_o(nmi_mode_o),
+		.csr_save_if_o(csr_save_if_o),
+		.csr_save_id_o(csr_save_id_o),
+		.csr_restore_mret_id_o(csr_restore_mret_id_o),
+		.csr_restore_dret_id_o(csr_restore_dret_id_o),
+		.csr_save_cause_o(csr_save_cause_o),
+		.csr_mtval_o(csr_mtval_o),
+		.priv_mode_i(priv_mode_i),
+		.csr_mstatus_tw_i(csr_mstatus_tw_i),
+		.debug_mode_o(debug_mode_o),
+		.debug_cause_o(debug_cause_o),
+		.debug_csr_save_o(debug_csr_save_o),
+		.debug_req_i(debug_req_i),
+		.debug_single_step_i(debug_single_step_i),
+		.debug_ebreakm_i(debug_ebreakm_i),
+		.debug_ebreaku_i(debug_ebreaku_i),
+		.trigger_match_i(trigger_match_i),
+		.stall_id_i(stall_id),
+		.flush_id_o(flush_id),
+		.perf_jump_o(perf_jump_o),
+		.perf_tbranch_o(perf_tbranch_o)
+	);
+	assign multdiv_en_dec = mult_en_dec | div_en_dec;
+	assign lsu_req = (instr_executing ? data_req_allowed & lsu_req_dec : 1'b0);
+	assign mult_en_id = (instr_executing ? mult_en_dec : 1'b0);
+	assign div_en_id = (instr_executing ? div_en_dec : 1'b0);
+	assign lsu_req_o = lsu_req;
+	assign lsu_we_o = lsu_we;
+	assign lsu_type_o = lsu_type;
+	assign lsu_sign_ext_o = lsu_sign_ext;
+	assign lsu_wdata_o = rf_rdata_b_fwd;
+	assign csr_op_en_o = (csr_access_o & instr_executing) & instr_id_done_o;
+	assign alu_operator_ex_o = alu_operator;
+	assign alu_operand_a_ex_o = alu_operand_a;
+	assign alu_operand_b_ex_o = alu_operand_b;
+	assign mult_en_ex_o = mult_en_id;
+	assign div_en_ex_o = div_en_id;
+	assign multdiv_operator_ex_o = multdiv_operator;
+	assign multdiv_signed_mode_ex_o = multdiv_signed_mode;
+	assign multdiv_operand_a_ex_o = rf_rdata_a_fwd;
+	assign multdiv_operand_b_ex_o = rf_rdata_b_fwd;
+	reg branch_set_raw_q;
+	always @(posedge clk_i or negedge rst_ni)
+		if (!rst_ni)
+			branch_set_raw_q <= 1'b0;
+		else
+			branch_set_raw_q <= branch_set_raw_d;
+	assign branch_set_raw = branch_set_raw_q;
+	assign branch_jump_set_done_d = ((branch_set_raw | jump_set_raw) | branch_jump_set_done_q) & ~instr_valid_clear_o;
+	always @(posedge clk_i or negedge rst_ni)
+		if (!rst_ni)
+			branch_jump_set_done_q <= 1'b0;
+		else
+			branch_jump_set_done_q <= branch_jump_set_done_d;
+	assign jump_set = jump_set_raw & ~branch_jump_set_done_q;
+	assign branch_set = branch_set_raw & ~branch_jump_set_done_q;
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		id_fsm_d = id_fsm_q;
+		rf_we_raw = rf_we_dec;
+		stall_multdiv = 1'b0;
+		stall_jump = 1'b0;
+		stall_branch = 1'b0;
+		stall_alu = 1'b0;
+		stall_coproc = 1'b0;
+		branch_set_raw_d = 1'b0;
+		jump_set_raw = 1'b0;
+		perf_branch_o = 1'b0;
+		coproc_done = 1'b1;
+		if (instr_executing_spec)
+			(* full_case, parallel_case *)
+			case (id_fsm_q)
+				1'd0:
+					(* full_case, parallel_case *)
+					case (1'b1)
+						lsu_req_dec: id_fsm_d = 1'd1;
+						multdiv_en_dec:
+							if (~ex_valid_i) begin
+								id_fsm_d = 1'd1;
+								rf_we_raw = 1'b0;
+								stall_multdiv = 1'b1;
+							end
+						branch_in_dec: begin
+							id_fsm_d = (branch_decision_i ? 1'd1 : 1'd0);
+							stall_branch = branch_decision_i;
+							branch_set_raw_d = branch_decision_i;
+							perf_branch_o = 1'b1;
+						end
+						jump_in_dec: begin
+							id_fsm_d = 1'd1;
+							stall_jump = 1'b1;
+							jump_set_raw = jump_set_dec;
+						end
+						alu_multicycle_dec: begin
+							stall_alu = 1'b1;
+							id_fsm_d = 1'd1;
+							rf_we_raw = 1'b0;
+						end
+						illegal_insn_dec:
+							if (XInterface) begin
+								if (x_issue_valid_o && x_issue_ready_i) begin
+									if (x_issue_resp_i[1 + ((cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) + 0)] && x_issue_resp_i[(cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) + 0-:(((32'd3 + 32'd0) + 0) >= ((32'd3 + 32'd0) + 0) ? (((cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) + 0) - ((cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) + 0)) + 1 : (((cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) + 0) - ((cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ) + 0)) + 1)]) begin
+										id_fsm_d = 1'd1;
+										stall_coproc = 1'b1;
+										coproc_done = 1'b0;
+									end
+									else
+										id_fsm_d = 1'd0;
+								end
+								else begin
+									stall_coproc = 1'b1;
+									id_fsm_d = 1'd0;
+								end
+							end
+							else
+								id_fsm_d = 1'd0;
+						default: id_fsm_d = 1'd0;
+					endcase
+				1'd1: begin
+					if (multdiv_en_dec)
+						rf_we_raw = rf_we_dec & ex_valid_i;
+					if (illegal_insn_dec && XInterface) begin
+						coproc_done = x_result_valid_i & x_result_i[0-:1];
+						rf_we_raw = x_result_valid_i & x_result_i[0-:1];
+					end
+					if (multicycle_done)
+						id_fsm_d = 1'd0;
+					else begin
+						stall_multdiv = multdiv_en_dec;
+						stall_branch = branch_in_dec;
+						stall_jump = jump_in_dec;
+						stall_coproc = XInterface & illegal_insn_dec;
+					end
+				end
+				default: id_fsm_d = 1'd0;
+			endcase
+	end
+	assign stall_id = ((((stall_mem | stall_multdiv) | stall_jump) | stall_branch) | stall_alu) | (XInterface & stall_coproc);
+	assign instr_done = (~stall_id & ~flush_id) & instr_executing;
+	assign instr_first_cycle = instr_valid_i & (id_fsm_q == 1'd0);
+	assign instr_first_cycle_id_o = instr_first_cycle;
+	assign data_req_allowed = instr_first_cycle;
+	assign stall_mem = instr_valid_i & (lsu_req_dec & (~lsu_resp_valid_i | instr_first_cycle));
+	assign instr_executing_spec = (instr_valid_i & ~instr_fetch_err_i) & controller_run;
+	assign instr_executing = instr_executing_spec;
+	assign rf_rdata_a_fwd = rf_rdata_a_i;
+	assign rf_rdata_b_fwd = rf_rdata_b_i;
+	assign rf_rdata_c_fwd = rf_rdata_c_i;
+	wire unused_data_req_done_ex;
+	assign perf_dside_wait_o = (instr_executing & lsu_req_dec) & ~lsu_resp_valid_i;
+	assign instr_id_done_o = instr_done;
+	assign instr_perf_count_id_o = ((((~ebrk_insn & ~ecall_insn_dec) & ~illegal_insn_dec) & ~(dret_insn_dec & ~debug_mode_o)) & ~illegal_csr_insn_i) & ~instr_fetch_err_i;
+	assign en_wb_o = instr_done;
+	assign perf_wfi_wait_o = wfi_insn_dec;
+	assign perf_div_wait_o = stall_multdiv & div_en_dec;
+	initial _sv2v_0 = 0;
+endmodule
+module cve2_if_stage (
+	clk_i,
+	rst_ni,
+	boot_addr_i,
+	req_i,
+	instr_req_o,
+	instr_addr_o,
+	instr_gnt_i,
+	instr_rvalid_i,
+	instr_rdata_i,
+	instr_err_i,
+	instr_valid_id_o,
+	instr_new_id_o,
+	instr_rdata_id_o,
+	instr_rdata_alu_id_o,
+	instr_rdata_c_id_o,
+	instr_is_compressed_id_o,
+	instr_fetch_err_o,
+	instr_fetch_err_plus2_o,
+	illegal_c_insn_id_o,
+	pc_if_o,
+	pc_id_o,
+	pmp_err_if_i,
+	pmp_err_if_plus2_i,
+	instr_valid_clear_i,
+	pc_set_i,
+	pc_mux_i,
+	exc_pc_mux_i,
+	exc_cause,
+	branch_target_ex_i,
+	csr_mepc_i,
+	csr_depc_i,
+	csr_mtvec_i,
+	csr_mtvec_init_o,
+	dm_halt_addr_i,
+	dm_exception_addr_i,
+	id_in_ready_i,
+	if_busy_o
+);
+	reg _sv2v_0;
+	input wire clk_i;
+	input wire rst_ni;
+	input wire [31:0] boot_addr_i;
+	input wire req_i;
+	output wire instr_req_o;
+	output wire [31:0] instr_addr_o;
+	input wire instr_gnt_i;
+	input wire instr_rvalid_i;
+	input wire [31:0] instr_rdata_i;
+	input wire instr_err_i;
+	output wire instr_valid_id_o;
+	output wire instr_new_id_o;
+	output reg [31:0] instr_rdata_id_o;
+	output reg [31:0] instr_rdata_alu_id_o;
+	output reg [15:0] instr_rdata_c_id_o;
+	output reg instr_is_compressed_id_o;
+	output reg instr_fetch_err_o;
+	output reg instr_fetch_err_plus2_o;
+	output reg illegal_c_insn_id_o;
+	output wire [31:0] pc_if_o;
+	output reg [31:0] pc_id_o;
+	input wire pmp_err_if_i;
+	input wire pmp_err_if_plus2_i;
+	input wire instr_valid_clear_i;
+	input wire pc_set_i;
+	input wire [2:0] pc_mux_i;
+	input wire [1:0] exc_pc_mux_i;
+	input wire [6:0] exc_cause;
+	input wire [31:0] branch_target_ex_i;
+	input wire [31:0] csr_mepc_i;
+	input wire [31:0] csr_depc_i;
+	input wire [31:0] csr_mtvec_i;
+	output wire csr_mtvec_init_o;
+	input wire [31:0] dm_halt_addr_i;
+	input wire [31:0] dm_exception_addr_i;
+	input wire id_in_ready_i;
+	output wire if_busy_o;
+	wire instr_valid_id_d;
+	reg instr_valid_id_q;
+	wire instr_new_id_d;
+	reg instr_new_id_q;
+	wire prefetch_busy;
+	wire branch_req;
+	reg [31:0] fetch_addr_n;
+	wire unused_fetch_addr_n0;
+	wire fetch_valid;
+	wire fetch_ready;
+	wire [31:0] fetch_rdata;
+	wire [31:0] fetch_addr;
+	wire fetch_err;
+	wire fetch_err_plus2;
+	wire [31:0] instr_decompressed;
+	wire illegal_c_insn;
+	wire instr_is_compressed;
+	wire if_instr_pmp_err;
+	wire if_instr_err;
+	wire if_instr_err_plus2;
+	reg [31:0] exc_pc;
+	wire [6:0] irq_id;
+	wire unused_irq_bit;
+	wire if_id_pipe_reg_we;
+	wire [2:0] pc_mux_internal;
+	wire [1:0] unused_boot_addr;
+	wire [7:0] unused_csr_mtvec;
+	assign unused_boot_addr = boot_addr_i[1:0];
+	assign unused_csr_mtvec = csr_mtvec_i[7:0];
+	assign irq_id = {exc_cause};
+	assign unused_irq_bit = irq_id[6];
+	always @(*) begin : exc_pc_mux
+		if (_sv2v_0)
+			;
+		(* full_case, parallel_case *)
+		case (exc_pc_mux_i)
+			2'd0: exc_pc = {csr_mtvec_i[31:8], 8'h00};
+			2'd1: exc_pc = {csr_mtvec_i[31:8], irq_id[5:0], 2'b00};
+			2'd2: exc_pc = dm_halt_addr_i;
+			2'd3: exc_pc = dm_exception_addr_i;
+			default: exc_pc = {csr_mtvec_i[31:8], 8'h00};
+		endcase
+	end
+	assign pc_mux_internal = pc_mux_i;
+	always @(*) begin : fetch_addr_mux
+		if (_sv2v_0)
+			;
+		(* full_case, parallel_case *)
+		case (pc_mux_internal)
+			3'd0: fetch_addr_n = {boot_addr_i[31:2], 2'b00};
+			3'd1: fetch_addr_n = branch_target_ex_i;
+			3'd2: fetch_addr_n = exc_pc;
+			3'd3: fetch_addr_n = csr_mepc_i;
+			3'd4: fetch_addr_n = csr_depc_i;
+			default: fetch_addr_n = {boot_addr_i[31:2], 2'b00};
+		endcase
+	end
+	assign csr_mtvec_init_o = (pc_mux_i == 3'd0) & pc_set_i;
+	cve2_prefetch_buffer prefetch_buffer_i(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.req_i(req_i),
+		.branch_i(branch_req),
+		.addr_i({fetch_addr_n[31:1], 1'b0}),
+		.ready_i(fetch_ready),
+		.valid_o(fetch_valid),
+		.rdata_o(fetch_rdata),
+		.addr_o(fetch_addr),
+		.err_o(fetch_err),
+		.err_plus2_o(fetch_err_plus2),
+		.instr_req_o(instr_req_o),
+		.instr_addr_o(instr_addr_o),
+		.instr_gnt_i(instr_gnt_i),
+		.instr_rvalid_i(instr_rvalid_i),
+		.instr_rdata_i(instr_rdata_i),
+		.instr_err_i(instr_err_i),
+		.busy_o(prefetch_busy)
+	);
+	assign unused_fetch_addr_n0 = fetch_addr_n[0];
+	assign branch_req = pc_set_i;
+	assign pc_if_o = fetch_addr;
+	assign if_busy_o = prefetch_busy;
+	assign if_instr_pmp_err = pmp_err_if_i | ((fetch_addr[2] & ~instr_is_compressed) & pmp_err_if_plus2_i);
+	assign if_instr_err = fetch_err | if_instr_pmp_err;
+	assign if_instr_err_plus2 = (((fetch_addr[2] & ~instr_is_compressed) & pmp_err_if_plus2_i) | fetch_err_plus2) & ~pmp_err_if_i;
+	cve2_compressed_decoder compressed_decoder_i(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.valid_i(fetch_valid & ~fetch_err),
+		.instr_i(fetch_rdata),
+		.instr_o(instr_decompressed),
+		.is_compressed_o(instr_is_compressed),
+		.illegal_instr_o(illegal_c_insn)
+	);
+	assign instr_valid_id_d = ((fetch_valid & id_in_ready_i) & ~pc_set_i) | (instr_valid_id_q & ~instr_valid_clear_i);
+	assign instr_new_id_d = fetch_valid & id_in_ready_i;
+	always @(posedge clk_i or negedge rst_ni)
+		if (!rst_ni) begin
+			instr_valid_id_q <= 1'b0;
+			instr_new_id_q <= 1'b0;
+		end
+		else begin
+			instr_valid_id_q <= instr_valid_id_d;
+			instr_new_id_q <= instr_new_id_d;
+		end
+	assign instr_valid_id_o = instr_valid_id_q;
+	assign instr_new_id_o = instr_new_id_q;
+	assign if_id_pipe_reg_we = instr_new_id_d;
+	always @(posedge clk_i or negedge rst_ni)
+		if (!rst_ni) begin
+			instr_rdata_id_o <= 1'sb0;
+			instr_rdata_alu_id_o <= 1'sb0;
+			instr_fetch_err_o <= 1'sb0;
+			instr_fetch_err_plus2_o <= 1'sb0;
+			instr_rdata_c_id_o <= 1'sb0;
+			instr_is_compressed_id_o <= 1'sb0;
+			illegal_c_insn_id_o <= 1'sb0;
+			pc_id_o <= 1'sb0;
+		end
+		else if (if_id_pipe_reg_we) begin
+			instr_rdata_id_o <= instr_decompressed;
+			instr_rdata_alu_id_o <= instr_decompressed;
+			instr_fetch_err_o <= if_instr_err;
+			instr_fetch_err_plus2_o <= if_instr_err_plus2;
+			instr_rdata_c_id_o <= fetch_rdata[15:0];
+			instr_is_compressed_id_o <= instr_is_compressed;
+			illegal_c_insn_id_o <= illegal_c_insn;
+			pc_id_o <= pc_if_o;
+		end
+	assign fetch_ready = id_in_ready_i;
+	initial _sv2v_0 = 0;
+endmodule
+module cve2_load_store_unit (
+	clk_i,
+	rst_ni,
+	data_req_o,
+	data_gnt_i,
+	data_rvalid_i,
+	data_err_i,
+	data_pmp_err_i,
+	data_addr_o,
+	data_we_o,
+	data_be_o,
+	data_wdata_o,
+	data_rdata_i,
+	lsu_we_i,
+	lsu_type_i,
+	lsu_wdata_i,
+	lsu_sign_ext_i,
+	lsu_rdata_o,
+	lsu_rdata_valid_o,
+	lsu_req_i,
+	adder_result_ex_i,
+	addr_incr_req_o,
+	addr_last_o,
+	lsu_resp_valid_o,
+	load_err_o,
+	store_err_o,
+	busy_o,
+	perf_load_o,
+	perf_store_o
+);
+	reg _sv2v_0;
+	input wire clk_i;
+	input wire rst_ni;
+	output reg data_req_o;
+	input wire data_gnt_i;
+	input wire data_rvalid_i;
+	input wire data_err_i;
+	input wire data_pmp_err_i;
+	output wire [31:0] data_addr_o;
+	output wire data_we_o;
+	output wire [3:0] data_be_o;
+	output wire [31:0] data_wdata_o;
+	input wire [31:0] data_rdata_i;
+	input wire lsu_we_i;
+	input wire [1:0] lsu_type_i;
+	input wire [31:0] lsu_wdata_i;
+	input wire lsu_sign_ext_i;
+	output wire [31:0] lsu_rdata_o;
+	output wire lsu_rdata_valid_o;
+	input wire lsu_req_i;
+	input wire [31:0] adder_result_ex_i;
+	output reg addr_incr_req_o;
+	output wire [31:0] addr_last_o;
+	output wire lsu_resp_valid_o;
+	output wire load_err_o;
+	output wire store_err_o;
+	output wire busy_o;
+	output reg perf_load_o;
+	output reg perf_store_o;
+	wire [31:0] data_addr;
+	wire [31:0] data_addr_w_aligned;
+	reg [31:0] addr_last_q;
+	wire [31:0] addr_last_d;
+	reg addr_update;
+	reg ctrl_update;
+	reg rdata_update;
+	reg [31:8] rdata_q;
+	reg [1:0] rdata_offset_q;
+	reg [1:0] data_type_q;
+	reg data_sign_ext_q;
+	reg data_we_q;
+	wire [1:0] data_offset;
+	reg [3:0] data_be;
+	reg [31:0] data_wdata;
+	reg [31:0] data_rdata_ext;
+	reg [31:0] rdata_w_ext;
+	reg [31:0] rdata_h_ext;
+	reg [31:0] rdata_b_ext;
+	wire split_misaligned_access;
+	reg handle_misaligned_q;
+	reg handle_misaligned_d;
+	reg pmp_err_q;
+	reg pmp_err_d;
+	reg lsu_err_q;
+	reg lsu_err_d;
+	wire data_or_pmp_err;
+	reg [2:0] ls_fsm_cs;
+	reg [2:0] ls_fsm_ns;
+	assign data_addr = adder_result_ex_i;
+	assign data_offset = data_addr[1:0];
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		(* full_case, parallel_case *)
+		case (lsu_type_i)
+			2'b00:
+				if (!handle_misaligned_q)
+					(* full_case, parallel_case *)
+					case (data_offset)
+						2'b00: data_be = 4'b1111;
+						2'b01: data_be = 4'b1110;
+						2'b10: data_be = 4'b1100;
+						2'b11: data_be = 4'b1000;
+						default: data_be = 4'b1111;
+					endcase
+				else
+					(* full_case, parallel_case *)
+					case (data_offset)
+						2'b00: data_be = 4'b0000;
+						2'b01: data_be = 4'b0001;
+						2'b10: data_be = 4'b0011;
+						2'b11: data_be = 4'b0111;
+						default: data_be = 4'b1111;
+					endcase
+			2'b01:
+				if (!handle_misaligned_q)
+					(* full_case, parallel_case *)
+					case (data_offset)
+						2'b00: data_be = 4'b0011;
+						2'b01: data_be = 4'b0110;
+						2'b10: data_be = 4'b1100;
+						2'b11: data_be = 4'b1000;
+						default: data_be = 4'b1111;
+					endcase
+				else
+					data_be = 4'b0001;
+			2'b10, 2'b11:
+				(* full_case, parallel_case *)
+				case (data_offset)
+					2'b00: data_be = 4'b0001;
+					2'b01: data_be = 4'b0010;
+					2'b10: data_be = 4'b0100;
+					2'b11: data_be = 4'b1000;
+					default: data_be = 4'b1111;
+				endcase
+			default: data_be = 4'b1111;
+		endcase
+	end
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		(* full_case, parallel_case *)
+		case (data_offset)
+			2'b00: data_wdata = lsu_wdata_i[31:0];
+			2'b01: data_wdata = {lsu_wdata_i[23:0], lsu_wdata_i[31:24]};
+			2'b10: data_wdata = {lsu_wdata_i[15:0], lsu_wdata_i[31:16]};
+			2'b11: data_wdata = {lsu_wdata_i[7:0], lsu_wdata_i[31:8]};
+			default: data_wdata = lsu_wdata_i[31:0];
+		endcase
+	end
+	always @(posedge clk_i or negedge rst_ni)
+		if (!rst_ni)
+			rdata_q <= 1'sb0;
+		else if (rdata_update)
+			rdata_q <= data_rdata_i[31:8];
+	always @(posedge clk_i or negedge rst_ni)
+		if (!rst_ni) begin
+			rdata_offset_q <= 2'h0;
+			data_type_q <= 2'h0;
+			data_sign_ext_q <= 1'b0;
+			data_we_q <= 1'b0;
+		end
+		else if (ctrl_update) begin
+			rdata_offset_q <= data_offset;
+			data_type_q <= lsu_type_i;
+			data_sign_ext_q <= lsu_sign_ext_i;
+			data_we_q <= lsu_we_i;
+		end
+	assign addr_last_d = (addr_incr_req_o ? data_addr_w_aligned : data_addr);
+	always @(posedge clk_i or negedge rst_ni)
+		if (!rst_ni)
+			addr_last_q <= 1'sb0;
+		else if (addr_update)
+			addr_last_q <= addr_last_d;
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		(* full_case, parallel_case *)
+		case (rdata_offset_q)
+			2'b00: rdata_w_ext = data_rdata_i[31:0];
+			2'b01: rdata_w_ext = {data_rdata_i[7:0], rdata_q[31:8]};
+			2'b10: rdata_w_ext = {data_rdata_i[15:0], rdata_q[31:16]};
+			2'b11: rdata_w_ext = {data_rdata_i[23:0], rdata_q[31:24]};
+			default: rdata_w_ext = data_rdata_i[31:0];
+		endcase
+	end
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		(* full_case, parallel_case *)
+		case (rdata_offset_q)
+			2'b00:
+				if (!data_sign_ext_q)
+					rdata_h_ext = {16'h0000, data_rdata_i[15:0]};
+				else
+					rdata_h_ext = {{16 {data_rdata_i[15]}}, data_rdata_i[15:0]};
+			2'b01:
+				if (!data_sign_ext_q)
+					rdata_h_ext = {16'h0000, data_rdata_i[23:8]};
+				else
+					rdata_h_ext = {{16 {data_rdata_i[23]}}, data_rdata_i[23:8]};
+			2'b10:
+				if (!data_sign_ext_q)
+					rdata_h_ext = {16'h0000, data_rdata_i[31:16]};
+				else
+					rdata_h_ext = {{16 {data_rdata_i[31]}}, data_rdata_i[31:16]};
+			2'b11:
+				if (!data_sign_ext_q)
+					rdata_h_ext = {16'h0000, data_rdata_i[7:0], rdata_q[31:24]};
+				else
+					rdata_h_ext = {{16 {data_rdata_i[7]}}, data_rdata_i[7:0], rdata_q[31:24]};
+			default: rdata_h_ext = {16'h0000, data_rdata_i[15:0]};
+		endcase
+	end
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		(* full_case, parallel_case *)
+		case (rdata_offset_q)
+			2'b00:
+				if (!data_sign_ext_q)
+					rdata_b_ext = {24'h000000, data_rdata_i[7:0]};
+				else
+					rdata_b_ext = {{24 {data_rdata_i[7]}}, data_rdata_i[7:0]};
+			2'b01:
+				if (!data_sign_ext_q)
+					rdata_b_ext = {24'h000000, data_rdata_i[15:8]};
+				else
+					rdata_b_ext = {{24 {data_rdata_i[15]}}, data_rdata_i[15:8]};
+			2'b10:
+				if (!data_sign_ext_q)
+					rdata_b_ext = {24'h000000, data_rdata_i[23:16]};
+				else
+					rdata_b_ext = {{24 {data_rdata_i[23]}}, data_rdata_i[23:16]};
+			2'b11:
+				if (!data_sign_ext_q)
+					rdata_b_ext = {24'h000000, data_rdata_i[31:24]};
+				else
+					rdata_b_ext = {{24 {data_rdata_i[31]}}, data_rdata_i[31:24]};
+			default: rdata_b_ext = {24'h000000, data_rdata_i[7:0]};
+		endcase
+	end
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		(* full_case, parallel_case *)
+		case (data_type_q)
+			2'b00: data_rdata_ext = rdata_w_ext;
+			2'b01: data_rdata_ext = rdata_h_ext;
+			2'b10, 2'b11: data_rdata_ext = rdata_b_ext;
+			default: data_rdata_ext = rdata_w_ext;
+		endcase
+	end
+	assign split_misaligned_access = ((lsu_type_i == 2'b00) && (data_offset != 2'b00)) || ((lsu_type_i == 2'b01) && (data_offset == 2'b11));
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		ls_fsm_ns = ls_fsm_cs;
+		data_req_o = 1'b0;
+		addr_incr_req_o = 1'b0;
+		handle_misaligned_d = handle_misaligned_q;
+		pmp_err_d = pmp_err_q;
+		lsu_err_d = lsu_err_q;
+		addr_update = 1'b0;
+		ctrl_update = 1'b0;
+		rdata_update = 1'b0;
+		perf_load_o = 1'b0;
+		perf_store_o = 1'b0;
+		(* full_case, parallel_case *)
+		case (ls_fsm_cs)
+			3'd0: begin
+				pmp_err_d = 1'b0;
+				if (lsu_req_i) begin
+					data_req_o = 1'b1;
+					pmp_err_d = data_pmp_err_i;
+					lsu_err_d = 1'b0;
+					perf_load_o = ~lsu_we_i;
+					perf_store_o = lsu_we_i;
+					if (data_gnt_i) begin
+						ctrl_update = 1'b1;
+						addr_update = 1'b1;
+						handle_misaligned_d = split_misaligned_access;
+						ls_fsm_ns = (split_misaligned_access ? 3'd2 : 3'd0);
+					end
+					else
+						ls_fsm_ns = (split_misaligned_access ? 3'd1 : 3'd3);
+				end
+			end
+			3'd1: begin
+				data_req_o = 1'b1;
+				if (data_gnt_i || pmp_err_q) begin
+					addr_update = 1'b1;
+					ctrl_update = 1'b1;
+					handle_misaligned_d = 1'b1;
+					ls_fsm_ns = 3'd2;
+				end
+			end
+			3'd2: begin
+				data_req_o = 1'b1;
+				addr_incr_req_o = 1'b1;
+				if (data_rvalid_i || pmp_err_q) begin
+					pmp_err_d = data_pmp_err_i;
+					lsu_err_d = data_err_i | pmp_err_q;
+					rdata_update = ~data_we_q;
+					ls_fsm_ns = (data_gnt_i ? 3'd0 : 3'd3);
+					addr_update = data_gnt_i & ~(data_err_i | pmp_err_q);
+					handle_misaligned_d = ~data_gnt_i;
+				end
+				else if (data_gnt_i) begin
+					ls_fsm_ns = 3'd4;
+					handle_misaligned_d = 1'b0;
+				end
+			end
+			3'd3: begin
+				addr_incr_req_o = handle_misaligned_q;
+				data_req_o = 1'b1;
+				if (data_gnt_i || pmp_err_q) begin
+					ctrl_update = 1'b1;
+					addr_update = ~lsu_err_q;
+					ls_fsm_ns = 3'd0;
+					handle_misaligned_d = 1'b0;
+				end
+			end
+			3'd4: begin
+				addr_incr_req_o = 1'b1;
+				if (data_rvalid_i) begin
+					pmp_err_d = data_pmp_err_i;
+					lsu_err_d = data_err_i;
+					addr_update = ~data_err_i;
+					rdata_update = ~data_we_q;
+					ls_fsm_ns = 3'd0;
+				end
+			end
+			default: ls_fsm_ns = 3'd0;
+		endcase
+	end
+	always @(posedge clk_i or negedge rst_ni)
+		if (!rst_ni) begin
+			ls_fsm_cs <= 3'd0;
+			handle_misaligned_q <= 1'sb0;
+			pmp_err_q <= 1'sb0;
+			lsu_err_q <= 1'sb0;
+		end
+		else begin
+			ls_fsm_cs <= ls_fsm_ns;
+			handle_misaligned_q <= handle_misaligned_d;
+			pmp_err_q <= pmp_err_d;
+			lsu_err_q <= lsu_err_d;
+		end
+	assign data_or_pmp_err = (lsu_err_q | data_err_i) | pmp_err_q;
+	assign lsu_resp_valid_o = (data_rvalid_i | pmp_err_q) & (ls_fsm_cs == 3'd0);
+	assign lsu_rdata_valid_o = (((ls_fsm_cs == 3'd0) & data_rvalid_i) & ~data_or_pmp_err) & ~data_we_q;
+	assign lsu_rdata_o = data_rdata_ext;
+	assign data_addr_w_aligned = {data_addr[31:2], 2'b00};
+	assign data_addr_o = data_addr_w_aligned;
+	assign data_wdata_o = data_wdata;
+	assign data_we_o = lsu_we_i;
+	assign data_be_o = data_be;
+	assign addr_last_o = addr_last_q;
+	assign load_err_o = (data_or_pmp_err & ~data_we_q) & lsu_resp_valid_o;
+	assign store_err_o = (data_or_pmp_err & data_we_q) & lsu_resp_valid_o;
+	assign busy_o = ls_fsm_cs != 3'd0;
+	initial _sv2v_0 = 0;
+endmodule
+module cve2_multdiv_fast (
+	clk_i,
+	rst_ni,
+	mult_en_i,
+	div_en_i,
+	mult_sel_i,
+	div_sel_i,
+	operator_i,
+	signed_mode_i,
+	op_a_i,
+	op_b_i,
+	alu_adder_ext_i,
+	alu_adder_i,
+	equal_to_zero_i,
+	alu_operand_a_o,
+	alu_operand_b_o,
+	imd_val_q_i,
+	imd_val_d_o,
+	imd_val_we_o,
+	multdiv_result_o,
+	valid_o
+);
+	reg _sv2v_0;
+	parameter integer RV32M = 32'sd2;
+	input wire clk_i;
+	input wire rst_ni;
+	input wire mult_en_i;
+	input wire div_en_i;
+	input wire mult_sel_i;
+	input wire div_sel_i;
+	input wire [1:0] operator_i;
+	input wire [1:0] signed_mode_i;
+	input wire [31:0] op_a_i;
+	input wire [31:0] op_b_i;
+	input wire [33:0] alu_adder_ext_i;
+	input wire [31:0] alu_adder_i;
+	input wire equal_to_zero_i;
+	output reg [32:0] alu_operand_a_o;
+	output reg [32:0] alu_operand_b_o;
+	input wire [67:0] imd_val_q_i;
+	output wire [67:0] imd_val_d_o;
+	output wire [1:0] imd_val_we_o;
+	output wire [31:0] multdiv_result_o;
+	output wire valid_o;
+	wire signed [34:0] mac_res_signed;
+	wire [34:0] mac_res_ext;
+	reg [33:0] accum;
+	reg sign_a;
+	reg sign_b;
+	reg mult_valid;
+	wire signed_mult;
+	reg [33:0] mac_res_d;
+	reg [33:0] op_remainder_d;
+	wire [33:0] mac_res;
+	wire div_sign_a;
+	wire div_sign_b;
+	reg is_greater_equal;
+	wire div_change_sign;
+	wire rem_change_sign;
+	wire [31:0] one_shift;
+	wire [31:0] op_denominator_q;
+	reg [31:0] op_numerator_q;
+	reg [31:0] op_quotient_q;
+	reg [31:0] op_denominator_d;
+	reg [31:0] op_numerator_d;
+	reg [31:0] op_quotient_d;
+	wire [31:0] next_remainder;
+	wire [32:0] next_quotient;
+	wire [31:0] res_adder_h;
+	reg div_valid;
+	reg [4:0] div_counter_q;
+	reg [4:0] div_counter_d;
+	wire multdiv_en;
+	reg mult_hold;
+	reg div_hold;
+	reg div_by_zero_d;
+	reg div_by_zero_q;
+	wire mult_en_internal;
+	wire div_en_internal;
+	reg [2:0] md_state_q;
+	reg [2:0] md_state_d;
+	wire unused_mult_sel_i;
+	assign unused_mult_sel_i = mult_sel_i;
+	assign mult_en_internal = mult_en_i & ~mult_hold;
+	assign div_en_internal = div_en_i & ~div_hold;
+	always @(posedge clk_i or negedge rst_ni)
+		if (!rst_ni) begin
+			div_counter_q <= 1'sb0;
+			md_state_q <= 3'd0;
+			op_numerator_q <= 1'sb0;
+			op_quotient_q <= 1'sb0;
+			div_by_zero_q <= 1'sb0;
+		end
+		else if (div_en_internal) begin
+			div_counter_q <= div_counter_d;
+			op_numerator_q <= op_numerator_d;
+			op_quotient_q <= op_quotient_d;
+			md_state_q <= md_state_d;
+			div_by_zero_q <= div_by_zero_d;
+		end
+	assign multdiv_en = mult_en_internal | div_en_internal;
+	assign imd_val_d_o[34+:34] = (div_sel_i ? op_remainder_d : mac_res_d);
+	assign imd_val_we_o[0] = multdiv_en;
+	assign imd_val_d_o[0+:34] = {2'b00, op_denominator_d};
+	assign imd_val_we_o[1] = div_en_internal;
+	assign op_denominator_q = imd_val_q_i[31-:32];
+	wire [1:0] unused_imd_val;
+	assign unused_imd_val = imd_val_q_i[33-:2];
+	wire unused_mac_res_ext;
+	assign unused_mac_res_ext = mac_res_ext[34];
+	assign signed_mult = signed_mode_i != 2'b00;
+	assign multdiv_result_o = (div_sel_i ? imd_val_q_i[65-:32] : mac_res_d[31:0]);
+	generate
+		if (RV32M == 32'sd3) begin : gen_mult_single_cycle
+			reg mult_state_q;
+			reg mult_state_d;
+			wire signed [33:0] mult1_res;
+			wire signed [33:0] mult2_res;
+			wire signed [33:0] mult3_res;
+			wire [33:0] mult1_res_uns;
+			wire [33:32] unused_mult1_res_uns;
+			wire [15:0] mult1_op_a;
+			wire [15:0] mult1_op_b;
+			wire [15:0] mult2_op_a;
+			wire [15:0] mult2_op_b;
+			reg [15:0] mult3_op_a;
+			reg [15:0] mult3_op_b;
+			wire mult1_sign_a;
+			wire mult1_sign_b;
+			wire mult2_sign_a;
+			wire mult2_sign_b;
+			reg mult3_sign_a;
+			reg mult3_sign_b;
+			reg [33:0] summand1;
+			reg [33:0] summand2;
+			reg [33:0] summand3;
+			assign mult1_res = $signed({mult1_sign_a, mult1_op_a}) * $signed({mult1_sign_b, mult1_op_b});
+			assign mult2_res = $signed({mult2_sign_a, mult2_op_a}) * $signed({mult2_sign_b, mult2_op_b});
+			assign mult3_res = $signed({mult3_sign_a, mult3_op_a}) * $signed({mult3_sign_b, mult3_op_b});
+			assign mac_res_signed = ($signed(summand1) + $signed(summand2)) + $signed(summand3);
+			assign mult1_res_uns = $unsigned(mult1_res);
+			assign mac_res_ext = $unsigned(mac_res_signed);
+			assign mac_res = mac_res_ext[33:0];
+			wire [1:1] sv2v_tmp_5ADA8;
+			assign sv2v_tmp_5ADA8 = signed_mode_i[0] & op_a_i[31];
+			always @(*) sign_a = sv2v_tmp_5ADA8;
+			wire [1:1] sv2v_tmp_C5449;
+			assign sv2v_tmp_C5449 = signed_mode_i[1] & op_b_i[31];
+			always @(*) sign_b = sv2v_tmp_C5449;
+			assign mult1_sign_a = 1'b0;
+			assign mult1_sign_b = 1'b0;
+			assign mult1_op_a = op_a_i[15:0];
+			assign mult1_op_b = op_b_i[15:0];
+			assign mult2_sign_a = 1'b0;
+			assign mult2_sign_b = sign_b;
+			assign mult2_op_a = op_a_i[15:0];
+			assign mult2_op_b = op_b_i[31:16];
+			wire [18:1] sv2v_tmp_6FF3F;
+			assign sv2v_tmp_6FF3F = imd_val_q_i[67-:18];
+			always @(*) accum[17:0] = sv2v_tmp_6FF3F;
+			wire [16:1] sv2v_tmp_A7770;
+			assign sv2v_tmp_A7770 = {16 {signed_mult & imd_val_q_i[67]}};
+			always @(*) accum[33:18] = sv2v_tmp_A7770;
+			always @(*) begin
+				if (_sv2v_0)
+					;
+				mult3_sign_a = sign_a;
+				mult3_sign_b = 1'b0;
+				mult3_op_a = op_a_i[31:16];
+				mult3_op_b = op_b_i[15:0];
+				summand1 = {18'h00000, mult1_res_uns[31:16]};
+				summand2 = $unsigned(mult2_res);
+				summand3 = $unsigned(mult3_res);
+				mac_res_d = {2'b00, mac_res[15:0], mult1_res_uns[15:0]};
+				mult_valid = mult_en_i;
+				mult_state_d = 1'd0;
+				mult_hold = 1'b0;
+				(* full_case, parallel_case *)
+				case (mult_state_q)
+					1'd0:
+						if (operator_i != 2'd0) begin
+							mac_res_d = mac_res;
+							mult_valid = 1'b0;
+							mult_state_d = 1'd1;
+						end
+						else
+							mult_hold = 1'b0;
+					1'd1: begin
+						mult3_sign_a = sign_a;
+						mult3_sign_b = sign_b;
+						mult3_op_a = op_a_i[31:16];
+						mult3_op_b = op_b_i[31:16];
+						mac_res_d = mac_res;
+						summand1 = 1'sb0;
+						summand2 = accum;
+						summand3 = $unsigned(mult3_res);
+						mult_state_d = 1'd0;
+						mult_valid = 1'b1;
+						mult_hold = 1'b0;
+					end
+					default: mult_state_d = 1'd0;
+				endcase
+			end
+			always @(posedge clk_i or negedge rst_ni)
+				if (!rst_ni)
+					mult_state_q <= 1'd0;
+				else if (mult_en_internal)
+					mult_state_q <= mult_state_d;
+			assign unused_mult1_res_uns = mult1_res_uns[33:32];
+		end
+		else begin : gen_mult_fast
+			reg [15:0] mult_op_a;
+			reg [15:0] mult_op_b;
+			reg [1:0] mult_state_q;
+			reg [1:0] mult_state_d;
+			assign mac_res_signed = ($signed({sign_a, mult_op_a}) * $signed({sign_b, mult_op_b})) + $signed(accum);
+			assign mac_res_ext = $unsigned(mac_res_signed);
+			assign mac_res = mac_res_ext[33:0];
+			always @(*) begin
+				if (_sv2v_0)
+					;
+				mult_op_a = op_a_i[15:0];
+				mult_op_b = op_b_i[15:0];
+				sign_a = 1'b0;
+				sign_b = 1'b0;
+				accum = imd_val_q_i[34+:34];
+				mac_res_d = mac_res;
+				mult_state_d = mult_state_q;
+				mult_valid = 1'b0;
+				mult_hold = 1'b0;
+				(* full_case, parallel_case *)
+				case (mult_state_q)
+					2'd0: begin
+						mult_op_a = op_a_i[15:0];
+						mult_op_b = op_b_i[15:0];
+						sign_a = 1'b0;
+						sign_b = 1'b0;
+						accum = 1'sb0;
+						mac_res_d = mac_res;
+						mult_state_d = 2'd1;
+					end
+					2'd1: begin
+						mult_op_a = op_a_i[15:0];
+						mult_op_b = op_b_i[31:16];
+						sign_a = 1'b0;
+						sign_b = signed_mode_i[1] & op_b_i[31];
+						accum = {18'b000000000000000000, imd_val_q_i[65-:16]};
+						if (operator_i == 2'd0)
+							mac_res_d = {2'b00, mac_res[15:0], imd_val_q_i[49-:16]};
+						else
+							mac_res_d = mac_res;
+						mult_state_d = 2'd2;
+					end
+					2'd2: begin
+						mult_op_a = op_a_i[31:16];
+						mult_op_b = op_b_i[15:0];
+						sign_a = signed_mode_i[0] & op_a_i[31];
+						sign_b = 1'b0;
+						if (operator_i == 2'd0) begin
+							accum = {18'b000000000000000000, imd_val_q_i[65-:16]};
+							mac_res_d = {2'b00, mac_res[15:0], imd_val_q_i[49-:16]};
+							mult_valid = 1'b1;
+							mult_state_d = 2'd0;
+							mult_hold = 1'b0;
+						end
+						else begin
+							accum = imd_val_q_i[34+:34];
+							mac_res_d = mac_res;
+							mult_state_d = 2'd3;
+						end
+					end
+					2'd3: begin
+						mult_op_a = op_a_i[31:16];
+						mult_op_b = op_b_i[31:16];
+						sign_a = signed_mode_i[0] & op_a_i[31];
+						sign_b = signed_mode_i[1] & op_b_i[31];
+						accum[17:0] = imd_val_q_i[67-:18];
+						accum[33:18] = {16 {signed_mult & imd_val_q_i[67]}};
+						mac_res_d = mac_res;
+						mult_valid = 1'b1;
+						mult_state_d = 2'd0;
+						mult_hold = 1'b0;
+					end
+					default: mult_state_d = 2'd0;
+				endcase
+			end
+			always @(posedge clk_i or negedge rst_ni)
+				if (!rst_ni)
+					mult_state_q <= 2'd0;
+				else if (mult_en_internal)
+					mult_state_q <= mult_state_d;
+		end
+	endgenerate
+	assign res_adder_h = alu_adder_ext_i[32:1];
+	wire [1:0] unused_alu_adder_ext;
+	assign unused_alu_adder_ext = {alu_adder_ext_i[33], alu_adder_ext_i[0]};
+	assign next_remainder = (is_greater_equal ? res_adder_h[31:0] : imd_val_q_i[65-:32]);
+	assign next_quotient = (is_greater_equal ? {1'b0, op_quotient_q} | {1'b0, one_shift} : {1'b0, op_quotient_q});
+	assign one_shift = 32'b00000000000000000000000000000001 << div_counter_q;
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		if ((imd_val_q_i[65] ^ op_denominator_q[31]) == 1'b0)
+			is_greater_equal = res_adder_h[31] == 1'b0;
+		else
+			is_greater_equal = imd_val_q_i[65];
+	end
+	assign div_sign_a = op_a_i[31] & signed_mode_i[0];
+	assign div_sign_b = op_b_i[31] & signed_mode_i[1];
+	assign div_change_sign = (div_sign_a ^ div_sign_b) & ~div_by_zero_q;
+	assign rem_change_sign = div_sign_a;
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		div_counter_d = div_counter_q - 5'h01;
+		op_remainder_d = imd_val_q_i[34+:34];
+		op_quotient_d = op_quotient_q;
+		md_state_d = md_state_q;
+		op_numerator_d = op_numerator_q;
+		op_denominator_d = op_denominator_q;
+		alu_operand_a_o = 33'h000000001;
+		alu_operand_b_o = {~op_b_i, 1'b1};
+		div_valid = 1'b0;
+		div_hold = 1'b0;
+		div_by_zero_d = div_by_zero_q;
+		(* full_case, parallel_case *)
+		case (md_state_q)
+			3'd0: begin
+				if (operator_i == 2'd2) begin
+					op_remainder_d = 1'sb1;
+					md_state_d = (equal_to_zero_i ? 3'd6 : 3'd1);
+					div_by_zero_d = equal_to_zero_i;
+				end
+				else begin
+					op_remainder_d = {2'b00, op_a_i};
+					md_state_d = (equal_to_zero_i ? 3'd6 : 3'd1);
+				end
+				alu_operand_a_o = 33'h000000001;
+				alu_operand_b_o = {~op_b_i, 1'b1};
+				div_counter_d = 5'd31;
+			end
+			3'd1: begin
+				op_quotient_d = 1'sb0;
+				op_numerator_d = (div_sign_a ? alu_adder_i : op_a_i);
+				md_state_d = 3'd2;
+				div_counter_d = 5'd31;
+				alu_operand_a_o = 33'h000000001;
+				alu_operand_b_o = {~op_a_i, 1'b1};
+			end
+			3'd2: begin
+				op_remainder_d = {33'h000000000, op_numerator_q[31]};
+				op_denominator_d = (div_sign_b ? alu_adder_i : op_b_i);
+				md_state_d = 3'd3;
+				div_counter_d = 5'd31;
+				alu_operand_a_o = 33'h000000001;
+				alu_operand_b_o = {~op_b_i, 1'b1};
+			end
+			3'd3: begin
+				op_remainder_d = {1'b0, next_remainder[31:0], op_numerator_q[div_counter_d]};
+				op_quotient_d = next_quotient[31:0];
+				md_state_d = (div_counter_q == 5'd1 ? 3'd4 : 3'd3);
+				alu_operand_a_o = {imd_val_q_i[65-:32], 1'b1};
+				alu_operand_b_o = {~op_denominator_q[31:0], 1'b1};
+			end
+			3'd4: begin
+				if (operator_i == 2'd2)
+					op_remainder_d = {1'b0, next_quotient};
+				else
+					op_remainder_d = {2'b00, next_remainder[31:0]};
+				alu_operand_a_o = {imd_val_q_i[65-:32], 1'b1};
+				alu_operand_b_o = {~op_denominator_q[31:0], 1'b1};
+				md_state_d = 3'd5;
+			end
+			3'd5: begin
+				md_state_d = 3'd6;
+				if (operator_i == 2'd2)
+					op_remainder_d = (div_change_sign ? {2'h0, alu_adder_i} : imd_val_q_i[34+:34]);
+				else
+					op_remainder_d = (rem_change_sign ? {2'h0, alu_adder_i} : imd_val_q_i[34+:34]);
+				alu_operand_a_o = 33'h000000001;
+				alu_operand_b_o = {~imd_val_q_i[65-:32], 1'b1};
+			end
+			3'd6: begin
+				md_state_d = 3'd0;
+				div_hold = 1'b0;
+				div_valid = 1'b1;
+			end
+			default: md_state_d = 3'd0;
+		endcase
+	end
+	assign valid_o = mult_valid | div_valid;
+	initial _sv2v_0 = 0;
+endmodule
+module cve2_multdiv_slow (
+	clk_i,
+	rst_ni,
+	mult_en_i,
+	div_en_i,
+	mult_sel_i,
+	div_sel_i,
+	operator_i,
+	signed_mode_i,
+	op_a_i,
+	op_b_i,
+	alu_adder_ext_i,
+	alu_adder_i,
+	equal_to_zero_i,
+	alu_operand_a_o,
+	alu_operand_b_o,
+	imd_val_q_i,
+	imd_val_d_o,
+	imd_val_we_o,
+	multdiv_ready_id_i,
+	multdiv_result_o,
+	valid_o
+);
+	reg _sv2v_0;
+	input wire clk_i;
+	input wire rst_ni;
+	input wire mult_en_i;
+	input wire div_en_i;
+	input wire mult_sel_i;
+	input wire div_sel_i;
+	input wire [1:0] operator_i;
+	input wire [1:0] signed_mode_i;
+	input wire [31:0] op_a_i;
+	input wire [31:0] op_b_i;
+	input wire [33:0] alu_adder_ext_i;
+	input wire [31:0] alu_adder_i;
+	input wire equal_to_zero_i;
+	output reg [32:0] alu_operand_a_o;
+	output reg [32:0] alu_operand_b_o;
+	input wire [67:0] imd_val_q_i;
+	output wire [67:0] imd_val_d_o;
+	output wire [1:0] imd_val_we_o;
+	input wire multdiv_ready_id_i;
+	output wire [31:0] multdiv_result_o;
+	output wire valid_o;
+	reg [2:0] md_state_q;
+	reg [2:0] md_state_d;
+	wire [32:0] accum_window_q;
+	reg [32:0] accum_window_d;
+	wire unused_imd_val0;
+	wire [1:0] unused_imd_val1;
+	wire [32:0] res_adder_l;
+	wire [32:0] res_adder_h;
+	reg [4:0] multdiv_count_q;
+	reg [4:0] multdiv_count_d;
+	reg [32:0] op_b_shift_q;
+	reg [32:0] op_b_shift_d;
+	reg [32:0] op_a_shift_q;
+	reg [32:0] op_a_shift_d;
+	wire [32:0] op_a_ext;
+	wire [32:0] op_b_ext;
+	wire [32:0] one_shift;
+	wire [32:0] op_a_bw_pp;
+	wire [32:0] op_a_bw_last_pp;
+	wire [31:0] b_0;
+	wire sign_a;
+	wire sign_b;
+	wire [32:0] next_quotient;
+	wire [31:0] next_remainder;
+	wire [31:0] op_numerator_q;
+	reg [31:0] op_numerator_d;
+	wire is_greater_equal;
+	wire div_change_sign;
+	wire rem_change_sign;
+	reg div_by_zero_d;
+	reg div_by_zero_q;
+	reg multdiv_hold;
+	wire multdiv_en;
+	assign res_adder_l = alu_adder_ext_i[32:0];
+	assign res_adder_h = alu_adder_ext_i[33:1];
+	assign imd_val_d_o[34+:34] = {1'b0, accum_window_d};
+	assign imd_val_we_o[0] = ~multdiv_hold;
+	assign accum_window_q = imd_val_q_i[66-:33];
+	assign unused_imd_val0 = imd_val_q_i[67];
+	assign imd_val_d_o[0+:34] = {2'b00, op_numerator_d};
+	assign imd_val_we_o[1] = multdiv_en;
+	assign op_numerator_q = imd_val_q_i[31-:32];
+	assign unused_imd_val1 = imd_val_q_i[33-:2];
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		alu_operand_a_o = accum_window_q;
+		(* full_case, parallel_case *)
+		case (operator_i)
+			2'd0: alu_operand_b_o = op_a_bw_pp;
+			2'd1: alu_operand_b_o = (md_state_q == 3'd4 ? op_a_bw_last_pp : op_a_bw_pp);
+			2'd2, 2'd3:
+				(* full_case, parallel_case *)
+				case (md_state_q)
+					3'd0: begin
+						alu_operand_a_o = 33'h000000001;
+						alu_operand_b_o = {~op_b_i, 1'b1};
+					end
+					3'd1: begin
+						alu_operand_a_o = 33'h000000001;
+						alu_operand_b_o = {~op_a_i, 1'b1};
+					end
+					3'd2: begin
+						alu_operand_a_o = 33'h000000001;
+						alu_operand_b_o = {~op_b_i, 1'b1};
+					end
+					3'd5: begin
+						alu_operand_a_o = 33'h000000001;
+						alu_operand_b_o = {~accum_window_q[31:0], 1'b1};
+					end
+					default: begin
+						alu_operand_a_o = {accum_window_q[31:0], 1'b1};
+						alu_operand_b_o = {~op_b_shift_q[31:0], 1'b1};
+					end
+				endcase
+			default: begin
+				alu_operand_a_o = accum_window_q;
+				alu_operand_b_o = {~op_b_shift_q[31:0], 1'b1};
+			end
+		endcase
+	end
+	assign b_0 = {32 {op_b_shift_q[0]}};
+	assign op_a_bw_pp = {~(op_a_shift_q[32] & op_b_shift_q[0]), op_a_shift_q[31:0] & b_0};
+	assign op_a_bw_last_pp = {op_a_shift_q[32] & op_b_shift_q[0], ~(op_a_shift_q[31:0] & b_0)};
+	assign sign_a = op_a_i[31] & signed_mode_i[0];
+	assign sign_b = op_b_i[31] & signed_mode_i[1];
+	assign op_a_ext = {sign_a, op_a_i};
+	assign op_b_ext = {sign_b, op_b_i};
+	assign is_greater_equal = (accum_window_q[31] == op_b_shift_q[31] ? ~res_adder_h[31] : accum_window_q[31]);
+	assign one_shift = 33'b000000000000000000000000000000001 << multdiv_count_q;
+	assign next_remainder = (is_greater_equal ? res_adder_h[31:0] : accum_window_q[31:0]);
+	assign next_quotient = (is_greater_equal ? op_a_shift_q | one_shift : op_a_shift_q);
+	assign div_change_sign = (sign_a ^ sign_b) & ~div_by_zero_q;
+	assign rem_change_sign = sign_a;
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		multdiv_count_d = multdiv_count_q;
+		accum_window_d = accum_window_q;
+		op_b_shift_d = op_b_shift_q;
+		op_a_shift_d = op_a_shift_q;
+		op_numerator_d = op_numerator_q;
+		md_state_d = md_state_q;
+		multdiv_hold = 1'b0;
+		div_by_zero_d = div_by_zero_q;
+		if (mult_sel_i || div_sel_i)
+			(* full_case, parallel_case *)
+			case (md_state_q)
+				3'd0: begin
+					(* full_case, parallel_case *)
+					case (operator_i)
+						2'd0: begin
+							op_a_shift_d = op_a_ext << 1;
+							accum_window_d = {~(op_a_ext[32] & op_b_i[0]), op_a_ext[31:0] & {32 {op_b_i[0]}}};
+							op_b_shift_d = op_b_ext >> 1;
+							md_state_d = ((op_b_ext >> 1) == 0 ? 3'd4 : 3'd3);
+						end
+						2'd1: begin
+							op_a_shift_d = op_a_ext;
+							accum_window_d = {1'b1, ~(op_a_ext[32] & op_b_i[0]), op_a_ext[31:1] & {31 {op_b_i[0]}}};
+							op_b_shift_d = op_b_ext >> 1;
+							md_state_d = 3'd3;
+						end
+						2'd2: begin
+							accum_window_d = {33 {1'b1}};
+							md_state_d = (equal_to_zero_i ? 3'd6 : 3'd1);
+							div_by_zero_d = equal_to_zero_i;
+						end
+						2'd3: begin
+							accum_window_d = op_a_ext;
+							md_state_d = (equal_to_zero_i ? 3'd6 : 3'd1);
+						end
+						default:
+							;
+					endcase
+					multdiv_count_d = 5'd31;
+				end
+				3'd1: begin
+					op_a_shift_d = 1'sb0;
+					op_numerator_d = (sign_a ? alu_adder_i : op_a_i);
+					md_state_d = 3'd2;
+				end
+				3'd2: begin
+					accum_window_d = {32'h00000000, op_numerator_q[31]};
+					op_b_shift_d = (sign_b ? {1'b0, alu_adder_i} : {1'b0, op_b_i});
+					md_state_d = 3'd3;
+				end
+				3'd3: begin
+					multdiv_count_d = multdiv_count_q - 5'h01;
+					(* full_case, parallel_case *)
+					case (operator_i)
+						2'd0: begin
+							accum_window_d = res_adder_l;
+							op_a_shift_d = op_a_shift_q << 1;
+							op_b_shift_d = op_b_shift_q >> 1;
+							md_state_d = ((op_b_shift_d == 0) || (multdiv_count_q == 5'd1) ? 3'd4 : 3'd3);
+						end
+						2'd1: begin
+							accum_window_d = res_adder_h;
+							op_a_shift_d = op_a_shift_q;
+							op_b_shift_d = op_b_shift_q >> 1;
+							md_state_d = (multdiv_count_q == 5'd1 ? 3'd4 : 3'd3);
+						end
+						2'd2, 2'd3: begin
+							accum_window_d = {next_remainder[31:0], op_numerator_q[multdiv_count_d]};
+							op_a_shift_d = next_quotient;
+							md_state_d = (multdiv_count_q == 5'd1 ? 3'd4 : 3'd3);
+						end
+						default:
+							;
+					endcase
+				end
+				3'd4:
+					(* full_case, parallel_case *)
+					case (operator_i)
+						2'd0: begin
+							accum_window_d = res_adder_l;
+							md_state_d = 3'd0;
+							multdiv_hold = ~multdiv_ready_id_i;
+						end
+						2'd1: begin
+							accum_window_d = res_adder_l;
+							md_state_d = 3'd0;
+							md_state_d = 3'd0;
+							multdiv_hold = ~multdiv_ready_id_i;
+						end
+						2'd2: begin
+							accum_window_d = next_quotient;
+							md_state_d = 3'd5;
+						end
+						2'd3: begin
+							accum_window_d = {1'b0, next_remainder[31:0]};
+							md_state_d = 3'd5;
+						end
+						default:
+							;
+					endcase
+				3'd5: begin
+					md_state_d = 3'd6;
+					(* full_case, parallel_case *)
+					case (operator_i)
+						2'd2: accum_window_d = (div_change_sign ? {1'b0, alu_adder_i} : accum_window_q);
+						2'd3: accum_window_d = (rem_change_sign ? {1'b0, alu_adder_i} : accum_window_q);
+						default:
+							;
+					endcase
+				end
+				3'd6: begin
+					md_state_d = 3'd0;
+					multdiv_hold = ~multdiv_ready_id_i;
+				end
+				default: md_state_d = 3'd0;
+			endcase
+	end
+	assign multdiv_en = (mult_en_i | div_en_i) & ~multdiv_hold;
+	always @(posedge clk_i or negedge rst_ni)
+		if (!rst_ni) begin
+			multdiv_count_q <= 5'h00;
+			op_b_shift_q <= 33'h000000000;
+			op_a_shift_q <= 33'h000000000;
+			md_state_q <= 3'd0;
+			div_by_zero_q <= 1'b0;
+		end
+		else if (multdiv_en) begin
+			multdiv_count_q <= multdiv_count_d;
+			op_b_shift_q <= op_b_shift_d;
+			op_a_shift_q <= op_a_shift_d;
+			md_state_q <= md_state_d;
+			div_by_zero_q <= div_by_zero_d;
+		end
+	assign valid_o = (md_state_q == 3'd6) | ((md_state_q == 3'd4) & ((operator_i == 2'd0) | (operator_i == 2'd1)));
+	assign multdiv_result_o = (div_en_i ? accum_window_q[31:0] : res_adder_l[31:0]);
+	initial _sv2v_0 = 0;
+endmodule
+module cve2_prefetch_buffer (
+	clk_i,
+	rst_ni,
+	req_i,
+	branch_i,
+	addr_i,
+	ready_i,
+	valid_o,
+	rdata_o,
+	addr_o,
+	err_o,
+	err_plus2_o,
+	instr_req_o,
+	instr_gnt_i,
+	instr_addr_o,
+	instr_rdata_i,
+	instr_err_i,
+	instr_rvalid_i,
+	busy_o
+);
+	input wire clk_i;
+	input wire rst_ni;
+	input wire req_i;
+	input wire branch_i;
+	input wire [31:0] addr_i;
+	input wire ready_i;
+	output wire valid_o;
+	output wire [31:0] rdata_o;
+	output wire [31:0] addr_o;
+	output wire err_o;
+	output wire err_plus2_o;
+	output wire instr_req_o;
+	input wire instr_gnt_i;
+	output wire [31:0] instr_addr_o;
+	input wire [31:0] instr_rdata_i;
+	input wire instr_err_i;
+	input wire instr_rvalid_i;
+	output wire busy_o;
+	localparam [31:0] NUM_REQS = 2;
+	wire valid_new_req;
+	wire valid_req;
+	wire valid_req_d;
+	reg valid_req_q;
+	wire discard_req_d;
+	reg discard_req_q;
+	wire [1:0] rdata_outstanding_n;
+	wire [1:0] rdata_outstanding_s;
+	reg [1:0] rdata_outstanding_q;
+	wire [1:0] branch_discard_n;
+	wire [1:0] branch_discard_s;
+	reg [1:0] branch_discard_q;
+	wire [1:0] rdata_outstanding_rev;
+	wire [31:0] stored_addr_d;
+	reg [31:0] stored_addr_q;
+	wire stored_addr_en;
+	wire [31:0] fetch_addr_d;
+	reg [31:0] fetch_addr_q;
+	wire fetch_addr_en;
+	wire [31:0] instr_addr;
+	wire [31:0] instr_addr_w_aligned;
+	wire fifo_valid;
+	wire [31:0] fifo_addr;
+	wire fifo_ready;
+	wire fifo_clear;
+	wire [1:0] fifo_busy;
+	wire valid_raw;
+	assign busy_o = |rdata_outstanding_q | instr_req_o;
+	assign fifo_clear = branch_i;
+	genvar _gv_i_31;
+	generate
+		for (_gv_i_31 = 0; _gv_i_31 < NUM_REQS; _gv_i_31 = _gv_i_31 + 1) begin : gen_rd_rev
+			localparam i = _gv_i_31;
+			assign rdata_outstanding_rev[i] = rdata_outstanding_q[1 - i];
+		end
+	endgenerate
+	assign fifo_ready = ~&(fifo_busy | rdata_outstanding_rev);
+	cve2_fetch_fifo #(.NUM_REQS(NUM_REQS)) fifo_i(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.clear_i(fifo_clear),
+		.busy_o(fifo_busy),
+		.in_valid_i(fifo_valid),
+		.in_addr_i(fifo_addr),
+		.in_rdata_i(instr_rdata_i),
+		.in_err_i(instr_err_i),
+		.out_valid_o(valid_raw),
+		.out_ready_i(ready_i),
+		.out_rdata_o(rdata_o),
+		.out_addr_o(addr_o),
+		.out_err_o(err_o),
+		.out_err_plus2_o(err_plus2_o)
+	);
+	assign valid_new_req = (req_i & (fifo_ready | branch_i)) & ~rdata_outstanding_q[1];
+	assign valid_req = valid_req_q | valid_new_req;
+	assign valid_req_d = valid_req & ~instr_gnt_i;
+	assign discard_req_d = valid_req_q & (branch_i | discard_req_q);
+	assign stored_addr_en = (valid_new_req & ~valid_req_q) & ~instr_gnt_i;
+	assign stored_addr_d = instr_addr;
+	always @(posedge clk_i or negedge rst_ni)
+		if (!rst_ni)
+			stored_addr_q <= 1'sb0;
+		else if (stored_addr_en)
+			stored_addr_q <= stored_addr_d;
+	assign fetch_addr_en = branch_i | (valid_new_req & ~valid_req_q);
+	assign fetch_addr_d = (branch_i ? addr_i : {fetch_addr_q[31:2], 2'b00}) + {{29 {1'b0}}, valid_new_req & ~valid_req_q, 2'b00};
+	always @(posedge clk_i or negedge rst_ni)
+		if (!rst_ni)
+			fetch_addr_q <= 1'sb0;
+		else if (fetch_addr_en)
+			fetch_addr_q <= fetch_addr_d;
+	assign instr_addr = (valid_req_q ? stored_addr_q : (branch_i ? addr_i : fetch_addr_q));
+	assign instr_addr_w_aligned = {instr_addr[31:2], 2'b00};
+	genvar _gv_i_32;
+	generate
+		for (_gv_i_32 = 0; _gv_i_32 < NUM_REQS; _gv_i_32 = _gv_i_32 + 1) begin : g_outstanding_reqs
+			localparam i = _gv_i_32;
+			if (i == 0) begin : g_req0
+				assign rdata_outstanding_n[i] = (valid_req & instr_gnt_i) | rdata_outstanding_q[i];
+				assign branch_discard_n[i] = (((valid_req & instr_gnt_i) & discard_req_d) | (branch_i & rdata_outstanding_q[i])) | branch_discard_q[i];
+			end
+			else begin : g_reqtop
+				assign rdata_outstanding_n[i] = ((valid_req & instr_gnt_i) & rdata_outstanding_q[i - 1]) | rdata_outstanding_q[i];
+				assign branch_discard_n[i] = ((((valid_req & instr_gnt_i) & discard_req_d) & rdata_outstanding_q[i - 1]) | (branch_i & rdata_outstanding_q[i])) | branch_discard_q[i];
+			end
+		end
+	endgenerate
+	assign rdata_outstanding_s = (instr_rvalid_i ? {1'b0, rdata_outstanding_n[1:1]} : rdata_outstanding_n);
+	assign branch_discard_s = (instr_rvalid_i ? {1'b0, branch_discard_n[1:1]} : branch_discard_n);
+	assign fifo_valid = instr_rvalid_i & ~branch_discard_q[0];
+	assign fifo_addr = addr_i;
+	always @(posedge clk_i or negedge rst_ni)
+		if (!rst_ni) begin
+			valid_req_q <= 1'b0;
+			discard_req_q <= 1'b0;
+			rdata_outstanding_q <= 'b0;
+			branch_discard_q <= 'b0;
+		end
+		else begin
+			valid_req_q <= valid_req_d;
+			discard_req_q <= discard_req_d;
+			rdata_outstanding_q <= rdata_outstanding_s;
+			branch_discard_q <= branch_discard_s;
+		end
+	assign instr_req_o = valid_req;
+	assign instr_addr_o = instr_addr_w_aligned;
+	assign valid_o = valid_raw;
+endmodule
+module cve2_pmp (
+	clk_i,
+	rst_ni,
+	csr_pmp_cfg_i,
+	csr_pmp_addr_i,
+	csr_pmp_mseccfg_i,
+	priv_mode_i,
+	pmp_req_addr_i,
+	pmp_req_type_i,
+	pmp_req_err_o
+);
+	reg _sv2v_0;
+	parameter [31:0] PMPGranularity = 0;
+	parameter [31:0] PMPNumChan = 2;
+	parameter [31:0] PMPNumRegions = 4;
+	input wire clk_i;
+	input wire rst_ni;
+	input wire [(PMPNumRegions * 6) - 1:0] csr_pmp_cfg_i;
+	input wire [(PMPNumRegions * 34) - 1:0] csr_pmp_addr_i;
+	input wire [2:0] csr_pmp_mseccfg_i;
+	input wire [(PMPNumChan * 2) - 1:0] priv_mode_i;
+	input wire [(PMPNumChan * 34) - 1:0] pmp_req_addr_i;
+	input wire [(PMPNumChan * 2) - 1:0] pmp_req_type_i;
+	output wire [0:PMPNumChan - 1] pmp_req_err_o;
+	wire [33:0] region_start_addr [0:PMPNumRegions - 1];
+	wire [33:PMPGranularity + 2] region_addr_mask [0:PMPNumRegions - 1];
+	wire [(PMPNumChan * PMPNumRegions) - 1:0] region_match_gt;
+	wire [(PMPNumChan * PMPNumRegions) - 1:0] region_match_lt;
+	wire [(PMPNumChan * PMPNumRegions) - 1:0] region_match_eq;
+	reg [(PMPNumChan * PMPNumRegions) - 1:0] region_match_all;
+	wire [(PMPNumChan * PMPNumRegions) - 1:0] region_basic_perm_check;
+	reg [(PMPNumChan * PMPNumRegions) - 1:0] region_mml_perm_check;
+	reg [PMPNumChan - 1:0] access_fault;
+	initial $display("Warning [elaboration] /tmp/tmp.QxSBci6NnL/mpy_soc.sv:42059:3 - cve2_pmp\n msg: ", "CVE2 does not officially support PMP, see rule PVL-40.");
+	genvar _gv_r_1;
+	generate
+		for (_gv_r_1 = 0; _gv_r_1 < PMPNumRegions; _gv_r_1 = _gv_r_1 + 1) begin : g_addr_exp
+			localparam r = _gv_r_1;
+			if (r == 0) begin : g_entry0
+				assign region_start_addr[r] = (csr_pmp_cfg_i[(((PMPNumRegions - 1) - r) * 6) + 4-:2] == 2'b01 ? 34'h000000000 : csr_pmp_addr_i[((PMPNumRegions - 1) - r) * 34+:34]);
+			end
+			else begin : g_oth
+				assign region_start_addr[r] = (csr_pmp_cfg_i[(((PMPNumRegions - 1) - r) * 6) + 4-:2] == 2'b01 ? csr_pmp_addr_i[((PMPNumRegions - 1) - (r - 1)) * 34+:34] : csr_pmp_addr_i[((PMPNumRegions - 1) - r) * 34+:34]);
+			end
+			genvar _gv_b_1;
+			for (_gv_b_1 = PMPGranularity + 2; _gv_b_1 < 34; _gv_b_1 = _gv_b_1 + 1) begin : g_bitmask
+				localparam b = _gv_b_1;
+				if (b == 2) begin : g_bit0
+					assign region_addr_mask[r][b] = csr_pmp_cfg_i[(((PMPNumRegions - 1) - r) * 6) + 4-:2] != 2'b11;
+				end
+				else begin : g_others
+					if (PMPGranularity == 0) begin : g_region_addr_mask_zero_granularity
+						assign region_addr_mask[r][b] = (csr_pmp_cfg_i[(((PMPNumRegions - 1) - r) * 6) + 4-:2] != 2'b11) | ~&csr_pmp_addr_i[(((PMPNumRegions - 1) - r) * 34) + ((b - 1) >= 2 ? b - 1 : ((b - 1) + ((b - 1) >= 2 ? b - 2 : 4 - b)) - 1)-:((b - 1) >= 2 ? b - 2 : 4 - b)];
+					end
+					else begin : g_region_addr_mask_other_granularity
+						assign region_addr_mask[r][b] = (csr_pmp_cfg_i[(((PMPNumRegions - 1) - r) * 6) + 4-:2] != 2'b11) | ~&csr_pmp_addr_i[(((PMPNumRegions - 1) - r) * 34) + ((b - 1) >= (PMPGranularity + 1) ? b - 1 : ((b - 1) + ((b - 1) >= (PMPGranularity + 1) ? ((b - 1) - (PMPGranularity + 1)) + 1 : ((PMPGranularity + 1) - (b - 1)) + 1)) - 1)-:((b - 1) >= (PMPGranularity + 1) ? ((b - 1) - (PMPGranularity + 1)) + 1 : ((PMPGranularity + 1) - (b - 1)) + 1)];
+					end
+				end
+			end
+		end
+	endgenerate
+	genvar _gv_c_1;
+	generate
+		for (_gv_c_1 = 0; _gv_c_1 < PMPNumChan; _gv_c_1 = _gv_c_1 + 1) begin : g_access_check
+			localparam c = _gv_c_1;
+			genvar _gv_r_2;
+			for (_gv_r_2 = 0; _gv_r_2 < PMPNumRegions; _gv_r_2 = _gv_r_2 + 1) begin : g_regions
+				localparam r = _gv_r_2;
+				assign region_match_eq[(c * PMPNumRegions) + r] = (pmp_req_addr_i[(((PMPNumChan - 1) - c) * 34) + (33 >= (PMPGranularity + 2) ? 33 : (33 + (33 >= (PMPGranularity + 2) ? 34 - (PMPGranularity + 2) : PMPGranularity - 30)) - 1)-:(33 >= (PMPGranularity + 2) ? 34 - (PMPGranularity + 2) : PMPGranularity - 30)] & region_addr_mask[r]) == (region_start_addr[r][33:PMPGranularity + 2] & region_addr_mask[r]);
+				assign region_match_gt[(c * PMPNumRegions) + r] = pmp_req_addr_i[(((PMPNumChan - 1) - c) * 34) + (33 >= (PMPGranularity + 2) ? 33 : (33 + (33 >= (PMPGranularity + 2) ? 34 - (PMPGranularity + 2) : PMPGranularity - 30)) - 1)-:(33 >= (PMPGranularity + 2) ? 34 - (PMPGranularity + 2) : PMPGranularity - 30)] > region_start_addr[r][33:PMPGranularity + 2];
+				assign region_match_lt[(c * PMPNumRegions) + r] = pmp_req_addr_i[(((PMPNumChan - 1) - c) * 34) + (33 >= (PMPGranularity + 2) ? 33 : (33 + (33 >= (PMPGranularity + 2) ? 34 - (PMPGranularity + 2) : PMPGranularity - 30)) - 1)-:(33 >= (PMPGranularity + 2) ? 34 - (PMPGranularity + 2) : PMPGranularity - 30)] < csr_pmp_addr_i[(((PMPNumRegions - 1) - r) * 34) + (33 >= (PMPGranularity + 2) ? 33 : (33 + (33 >= (PMPGranularity + 2) ? 34 - (PMPGranularity + 2) : PMPGranularity - 30)) - 1)-:(33 >= (PMPGranularity + 2) ? 34 - (PMPGranularity + 2) : PMPGranularity - 30)];
+				always @(*) begin
+					if (_sv2v_0)
+						;
+					region_match_all[(c * PMPNumRegions) + r] = 1'b0;
+					(* full_case, parallel_case *)
+					case (csr_pmp_cfg_i[(((PMPNumRegions - 1) - r) * 6) + 4-:2])
+						2'b00: region_match_all[(c * PMPNumRegions) + r] = 1'b0;
+						2'b10: region_match_all[(c * PMPNumRegions) + r] = region_match_eq[(c * PMPNumRegions) + r];
+						2'b11: region_match_all[(c * PMPNumRegions) + r] = region_match_eq[(c * PMPNumRegions) + r];
+						2'b01: region_match_all[(c * PMPNumRegions) + r] = (region_match_eq[(c * PMPNumRegions) + r] | region_match_gt[(c * PMPNumRegions) + r]) & region_match_lt[(c * PMPNumRegions) + r];
+						default: region_match_all[(c * PMPNumRegions) + r] = 1'b0;
+					endcase
+				end
+				assign region_basic_perm_check[(c * PMPNumRegions) + r] = (((pmp_req_type_i[((PMPNumChan - 1) - c) * 2+:2] == 2'b00) & csr_pmp_cfg_i[(((PMPNumRegions - 1) - r) * 6) + 2]) | ((pmp_req_type_i[((PMPNumChan - 1) - c) * 2+:2] == 2'b01) & csr_pmp_cfg_i[(((PMPNumRegions - 1) - r) * 6) + 1])) | ((pmp_req_type_i[((PMPNumChan - 1) - c) * 2+:2] == 2'b10) & csr_pmp_cfg_i[((PMPNumRegions - 1) - r) * 6]);
+				always @(*) begin
+					if (_sv2v_0)
+						;
+					region_mml_perm_check[(c * PMPNumRegions) + r] = 1'b0;
+					if (!csr_pmp_cfg_i[((PMPNumRegions - 1) - r) * 6] && csr_pmp_cfg_i[(((PMPNumRegions - 1) - r) * 6) + 1])
+						(* full_case, parallel_case *)
+						case ({csr_pmp_cfg_i[(((PMPNumRegions - 1) - r) * 6) + 5], csr_pmp_cfg_i[(((PMPNumRegions - 1) - r) * 6) + 2]})
+							2'b00: region_mml_perm_check[(c * PMPNumRegions) + r] = (pmp_req_type_i[((PMPNumChan - 1) - c) * 2+:2] == 2'b10) | ((pmp_req_type_i[((PMPNumChan - 1) - c) * 2+:2] == 2'b01) & (priv_mode_i[((PMPNumChan - 1) - c) * 2+:2] == 2'b11));
+							2'b01: region_mml_perm_check[(c * PMPNumRegions) + r] = (pmp_req_type_i[((PMPNumChan - 1) - c) * 2+:2] == 2'b10) | (pmp_req_type_i[((PMPNumChan - 1) - c) * 2+:2] == 2'b01);
+							2'b10: region_mml_perm_check[(c * PMPNumRegions) + r] = pmp_req_type_i[((PMPNumChan - 1) - c) * 2+:2] == 2'b00;
+							2'b11: region_mml_perm_check[(c * PMPNumRegions) + r] = (pmp_req_type_i[((PMPNumChan - 1) - c) * 2+:2] == 2'b00) | ((pmp_req_type_i[((PMPNumChan - 1) - c) * 2+:2] == 2'b10) & (priv_mode_i[((PMPNumChan - 1) - c) * 2+:2] == 2'b11));
+							default:
+								;
+						endcase
+					else if (((csr_pmp_cfg_i[((PMPNumRegions - 1) - r) * 6] & csr_pmp_cfg_i[(((PMPNumRegions - 1) - r) * 6) + 1]) & csr_pmp_cfg_i[(((PMPNumRegions - 1) - r) * 6) + 2]) & csr_pmp_cfg_i[(((PMPNumRegions - 1) - r) * 6) + 5])
+						region_mml_perm_check[(c * PMPNumRegions) + r] = pmp_req_type_i[((PMPNumChan - 1) - c) * 2+:2] == 2'b10;
+					else
+						region_mml_perm_check[(c * PMPNumRegions) + r] = (priv_mode_i[((PMPNumChan - 1) - c) * 2+:2] == 2'b11 ? csr_pmp_cfg_i[(((PMPNumRegions - 1) - r) * 6) + 5] & region_basic_perm_check[(c * PMPNumRegions) + r] : ~csr_pmp_cfg_i[(((PMPNumRegions - 1) - r) * 6) + 5] & region_basic_perm_check[(c * PMPNumRegions) + r]);
+				end
+			end
+			always @(*) begin
+				if (_sv2v_0)
+					;
+				access_fault[c] = csr_pmp_mseccfg_i[1] | (priv_mode_i[((PMPNumChan - 1) - c) * 2+:2] != 2'b11);
+				begin : sv2v_autoblock_1
+					reg signed [31:0] r;
+					for (r = PMPNumRegions - 1; r >= 0; r = r - 1)
+						if (region_match_all[(c * PMPNumRegions) + r]) begin
+							if (csr_pmp_mseccfg_i[0])
+								access_fault[c] = ~region_mml_perm_check[(c * PMPNumRegions) + r];
+							else
+								access_fault[c] = (priv_mode_i[((PMPNumChan - 1) - c) * 2+:2] == 2'b11 ? csr_pmp_cfg_i[(((PMPNumRegions - 1) - r) * 6) + 5] & ~region_basic_perm_check[(c * PMPNumRegions) + r] : ~region_basic_perm_check[(c * PMPNumRegions) + r]);
+						end
+				end
+			end
+			assign pmp_req_err_o[c] = access_fault[c];
+		end
+	endgenerate
+	wire unused_csr_pmp_mseccfg_rlb;
+	assign unused_csr_pmp_mseccfg_rlb = csr_pmp_mseccfg_i[2];
+	initial _sv2v_0 = 0;
+endmodule
+module cve2_register_file_ff (
+	clk_i,
+	rst_ni,
+	test_en_i,
+	raddr_a_i,
+	rdata_a_o,
+	raddr_b_i,
+	rdata_b_o,
+	raddr_c_i,
+	rdata_c_o,
+	waddr_a_i,
+	wdata_a_i,
+	we_a_i
+);
+	reg _sv2v_0;
+	parameter [0:0] RV32E = 0;
+	parameter [31:0] DataWidth = 32;
+	parameter [DataWidth - 1:0] WordZeroVal = 1'sb0;
+	parameter [0:0] XInterface = 1'b0;
+	input wire clk_i;
+	input wire rst_ni;
+	input wire test_en_i;
+	input wire [4:0] raddr_a_i;
+	output wire [DataWidth - 1:0] rdata_a_o;
+	input wire [4:0] raddr_b_i;
+	output wire [DataWidth - 1:0] rdata_b_o;
+	input wire [4:0] raddr_c_i;
+	output wire [DataWidth - 1:0] rdata_c_o;
+	input wire [4:0] waddr_a_i;
+	input wire [DataWidth - 1:0] wdata_a_i;
+	input wire we_a_i;
+	localparam [31:0] ADDR_WIDTH = (RV32E ? 4 : 5);
+	localparam [31:0] NUM_WORDS = 2 ** ADDR_WIDTH;
+	wire [(NUM_WORDS * DataWidth) - 1:0] rf_reg;
+	reg [((NUM_WORDS - 1) >= 1 ? ((NUM_WORDS - 1) * DataWidth) + (DataWidth - 1) : ((3 - NUM_WORDS) * DataWidth) + (((NUM_WORDS - 1) * DataWidth) - 1)):((NUM_WORDS - 1) >= 1 ? DataWidth : (NUM_WORDS - 1) * DataWidth)] rf_reg_q;
+	reg [NUM_WORDS - 1:1] we_a_dec;
+	function automatic [4:0] sv2v_cast_5;
+		input reg [4:0] inp;
+		sv2v_cast_5 = inp;
+	endfunction
+	always @(*) begin : we_a_decoder
+		if (_sv2v_0)
+			;
+		begin : sv2v_autoblock_1
+			reg [31:0] i;
+			for (i = 1; i < NUM_WORDS; i = i + 1)
+				we_a_dec[i] = (waddr_a_i == sv2v_cast_5(i) ? we_a_i : 1'b0);
+		end
+	end
+	genvar _gv_i_33;
+	generate
+		for (_gv_i_33 = 1; _gv_i_33 < NUM_WORDS; _gv_i_33 = _gv_i_33 + 1) begin : g_rf_flops
+			localparam i = _gv_i_33;
+			always @(posedge clk_i or negedge rst_ni)
+				if (!rst_ni)
+					rf_reg_q[((NUM_WORDS - 1) >= 1 ? i : 1 - (i - (NUM_WORDS - 1))) * DataWidth+:DataWidth] <= WordZeroVal;
+				else if (we_a_dec[i])
+					rf_reg_q[((NUM_WORDS - 1) >= 1 ? i : 1 - (i - (NUM_WORDS - 1))) * DataWidth+:DataWidth] <= wdata_a_i;
+		end
+	endgenerate
+	assign rf_reg[0+:DataWidth] = WordZeroVal;
+	assign rf_reg[DataWidth * (((NUM_WORDS - 1) >= 1 ? NUM_WORDS - 1 : ((NUM_WORDS - 1) + ((NUM_WORDS - 1) >= 1 ? NUM_WORDS - 1 : 3 - NUM_WORDS)) - 1) - (((NUM_WORDS - 1) >= 1 ? NUM_WORDS - 1 : 3 - NUM_WORDS) - 1))+:DataWidth * ((NUM_WORDS - 1) >= 1 ? NUM_WORDS - 1 : 3 - NUM_WORDS)] = rf_reg_q[DataWidth * ((NUM_WORDS - 1) >= 1 ? ((NUM_WORDS - 1) >= 1 ? ((NUM_WORDS - 1) >= 1 ? NUM_WORDS - 1 : ((NUM_WORDS - 1) + ((NUM_WORDS - 1) >= 1 ? NUM_WORDS - 1 : 3 - NUM_WORDS)) - 1) - (((NUM_WORDS - 1) >= 1 ? NUM_WORDS - 1 : 3 - NUM_WORDS) - 1) : ((NUM_WORDS - 1) >= 1 ? NUM_WORDS - 1 : ((NUM_WORDS - 1) + ((NUM_WORDS - 1) >= 1 ? NUM_WORDS - 1 : 3 - NUM_WORDS)) - 1)) : 1 - (((NUM_WORDS - 1) >= 1 ? ((NUM_WORDS - 1) >= 1 ? NUM_WORDS - 1 : ((NUM_WORDS - 1) + ((NUM_WORDS - 1) >= 1 ? NUM_WORDS - 1 : 3 - NUM_WORDS)) - 1) - (((NUM_WORDS - 1) >= 1 ? NUM_WORDS - 1 : 3 - NUM_WORDS) - 1) : ((NUM_WORDS - 1) >= 1 ? NUM_WORDS - 1 : ((NUM_WORDS - 1) + ((NUM_WORDS - 1) >= 1 ? NUM_WORDS - 1 : 3 - NUM_WORDS)) - 1)) - (NUM_WORDS - 1)))+:DataWidth * ((NUM_WORDS - 1) >= 1 ? NUM_WORDS - 1 : 3 - NUM_WORDS)];
+	assign rdata_a_o = rf_reg[raddr_a_i * DataWidth+:DataWidth];
+	assign rdata_b_o = rf_reg[raddr_b_i * DataWidth+:DataWidth];
+	assign rdata_c_o = (XInterface ? rf_reg[raddr_c_i * DataWidth+:DataWidth] : {DataWidth {1'sb0}});
+	wire unused_test_en;
+	assign unused_test_en = test_en_i;
+	initial _sv2v_0 = 0;
+endmodule
+module cve2_wb (
+	clk_i,
+	rst_ni,
+	en_wb_i,
+	instr_is_compressed_id_i,
+	instr_perf_count_id_i,
+	perf_instr_ret_wb_o,
+	perf_instr_ret_compressed_wb_o,
+	rf_waddr_id_i,
+	rf_wdata_id_i,
+	rf_we_id_i,
+	rf_wdata_lsu_i,
+	rf_we_lsu_i,
+	rf_waddr_wb_o,
+	rf_wdata_wb_o,
+	rf_we_wb_o,
+	lsu_resp_valid_i,
+	lsu_resp_err_i
+);
+	input wire clk_i;
+	input wire rst_ni;
+	input wire en_wb_i;
+	input wire instr_is_compressed_id_i;
+	input wire instr_perf_count_id_i;
+	output wire perf_instr_ret_wb_o;
+	output wire perf_instr_ret_compressed_wb_o;
+	input wire [4:0] rf_waddr_id_i;
+	input wire [31:0] rf_wdata_id_i;
+	input wire rf_we_id_i;
+	input wire [31:0] rf_wdata_lsu_i;
+	input wire rf_we_lsu_i;
+	output wire [4:0] rf_waddr_wb_o;
+	output wire [31:0] rf_wdata_wb_o;
+	output wire rf_we_wb_o;
+	input wire lsu_resp_valid_i;
+	input wire lsu_resp_err_i;
+	wire [31:0] rf_wdata_wb_mux [0:1];
+	wire [1:0] rf_wdata_wb_mux_we;
+	assign rf_waddr_wb_o = rf_waddr_id_i;
+	assign rf_wdata_wb_mux[0] = rf_wdata_id_i;
+	assign rf_wdata_wb_mux_we[0] = rf_we_id_i;
+	assign perf_instr_ret_wb_o = (instr_perf_count_id_i & en_wb_i) & ~(lsu_resp_valid_i & lsu_resp_err_i);
+	assign perf_instr_ret_compressed_wb_o = perf_instr_ret_wb_o & instr_is_compressed_id_i;
+	assign rf_wdata_wb_mux[1] = rf_wdata_lsu_i;
+	assign rf_wdata_wb_mux_we[1] = rf_we_lsu_i;
+	assign rf_wdata_wb_o = ({32 {rf_wdata_wb_mux_we[0]}} & rf_wdata_wb_mux[0]) | ({32 {rf_wdata_wb_mux_we[1]}} & rf_wdata_wb_mux[1]);
+	assign rf_we_wb_o = |rf_wdata_wb_mux_we;
+endmodule
+module cve2_core (
+	clk_i,
+	rst_ni,
+	test_en_i,
+	hart_id_i,
+	boot_addr_i,
+	instr_req_o,
+	instr_gnt_i,
+	instr_rvalid_i,
+	instr_addr_o,
+	instr_rdata_i,
+	instr_err_i,
+	data_req_o,
+	data_gnt_i,
+	data_rvalid_i,
+	data_we_o,
+	data_be_o,
+	data_addr_o,
+	data_wdata_o,
+	data_rdata_i,
+	data_err_i,
+	x_issue_valid_o,
+	x_issue_ready_i,
+	x_issue_req_o,
+	x_issue_resp_i,
+	x_register_o,
+	x_commit_valid_o,
+	x_commit_o,
+	x_result_valid_i,
+	x_result_ready_o,
+	x_result_i,
+	irq_software_i,
+	irq_timer_i,
+	irq_external_i,
+	irq_fast_i,
+	irq_nm_i,
+	irq_pending_o,
+	debug_req_i,
+	debug_halted_o,
+	dm_halt_addr_i,
+	dm_exception_addr_i,
+	crash_dump_o,
+	fetch_enable_i,
+	core_busy_o
+);
+	parameter [0:0] PMPEnable = 1'b0;
+	parameter [31:0] PMPGranularity = 0;
+	parameter [31:0] PMPNumRegions = 4;
+	parameter [31:0] MHPMCounterNum = 10;
+	parameter [31:0] MHPMCounterWidth = 40;
+	parameter [0:0] RV32E = 1'b0;
+	parameter integer RV32M = 32'sd2;
+	parameter integer RV32B = 32'sd0;
+	parameter [0:0] DbgTriggerEn = 1'b0;
+	parameter [31:0] DbgHwBreakNum = 1;
+	parameter [0:0] XInterface = 1'b0;
+	input wire clk_i;
+	input wire rst_ni;
+	input wire test_en_i;
+	input wire [31:0] hart_id_i;
+	input wire [31:0] boot_addr_i;
+	output wire instr_req_o;
+	input wire instr_gnt_i;
+	input wire instr_rvalid_i;
+	output wire [31:0] instr_addr_o;
+	input wire [31:0] instr_rdata_i;
+	input wire instr_err_i;
+	output wire data_req_o;
+	input wire data_gnt_i;
+	input wire data_rvalid_i;
+	output wire data_we_o;
+	output wire [3:0] data_be_o;
+	output wire [31:0] data_addr_o;
+	output wire [31:0] data_wdata_o;
+	input wire [31:0] data_rdata_i;
+	input wire data_err_i;
+	output wire x_issue_valid_o;
+	input wire x_issue_ready_i;
+	localparam [31:0] cve2_pkg_X_HARTID_WIDTH = 32;
+	localparam [31:0] cve2_pkg_X_ID_WIDTH = 4;
+	output wire [67:0] x_issue_req_o;
+	localparam [31:0] cve2_pkg_X_DUAL_READ = 0;
+	localparam [31:0] cve2_pkg_X_NUM_RS = 3;
+	localparam [31:0] cve2_pkg_X_DUAL_WRITE = 0;
+	input wire [(2 + (cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ)) - 1:0] x_issue_resp_i;
+	localparam [31:0] cve2_pkg_X_RFR_WIDTH = 32;
+	output wire [(((cve2_pkg_X_HARTID_WIDTH + cve2_pkg_X_ID_WIDTH) + (cve2_pkg_X_NUM_RS * cve2_pkg_X_RFR_WIDTH)) + (cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ)) - 1:0] x_register_o;
+	output wire x_commit_valid_o;
+	output wire [(cve2_pkg_X_HARTID_WIDTH + cve2_pkg_X_ID_WIDTH) + 0:0] x_commit_o;
+	input wire x_result_valid_i;
+	output wire x_result_ready_o;
+	localparam [31:0] cve2_pkg_X_RFW_WIDTH = 32;
+	input wire [((cve2_pkg_X_HARTID_WIDTH + cve2_pkg_X_ID_WIDTH) + cve2_pkg_X_RFW_WIDTH) + 5:0] x_result_i;
+	input wire irq_software_i;
+	input wire irq_timer_i;
+	input wire irq_external_i;
+	input wire [15:0] irq_fast_i;
+	input wire irq_nm_i;
+	output wire irq_pending_o;
+	input wire debug_req_i;
+	output wire debug_halted_o;
+	input wire [31:0] dm_halt_addr_i;
+	input wire [31:0] dm_exception_addr_i;
+	output wire [127:0] crash_dump_o;
+	input wire fetch_enable_i;
+	output wire core_busy_o;
+	localparam [31:0] PMP_NUM_CHAN = 3;
+	wire instr_valid_id;
+	wire instr_new_id;
+	wire [31:0] instr_rdata_id;
+	wire [31:0] instr_rdata_alu_id;
+	wire [15:0] instr_rdata_c_id;
+	wire instr_is_compressed_id;
+	wire instr_perf_count_id;
+	wire instr_fetch_err;
+	wire instr_fetch_err_plus2;
+	wire illegal_c_insn_id;
+	wire [31:0] pc_if;
+	wire [31:0] pc_id;
+	wire [67:0] imd_val_d_ex;
+	wire [67:0] imd_val_q_ex;
+	wire [1:0] imd_val_we_ex;
+	wire instr_first_cycle_id;
+	wire instr_valid_clear;
+	wire pc_set;
+	wire [2:0] pc_mux_id;
+	wire [1:0] exc_pc_mux_id;
+	wire [6:0] exc_cause;
+	wire lsu_load_err;
+	wire lsu_store_err;
+	wire lsu_addr_incr_req;
+	wire [31:0] lsu_addr_last;
+	wire [31:0] branch_target_ex;
+	wire branch_decision;
+	wire ctrl_busy;
+	wire if_busy;
+	wire lsu_busy;
+	wire [4:0] rf_raddr_a;
+	wire [31:0] rf_rdata_a;
+	wire [4:0] rf_raddr_b;
+	wire [31:0] rf_rdata_b;
+	wire [4:0] rf_raddr_c;
+	wire [31:0] rf_rdata_c;
+	wire rf_ren_a;
+	wire rf_ren_b;
+	wire rf_ren_c;
+	wire [4:0] rf_waddr_wb;
+	wire [31:0] rf_wdata_wb;
+	wire [31:0] rf_wdata_lsu;
+	wire rf_we_wb;
+	wire rf_we_lsu;
+	wire [4:0] rf_waddr_id;
+	wire [31:0] rf_wdata_id;
+	wire rf_we_id;
+	wire [6:0] alu_operator_ex;
+	wire [31:0] alu_operand_a_ex;
+	wire [31:0] alu_operand_b_ex;
+	wire [31:0] alu_adder_result_ex;
+	wire [31:0] result_ex;
+	wire mult_en_ex;
+	wire div_en_ex;
+	wire mult_sel_ex;
+	wire div_sel_ex;
+	wire [1:0] multdiv_operator_ex;
+	wire [1:0] multdiv_signed_mode_ex;
+	wire [31:0] multdiv_operand_a_ex;
+	wire [31:0] multdiv_operand_b_ex;
+	wire csr_access;
+	wire [1:0] csr_op;
+	wire csr_op_en;
+	wire [11:0] csr_addr;
+	wire [31:0] csr_rdata;
+	wire [31:0] csr_wdata;
+	wire illegal_csr_insn_id;
+	wire lsu_we;
+	wire [1:0] lsu_type;
+	wire lsu_sign_ext;
+	wire lsu_req;
+	wire [31:0] lsu_wdata;
+	wire id_in_ready;
+	wire ex_valid;
+	wire lsu_resp_valid;
+	wire lsu_resp_err;
+	wire instr_req_int;
+	wire instr_req_gated;
+	wire en_wb;
+	wire nmi_mode;
+	wire [18:0] irqs;
+	wire csr_mstatus_mie;
+	wire [31:0] csr_mepc;
+	wire [31:0] csr_depc;
+	wire [(PMPNumRegions * 34) - 1:0] csr_pmp_addr;
+	wire [(PMPNumRegions * 6) - 1:0] csr_pmp_cfg;
+	wire [2:0] csr_pmp_mseccfg;
+	wire [0:2] pmp_req_err;
+	wire data_req_out;
+	wire csr_save_if;
+	wire csr_save_id;
+	wire csr_restore_mret_id;
+	wire csr_restore_dret_id;
+	wire csr_save_cause;
+	wire csr_mtvec_init;
+	wire [31:0] csr_mtvec;
+	wire [31:0] csr_mtval;
+	wire csr_mstatus_tw;
+	wire [1:0] priv_mode_id;
+	wire [1:0] priv_mode_lsu;
+	wire debug_mode;
+	wire [2:0] debug_cause;
+	wire debug_csr_save;
+	wire debug_single_step;
+	wire debug_ebreakm;
+	wire debug_ebreaku;
+	wire trigger_match;
+	wire instr_id_done;
+	wire perf_instr_ret_wb;
+	wire perf_instr_ret_compressed_wb;
+	wire perf_iside_wait;
+	wire perf_dside_wait;
+	wire perf_wfi_wait;
+	wire perf_div_wait;
+	wire perf_jump;
+	wire perf_branch;
+	wire perf_tbranch;
+	wire perf_load;
+	wire perf_store;
+	wire illegal_insn_id;
+	wire unused_illegal_insn_id;
+	assign core_busy_o = (ctrl_busy | if_busy) | lsu_busy;
+	localparam [31:0] cve2_pkg_PMP_I = 0;
+	localparam [31:0] cve2_pkg_PMP_I2 = 1;
+	cve2_if_stage if_stage_i(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.boot_addr_i(boot_addr_i),
+		.req_i(instr_req_gated),
+		.instr_req_o(instr_req_o),
+		.instr_addr_o(instr_addr_o),
+		.instr_gnt_i(instr_gnt_i),
+		.instr_rvalid_i(instr_rvalid_i),
+		.instr_rdata_i(instr_rdata_i),
+		.instr_err_i(instr_err_i),
+		.instr_valid_id_o(instr_valid_id),
+		.instr_new_id_o(instr_new_id),
+		.instr_rdata_id_o(instr_rdata_id),
+		.instr_rdata_alu_id_o(instr_rdata_alu_id),
+		.instr_rdata_c_id_o(instr_rdata_c_id),
+		.instr_is_compressed_id_o(instr_is_compressed_id),
+		.instr_fetch_err_o(instr_fetch_err),
+		.instr_fetch_err_plus2_o(instr_fetch_err_plus2),
+		.illegal_c_insn_id_o(illegal_c_insn_id),
+		.pc_if_o(pc_if),
+		.pc_id_o(pc_id),
+		.pmp_err_if_i(pmp_req_err[cve2_pkg_PMP_I]),
+		.pmp_err_if_plus2_i(pmp_req_err[cve2_pkg_PMP_I2]),
+		.instr_valid_clear_i(instr_valid_clear),
+		.pc_set_i(pc_set),
+		.pc_mux_i(pc_mux_id),
+		.exc_pc_mux_i(exc_pc_mux_id),
+		.exc_cause(exc_cause),
+		.branch_target_ex_i(branch_target_ex),
+		.csr_mepc_i(csr_mepc),
+		.csr_depc_i(csr_depc),
+		.csr_mtvec_i(csr_mtvec),
+		.csr_mtvec_init_o(csr_mtvec_init),
+		.dm_halt_addr_i(dm_halt_addr_i),
+		.dm_exception_addr_i(dm_exception_addr_i),
+		.id_in_ready_i(id_in_ready),
+		.if_busy_o(if_busy)
+	);
+	assign perf_iside_wait = id_in_ready & ~instr_valid_id;
+	assign instr_req_gated = instr_req_int;
+	cve2_id_stage #(
+		.RV32E(RV32E),
+		.RV32M(RV32M),
+		.RV32B(RV32B),
+		.XInterface(XInterface)
+	) id_stage_i(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.fetch_enable_i(fetch_enable_i),
+		.ctrl_busy_o(ctrl_busy),
+		.illegal_insn_o(illegal_insn_id),
+		.instr_valid_i(instr_valid_id),
+		.instr_rdata_i(instr_rdata_id),
+		.instr_rdata_alu_i(instr_rdata_alu_id),
+		.instr_rdata_c_i(instr_rdata_c_id),
+		.instr_is_compressed_i(instr_is_compressed_id),
+		.branch_decision_i(branch_decision),
+		.instr_first_cycle_id_o(instr_first_cycle_id),
+		.instr_valid_clear_o(instr_valid_clear),
+		.id_in_ready_o(id_in_ready),
+		.instr_req_o(instr_req_int),
+		.pc_set_o(pc_set),
+		.pc_mux_o(pc_mux_id),
+		.exc_pc_mux_o(exc_pc_mux_id),
+		.exc_cause_o(exc_cause),
+		.instr_fetch_err_i(instr_fetch_err),
+		.instr_fetch_err_plus2_i(instr_fetch_err_plus2),
+		.illegal_c_insn_i(illegal_c_insn_id),
+		.pc_id_i(pc_id),
+		.ex_valid_i(ex_valid),
+		.lsu_resp_valid_i(lsu_resp_valid),
+		.alu_operator_ex_o(alu_operator_ex),
+		.alu_operand_a_ex_o(alu_operand_a_ex),
+		.alu_operand_b_ex_o(alu_operand_b_ex),
+		.imd_val_q_ex_o(imd_val_q_ex),
+		.imd_val_d_ex_i(imd_val_d_ex),
+		.imd_val_we_ex_i(imd_val_we_ex),
+		.mult_en_ex_o(mult_en_ex),
+		.div_en_ex_o(div_en_ex),
+		.mult_sel_ex_o(mult_sel_ex),
+		.div_sel_ex_o(div_sel_ex),
+		.multdiv_operator_ex_o(multdiv_operator_ex),
+		.multdiv_signed_mode_ex_o(multdiv_signed_mode_ex),
+		.multdiv_operand_a_ex_o(multdiv_operand_a_ex),
+		.multdiv_operand_b_ex_o(multdiv_operand_b_ex),
+		.csr_access_o(csr_access),
+		.csr_op_o(csr_op),
+		.csr_op_en_o(csr_op_en),
+		.csr_save_if_o(csr_save_if),
+		.csr_save_id_o(csr_save_id),
+		.csr_restore_mret_id_o(csr_restore_mret_id),
+		.csr_restore_dret_id_o(csr_restore_dret_id),
+		.csr_save_cause_o(csr_save_cause),
+		.csr_mtval_o(csr_mtval),
+		.priv_mode_i(priv_mode_id),
+		.csr_mstatus_tw_i(csr_mstatus_tw),
+		.illegal_csr_insn_i(illegal_csr_insn_id),
+		.lsu_req_o(lsu_req),
+		.lsu_we_o(lsu_we),
+		.lsu_type_o(lsu_type),
+		.lsu_sign_ext_o(lsu_sign_ext),
+		.lsu_wdata_o(lsu_wdata),
+		.lsu_addr_incr_req_i(lsu_addr_incr_req),
+		.lsu_addr_last_i(lsu_addr_last),
+		.lsu_load_err_i(lsu_load_err),
+		.lsu_store_err_i(lsu_store_err),
+		.hart_id_i(hart_id_i),
+		.x_issue_valid_o(x_issue_valid_o),
+		.x_issue_ready_i(x_issue_ready_i),
+		.x_issue_req_o(x_issue_req_o),
+		.x_issue_resp_i(x_issue_resp_i),
+		.x_register_o(x_register_o),
+		.x_commit_valid_o(x_commit_valid_o),
+		.x_commit_o(x_commit_o),
+		.x_result_valid_i(x_result_valid_i),
+		.x_result_ready_o(x_result_ready_o),
+		.x_result_i(x_result_i),
+		.csr_mstatus_mie_i(csr_mstatus_mie),
+		.irq_pending_i(irq_pending_o),
+		.irqs_i(irqs),
+		.irq_nm_i(irq_nm_i),
+		.nmi_mode_o(nmi_mode),
+		.debug_mode_o(debug_mode),
+		.debug_cause_o(debug_cause),
+		.debug_csr_save_o(debug_csr_save),
+		.debug_req_i(debug_req_i),
+		.debug_single_step_i(debug_single_step),
+		.debug_ebreakm_i(debug_ebreakm),
+		.debug_ebreaku_i(debug_ebreaku),
+		.trigger_match_i(trigger_match),
+		.result_ex_i(result_ex),
+		.csr_rdata_i(csr_rdata),
+		.rf_raddr_a_o(rf_raddr_a),
+		.rf_rdata_a_i(rf_rdata_a),
+		.rf_raddr_b_o(rf_raddr_b),
+		.rf_rdata_b_i(rf_rdata_b),
+		.rf_raddr_c_o(rf_raddr_c),
+		.rf_rdata_c_i(rf_rdata_c),
+		.rf_ren_a_o(rf_ren_a),
+		.rf_ren_b_o(rf_ren_b),
+		.rf_ren_c_o(rf_ren_c),
+		.rf_waddr_id_o(rf_waddr_id),
+		.rf_wdata_id_o(rf_wdata_id),
+		.rf_we_id_o(rf_we_id),
+		.en_wb_o(en_wb),
+		.instr_perf_count_id_o(instr_perf_count_id),
+		.perf_jump_o(perf_jump),
+		.perf_branch_o(perf_branch),
+		.perf_tbranch_o(perf_tbranch),
+		.perf_dside_wait_o(perf_dside_wait),
+		.perf_wfi_wait_o(perf_wfi_wait),
+		.perf_div_wait_o(perf_div_wait),
+		.instr_id_done_o(instr_id_done)
+	);
+	assign unused_illegal_insn_id = illegal_insn_id;
+	cve2_ex_block #(
+		.RV32M(RV32M),
+		.RV32B(RV32B)
+	) ex_block_i(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.alu_operator_i(alu_operator_ex),
+		.alu_operand_a_i(alu_operand_a_ex),
+		.alu_operand_b_i(alu_operand_b_ex),
+		.alu_instr_first_cycle_i(instr_first_cycle_id),
+		.multdiv_operator_i(multdiv_operator_ex),
+		.mult_en_i(mult_en_ex),
+		.div_en_i(div_en_ex),
+		.mult_sel_i(mult_sel_ex),
+		.div_sel_i(div_sel_ex),
+		.multdiv_signed_mode_i(multdiv_signed_mode_ex),
+		.multdiv_operand_a_i(multdiv_operand_a_ex),
+		.multdiv_operand_b_i(multdiv_operand_b_ex),
+		.imd_val_we_o(imd_val_we_ex),
+		.imd_val_d_o(imd_val_d_ex),
+		.imd_val_q_i(imd_val_q_ex),
+		.alu_adder_result_ex_o(alu_adder_result_ex),
+		.result_ex_o(result_ex),
+		.branch_target_o(branch_target_ex),
+		.branch_decision_o(branch_decision),
+		.ex_valid_o(ex_valid)
+	);
+	localparam [31:0] cve2_pkg_PMP_D = 2;
+	assign data_req_o = data_req_out & ~pmp_req_err[cve2_pkg_PMP_D];
+	assign lsu_resp_err = lsu_load_err | lsu_store_err;
+	cve2_load_store_unit load_store_unit_i(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.data_req_o(data_req_out),
+		.data_gnt_i(data_gnt_i),
+		.data_rvalid_i(data_rvalid_i),
+		.data_err_i(data_err_i),
+		.data_pmp_err_i(pmp_req_err[cve2_pkg_PMP_D]),
+		.data_addr_o(data_addr_o),
+		.data_we_o(data_we_o),
+		.data_be_o(data_be_o),
+		.data_wdata_o(data_wdata_o),
+		.data_rdata_i(data_rdata_i),
+		.lsu_we_i(lsu_we),
+		.lsu_type_i(lsu_type),
+		.lsu_wdata_i(lsu_wdata),
+		.lsu_sign_ext_i(lsu_sign_ext),
+		.lsu_rdata_o(rf_wdata_lsu),
+		.lsu_rdata_valid_o(rf_we_lsu),
+		.lsu_req_i(lsu_req),
+		.adder_result_ex_i(alu_adder_result_ex),
+		.addr_incr_req_o(lsu_addr_incr_req),
+		.addr_last_o(lsu_addr_last),
+		.lsu_resp_valid_o(lsu_resp_valid),
+		.load_err_o(lsu_load_err),
+		.store_err_o(lsu_store_err),
+		.busy_o(lsu_busy),
+		.perf_load_o(perf_load),
+		.perf_store_o(perf_store)
+	);
+	cve2_wb wb_i(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.en_wb_i(en_wb),
+		.instr_is_compressed_id_i(instr_is_compressed_id),
+		.instr_perf_count_id_i(instr_perf_count_id),
+		.perf_instr_ret_wb_o(perf_instr_ret_wb),
+		.perf_instr_ret_compressed_wb_o(perf_instr_ret_compressed_wb),
+		.rf_waddr_id_i(rf_waddr_id),
+		.rf_wdata_id_i(rf_wdata_id),
+		.rf_we_id_i(rf_we_id),
+		.rf_wdata_lsu_i(rf_wdata_lsu),
+		.rf_we_lsu_i(rf_we_lsu),
+		.rf_waddr_wb_o(rf_waddr_wb),
+		.rf_wdata_wb_o(rf_wdata_wb),
+		.rf_we_wb_o(rf_we_wb),
+		.lsu_resp_valid_i(lsu_resp_valid),
+		.lsu_resp_err_i(lsu_resp_err)
+	);
+	assign crash_dump_o[127-:32] = pc_id;
+	assign crash_dump_o[95-:32] = pc_if;
+	assign crash_dump_o[63-:32] = lsu_addr_last;
+	assign crash_dump_o[31-:32] = csr_mepc;
+	assign debug_halted_o = debug_mode;
+	cve2_register_file_ff #(
+		.RV32E(RV32E),
+		.DataWidth(32),
+		.WordZeroVal(32'h00000000),
+		.XInterface(XInterface)
+	) register_file_i(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.test_en_i(test_en_i),
+		.raddr_a_i(rf_raddr_a),
+		.rdata_a_o(rf_rdata_a),
+		.raddr_b_i(rf_raddr_b),
+		.rdata_b_o(rf_rdata_b),
+		.raddr_c_i(rf_raddr_c),
+		.rdata_c_o(rf_rdata_c),
+		.waddr_a_i(rf_waddr_wb),
+		.wdata_a_i(rf_wdata_wb),
+		.we_a_i(rf_we_wb)
+	);
+	assign csr_wdata = alu_operand_a_ex;
+	function automatic [11:0] sv2v_cast_12;
+		input reg [11:0] inp;
+		sv2v_cast_12 = inp;
+	endfunction
+	assign csr_addr = sv2v_cast_12((csr_access ? alu_operand_b_ex[11:0] : 12'b000000000000));
+	cve2_cs_registers #(
+		.DbgTriggerEn(DbgTriggerEn),
+		.DbgHwBreakNum(DbgHwBreakNum),
+		.MHPMCounterNum(MHPMCounterNum),
+		.MHPMCounterWidth(MHPMCounterWidth),
+		.PMPEnable(PMPEnable),
+		.PMPGranularity(PMPGranularity),
+		.PMPNumRegions(PMPNumRegions),
+		.RV32E(RV32E),
+		.RV32M(RV32M),
+		.RV32B(RV32B)
+	) cs_registers_i(
+		.clk_i(clk_i),
+		.rst_ni(rst_ni),
+		.hart_id_i(hart_id_i),
+		.priv_mode_id_o(priv_mode_id),
+		.priv_mode_lsu_o(priv_mode_lsu),
+		.csr_mtvec_o(csr_mtvec),
+		.csr_mtvec_init_i(csr_mtvec_init),
+		.boot_addr_i(boot_addr_i),
+		.csr_access_i(csr_access),
+		.csr_addr_i(csr_addr),
+		.csr_wdata_i(csr_wdata),
+		.csr_op_i(csr_op),
+		.csr_op_en_i(csr_op_en),
+		.csr_rdata_o(csr_rdata),
+		.irq_software_i(irq_software_i),
+		.irq_timer_i(irq_timer_i),
+		.irq_external_i(irq_external_i),
+		.irq_fast_i(irq_fast_i),
+		.nmi_mode_i(nmi_mode),
+		.irq_pending_o(irq_pending_o),
+		.irqs_o(irqs),
+		.csr_mstatus_mie_o(csr_mstatus_mie),
+		.csr_mstatus_tw_o(csr_mstatus_tw),
+		.csr_mepc_o(csr_mepc),
+		.csr_pmp_cfg_o(csr_pmp_cfg),
+		.csr_pmp_addr_o(csr_pmp_addr),
+		.csr_pmp_mseccfg_o(csr_pmp_mseccfg),
+		.csr_depc_o(csr_depc),
+		.debug_mode_i(debug_mode),
+		.debug_cause_i(debug_cause),
+		.debug_csr_save_i(debug_csr_save),
+		.debug_single_step_o(debug_single_step),
+		.debug_ebreakm_o(debug_ebreakm),
+		.debug_ebreaku_o(debug_ebreaku),
+		.trigger_match_o(trigger_match),
+		.pc_if_i(pc_if),
+		.pc_id_i(pc_id),
+		.csr_save_if_i(csr_save_if),
+		.csr_save_id_i(csr_save_id),
+		.csr_restore_mret_i(csr_restore_mret_id),
+		.csr_restore_dret_i(csr_restore_dret_id),
+		.csr_save_cause_i(csr_save_cause),
+		.csr_mcause_i(exc_cause),
+		.csr_mtval_i(csr_mtval),
+		.illegal_csr_insn_o(illegal_csr_insn_id),
+		.instr_ret_i(perf_instr_ret_wb),
+		.instr_ret_compressed_i(perf_instr_ret_compressed_wb),
+		.iside_wait_i(perf_iside_wait),
+		.jump_i(perf_jump),
+		.branch_i(perf_branch),
+		.branch_taken_i(perf_tbranch),
+		.mem_load_i(perf_load),
+		.mem_store_i(perf_store),
+		.dside_wait_i(perf_dside_wait),
+		.wfi_wait_i(perf_wfi_wait),
+		.div_wait_i(perf_div_wait)
+	);
+	generate
+		if (PMPEnable) begin : g_pmp
+			wire [101:0] pmp_req_addr;
+			wire [5:0] pmp_req_type;
+			wire [5:0] pmp_priv_lvl;
+			assign pmp_req_addr[68+:34] = {2'b00, pc_if};
+			assign pmp_req_type[4+:2] = 2'b00;
+			assign pmp_priv_lvl[4+:2] = priv_mode_id;
+			assign pmp_req_addr[34+:34] = {2'b00, pc_if + 32'd2};
+			assign pmp_req_type[2+:2] = 2'b00;
+			assign pmp_priv_lvl[2+:2] = priv_mode_id;
+			assign pmp_req_addr[0+:34] = {2'b00, data_addr_o[31:0]};
+			assign pmp_req_type[0+:2] = (data_we_o ? 2'b01 : 2'b10);
+			assign pmp_priv_lvl[0+:2] = priv_mode_lsu;
+			cve2_pmp #(
+				.PMPGranularity(PMPGranularity),
+				.PMPNumChan(PMP_NUM_CHAN),
+				.PMPNumRegions(PMPNumRegions)
+			) pmp_i(
+				.clk_i(clk_i),
+				.rst_ni(rst_ni),
+				.csr_pmp_cfg_i(csr_pmp_cfg),
+				.csr_pmp_addr_i(csr_pmp_addr),
+				.csr_pmp_mseccfg_i(csr_pmp_mseccfg),
+				.priv_mode_i(pmp_priv_lvl),
+				.pmp_req_addr_i(pmp_req_addr),
+				.pmp_req_type_i(pmp_req_type),
+				.pmp_req_err_o(pmp_req_err)
+			);
+		end
+		else begin : g_no_pmp
+			wire [1:0] unused_priv_lvl_ls;
+			wire [(PMPNumRegions * 34) - 1:0] unused_csr_pmp_addr;
+			wire [(PMPNumRegions * 6) - 1:0] unused_csr_pmp_cfg;
+			wire [2:0] unused_csr_pmp_mseccfg;
+			assign unused_priv_lvl_ls = priv_mode_lsu;
+			assign unused_csr_pmp_addr = csr_pmp_addr;
+			assign unused_csr_pmp_cfg = csr_pmp_cfg;
+			assign unused_csr_pmp_mseccfg = csr_pmp_mseccfg;
+			assign pmp_req_err[cve2_pkg_PMP_I] = 1'b0;
+			assign pmp_req_err[cve2_pkg_PMP_I2] = 1'b0;
+			assign pmp_req_err[cve2_pkg_PMP_D] = 1'b0;
+		end
+	endgenerate
+	wire unused_instr_new_id;
+	wire unused_instr_id_done;
+	assign unused_instr_id_done = instr_id_done;
+	assign unused_instr_new_id = instr_new_id;
+endmodule
+module cve2_clock_gate (
+	clk_i,
+	en_i,
+	scan_cg_en_i,
+	clk_o
+);
+	input wire clk_i;
+	input wire en_i;
+	input wire scan_cg_en_i;
+	output wire clk_o;
+	sky130_fd_sc_hd__dlclkp_1 u_icg(
+		.CLK(clk_i),
+		.GATE(en_i | scan_cg_en_i),
+		.GCLK(clk_o)
+	);
+endmodule
+module cve2_top (
+	clk_i,
+	rst_ni,
+	test_en_i,
+	ram_cfg_i,
+	hart_id_i,
+	boot_addr_i,
+	instr_req_o,
+	instr_gnt_i,
+	instr_rvalid_i,
+	instr_addr_o,
+	instr_rdata_i,
+	instr_err_i,
+	data_req_o,
+	data_gnt_i,
+	data_rvalid_i,
+	data_we_o,
+	data_be_o,
+	data_addr_o,
+	data_wdata_o,
+	data_rdata_i,
+	data_err_i,
+	x_issue_valid_o,
+	x_issue_ready_i,
+	x_issue_req_o,
+	x_issue_resp_i,
+	x_register_o,
+	x_commit_valid_o,
+	x_commit_o,
+	x_result_valid_i,
+	x_result_ready_o,
+	x_result_i,
+	irq_software_i,
+	irq_timer_i,
+	irq_external_i,
+	irq_fast_i,
+	irq_nm_i,
+	debug_req_i,
+	debug_halted_o,
+	dm_halt_addr_i,
+	dm_exception_addr_i,
+	crash_dump_o,
+	fetch_enable_i,
+	core_sleep_o
+);
+	parameter [31:0] MHPMCounterNum = 10;
+	parameter [31:0] MHPMCounterWidth = 40;
+	parameter [0:0] RV32E = 1'b0;
+	parameter integer RV32M = 32'sd2;
+	parameter [0:0] XInterface = 1'b0;
+	input wire clk_i;
+	input wire rst_ni;
+	input wire test_en_i;
+	input wire [9:0] ram_cfg_i;
+	input wire [31:0] hart_id_i;
+	input wire [31:0] boot_addr_i;
+	output wire instr_req_o;
+	input wire instr_gnt_i;
+	input wire instr_rvalid_i;
+	output wire [31:0] instr_addr_o;
+	input wire [31:0] instr_rdata_i;
+	input wire instr_err_i;
+	output wire data_req_o;
+	input wire data_gnt_i;
+	input wire data_rvalid_i;
+	output wire data_we_o;
+	output wire [3:0] data_be_o;
+	output wire [31:0] data_addr_o;
+	output wire [31:0] data_wdata_o;
+	input wire [31:0] data_rdata_i;
+	input wire data_err_i;
+	output wire x_issue_valid_o;
+	input wire x_issue_ready_i;
+	localparam [31:0] cve2_pkg_X_HARTID_WIDTH = 32;
+	localparam [31:0] cve2_pkg_X_ID_WIDTH = 4;
+	output wire [67:0] x_issue_req_o;
+	localparam [31:0] cve2_pkg_X_DUAL_READ = 0;
+	localparam [31:0] cve2_pkg_X_NUM_RS = 3;
+	localparam [31:0] cve2_pkg_X_DUAL_WRITE = 0;
+	input wire [(2 + (cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ)) - 1:0] x_issue_resp_i;
+	localparam [31:0] cve2_pkg_X_RFR_WIDTH = 32;
+	output wire [(((cve2_pkg_X_HARTID_WIDTH + cve2_pkg_X_ID_WIDTH) + (cve2_pkg_X_NUM_RS * cve2_pkg_X_RFR_WIDTH)) + (cve2_pkg_X_NUM_RS + cve2_pkg_X_DUAL_READ)) - 1:0] x_register_o;
+	output wire x_commit_valid_o;
+	output wire [(cve2_pkg_X_HARTID_WIDTH + cve2_pkg_X_ID_WIDTH) + 0:0] x_commit_o;
+	input wire x_result_valid_i;
+	output wire x_result_ready_o;
+	localparam [31:0] cve2_pkg_X_RFW_WIDTH = 32;
+	input wire [((cve2_pkg_X_HARTID_WIDTH + cve2_pkg_X_ID_WIDTH) + cve2_pkg_X_RFW_WIDTH) + 5:0] x_result_i;
+	input wire irq_software_i;
+	input wire irq_timer_i;
+	input wire irq_external_i;
+	input wire [15:0] irq_fast_i;
+	input wire irq_nm_i;
+	input wire debug_req_i;
+	output wire debug_halted_o;
+	input wire [31:0] dm_halt_addr_i;
+	input wire [31:0] dm_exception_addr_i;
+	output wire [127:0] crash_dump_o;
+	input wire fetch_enable_i;
+	output wire core_sleep_o;
+	localparam [31:0] NumAddrScrRounds = 0;
+	localparam [0:0] PMPEnable = 1'b0;
+	localparam [31:0] PMPGranularity = 0;
+	localparam [31:0] PMPNumRegions = 4;
+	localparam [0:0] DbgTriggerEn = 1'b1;
+	localparam [31:0] DbgHwBreakNum = 1;
+	localparam integer RV32B = 32'sd0;
+	wire clk;
+	wire core_busy_d;
+	reg core_busy_q;
+	wire clock_en;
+	wire fetch_enable_d;
+	reg fetch_enable_q;
+	wire irq_pending;
+	always @(posedge clk_i or negedge rst_ni)
+		if (!rst_ni) begin
+			core_busy_q <= 1'b0;
+			fetch_enable_q <= 1'b0;
+		end
+		else begin
+			core_busy_q <= core_busy_d;
+			fetch_enable_q <= fetch_enable_d;
+		end
+	assign clock_en = fetch_enable_q & (((core_busy_q | debug_req_i) | irq_pending) | irq_nm_i);
+	assign core_sleep_o = fetch_enable_q & !clock_en;
+	assign fetch_enable_d = (fetch_enable_i ? 1'b1 : fetch_enable_q);
+	cve2_clock_gate core_clock_gate_i(
+		.clk_i(clk_i),
+		.en_i(clock_en),
+		.scan_cg_en_i(test_en_i),
+		.clk_o(clk)
+	);
+	cve2_core #(
+		.PMPEnable(PMPEnable),
+		.PMPGranularity(PMPGranularity),
+		.PMPNumRegions(PMPNumRegions),
+		.MHPMCounterNum(MHPMCounterNum),
+		.MHPMCounterWidth(MHPMCounterWidth),
+		.RV32E(RV32E),
+		.RV32M(RV32M),
+		.RV32B(RV32B),
+		.DbgTriggerEn(DbgTriggerEn),
+		.DbgHwBreakNum(DbgHwBreakNum),
+		.XInterface(XInterface)
+	) u_cve2_core(
+		.clk_i(clk),
+		.rst_ni(rst_ni),
+		.test_en_i(test_en_i),
+		.hart_id_i(hart_id_i),
+		.boot_addr_i(boot_addr_i),
+		.instr_req_o(instr_req_o),
+		.instr_gnt_i(instr_gnt_i),
+		.instr_rvalid_i(instr_rvalid_i),
+		.instr_addr_o(instr_addr_o),
+		.instr_rdata_i(instr_rdata_i),
+		.instr_err_i(instr_err_i),
+		.data_req_o(data_req_o),
+		.data_gnt_i(data_gnt_i),
+		.data_rvalid_i(data_rvalid_i),
+		.data_we_o(data_we_o),
+		.data_be_o(data_be_o),
+		.data_addr_o(data_addr_o),
+		.data_wdata_o(data_wdata_o),
+		.data_rdata_i(data_rdata_i),
+		.data_err_i(data_err_i),
+		.x_issue_valid_o(x_issue_valid_o),
+		.x_issue_ready_i(x_issue_ready_i),
+		.x_issue_req_o(x_issue_req_o),
+		.x_issue_resp_i(x_issue_resp_i),
+		.x_register_o(x_register_o),
+		.x_commit_valid_o(x_commit_valid_o),
+		.x_commit_o(x_commit_o),
+		.x_result_valid_i(x_result_valid_i),
+		.x_result_ready_o(x_result_ready_o),
+		.x_result_i(x_result_i),
+		.irq_software_i(irq_software_i),
+		.irq_timer_i(irq_timer_i),
+		.irq_external_i(irq_external_i),
+		.irq_fast_i(irq_fast_i),
+		.irq_nm_i(irq_nm_i),
+		.irq_pending_o(irq_pending),
+		.debug_req_i(debug_req_i),
+		.debug_halted_o(debug_halted_o),
+		.dm_halt_addr_i(dm_halt_addr_i),
+		.dm_exception_addr_i(dm_exception_addr_i),
+		.crash_dump_o(crash_dump_o),
+		.fetch_enable_i(fetch_enable_q),
+		.core_busy_o(core_busy_d)
+	);
+	wire [9:0] unused_ram_cfg;
+	wire unused_ram_inputs;
+	assign unused_ram_cfg = ram_cfg_i;
+	assign unused_ram_inputs = |NumAddrScrRounds;
+endmodule
+module bsg_mem_1r1w_sync_mask_write_bit (
+	clk_i,
+	reset_i,
+	w_v_i,
+	w_mask_i,
+	w_addr_i,
+	w_data_i,
+	r_v_i,
+	r_addr_i,
+	r_data_o
+);
+	parameter signed [31:0] width_p = 1;
+	parameter signed [31:0] els_p = 1;
+	parameter signed [31:0] read_write_same_addr_p = 0;
+	parameter signed [31:0] addr_width_lp = (els_p > 1 ? $clog2(els_p) : 1);
+	input wire clk_i;
+	input wire reset_i;
+	input wire w_v_i;
+	input wire [width_p - 1:0] w_mask_i;
+	input wire [addr_width_lp - 1:0] w_addr_i;
+	input wire [width_p - 1:0] w_data_i;
+	input wire r_v_i;
+	input wire [addr_width_lp - 1:0] r_addr_i;
+	output reg [width_p - 1:0] r_data_o;
+	reg [width_p - 1:0] mem [0:els_p - 1];
+	always @(posedge clk_i) begin
+		if (w_v_i) begin : sv2v_autoblock_1
+			reg signed [31:0] i;
+			for (i = 0; i < width_p; i = i + 1)
+				if (w_mask_i[i])
+					mem[w_addr_i][i] <= w_data_i[i];
+		end
+		if (r_v_i)
+			r_data_o <= mem[r_addr_i];
+	end
+	wire unused;
+	assign unused = reset_i;
+endmodule
+module iocore_usb_ram256x16 (
+	clk_i,
+	we_i,
+	waddr_i,
+	wmask_i,
+	wdata_i,
+	re_i,
+	raddr_i,
+	rdata_o
+);
+	input wire clk_i;
+	input wire we_i;
+	input wire [7:0] waddr_i;
+	input wire [15:0] wmask_i;
+	input wire [15:0] wdata_i;
+	input wire re_i;
+	input wire [7:0] raddr_i;
+	output wire [15:0] rdata_o;
+	bsg_mem_1r1w_sync_mask_write_bit #(
+		.width_p(16),
+		.els_p(256)
+	) u_mem(
+		.clk_i(clk_i),
+		.reset_i(1'b0),
+		.w_v_i(we_i),
+		.w_mask_i(wmask_i),
+		.w_addr_i(waddr_i),
+		.w_data_i(wdata_i),
+		.r_v_i(re_i),
+		.r_addr_i(raddr_i),
+		.r_data_o(rdata_o)
+	);
+endmodule
+module SB_RAM40_4K (
+	RDATA,
+	RCLK,
+	RCLKE,
+	RE,
+	RADDR,
+	WCLK,
+	WCLKE,
+	WE,
+	WADDR,
+	MASK,
+	WDATA
+);
+	parameter integer WRITE_MODE = 0;
+	parameter integer READ_MODE = 0;
+	parameter INIT_FILE = "";
+	parameter [255:0] INIT_0 = 256'h0000000000000000000000000000000000000000000000000000000000000000;
+	parameter [255:0] INIT_1 = 256'h0000000000000000000000000000000000000000000000000000000000000000;
+	parameter [255:0] INIT_2 = 256'h0000000000000000000000000000000000000000000000000000000000000000;
+	parameter [255:0] INIT_3 = 256'h0000000000000000000000000000000000000000000000000000000000000000;
+	parameter [255:0] INIT_4 = 256'h0000000000000000000000000000000000000000000000000000000000000000;
+	parameter [255:0] INIT_5 = 256'h0000000000000000000000000000000000000000000000000000000000000000;
+	parameter [255:0] INIT_6 = 256'h0000000000000000000000000000000000000000000000000000000000000000;
+	parameter [255:0] INIT_7 = 256'h0000000000000000000000000000000000000000000000000000000000000000;
+	parameter [255:0] INIT_8 = 256'h0000000000000000000000000000000000000000000000000000000000000000;
+	parameter [255:0] INIT_9 = 256'h0000000000000000000000000000000000000000000000000000000000000000;
+	parameter [255:0] INIT_A = 256'h0000000000000000000000000000000000000000000000000000000000000000;
+	parameter [255:0] INIT_B = 256'h0000000000000000000000000000000000000000000000000000000000000000;
+	parameter [255:0] INIT_C = 256'h0000000000000000000000000000000000000000000000000000000000000000;
+	parameter [255:0] INIT_D = 256'h0000000000000000000000000000000000000000000000000000000000000000;
+	parameter [255:0] INIT_E = 256'h0000000000000000000000000000000000000000000000000000000000000000;
+	parameter [255:0] INIT_F = 256'h0000000000000000000000000000000000000000000000000000000000000000;
+	output wire [15:0] RDATA;
+	input wire RCLK;
+	input wire RCLKE;
+	input wire RE;
+	input wire [10:0] RADDR;
+	input wire WCLK;
+	input wire WCLKE;
+	input wire WE;
+	input wire [10:0] WADDR;
+	input wire [15:0] MASK;
+	input wire [15:0] WDATA;
+	function automatic [15:0] lane_mask;
+		input integer mode;
+		input [10:0] a;
+		input [15:0] m0;
+		case (mode)
+			0: lane_mask = m0;
+			1: lane_mask = ~(16'b0101010101010101 << a[8]);
+			2: lane_mask = ~(16'b0001000100010001 << a[9:8]);
+			default: lane_mask = ~(16'b0000000100000001 << a[10:8]);
+		endcase
+	endfunction
+	wire [15:0] wmask = lane_mask(WRITE_MODE, WADDR, MASK);
+	wire [15:0] rmask = lane_mask(READ_MODE, RADDR, 16'h0000);
+	wire [15:0] wd = (WRITE_MODE == 0 ? WDATA : (WRITE_MODE == 1 ? {{2 {WDATA[14]}}, {2 {WDATA[12]}}, {2 {WDATA[10]}}, {2 {WDATA[8]}}, {2 {WDATA[6]}}, {2 {WDATA[4]}}, {2 {WDATA[2]}}, {2 {WDATA[0]}}} : (WRITE_MODE == 2 ? {{4 {WDATA[13]}}, {4 {WDATA[9]}}, {4 {WDATA[5]}}, {4 {WDATA[1]}}} : {{8 {WDATA[11]}}, {8 {WDATA[3]}}})));
+	reg [15:0] rq;
+	reg [15:0] rmask_q;
+	wire [15:0] word;
+	function automatic [15:0] usb_trans_mc;
+		input reg [7:0] a;
+		case (a)
+			8'h00: usb_trans_mc = 16'h1000;
+			8'h01: usb_trans_mc = 16'h80f0;
+			8'h02: usb_trans_mc = 16'h600f;
+			8'h03: usb_trans_mc = 16'h8010;
+			8'h04: usb_trans_mc = 16'h1002;
+			8'h05: usb_trans_mc = 16'h83f9;
+			8'h06: usb_trans_mc = 16'h93f1;
+			8'h07: usb_trans_mc = 16'h8efd;
+			8'h08: usb_trans_mc = 16'h8000;
+			8'h09: usb_trans_mc = 16'h8300;
+			8'h0a: usb_trans_mc = 16'h8300;
+			8'h0b: usb_trans_mc = 16'h8300;
+			8'h0c: usb_trans_mc = 16'h1004;
+			8'h0d: usb_trans_mc = 16'h8a71;
+			8'h0e: usb_trans_mc = 16'h8070;
+			8'h0f: usb_trans_mc = 16'ha211;
+			8'h10: usb_trans_mc = 16'ha3ee;
+			8'h11: usb_trans_mc = 16'h1006;
+			8'h12: usb_trans_mc = 16'ha1f3;
+			8'h13: usb_trans_mc = 16'he3f2;
+			8'h14: usb_trans_mc = 16'h4013;
+			8'h15: usb_trans_mc = 16'h8600;
+			8'h16: usb_trans_mc = 16'h8600;
+			8'h17: usb_trans_mc = 16'h8600;
+			8'h18: usb_trans_mc = 16'h1000;
+			8'h19: usb_trans_mc = 16'h8640;
+			8'h1a: usb_trans_mc = 16'h6004;
+			8'h1b: usb_trans_mc = 16'h7046;
+			8'h1c: usb_trans_mc = 16'h1000;
+			8'h1d: usb_trans_mc = 16'h87b0;
+			8'h1e: usb_trans_mc = 16'h8910;
+			8'h1f: usb_trans_mc = 16'h1002;
+			8'h20: usb_trans_mc = 16'hc9f2;
+			8'h21: usb_trans_mc = 16'h20a7;
+			8'h22: usb_trans_mc = 16'h5000;
+			8'h23: usb_trans_mc = 16'h8000;
+			8'h24: usb_trans_mc = 16'h5008;
+			8'h25: usb_trans_mc = 16'h8000;
+			8'h26: usb_trans_mc = 16'h8a00;
+			8'h27: usb_trans_mc = 16'h8a00;
+			8'h28: usb_trans_mc = 16'h1006;
+			8'h29: usb_trans_mc = 16'hcdf2;
+			8'h2a: usb_trans_mc = 16'h4003;
+			8'h2b: usb_trans_mc = 16'h8b00;
+			8'h2c: usb_trans_mc = 16'h1000;
+			8'h2d: usb_trans_mc = 16'h8b40;
+			8'h2e: usb_trans_mc = 16'h6004;
+			8'h2f: usb_trans_mc = 16'h20a6;
+			8'h30: usb_trans_mc = 16'h5000;
+			8'h31: usb_trans_mc = 16'h8000;
+			8'h32: usb_trans_mc = 16'h8d00;
+			8'h33: usb_trans_mc = 16'h8d00;
+			8'h34: usb_trans_mc = 16'h3000;
+			8'h35: usb_trans_mc = 16'h4003;
+			8'h36: usb_trans_mc = 16'h8000;
+			8'h37: usb_trans_mc = 16'h8e00;
+			8'h38: usb_trans_mc = 16'h1004;
+			8'h39: usb_trans_mc = 16'he5e6;
+			8'h3a: usb_trans_mc = 16'h1006;
+			8'h3b: usb_trans_mc = 16'he5f2;
+			8'h3c: usb_trans_mc = 16'h7046;
+			8'h3d: usb_trans_mc = 16'h9000;
+			8'h3e: usb_trans_mc = 16'h9000;
+			8'h3f: usb_trans_mc = 16'h9000;
+			8'h40: usb_trans_mc = 16'h1000;
+			8'h41: usb_trans_mc = 16'h90b0;
+			8'h42: usb_trans_mc = 16'h9210;
+			8'h43: usb_trans_mc = 16'h1002;
+			8'h44: usb_trans_mc = 16'hd2f3;
+			8'h45: usb_trans_mc = 16'h21a7;
+			8'h46: usb_trans_mc = 16'h5000;
+			8'h47: usb_trans_mc = 16'ha400;
+			8'h48: usb_trans_mc = 16'h20ae;
+			8'h49: usb_trans_mc = 16'h5009;
+			8'h4a: usb_trans_mc = 16'h8000;
+			8'h4b: usb_trans_mc = 16'h9300;
+			8'h4c: usb_trans_mc = 16'h1004;
+			8'h4d: usb_trans_mc = 16'h9c71;
+			8'h4e: usb_trans_mc = 16'h8070;
+			8'h4f: usb_trans_mc = 16'h9911;
+			8'h50: usb_trans_mc = 16'h99ee;
+			8'h51: usb_trans_mc = 16'h1006;
+			8'h52: usb_trans_mc = 16'hd9f2;
+			8'h53: usb_trans_mc = 16'h7046;
+			8'h54: usb_trans_mc = 16'h1000;
+			8'h55: usb_trans_mc = 16'h95b0;
+			8'h56: usb_trans_mc = 16'h9a10;
+			8'h57: usb_trans_mc = 16'h1003;
+			8'h58: usb_trans_mc = 16'hda73;
+			8'h59: usb_trans_mc = 16'h1004;
+			8'h5a: usb_trans_mc = 16'ha211;
+			8'h5b: usb_trans_mc = 16'ha3ee;
+			8'h5c: usb_trans_mc = 16'h1003;
+			8'h5d: usb_trans_mc = 16'ha4fb;
+			8'h5e: usb_trans_mc = 16'h1006;
+			8'h5f: usb_trans_mc = 16'he362;
+			8'h60: usb_trans_mc = 16'ha1f3;
+			8'h61: usb_trans_mc = 16'h20a7;
+			8'h62: usb_trans_mc = 16'h5000;
+			8'h63: usb_trans_mc = 16'ha400;
+			8'h64: usb_trans_mc = 16'h3000;
+			8'h65: usb_trans_mc = 16'h9500;
+			8'h66: usb_trans_mc = 16'h9a00;
+			8'h67: usb_trans_mc = 16'h9a00;
+			8'h68: usb_trans_mc = 16'h1006;
+			8'h69: usb_trans_mc = 16'hc062;
+			8'h6a: usb_trans_mc = 16'h20ae;
+			8'h6b: usb_trans_mc = 16'h5009;
+			8'h6c: usb_trans_mc = 16'h8000;
+			8'h6d: usb_trans_mc = 16'h9c00;
+			8'h6e: usb_trans_mc = 16'h9c00;
+			8'h6f: usb_trans_mc = 16'h9c00;
+			8'h70: usb_trans_mc = 16'h1006;
+			8'h71: usb_trans_mc = 16'he0f2;
+			8'h72: usb_trans_mc = 16'h7046;
+			8'h73: usb_trans_mc = 16'h9d00;
+			8'h74: usb_trans_mc = 16'h1000;
+			8'h75: usb_trans_mc = 16'h9db0;
+			8'h76: usb_trans_mc = 16'h9f10;
+			8'h77: usb_trans_mc = 16'h1002;
+			8'h78: usb_trans_mc = 16'hdf73;
+			8'h79: usb_trans_mc = 16'h20a6;
+			8'h7a: usb_trans_mc = 16'h5000;
+			8'h7b: usb_trans_mc = 16'h8000;
+			8'h7c: usb_trans_mc = 16'h20ae;
+			8'h7d: usb_trans_mc = 16'h5009;
+			8'h7e: usb_trans_mc = 16'h8000;
+			8'h7f: usb_trans_mc = 16'ha000;
+			8'h80: usb_trans_mc = 16'ha500;
+			8'h81: usb_trans_mc = 16'ha100;
+			8'h82: usb_trans_mc = 16'ha100;
+			8'h83: usb_trans_mc = 16'ha100;
+			8'h84: usb_trans_mc = 16'h20a6;
+			8'h85: usb_trans_mc = 16'h5000;
+			8'h86: usb_trans_mc = 16'ha200;
+			8'h87: usb_trans_mc = 16'ha200;
+			8'h88: usb_trans_mc = 16'h3000;
+			8'h89: usb_trans_mc = 16'h400e;
+			8'h8a: usb_trans_mc = 16'h8000;
+			8'h8b: usb_trans_mc = 16'ha300;
+			8'h8c: usb_trans_mc = 16'h3000;
+			8'h8d: usb_trans_mc = 16'h400a;
+			8'h8e: usb_trans_mc = 16'h8000;
+			8'h8f: usb_trans_mc = 16'ha400;
+			8'h90: usb_trans_mc = 16'h3000;
+			8'h91: usb_trans_mc = 16'h4002;
+			8'h92: usb_trans_mc = 16'h8000;
+			8'h93: usb_trans_mc = 16'ha500;
+			8'h94: usb_trans_mc = 16'h3000;
+			8'h95: usb_trans_mc = 16'h7046;
+			8'h96: usb_trans_mc = 16'ha600;
+			8'h97: usb_trans_mc = 16'ha600;
+			8'h98: usb_trans_mc = 16'h1000;
+			8'h99: usb_trans_mc = 16'ha6b0;
+			8'h9a: usb_trans_mc = 16'h8000;
+			default: usb_trans_mc = 16'h0000;
+		endcase
+	endfunction
+	generate
+		if (INIT_FILE == "usb_trans_mc.hex") begin : g_rom
+			reg [15:0] rom_q;
+			always @(posedge RCLK)
+				if (RE && RCLKE)
+					rom_q <= usb_trans_mc(RADDR[7:0]);
+			assign word = rom_q;
+		end
+		else begin : g_ram
+			iocore_usb_ram256x16 u_ram(
+				.clk_i(RCLK),
+				.we_i(WE && WCLKE),
+				.waddr_i(WADDR[7:0]),
+				.wmask_i(~wmask),
+				.wdata_i(wd),
+				.re_i(RE && RCLKE),
+				.raddr_i(RADDR[7:0]),
+				.rdata_o(word)
+			);
+		end
+	endgenerate
+	always @(posedge RCLK)
+		if (RE && RCLKE)
+			rmask_q <= rmask;
+	always @(*) rq = word & ~rmask_q;
+	assign RDATA = (READ_MODE == 0 ? rq : (READ_MODE == 1 ? {1'b0, |rq[15:14], 1'b0, |rq[13:12], 1'b0, |rq[11:10], 1'b0, |rq[9:8], 1'b0, |rq[7:6], 1'b0, |rq[5:4], 1'b0, |rq[3:2], 1'b0, |rq[1:0]} : (READ_MODE == 2 ? {2'b00, |rq[15:12], 3'b000, |rq[11:8], 3'b000, |rq[7:4], 3'b000, |rq[3:0], 1'b0} : {4'b0000, |rq[15:8], 7'b0000000, |rq[7:0], 3'b000})));
+	wire unused = (WCLK ^ |INIT_0) ^ |INIT_F;
+endmodule
+module iocore_usb_pad (
+	pad_io,
+	oe_i,
+	out_i,
+	in_o
+);
+	inout wire pad_io;
+	input wire oe_i;
+	input wire out_i;
+	output wire in_o;
+	assign pad_io = (oe_i ? out_i : 1'bz);
+	assign in_o = pad_io;
+endmodule
+module SB_IO (
+	PACKAGE_PIN,
+	LATCH_INPUT_VALUE,
+	CLOCK_ENABLE,
+	INPUT_CLK,
+	OUTPUT_CLK,
+	OUTPUT_ENABLE,
+	D_OUT_0,
+	D_OUT_1,
+	D_IN_0,
+	D_IN_1
+);
+	parameter [5:0] PIN_TYPE = 6'b110100;
+	parameter [0:0] PULLUP = 1'b0;
+	parameter [0:0] NEG_TRIGGER = 1'b0;
+	parameter IO_STANDARD = "SB_LVCMOS";
+	inout wire PACKAGE_PIN;
+	input wire LATCH_INPUT_VALUE;
+	input wire CLOCK_ENABLE;
+	input wire INPUT_CLK;
+	input wire OUTPUT_CLK;
+	input wire OUTPUT_ENABLE;
+	input wire D_OUT_0;
+	input wire D_OUT_1;
+	output wire D_IN_0;
+	output wire D_IN_1;
+	reg din0;
+	reg din1;
+	reg dout0;
+	reg oe;
+	wire pin_in;
+	iocore_usb_pad u_pad(
+		.pad_io(PACKAGE_PIN),
+		.oe_i(oe),
+		.out_i(dout0),
+		.in_o(pin_in)
+	);
+	always @(posedge INPUT_CLK)
+		if (CLOCK_ENABLE)
+			din0 <= pin_in;
+	always @(negedge INPUT_CLK)
+		if (CLOCK_ENABLE)
+			din1 <= pin_in;
+	always @(posedge OUTPUT_CLK)
+		if (CLOCK_ENABLE) begin
+			dout0 <= D_OUT_0;
+			oe <= OUTPUT_ENABLE;
+		end
+	assign D_IN_0 = din0;
+	assign D_IN_1 = din1;
+	wire unused = LATCH_INPUT_VALUE ^ D_OUT_1;
+endmodule
+`default_nettype none
+module usb_crc (
+	in_bit,
+	in_first,
+	in_valid,
+	crc,
+	crc_match,
+	clk,
+	rst
+);
+	parameter integer WIDTH = 5;
+	parameter POLY = 5'b00011;
+	parameter MATCH = 5'b00000;
+	input wire in_bit;
+	input wire in_first;
+	input wire in_valid;
+	output wire [WIDTH - 1:0] crc;
+	output wire crc_match;
+	input wire clk;
+	input wire rst;
+	reg [WIDTH - 1:0] state;
+	wire [WIDTH - 1:0] state_fb_mux;
+	wire [WIDTH - 1:0] state_upd_mux;
+	wire [WIDTH - 1:0] state_nxt;
+	assign state_fb_mux = state & {WIDTH {~in_first}};
+	assign state_upd_mux = (state_fb_mux[WIDTH - 1] == in_bit ? POLY : 0);
+	assign state_nxt = {state_fb_mux[WIDTH - 2:0], 1'b1} ^ state_upd_mux;
+	always @(posedge clk)
+		if (in_valid)
+			state <= state_nxt;
+	assign crc_match = state == ~MATCH;
+	genvar _gv_i_34;
+	generate
+		for (_gv_i_34 = 0; _gv_i_34 < WIDTH; _gv_i_34 = _gv_i_34 + 1) begin : genblk1
+			localparam i = _gv_i_34;
+			assign crc[i] = state[(WIDTH - 1) - i];
+		end
+	endgenerate
+endmodule
+`default_nettype none
+module usb_ep_buf (
+	rd_addr_0,
+	rd_data_1,
+	rd_en_0,
+	rd_clk,
+	wr_addr_0,
+	wr_data_0,
+	wr_en_0,
+	wr_clk
+);
+	parameter TARGET = "ICE40";
+	parameter integer RWIDTH = 8;
+	parameter integer WWIDTH = 8;
+	parameter integer AWIDTH = 11;
+	parameter integer ARW = AWIDTH - $clog2(RWIDTH / 8);
+	parameter integer AWW = AWIDTH - $clog2(WWIDTH / 8);
+	input wire [ARW - 1:0] rd_addr_0;
+	output wire [RWIDTH - 1:0] rd_data_1;
+	input wire rd_en_0;
+	input wire rd_clk;
+	input wire [AWW - 1:0] wr_addr_0;
+	input wire [WWIDTH - 1:0] wr_data_0;
+	input wire wr_en_0;
+	input wire wr_clk;
+	localparam WRITE_MODE = 3 - $clog2(WWIDTH / 8);
+	localparam READ_MODE = 3 - $clog2(RWIDTH / 8);
+	function [7:0] ram_rd_map8;
+		input [15:0] rdata;
+		ram_rd_map8 = {rdata[14], rdata[12], rdata[10], rdata[8], rdata[6], rdata[4], rdata[2], rdata[0]};
+	endfunction
+	function [15:0] ram_wr_map8;
+		input [7:0] wdata;
+		ram_wr_map8 = {1'b0, wdata[7], 1'b0, wdata[6], 1'b0, wdata[5], 1'b0, wdata[4], 1'b0, wdata[3], 1'b0, wdata[2], 1'b0, wdata[1], 1'b0, wdata[0]};
+	endfunction
+	function [3:0] ram_rd_map4;
+		input [15:0] rdata;
+		ram_rd_map4 = {rdata[13], rdata[9], rdata[5], rdata[1]};
+	endfunction
+	function [15:0] ram_wr_map4;
+		input [3:0] wdata;
+		ram_wr_map4 = {2'h0, wdata[3], 3'h0, wdata[2], 3'h0, wdata[1], 3'h0, wdata[0], 1'b0};
+	endfunction
+	function [1:0] ram_rd_map2;
+		input [15:0] rdata;
+		ram_rd_map2 = {rdata[11], rdata[3]};
+	endfunction
+	function [15:0] ram_wr_map2;
+		input [1:0] wdata;
+		ram_wr_map2 = {4'h0, wdata[1], 7'h00, wdata[0], 3'h0};
+	endfunction
+	function [63:0] ram_rd_shuffle_64;
+		input [63:0] src;
+		ram_rd_shuffle_64 = {src[63], src[55], src[47], src[39], src[31], src[23], src[15], src[7], src[59], src[51], src[43], src[35], src[27], src[19], src[11], src[3], src[61], src[53], src[45], src[37], src[29], src[21], src[13], src[5], src[57], src[49], src[41], src[33], src[25], src[17], src[9], src[1], src[62], src[54], src[46], src[38], src[30], src[22], src[14], src[6], src[58], src[50], src[42], src[34], src[26], src[18], src[10], src[2], src[60], src[52], src[44], src[36], src[28], src[20], src[12], src[4], src[56], src[48], src[40], src[32], src[24], src[16], src[8], src[0]};
+	endfunction
+	function [31:0] ram_rd_shuffle_32;
+		input [31:0] src;
+		ram_rd_shuffle_32 = {src[31], src[27], src[23], src[19], src[15], src[11], src[7], src[3], src[29], src[25], src[21], src[17], src[13], src[9], src[5], src[1], src[30], src[26], src[22], src[18], src[14], src[10], src[6], src[2], src[28], src[24], src[20], src[16], src[12], src[8], src[4], src[0]};
+	endfunction
+	function [15:0] ram_rd_shuffle_16;
+		input [15:0] src;
+		ram_rd_shuffle_16 = {src[15], src[13], src[11], src[9], src[7], src[5], src[3], src[1], src[14], src[12], src[10], src[8], src[6], src[4], src[2], src[0]};
+	endfunction
+	function [63:0] ram_wr_shuffle_64;
+		input [63:0] src;
+		ram_wr_shuffle_64 = {src[63], src[31], src[47], src[15], src[55], src[23], src[39], src[7], src[62], src[30], src[46], src[14], src[54], src[22], src[38], src[6], src[61], src[29], src[45], src[13], src[53], src[21], src[37], src[5], src[60], src[28], src[44], src[12], src[52], src[20], src[36], src[4], src[59], src[27], src[43], src[11], src[51], src[19], src[35], src[3], src[58], src[26], src[42], src[10], src[50], src[18], src[34], src[2], src[57], src[25], src[41], src[9], src[49], src[17], src[33], src[1], src[56], src[24], src[40], src[8], src[48], src[16], src[32], src[0]};
+	endfunction
+	function [31:0] ram_wr_shuffle_32;
+		input [31:0] src;
+		ram_wr_shuffle_32 = {src[31], src[15], src[23], src[7], src[30], src[14], src[22], src[6], src[29], src[13], src[21], src[5], src[28], src[12], src[20], src[4], src[27], src[11], src[19], src[3], src[26], src[10], src[18], src[2], src[25], src[9], src[17], src[1], src[24], src[8], src[16], src[0]};
+	endfunction
+	function [15:0] ram_wr_shuffle_16;
+		input [15:0] src;
+		ram_wr_shuffle_16 = {src[15], src[7], src[14], src[6], src[13], src[5], src[12], src[4], src[11], src[3], src[10], src[2], src[9], src[1], src[8], src[0]};
+	endfunction
+	initial begin
+		$display("READ_MODE  : %d", READ_MODE);
+		$display("WRITE_MODE : %d", WRITE_MODE);
+	end
+	wire [10:0] ram_raddr;
+	wire [10:0] ram_waddr;
+	wire [RWIDTH - 1:0] rd_data_1_ram;
+	wire [WWIDTH - 1:0] wr_data_0_ram;
+	genvar _gv_i_35;
+	assign ram_raddr[7:0] = rd_addr_0[ARW - 1:ARW - 8];
+	assign ram_waddr[7:0] = wr_addr_0[AWW - 1:AWW - 8];
+	generate
+		if (READ_MODE == 3) begin : genblk1
+			assign ram_raddr[10:8] = {rd_addr_0[0], rd_addr_0[1], rd_addr_0[2]};
+		end
+		else if (READ_MODE == 2) begin : genblk1
+			assign ram_raddr[10:8] = {1'b0, rd_addr_0[0], rd_addr_0[1]};
+		end
+		else if (READ_MODE == 1) begin : genblk1
+			assign ram_raddr[10:8] = {2'b00, rd_addr_0[0]};
+		end
+		else begin : genblk1
+			assign ram_raddr[10:8] = 3'b000;
+		end
+		if (WRITE_MODE == 3) begin : genblk2
+			assign ram_waddr[10:8] = {wr_addr_0[0], wr_addr_0[1], wr_addr_0[2]};
+		end
+		else if (WRITE_MODE == 2) begin : genblk2
+			assign ram_waddr[10:8] = {1'b0, wr_addr_0[0], wr_addr_0[1]};
+		end
+		else if (WRITE_MODE == 1) begin : genblk2
+			assign ram_waddr[10:8] = {2'b00, wr_addr_0[0]};
+		end
+		else begin : genblk2
+			assign ram_waddr[10:8] = 3'b000;
+		end
+		if (READ_MODE == 0) begin : genblk3
+			assign rd_data_1 = ram_rd_shuffle_64(rd_data_1_ram);
+		end
+		else if (READ_MODE == 1) begin : genblk3
+			assign rd_data_1 = ram_rd_shuffle_32(rd_data_1_ram);
+		end
+		else if (READ_MODE == 2) begin : genblk3
+			assign rd_data_1 = ram_rd_shuffle_16(rd_data_1_ram);
+		end
+		else begin : genblk3
+			assign rd_data_1 = rd_data_1_ram;
+		end
+		if (WRITE_MODE == 0) begin : genblk4
+			assign wr_data_0_ram = ram_wr_shuffle_64(wr_data_0);
+		end
+		else if (WRITE_MODE == 1) begin : genblk4
+			assign wr_data_0_ram = ram_wr_shuffle_32(wr_data_0);
+		end
+		else if (WRITE_MODE == 2) begin : genblk4
+			assign wr_data_0_ram = ram_wr_shuffle_16(wr_data_0);
+		end
+		else begin : genblk4
+			assign wr_data_0_ram = wr_data_0;
+		end
+		for (_gv_i_35 = 0; _gv_i_35 < 4; _gv_i_35 = _gv_i_35 + 1) begin : block
+			localparam i = _gv_i_35;
+			wire [15:0] ram_rdata;
+			wire [15:0] ram_wdata;
+			SB_RAM40_4K #(
+				.WRITE_MODE(WRITE_MODE),
+				.READ_MODE(READ_MODE)
+			) ram_I(
+				.RDATA(ram_rdata),
+				.RCLK(rd_clk),
+				.RCLKE(rd_en_0),
+				.RE(1'b1),
+				.RADDR(ram_raddr),
+				.WCLK(wr_clk),
+				.WCLKE(wr_en_0),
+				.WE(1'b1),
+				.WADDR(ram_waddr),
+				.MASK(16'h0000),
+				.WDATA(ram_wdata)
+			);
+			if (READ_MODE == 3) begin : genblk1
+				assign rd_data_1_ram[i * 2+:2] = ram_rd_map2(ram_rdata);
+			end
+			else if (READ_MODE == 2) begin : genblk1
+				assign rd_data_1_ram[i * 4+:4] = ram_rd_map4(ram_rdata);
+			end
+			else if (READ_MODE == 1) begin : genblk1
+				assign rd_data_1_ram[i * 8+:8] = ram_rd_map8(ram_rdata);
+			end
+			else begin : genblk1
+				assign rd_data_1_ram[i * 16+:16] = ram_rdata;
+			end
+			if (WRITE_MODE == 3) begin : genblk2
+				assign ram_wdata = ram_wr_map2(wr_data_0_ram[i * 2+:2]);
+			end
+			else if (WRITE_MODE == 2) begin : genblk2
+				assign ram_wdata = ram_wr_map4(wr_data_0_ram[i * 4+:4]);
+			end
+			else if (WRITE_MODE == 1) begin : genblk2
+				assign ram_wdata = ram_wr_map8(wr_data_0_ram[i * 8+:8]);
+			end
+			else begin : genblk2
+				assign ram_wdata = wr_data_0_ram[i * 16+:16];
+			end
+		end
+	endgenerate
+endmodule
+`default_nettype none
+module usb_ep_status (
+	p_addr_0,
+	p_read_0,
+	p_zero_0,
+	p_write_0,
+	p_din_0,
+	p_dout_3,
+	s_addr_0,
+	s_read_0,
+	s_zero_0,
+	s_write_0,
+	s_din_0,
+	s_dout_3,
+	s_ready_0,
+	clk,
+	rst
+);
+	input wire [7:0] p_addr_0;
+	input wire p_read_0;
+	input wire p_zero_0;
+	input wire p_write_0;
+	input wire [15:0] p_din_0;
+	output reg [15:0] p_dout_3;
+	input wire [7:0] s_addr_0;
+	input wire s_read_0;
+	input wire s_zero_0;
+	input wire s_write_0;
+	input wire [15:0] s_din_0;
+	output reg [15:0] s_dout_3;
+	output wire s_ready_0;
+	input wire clk;
+	input wire rst;
+	wire s_ready_0_i;
+	reg [7:0] addr_1;
+	reg [15:0] din_1;
+	reg we_1;
+	reg p_read_1;
+	reg p_zero_1;
+	reg s_read_1;
+	reg s_zero_1;
+	wire [15:0] dout_2;
+	reg p_read_2;
+	reg p_zero_2;
+	reg s_read_2;
+	reg s_zero_2;
+	assign s_ready_0_i = ~p_read_0 & ~p_write_0;
+	assign s_ready_0 = s_ready_0_i;
+	always @(posedge clk) begin
+		addr_1 <= (p_read_0 | p_write_0 ? p_addr_0 : s_addr_0);
+		we_1 <= p_write_0 | (s_write_0 & s_ready_0_i);
+		din_1 <= (p_write_0 ? p_din_0 : s_din_0);
+		p_read_1 <= p_read_0;
+		p_zero_1 <= p_zero_0;
+		s_read_1 <= s_read_0 & s_ready_0_i;
+		s_zero_1 <= s_zero_0 & s_ready_0_i;
+	end
+	always @(posedge clk) begin
+		p_read_2 <= p_read_1 | p_zero_1;
+		p_zero_2 <= p_zero_1;
+		s_read_2 <= s_read_1 | s_zero_1;
+		s_zero_2 <= s_zero_1;
+	end
+	always @(posedge clk)
+		if (p_read_2)
+			p_dout_3 <= (p_zero_2 ? 16'h0000 : dout_2);
+	always @(posedge clk)
+		if (s_read_2)
+			s_dout_3 <= (s_zero_2 ? 16'h0000 : dout_2);
+	SB_RAM40_4K #(
+		.WRITE_MODE(0),
+		.READ_MODE(0)
+	) ebr_I(
+		.RDATA(dout_2),
+		.RADDR({3'b000, addr_1}),
+		.RCLK(clk),
+		.RCLKE(1'b1),
+		.RE(1'b1),
+		.WDATA(din_1),
+		.WADDR({3'b000, addr_1}),
+		.MASK(16'h0000),
+		.WCLK(clk),
+		.WCLKE(we_1),
+		.WE(1'b1)
+	);
+endmodule
+`default_nettype none
+module usb_phy (
+	pad_dp,
+	pad_dn,
+	rx_dp,
+	rx_dn,
+	rx_chg,
+	tx_dp,
+	tx_dn,
+	tx_en,
+	clk,
+	rst
+);
+	parameter TARGET = "ICE40";
+	inout wire pad_dp;
+	inout wire pad_dn;
+	output wire rx_dp;
+	output wire rx_dn;
+	output wire rx_chg;
+	input wire tx_dp;
+	input wire tx_dn;
+	input wire tx_en;
+	input wire clk;
+	input wire rst;
+	wire [1:0] rx_dp_i;
+	wire [1:0] rx_dn_i;
+	reg [2:0] dp_state;
+	reg [2:0] dn_state;
+	generate
+		if (TARGET == "ICE40") begin : genblk1
+			SB_IO #(
+				.PIN_TYPE(6'b110100),
+				.PULLUP(1'b0),
+				.NEG_TRIGGER(1'b0),
+				.IO_STANDARD("SB_LVCMOS")
+			) io_dp_I(
+				.PACKAGE_PIN(pad_dp),
+				.CLOCK_ENABLE(1'b1),
+				.INPUT_CLK(clk),
+				.OUTPUT_CLK(clk),
+				.OUTPUT_ENABLE(tx_en),
+				.D_OUT_0(tx_dp),
+				.D_OUT_1(1'b0),
+				.D_IN_0(rx_dp_i[0]),
+				.D_IN_1(rx_dp_i[1])
+			);
+			SB_IO #(
+				.PIN_TYPE(6'b110100),
+				.PULLUP(1'b0),
+				.NEG_TRIGGER(1'b0),
+				.IO_STANDARD("SB_LVCMOS")
+			) io_dn_I(
+				.PACKAGE_PIN(pad_dn),
+				.CLOCK_ENABLE(1'b1),
+				.INPUT_CLK(clk),
+				.OUTPUT_CLK(clk),
+				.OUTPUT_ENABLE(tx_en),
+				.D_OUT_0(tx_dn),
+				.D_OUT_1(1'b0),
+				.D_IN_0(rx_dn_i[0]),
+				.D_IN_1(rx_dn_i[1])
+			);
+		end
+	endgenerate
+	always @(posedge clk or posedge rst)
+		if (rst) begin
+			dp_state <= 3'b000;
+			dn_state <= 3'b000;
+		end
+		else begin
+			case ({dp_state[1:0], rx_dp_i})
+				4'b0000: dp_state <= 3'b000;
+				4'b0001: dp_state <= 3'b001;
+				4'b0010: dp_state <= 3'b001;
+				4'b0011: dp_state <= 3'b001;
+				4'b0100: dp_state <= 3'b000;
+				4'b0101: dp_state <= 3'b001;
+				4'b0110: dp_state <= 3'b001;
+				4'b0111: dp_state <= 3'b111;
+				4'b1000: dp_state <= 3'b100;
+				4'b1001: dp_state <= 3'b010;
+				4'b1010: dp_state <= 3'b010;
+				4'b1011: dp_state <= 3'b011;
+				4'b1100: dp_state <= 3'b010;
+				4'b1101: dp_state <= 3'b010;
+				4'b1110: dp_state <= 3'b010;
+				4'b1111: dp_state <= 3'b011;
+				default: dp_state <= 3'bxxx;
+			endcase
+			case ({dn_state[1:0], rx_dn_i})
+				4'b0000: dn_state <= 3'b000;
+				4'b0001: dn_state <= 3'b001;
+				4'b0010: dn_state <= 3'b001;
+				4'b0011: dn_state <= 3'b001;
+				4'b0100: dn_state <= 3'b000;
+				4'b0101: dn_state <= 3'b001;
+				4'b0110: dn_state <= 3'b001;
+				4'b0111: dn_state <= 3'b111;
+				4'b1000: dn_state <= 3'b100;
+				4'b1001: dn_state <= 3'b010;
+				4'b1010: dn_state <= 3'b010;
+				4'b1011: dn_state <= 3'b011;
+				4'b1100: dn_state <= 3'b010;
+				4'b1101: dn_state <= 3'b010;
+				4'b1110: dn_state <= 3'b010;
+				4'b1111: dn_state <= 3'b011;
+				default: dn_state <= 3'bxxx;
+			endcase
+		end
+	assign rx_dp = dp_state[1];
+	assign rx_dn = dn_state[1];
+	assign rx_chg = dp_state[2] | dn_state[2];
+endmodule
+`default_nettype none
+module usb_rx_ll (
+	phy_rx_dp,
+	phy_rx_dn,
+	phy_rx_chg,
+	ll_sym,
+	ll_bit,
+	ll_valid,
+	ll_eop,
+	ll_sync,
+	ll_bs_skip,
+	ll_bs_err,
+	clk,
+	rst
+);
+	input wire phy_rx_dp;
+	input wire phy_rx_dn;
+	input wire phy_rx_chg;
+	output wire [1:0] ll_sym;
+	output wire ll_bit;
+	output wire ll_valid;
+	output wire ll_eop;
+	output wire ll_sync;
+	output wire ll_bs_skip;
+	output wire ll_bs_err;
+	input wire clk;
+	input wire rst;
+	reg samp_active;
+	(* keep = "true" *) wire samp_sync;
+	reg [2:0] samp_cnt;
+	wire [1:0] samp_sym_0;
+	reg samp_valid_0;
+	(* keep = "true" *) wire dec_sym_same_0;
+	(* keep = "true" *) wire dec_sym_se_0;
+	reg [2:0] dec_eop_state_1;
+	reg [3:0] dec_sync_state_1;
+	reg [3:0] dec_rep_state_1;
+	reg [1:0] dec_sym_1 = 2'b00;
+	reg dec_bit_1;
+	reg dec_valid_1;
+	wire dec_eop_1;
+	wire dec_sync_1;
+	wire [2:0] dec_rep_1;
+	reg dec_bs_skip_1;
+	wire dec_bs_err_1;
+	always @(posedge clk or posedge rst)
+		if (rst)
+			samp_active <= 1'b0;
+		else
+			samp_active <= (samp_active | phy_rx_chg) & ~(dec_valid_1 & (dec_eop_1 | dec_bs_err_1));
+	assign samp_sync = ~samp_active | (~samp_cnt[2] && phy_rx_chg);
+	always @(posedge clk)
+		if (samp_sync)
+			samp_cnt <= 3'b101;
+		else
+			case (samp_cnt)
+				3'b000: samp_cnt <= 3'b011;
+				3'b001: samp_cnt <= 3'b000;
+				3'b010: samp_cnt <= 3'b001;
+				3'b011: samp_cnt <= 3'b010;
+				3'b100: samp_cnt <= 3'b011;
+				3'b101: samp_cnt <= 3'b100;
+				3'b110: samp_cnt <= 3'b101;
+				3'b111: samp_cnt <= 3'b110;
+				default: samp_cnt <= 3'bxxx;
+			endcase
+	always @(posedge clk) samp_valid_0 <= (samp_active & (samp_cnt[1:0] == 2'b01)) & ~samp_valid_0;
+	assign samp_sym_0 = {phy_rx_dp, phy_rx_dn};
+	assign dec_sym_same_0 = samp_sym_0 == dec_sym_1;
+	assign dec_sym_se_0 = ~^samp_sym_0;
+	always @(posedge clk)
+		if (samp_valid_0) begin
+			dec_sym_1 <= samp_sym_0;
+			dec_bit_1 <= ((samp_sym_0[0] ^ samp_sym_0[1]) & (dec_sym_1[0] ^ dec_sym_1[1])) & ~(samp_sym_0[1] ^ dec_sym_1[1]);
+		end
+	always @(posedge clk) dec_valid_1 <= samp_valid_0;
+	always @(posedge clk)
+		if (samp_valid_0)
+			case ({dec_eop_state_1[1:0], samp_sym_0})
+				4'b0000: dec_eop_state_1 <= 3'b001;
+				4'b0100: dec_eop_state_1 <= 3'b010;
+				4'b1000: dec_eop_state_1 <= 3'b010;
+				4'b1010: dec_eop_state_1 <= 3'b111;
+				default: dec_eop_state_1 <= 3'b000;
+			endcase
+	assign dec_eop_1 = dec_eop_state_1[2];
+	always @(posedge clk)
+		if (samp_valid_0) begin
+			if (dec_sym_se_0)
+				dec_sync_state_1 <= 4'b0000;
+			else
+				casez ({dec_sync_state_1[2:0], samp_sym_0[1]})
+					4'b0000: dec_sync_state_1 <= 4'b0001;
+					4'b0011: dec_sync_state_1 <= 4'b0010;
+					4'b0100: dec_sync_state_1 <= 4'b0011;
+					4'b0111: dec_sync_state_1 <= 4'b0100;
+					4'b1000: dec_sync_state_1 <= 4'b0101;
+					4'b1011: dec_sync_state_1 <= 4'b0110;
+					4'b1100: dec_sync_state_1 <= 4'b0111;
+					4'b1110: dec_sync_state_1 <= 4'b1001;
+					4'bzzz0: dec_sync_state_1 <= 4'b0001;
+					default: dec_sync_state_1 <= 4'b0000;
+				endcase
+		end
+	assign dec_sync_1 = dec_sync_state_1[3];
+	always @(posedge clk)
+		if (samp_valid_0) begin
+			if (dec_sym_same_0 == 1'b0)
+				dec_rep_state_1 <= 4'b0000;
+			else
+				case (dec_rep_state_1[2:0])
+					3'b000: dec_rep_state_1 <= 4'b0001;
+					3'b001: dec_rep_state_1 <= 4'b0010;
+					3'b010: dec_rep_state_1 <= 4'b0011;
+					3'b011: dec_rep_state_1 <= 4'b0100;
+					3'b100: dec_rep_state_1 <= 4'b0101;
+					3'b101: dec_rep_state_1 <= 4'b0110;
+					3'b110: dec_rep_state_1 <= 4'b1111;
+					3'b111: dec_rep_state_1 <= 4'b1111;
+					default: dec_rep_state_1 <= 4'bxxxx;
+				endcase
+		end
+	assign dec_bs_err_1 = dec_rep_state_1[3];
+	assign dec_rep_1 = dec_rep_state_1[2:0];
+	always @(posedge clk)
+		if (samp_valid_0)
+			dec_bs_skip_1 <= dec_rep_state_1[2:0] == 3'b110;
+	assign ll_sym = dec_sym_1;
+	assign ll_bit = dec_bit_1;
+	assign ll_valid = dec_valid_1;
+	assign ll_eop = dec_eop_1;
+	assign ll_sync = dec_sync_1;
+	assign ll_bs_skip = dec_bs_skip_1;
+	assign ll_bs_err = dec_bs_err_1;
+endmodule
+`default_nettype none
+module usb_rx_pkt (
+	ll_sym,
+	ll_bit,
+	ll_valid,
+	ll_eop,
+	ll_sync,
+	ll_bs_skip,
+	ll_bs_err,
+	pkt_start,
+	pkt_done_ok,
+	pkt_done_err,
+	pkt_pid,
+	pkt_is_sof,
+	pkt_is_token,
+	pkt_is_data,
+	pkt_is_handshake,
+	pkt_frameno,
+	pkt_addr,
+	pkt_endp,
+	pkt_data,
+	pkt_data_stb,
+	inhibit,
+	clk,
+	rst
+);
+	input wire [1:0] ll_sym;
+	input wire ll_bit;
+	input wire ll_valid;
+	input wire ll_eop;
+	input wire ll_sync;
+	input wire ll_bs_skip;
+	input wire ll_bs_err;
+	output reg pkt_start;
+	output reg pkt_done_ok;
+	output reg pkt_done_err;
+	output wire [3:0] pkt_pid;
+	output wire pkt_is_sof;
+	output wire pkt_is_token;
+	output wire pkt_is_data;
+	output wire pkt_is_handshake;
+	output wire [10:0] pkt_frameno;
+	output wire [6:0] pkt_addr;
+	output wire [3:0] pkt_endp;
+	output wire [7:0] pkt_data;
+	output reg pkt_data_stb;
+	input wire inhibit;
+	input wire clk;
+	input wire rst;
+	localparam SYM_SE0 = 2'b00;
+	localparam SYM_SE1 = 2'b11;
+	localparam SYM_J = 2'b10;
+	localparam SYM_K = 2'b01;
+	localparam PID_OUT = 4'b0001;
+	localparam PID_IN = 4'b1001;
+	localparam PID_SOF = 4'b0101;
+	localparam PID_SETUP = 4'b1101;
+	localparam PID_DATA0 = 4'b0011;
+	localparam PID_DATA1 = 4'b1011;
+	localparam PID_ACK = 4'b0010;
+	localparam PID_NAK = 4'b1010;
+	localparam PID_STALL = 4'b1110;
+	localparam PID_INVAL = 4'b0000;
+	localparam ST_IDLE = 0;
+	localparam ST_PID = 1;
+	localparam ST_PID_CHECK = 2;
+	localparam ST_ERROR = 3;
+	localparam ST_TOKEN_1 = 4;
+	localparam ST_TOKEN_2 = 5;
+	localparam ST_WAIT_EOP = 6;
+	localparam ST_DATA = 7;
+	reg [3:0] state_nxt;
+	reg [3:0] state;
+	reg state_prev_idle;
+	reg state_prev_error;
+	wire llu_bit_stb;
+	wire llu_byte_stb;
+	wire [7:0] data_nxt;
+	reg [7:0] data;
+	reg [3:0] bit_cnt;
+	reg bit_eop_ok;
+	wire bit_last;
+	wire crc_in_bit;
+	wire crc_in_valid;
+	reg crc_in_first;
+	reg crc_cap;
+	wire crc5_match;
+	reg crc5_ok;
+	wire crc16_match;
+	reg crc16_ok;
+	wire pid_cap;
+	reg pid_cap_r;
+	reg pid_valid;
+	reg [3:0] pid;
+	reg pid_is_sof;
+	reg pid_is_token;
+	reg pid_is_data;
+	reg pid_is_handshake;
+	reg [10:0] token_data;
+	always @(*) begin
+		state_nxt = state;
+		case (state)
+			ST_IDLE:
+				if ((ll_valid && ll_sync) && ~inhibit)
+					state_nxt = ST_PID;
+			ST_PID:
+				if (llu_byte_stb)
+					state_nxt = ST_PID_CHECK;
+			ST_PID_CHECK: begin
+				state_nxt = ST_ERROR;
+				if (pid_valid) begin
+					if (pid_is_sof)
+						state_nxt = ST_TOKEN_1;
+					else if (pid_is_token)
+						state_nxt = ST_TOKEN_1;
+					else if (pid_is_data)
+						state_nxt = ST_DATA;
+					else if (pid_is_handshake)
+						state_nxt = ST_WAIT_EOP;
+				end
+			end
+			ST_ERROR:
+				if (ll_valid && (ll_eop || (ll_bs_err && (ll_sym == SYM_J))))
+					state_nxt = ST_IDLE;
+			ST_TOKEN_1:
+				if (ll_valid && ll_eop)
+					state_nxt = ST_ERROR;
+				else if (llu_byte_stb)
+					state_nxt = ST_TOKEN_2;
+			ST_TOKEN_2:
+				if (ll_valid && ll_eop)
+					state_nxt = ST_ERROR;
+				else if (llu_byte_stb)
+					state_nxt = ST_WAIT_EOP;
+			ST_WAIT_EOP:
+				if (ll_valid && ll_eop)
+					state_nxt = (bit_eop_ok & (crc5_ok | pid_is_handshake) ? ST_IDLE : ST_ERROR);
+				else if (llu_byte_stb)
+					state_nxt = ST_ERROR;
+			ST_DATA:
+				if (ll_valid) begin
+					if (ll_eop)
+						state_nxt = (bit_eop_ok & crc16_ok ? ST_IDLE : ST_ERROR);
+					else if (ll_bs_err)
+						state_nxt = ST_ERROR;
+				end
+		endcase
+	end
+	always @(posedge clk or posedge rst)
+		if (rst)
+			state <= ST_IDLE;
+		else
+			state <= state_nxt;
+	always @(posedge clk) begin
+		state_prev_idle <= state == ST_IDLE;
+		state_prev_error <= state == ST_ERROR;
+	end
+	assign llu_bit_stb = ll_valid & ~ll_bs_skip;
+	assign llu_byte_stb = (ll_valid & ~ll_bs_skip) & bit_last;
+	assign data_nxt = {ll_bit, data[7:1]};
+	always @(posedge clk)
+		if (llu_bit_stb)
+			data <= data_nxt;
+	always @(posedge clk)
+		if (state == ST_IDLE)
+			bit_cnt <= 4'b0110;
+		else if (llu_bit_stb)
+			bit_cnt <= {1'b0, bit_cnt[2:0]} - 1;
+	assign bit_last = bit_cnt[3];
+	always @(posedge clk)
+		if (state == ST_IDLE)
+			bit_eop_ok <= 1'b0;
+		else if (llu_bit_stb)
+			bit_eop_ok <= bit_cnt[2:1] == 2'b10;
+	assign crc_in_bit = ll_bit;
+	assign crc_in_valid = llu_bit_stb;
+	always @(posedge clk)
+		if (state == ST_PID)
+			crc_in_first <= 1'b1;
+		else if (crc_in_valid)
+			crc_in_first <= 1'b0;
+	usb_crc #(
+		.WIDTH(5),
+		.POLY(5'b00101),
+		.MATCH(5'b01100)
+	) crc_5_I(
+		.in_bit(crc_in_bit),
+		.in_first(crc_in_first),
+		.in_valid(crc_in_valid),
+		.crc(),
+		.crc_match(crc5_match),
+		.clk(clk),
+		.rst(rst)
+	);
+	usb_crc #(
+		.WIDTH(16),
+		.POLY(16'h8005),
+		.MATCH(16'h800d)
+	) crc_16_I(
+		.in_bit(crc_in_bit),
+		.in_first(crc_in_first),
+		.in_valid(crc_in_valid),
+		.crc(),
+		.crc_match(crc16_match),
+		.clk(clk),
+		.rst(rst)
+	);
+	always @(posedge clk) crc_cap <= llu_byte_stb;
+	always @(posedge clk)
+		if (state == ST_IDLE) begin
+			crc5_ok <= 1'b0;
+			crc16_ok <= 1'b0;
+		end
+		else if (crc_cap) begin
+			crc5_ok <= crc5_match;
+			crc16_ok <= crc16_match;
+		end
+	assign pid_cap = (state == ST_PID) & llu_byte_stb;
+	always @(posedge clk)
+		if (pid_cap)
+			pid_valid <= (data_nxt[3:0] == ~data_nxt[7:4]) && (((((((((data_nxt[3:0] == PID_SOF) || (data_nxt[3:0] == PID_OUT)) || (data_nxt[3:0] == PID_IN)) || (data_nxt[3:0] == PID_SETUP)) || (data_nxt[3:0] == PID_DATA0)) || (data_nxt[3:0] == PID_DATA1)) || (data_nxt[3:0] == PID_ACK)) || (data_nxt[3:0] == PID_NAK)) || (data_nxt[3:0] == PID_STALL));
+	always @(posedge clk) pid_cap_r <= pid_cap;
+	always @(posedge clk)
+		if ((state == ST_PID) && llu_byte_stb) begin
+			pid <= data_nxt;
+			pid_is_sof <= data_nxt[3:0] == PID_SOF;
+			pid_is_token <= ((data_nxt[3:0] == PID_OUT) || (data_nxt[3:0] == PID_IN)) || (data_nxt[3:0] == PID_SETUP);
+			pid_is_data <= (data_nxt[3:0] == PID_DATA0) || (data_nxt[3:0] == PID_DATA1);
+			pid_is_handshake <= ((data_nxt[3:0] == PID_ACK) || (data_nxt[3:0] == PID_NAK)) || (data_nxt[3:0] == PID_STALL);
+		end
+	always @(posedge clk)
+		if ((state == ST_TOKEN_1) && llu_byte_stb)
+			token_data[7:0] <= data_nxt[7:0];
+	always @(posedge clk)
+		if ((state == ST_TOKEN_2) && llu_byte_stb)
+			token_data[10:8] <= data_nxt[2:0];
+	always @(posedge clk) pkt_start <= pid_cap_r & pid_valid;
+	always @(posedge clk) begin
+		pkt_done_ok <= ((state == ST_IDLE) && !state_prev_idle) && !state_prev_error;
+		pkt_done_err <= (state == ST_ERROR) && !state_prev_error;
+	end
+	assign pkt_pid = pid;
+	assign pkt_is_sof = pid_is_sof;
+	assign pkt_is_token = pid_is_token;
+	assign pkt_is_data = pid_is_data;
+	assign pkt_is_handshake = pid_is_handshake;
+	assign pkt_frameno = token_data;
+	assign pkt_addr = token_data[6:0];
+	assign pkt_endp = token_data[10:7];
+	assign pkt_data = data;
+	always @(posedge clk) pkt_data_stb <= (state == ST_DATA) && llu_byte_stb;
+endmodule
+`default_nettype none
+module usb_trans (
+	txpkt_start,
+	txpkt_done,
+	txpkt_pid,
+	txpkt_len,
+	txpkt_data,
+	txpkt_data_ack,
+	rxpkt_start,
+	rxpkt_done_ok,
+	rxpkt_done_err,
+	rxpkt_pid,
+	rxpkt_is_sof,
+	rxpkt_is_token,
+	rxpkt_is_data,
+	rxpkt_is_handshake,
+	rxpkt_frameno,
+	rxpkt_addr,
+	rxpkt_endp,
+	rxpkt_data,
+	rxpkt_data_stb,
+	buf_tx_addr_0,
+	buf_tx_data_1,
+	buf_tx_rden_0,
+	buf_rx_addr_0,
+	buf_rx_data_0,
+	buf_rx_wren_0,
+	eps_read_0,
+	eps_zero_0,
+	eps_write_0,
+	eps_addr_0,
+	eps_wrdata_0,
+	eps_rddata_3,
+	cr_addr_chk,
+	cr_addr,
+	evt_data,
+	evt_stb,
+	cel_state,
+	cel_rel,
+	cel_ena,
+	clk,
+	rst
+);
+	parameter integer ADDR_MATCH = 1;
+	output wire txpkt_start;
+	input wire txpkt_done;
+	output reg [3:0] txpkt_pid;
+	output wire [9:0] txpkt_len;
+	output wire [7:0] txpkt_data;
+	input wire txpkt_data_ack;
+	input wire rxpkt_start;
+	input wire rxpkt_done_ok;
+	input wire rxpkt_done_err;
+	input wire [3:0] rxpkt_pid;
+	input wire rxpkt_is_sof;
+	input wire rxpkt_is_token;
+	input wire rxpkt_is_data;
+	input wire rxpkt_is_handshake;
+	input wire [10:0] rxpkt_frameno;
+	input wire [6:0] rxpkt_addr;
+	input wire [3:0] rxpkt_endp;
+	input wire [7:0] rxpkt_data;
+	input wire rxpkt_data_stb;
+	output wire [10:0] buf_tx_addr_0;
+	input wire [7:0] buf_tx_data_1;
+	output wire buf_tx_rden_0;
+	output wire [10:0] buf_rx_addr_0;
+	output wire [7:0] buf_rx_data_0;
+	output wire buf_rx_wren_0;
+	output wire eps_read_0;
+	output wire eps_zero_0;
+	output wire eps_write_0;
+	output wire [7:0] eps_addr_0;
+	output wire [15:0] eps_wrdata_0;
+	input wire [15:0] eps_rddata_3;
+	input wire cr_addr_chk;
+	input wire [6:0] cr_addr;
+	output wire [11:0] evt_data;
+	output wire evt_stb;
+	output wire cel_state;
+	input wire cel_rel;
+	input wire cel_ena;
+	input wire clk;
+	input wire rst;
+	localparam SYM_SE0 = 2'b00;
+	localparam SYM_SE1 = 2'b11;
+	localparam SYM_J = 2'b10;
+	localparam SYM_K = 2'b01;
+	localparam PID_OUT = 4'b0001;
+	localparam PID_IN = 4'b1001;
+	localparam PID_SOF = 4'b0101;
+	localparam PID_SETUP = 4'b1101;
+	localparam PID_DATA0 = 4'b0011;
+	localparam PID_DATA1 = 4'b1011;
+	localparam PID_ACK = 4'b0010;
+	localparam PID_NAK = 4'b1010;
+	localparam PID_STALL = 4'b1110;
+	localparam PID_INVAL = 4'b0000;
+	reg [3:0] mc_a_reg;
+	reg mc_rst_n;
+	(* keep = "true" *) wire [3:0] mc_match_bits;
+	wire mc_match;
+	wire mc_jmp;
+	wire [7:0] mc_pc;
+	reg [7:0] mc_pc_nxt;
+	wire [15:0] mc_opcode;
+	(* keep = "true" *) wire mc_op_ld;
+	(* keep = "true" *) wire mc_op_ep;
+	(* keep = "true" *) wire mc_op_zlen;
+	(* keep = "true" *) wire mc_op_tx;
+	(* keep = "true" *) wire mc_op_notify;
+	(* keep = "true" *) wire mc_op_evt_clr;
+	(* keep = "true" *) wire mc_op_evt_rto;
+	wire [3:0] evt_rst;
+	wire [3:0] evt_set;
+	reg [3:0] evt;
+	reg [3:0] pkt_pid;
+	wire rto_now;
+	reg [9:0] rto_cnt;
+	reg trans_is_setup;
+	reg [3:0] trans_endp;
+	reg trans_dir;
+	reg trans_cel;
+	reg [2:0] ep_type;
+	reg ep_bd_dual;
+	reg ep_bd_ctrl;
+	reg ep_bd_idx_cur;
+	reg ep_bd_idx_nxt;
+	reg ep_data_toggle;
+	reg [2:0] bd_state;
+	localparam EPFW_IDLE = 4'b0000;
+	localparam EPFW_RD_STATUS = 4'b0100;
+	localparam EPFW_RD_BD_W0 = 4'b0110;
+	localparam EPFW_RD_BD_W1 = 4'b0111;
+	localparam EPFW_WR_STATUS = 4'b1000;
+	localparam EPFW_WR_BD_W0 = 4'b1010;
+	reg [3:0] epfw_state;
+	reg [5:0] epfw_cap_dl;
+	reg epfw_issue_wb;
+	reg cel_state_i;
+	reg txpkt_start_i;
+	reg [10:0] addr;
+	wire addr_inc;
+	wire addr_ld;
+	reg [10:0] bd_length;
+	reg [9:0] xfer_length;
+	wire len_ld;
+	wire len_bd_dec;
+	wire len_xf_inc;
+	always @(posedge clk or posedge rst)
+		if (rst)
+			mc_rst_n <= 1'b0;
+		else
+			mc_rst_n <= 1'b1;
+	assign mc_match_bits = (mc_a_reg[3:0] & mc_opcode[7:4]) ^ mc_opcode[3:0];
+	assign mc_match = ~|mc_match_bits;
+	assign mc_jmp = (mc_opcode[15] & mc_rst_n) & (mc_match ^ mc_opcode[14]);
+	assign mc_pc = (mc_jmp ? {mc_opcode[13:8], 2'b00} : mc_pc_nxt);
+	always @(posedge clk or posedge rst)
+		if (rst)
+			mc_pc_nxt <= 8'h00;
+		else
+			mc_pc_nxt <= mc_pc + 1;
+	SB_RAM40_4K #(
+		.INIT_FILE("usb_trans_mc.hex"),
+		.WRITE_MODE(0),
+		.READ_MODE(0)
+	) mc_rom_I(
+		.RDATA(mc_opcode),
+		.RADDR({3'b000, mc_pc}),
+		.RCLK(clk),
+		.RCLKE(1'b1),
+		.RE(1'b1),
+		.WDATA(16'h0000),
+		.WADDR(11'h000),
+		.MASK(16'h0000),
+		.WCLK(1'b0),
+		.WCLKE(1'b0),
+		.WE(1'b0)
+	);
+	assign mc_op_ld = mc_opcode[15:12] == 4'b0001;
+	assign mc_op_ep = mc_opcode[15:12] == 4'b0010;
+	assign mc_op_zlen = mc_opcode[15:12] == 4'b0011;
+	assign mc_op_tx = mc_opcode[15:12] == 4'b0100;
+	assign mc_op_notify = mc_opcode[15:12] == 4'b0101;
+	assign mc_op_evt_clr = mc_opcode[15:12] == 4'b0110;
+	assign mc_op_evt_rto = mc_opcode[15:12] == 4'b0111;
+	always @(posedge clk)
+		if (mc_op_ld)
+			casez (mc_opcode[2:1])
+				2'b00: mc_a_reg <= evt;
+				2'b01: mc_a_reg <= pkt_pid ^ {ep_data_toggle & mc_opcode[0], 3'b000};
+				2'b10: mc_a_reg <= {trans_cel, ep_type};
+				2'b11: mc_a_reg <= {1'b0, bd_state};
+				default: mc_a_reg <= 4'hx;
+			endcase
+	always @(posedge clk or posedge rst)
+		if (rst)
+			evt <= 4'h0;
+		else
+			evt <= (evt & ~evt_rst) | evt_set;
+	assign evt_rst = {4 {mc_op_evt_clr}} & mc_opcode[3:0];
+	assign evt_set = {rto_now, txpkt_done, rxpkt_done_err, rxpkt_done_ok};
+	generate
+		if (ADDR_MATCH) begin : genblk1
+			always @(posedge clk)
+				if (rxpkt_done_ok) begin
+					if (rxpkt_is_token & cr_addr_chk)
+						pkt_pid <= (rxpkt_addr == cr_addr ? rxpkt_pid : PID_INVAL);
+					else
+						pkt_pid <= rxpkt_pid;
+				end
+		end
+		else begin : genblk1
+			always @(*) pkt_pid = rxpkt_pid;
+		end
+	endgenerate
+	always @(posedge clk or posedge rst)
+		if (rst)
+			rto_cnt <= 0;
+		else if (mc_op_evt_rto)
+			rto_cnt <= {2'b01, mc_opcode[7:0]};
+		else
+			rto_cnt <= {(rto_cnt[9] & rto_cnt[8]) & ~rxpkt_start, rto_cnt[8:0] - rto_cnt[9]};
+	assign rto_now = rto_cnt[9] & ~rto_cnt[8];
+	assign evt_stb = mc_op_notify;
+	assign evt_data = {mc_opcode[3:0], trans_endp, trans_dir, trans_is_setup, ep_bd_idx_cur, 1'b0};
+	always @(posedge clk)
+		if (rxpkt_done_ok & rxpkt_is_token) begin
+			trans_is_setup <= rxpkt_pid == PID_SETUP;
+			trans_endp <= rxpkt_endp;
+			trans_dir <= rxpkt_pid == PID_IN;
+			trans_cel <= cel_state_i;
+		end
+	always @(posedge clk or posedge rst)
+		if (rst)
+			epfw_state <= EPFW_IDLE;
+		else
+			case (epfw_state)
+				EPFW_IDLE:
+					if (epfw_issue_wb)
+						epfw_state <= EPFW_WR_STATUS;
+					else if (rxpkt_done_ok & rxpkt_is_token)
+						epfw_state <= EPFW_RD_STATUS;
+					else if (epfw_cap_dl[1:0] == 2'b01)
+						epfw_state <= EPFW_RD_BD_W0;
+					else
+						epfw_state <= EPFW_IDLE;
+				EPFW_RD_STATUS: epfw_state <= EPFW_IDLE;
+				EPFW_RD_BD_W0: epfw_state <= EPFW_RD_BD_W1;
+				EPFW_RD_BD_W1: epfw_state <= EPFW_IDLE;
+				EPFW_WR_STATUS: epfw_state <= EPFW_WR_BD_W0;
+				EPFW_WR_BD_W0: epfw_state <= EPFW_IDLE;
+				default: epfw_state <= EPFW_IDLE;
+			endcase
+	assign eps_zero_0 = 1'b0;
+	assign eps_read_0 = epfw_state[2];
+	assign eps_write_0 = epfw_state[3];
+	assign eps_addr_0 = {trans_endp, trans_dir, epfw_state[1], epfw_state[1] & ep_bd_idx_cur, epfw_state[0]};
+	assign eps_wrdata_0 = (epfw_state[1] ? {bd_state, trans_is_setup, 2'b00, xfer_length[9:0]} : {8'h00, ep_data_toggle, ep_bd_idx_nxt, ep_bd_ctrl, ep_bd_dual, 1'b0, ep_type});
+	always @(posedge clk or posedge rst)
+		if (rst)
+			epfw_cap_dl <= 6'b000000;
+		else
+			epfw_cap_dl <= {epfw_state[1], epfw_state[2] & ~^epfw_state[1:0], epfw_cap_dl[5:2]};
+	always @(posedge clk) begin
+		if (epfw_cap_dl[1:0] == 2'b01) begin
+			ep_type <= eps_rddata_3[2:0];
+			ep_bd_dual <= eps_rddata_3[4];
+			ep_bd_ctrl <= eps_rddata_3[5];
+			ep_bd_idx_cur <= (eps_rddata_3[5] ? trans_is_setup : eps_rddata_3[6]);
+			ep_bd_idx_nxt <= eps_rddata_3[6];
+			ep_data_toggle <= eps_rddata_3[7] & ~trans_is_setup;
+		end
+		else begin
+			ep_data_toggle <= ep_data_toggle ^ (mc_op_ep & mc_opcode[0]);
+			ep_bd_idx_nxt <= ep_bd_idx_nxt ^ ((mc_op_ep & mc_opcode[1]) & ep_bd_dual);
+		end
+		if (epfw_cap_dl[1:0] == 2'b10)
+			bd_state <= eps_rddata_3[15:13];
+		else
+			bd_state <= (mc_op_ep & mc_opcode[2] ? mc_opcode[5:3] : bd_state);
+	end
+	always @(posedge clk) epfw_issue_wb <= mc_op_ep & mc_opcode[7];
+	always @(posedge clk or posedge rst)
+		if (rst)
+			cel_state_i <= 1'b0;
+		else
+			cel_state_i <= cel_ena & ((cel_state_i & ~cel_rel) | (mc_op_ep & mc_opcode[8]));
+	assign cel_state = cel_state_i;
+	always @(posedge clk)
+		if (mc_op_tx)
+			txpkt_pid <= mc_opcode[3:0] ^ {mc_opcode[4] & ep_data_toggle, 3'b000};
+	always @(posedge clk) txpkt_start_i <= mc_op_tx;
+	assign txpkt_start = txpkt_start_i;
+	assign txpkt_len = bd_length[9:0];
+	always @(posedge clk) addr <= (addr_ld ? eps_rddata_3[10:0] : addr + addr_inc);
+	assign addr_ld = epfw_cap_dl[1:0] == 2'b11;
+	assign addr_inc = (txpkt_data_ack | txpkt_start_i) | rxpkt_data_stb;
+	always @(posedge clk)
+		if (mc_op_zlen)
+			bd_length <= 0;
+		else
+			bd_length <= (len_ld ? {1'b1, eps_rddata_3[9:0]} : bd_length - len_bd_dec);
+	always @(posedge clk) xfer_length <= (len_ld ? 10'h000 : xfer_length + len_xf_inc);
+	assign len_ld = epfw_cap_dl[1:0] == 2'b10;
+	assign len_bd_dec = (rxpkt_data_stb | rxpkt_start) & bd_length[10];
+	assign len_xf_inc = rxpkt_data_stb;
+	assign buf_tx_addr_0 = addr;
+	assign buf_tx_rden_0 = txpkt_data_ack | txpkt_start_i;
+	assign txpkt_data = buf_tx_data_1;
+	assign buf_rx_addr_0 = addr;
+	assign buf_rx_data_0 = rxpkt_data;
+	assign buf_rx_wren_0 = rxpkt_data_stb & bd_length[10];
+endmodule
+`default_nettype none
+module usb_tx_ll (
+	phy_tx_dp,
+	phy_tx_dn,
+	phy_tx_en,
+	ll_start,
+	ll_bit,
+	ll_last,
+	ll_ack,
+	clk,
+	rst
+);
+	output wire phy_tx_dp;
+	output wire phy_tx_dn;
+	output wire phy_tx_en;
+	input wire ll_start;
+	input wire ll_bit;
+	input wire ll_last;
+	output reg ll_ack;
+	input wire clk;
+	input wire rst;
+	localparam SYM_SE0 = 2'b00;
+	localparam SYM_SE1 = 2'b11;
+	localparam SYM_J = 2'b10;
+	localparam SYM_K = 2'b01;
+	localparam PID_OUT = 4'b0001;
+	localparam PID_IN = 4'b1001;
+	localparam PID_SOF = 4'b0101;
+	localparam PID_SETUP = 4'b1101;
+	localparam PID_DATA0 = 4'b0011;
+	localparam PID_DATA1 = 4'b1011;
+	localparam PID_ACK = 4'b0010;
+	localparam PID_NAK = 4'b1010;
+	localparam PID_STALL = 4'b1110;
+	localparam PID_INVAL = 4'b0000;
+	reg [2:0] state;
+	wire active;
+	reg [2:0] br_cnt;
+	wire br_now;
+	reg [2:0] bs_cnt;
+	reg bs_now;
+	wire bs_bit;
+	reg lvl_prev;
+	reg out_active;
+	wire [1:0] out_sym_nxt;
+	reg [1:0] out_sym;
+	always @(posedge clk or posedge rst)
+		if (rst)
+			state <= 3'b000;
+		else if (ll_start)
+			state <= 3'b100;
+		else if (br_now & ~bs_now) begin
+			if (ll_last)
+				state <= 3'b101;
+			else
+				case (state[1:0])
+					2'b00: state <= state;
+					2'b01: state <= 3'b110;
+					2'b10: state <= 3'b111;
+					default: state <= 3'b000;
+				endcase
+		end
+	assign active = state[2];
+	always @(posedge clk) br_cnt <= {1'b0, (active ? br_cnt[1:0] : 2'b10)} + 1;
+	assign br_now = br_cnt[2];
+	always @(posedge clk or posedge ll_start)
+		if (ll_start) begin
+			bs_cnt <= 3'b000;
+			bs_now <= 1'b0;
+		end
+		else if (br_now) begin
+			bs_cnt <= (ll_bit & ~bs_now ? bs_cnt + 1 : 3'b000);
+			bs_now <= ll_bit & (bs_cnt == 3'b101);
+		end
+	assign bs_bit = ~bs_now & ll_bit;
+	always @(posedge clk) lvl_prev <= (active ? lvl_prev ^ (~bs_bit & br_now) : 1'b1);
+	always @(posedge clk) ll_ack <= (br_now & ~bs_now) & (state[1:0] == 2'b00);
+	assign out_sym_nxt = (bs_bit ^ lvl_prev ? SYM_K : SYM_J);
+	always @(posedge clk or posedge rst)
+		if (rst)
+			out_sym <= SYM_J;
+		else if (br_now)
+			case (state[1:0])
+				2'b00: out_sym <= out_sym_nxt;
+				2'b01: out_sym <= (bs_now ? out_sym_nxt : SYM_SE0);
+				2'b10: out_sym <= SYM_SE0;
+				2'b11: out_sym <= SYM_J;
+				default: out_sym <= 2'bxx;
+			endcase
+	always @(posedge clk) out_active <= active;
+	assign phy_tx_dp = out_sym[1];
+	assign phy_tx_dn = out_sym[0];
+	assign phy_tx_en = out_active;
+endmodule
+`default_nettype none
+module usb_tx_pkt (
+	ll_start,
+	ll_bit,
+	ll_last,
+	ll_ack,
+	pkt_start,
+	pkt_done,
+	pkt_pid,
+	pkt_len,
+	pkt_data,
+	pkt_data_ack,
+	clk,
+	rst
+);
+	output reg ll_start;
+	output wire ll_bit;
+	output wire ll_last;
+	input wire ll_ack;
+	input wire pkt_start;
+	output reg pkt_done;
+	input wire [3:0] pkt_pid;
+	input wire [9:0] pkt_len;
+	input wire [7:0] pkt_data;
+	output reg pkt_data_ack;
+	input wire clk;
+	input wire rst;
+	localparam SYM_SE0 = 2'b00;
+	localparam SYM_SE1 = 2'b11;
+	localparam SYM_J = 2'b10;
+	localparam SYM_K = 2'b01;
+	localparam PID_OUT = 4'b0001;
+	localparam PID_IN = 4'b1001;
+	localparam PID_SOF = 4'b0101;
+	localparam PID_SETUP = 4'b1101;
+	localparam PID_DATA0 = 4'b0011;
+	localparam PID_DATA1 = 4'b1011;
+	localparam PID_ACK = 4'b0010;
+	localparam PID_NAK = 4'b1010;
+	localparam PID_STALL = 4'b1110;
+	localparam PID_INVAL = 4'b0000;
+	localparam ST_IDLE = 0;
+	localparam ST_SYNC = 1;
+	localparam ST_PID = 2;
+	localparam ST_DATA = 3;
+	localparam ST_CRC_LSB = 4;
+	localparam ST_CRC_MSB = 5;
+	reg [3:0] state_nxt;
+	reg [3:0] state;
+	reg pid_is_handshake;
+	wire next;
+	reg [3:0] shift_bit;
+	reg [7:0] shift_load;
+	reg [7:0] shift_data;
+	reg shift_data_crc;
+	wire shift_last_bit;
+	reg shift_last_byte;
+	wire shift_do_load;
+	wire shift_now;
+	reg shift_new_bit;
+	reg [10:0] len;
+	wire len_last;
+	wire len_dec;
+	wire crc_in_bit;
+	reg crc_in_first;
+	wire crc_in_valid;
+	wire [15:0] crc;
+	always @(*) begin
+		state_nxt = state;
+		case (state)
+			ST_IDLE:
+				if (pkt_start)
+					state_nxt = ST_SYNC;
+			ST_SYNC: state_nxt = ST_PID;
+			ST_PID:
+				if (next) begin
+					if (pid_is_handshake)
+						state_nxt = ST_IDLE;
+					else if (len_last)
+						state_nxt = ST_CRC_LSB;
+					else
+						state_nxt = ST_DATA;
+				end
+			ST_DATA:
+				if (next && len_last)
+					state_nxt = ST_CRC_LSB;
+			ST_CRC_LSB:
+				if (next)
+					state_nxt = ST_CRC_MSB;
+			ST_CRC_MSB:
+				if (next)
+					state_nxt = ST_IDLE;
+		endcase
+	end
+	always @(posedge clk or posedge rst)
+		if (rst)
+			state <= ST_IDLE;
+		else
+			state <= state_nxt;
+	always @(posedge clk) pid_is_handshake <= ((pkt_pid == PID_ACK) || (pkt_pid == PID_NAK)) || (pkt_pid == PID_STALL);
+	assign next = shift_last_bit & ll_ack;
+	assign shift_do_load = (state == ST_SYNC) | (shift_last_bit & ll_ack);
+	assign shift_now = (state == ST_SYNC) | ll_ack;
+	always @(posedge clk)
+		if (shift_now)
+			shift_bit <= (shift_do_load ? 4'b0111 : shift_bit) - 1;
+	assign shift_last_bit = shift_bit[3];
+	always @(*)
+		case (state)
+			ST_SYNC: shift_load <= 8'h80;
+			ST_PID: shift_load <= {~pkt_pid, pkt_pid};
+			ST_DATA: shift_load <= pkt_data;
+			ST_CRC_LSB: shift_load <= (crc_in_first ? 8'h00 : crc[7:0]);
+			ST_CRC_MSB: shift_load <= (crc_in_first ? 8'h00 : crc[15:8]);
+			default: shift_load <= 8'hxx;
+		endcase
+	always @(posedge clk)
+		if (shift_now)
+			shift_data <= (shift_do_load ? shift_load : {1'b0, shift_data[7:1]});
+	always @(posedge clk)
+		if (shift_now & shift_do_load) begin
+			shift_data_crc <= state == ST_DATA;
+			shift_last_byte <= (state == ST_CRC_MSB) | ((state == ST_PID) & pid_is_handshake);
+		end
+	always @(posedge clk) shift_new_bit <= shift_now;
+	assign len_dec = pkt_start || (shift_do_load && ((state == ST_DATA) || (state == ST_PID)));
+	always @(posedge clk)
+		if (len_dec)
+			len <= (pkt_start ? {1'b0, pkt_len} : len) - 1;
+	assign len_last = len[10];
+	always @(posedge clk) crc_in_first <= (crc_in_first & ~crc_in_valid) | (state == ST_IDLE);
+	assign crc_in_bit = shift_data[0];
+	assign crc_in_valid = shift_data_crc & shift_new_bit;
+	usb_crc #(
+		.WIDTH(16),
+		.POLY(16'h8005),
+		.MATCH(16'h800d)
+	) crc_16_I(
+		.in_bit(crc_in_bit),
+		.in_first(crc_in_first),
+		.in_valid(crc_in_valid),
+		.crc(crc),
+		.crc_match(),
+		.clk(clk),
+		.rst(rst)
+	);
+	always @(posedge clk) ll_start <= state == ST_SYNC;
+	assign ll_bit = shift_data[0];
+	assign ll_last = shift_last_bit & shift_last_byte;
+	always @(posedge clk) begin
+		pkt_done <= ll_ack && ll_last;
+		pkt_data_ack <= (state == ST_DATA) && next;
+	end
+endmodule
+`default_nettype none
+module usb (
+	pad_dp,
+	pad_dn,
+	pad_pu,
+	ep_tx_addr_0,
+	ep_tx_data_0,
+	ep_tx_we_0,
+	ep_rx_addr_0,
+	ep_rx_data_1,
+	ep_rx_re_0,
+	ep_clk,
+	wb_addr,
+	wb_rdata,
+	wb_wdata,
+	wb_we,
+	wb_cyc,
+	wb_ack,
+	irq,
+	sof,
+	clk,
+	rst
+);
+	parameter TARGET = "ICE40";
+	parameter integer EPDW = 16;
+	parameter integer EVT_DEPTH = 0;
+	parameter integer IRQ = 0;
+	parameter integer EPAW = 11 - $clog2(EPDW / 8);
+	inout wire pad_dp;
+	inout wire pad_dn;
+	output reg pad_pu;
+	input wire [EPAW - 1:0] ep_tx_addr_0;
+	input wire [EPDW - 1:0] ep_tx_data_0;
+	input wire ep_tx_we_0;
+	input wire [EPAW - 1:0] ep_rx_addr_0;
+	output wire [EPDW - 1:0] ep_rx_data_1;
+	input wire ep_rx_re_0;
+	input wire ep_clk;
+	input wire [11:0] wb_addr;
+	output wire [15:0] wb_rdata;
+	input wire [15:0] wb_wdata;
+	input wire wb_we;
+	input wire wb_cyc;
+	output wire wb_ack;
+	output reg irq;
+	output wire sof;
+	input wire clk;
+	input wire rst;
+	wire phy_rx_dp;
+	wire phy_rx_dn;
+	wire phy_rx_chg;
+	wire phy_tx_dp;
+	wire phy_tx_dn;
+	wire phy_tx_en;
+	wire txll_start;
+	wire txll_bit;
+	wire txll_last;
+	wire txll_ack;
+	wire txpkt_start;
+	wire txpkt_done;
+	wire [3:0] txpkt_pid;
+	wire [9:0] txpkt_len;
+	wire [7:0] txpkt_data;
+	wire txpkt_data_ack;
+	wire [1:0] rxll_sym;
+	wire rxll_bit;
+	wire rxll_valid;
+	wire rxll_eop;
+	wire rxll_sync;
+	wire rxll_bs_skip;
+	wire rxll_bs_err;
+	wire rxpkt_start;
+	wire rxpkt_done_ok;
+	wire rxpkt_done_err;
+	wire [3:0] rxpkt_pid;
+	wire rxpkt_is_sof;
+	wire rxpkt_is_token;
+	wire rxpkt_is_data;
+	wire rxpkt_is_handshake;
+	wire [10:0] rxpkt_frameno;
+	wire [6:0] rxpkt_addr;
+	wire [3:0] rxpkt_endp;
+	wire [7:0] rxpkt_data;
+	wire rxpkt_data_stb;
+	wire [10:0] buf_tx_addr_0;
+	wire [7:0] buf_tx_data_1;
+	wire buf_tx_rden_0;
+	wire [10:0] buf_rx_addr_0;
+	wire [7:0] buf_rx_data_0;
+	wire buf_rx_wren_0;
+	wire eps_read_0;
+	wire eps_zero_0;
+	wire eps_write_0;
+	wire [7:0] eps_addr_0;
+	wire [15:0] eps_wrdata_0;
+	wire [15:0] eps_rddata_3;
+	wire eps_bus_ready;
+	reg eps_bus_read;
+	wire eps_bus_zero;
+	reg eps_bus_write;
+	wire [15:0] eps_bus_dout;
+	reg cr_pu_ena;
+	reg cr_cel_ena;
+	reg cr_addr_chk;
+	reg [6:0] cr_addr;
+	wire cel_state;
+	reg cel_rel;
+	reg ir_sfp;
+	reg ir_evt;
+	reg ir_bsa;
+	reg ir_brr;
+	reg ir_bra;
+	reg ir_brp;
+	reg csr_bus_req;
+	wire csr_bus_clear;
+	wire csr_bus_ack;
+	reg [15:0] csr_bus_dout;
+	wire [15:0] csr_readout;
+	wire [15:0] ir_readout;
+	reg cr_bus_we;
+	reg ir_bus_we;
+	reg eps_bus_req;
+	wire eps_bus_clear;
+	reg eps_bus_ack_wait;
+	wire eps_bus_req_ok;
+	reg [2:0] eps_bus_req_ok_dly;
+	wire [15:0] evt_rd_data;
+	wire evt_rd_rdy;
+	reg evt_rd_ack;
+	wire evt_pending;
+	wire [11:0] evt_data;
+	wire evt_stb;
+	wire oob_se0;
+	wire oob_sof;
+	reg [19:0] timeout_suspend;
+	reg [19:0] timeout_reset;
+	wire usb_suspend;
+	wire usb_reset;
+	reg rst_pending;
+	reg rst_clear;
+	reg sof_ind;
+	reg sof_pending;
+	reg sof_clear;
+	usb_phy #(.TARGET(TARGET)) phy_I(
+		.pad_dp(pad_dp),
+		.pad_dn(pad_dn),
+		.rx_dp(phy_rx_dp),
+		.rx_dn(phy_rx_dn),
+		.rx_chg(phy_rx_chg),
+		.tx_dp(phy_tx_dp),
+		.tx_dn(phy_tx_dn),
+		.tx_en(phy_tx_en),
+		.clk(clk),
+		.rst(rst)
+	);
+	usb_tx_ll tx_ll_I(
+		.phy_tx_dp(phy_tx_dp),
+		.phy_tx_dn(phy_tx_dn),
+		.phy_tx_en(phy_tx_en),
+		.ll_start(txll_start),
+		.ll_bit(txll_bit),
+		.ll_last(txll_last),
+		.ll_ack(txll_ack),
+		.clk(clk),
+		.rst(rst)
+	);
+	usb_tx_pkt tx_pkt_I(
+		.ll_start(txll_start),
+		.ll_bit(txll_bit),
+		.ll_last(txll_last),
+		.ll_ack(txll_ack),
+		.pkt_start(txpkt_start),
+		.pkt_done(txpkt_done),
+		.pkt_pid(txpkt_pid),
+		.pkt_len(txpkt_len),
+		.pkt_data(txpkt_data),
+		.pkt_data_ack(txpkt_data_ack),
+		.clk(clk),
+		.rst(rst)
+	);
+	usb_rx_ll rx_ll_I(
+		.phy_rx_dp(phy_rx_dp),
+		.phy_rx_dn(phy_rx_dn),
+		.phy_rx_chg(phy_rx_chg),
+		.ll_sym(rxll_sym),
+		.ll_bit(rxll_bit),
+		.ll_valid(rxll_valid),
+		.ll_eop(rxll_eop),
+		.ll_sync(rxll_sync),
+		.ll_bs_skip(rxll_bs_skip),
+		.ll_bs_err(rxll_bs_err),
+		.clk(clk),
+		.rst(rst)
+	);
+	usb_rx_pkt rx_pkt_I(
+		.ll_sym(rxll_sym),
+		.ll_bit(rxll_bit),
+		.ll_valid(rxll_valid),
+		.ll_eop(rxll_eop),
+		.ll_sync(rxll_sync),
+		.ll_bs_skip(rxll_bs_skip),
+		.ll_bs_err(rxll_bs_err),
+		.pkt_start(rxpkt_start),
+		.pkt_done_ok(rxpkt_done_ok),
+		.pkt_done_err(rxpkt_done_err),
+		.pkt_pid(rxpkt_pid),
+		.pkt_is_sof(rxpkt_is_sof),
+		.pkt_is_token(rxpkt_is_token),
+		.pkt_is_data(rxpkt_is_data),
+		.pkt_is_handshake(rxpkt_is_handshake),
+		.pkt_frameno(rxpkt_frameno),
+		.pkt_addr(rxpkt_addr),
+		.pkt_endp(rxpkt_endp),
+		.pkt_data(rxpkt_data),
+		.pkt_data_stb(rxpkt_data_stb),
+		.inhibit(phy_tx_en),
+		.clk(clk),
+		.rst(rst)
+	);
+	usb_trans trans_I(
+		.txpkt_start(txpkt_start),
+		.txpkt_done(txpkt_done),
+		.txpkt_pid(txpkt_pid),
+		.txpkt_len(txpkt_len),
+		.txpkt_data(txpkt_data),
+		.txpkt_data_ack(txpkt_data_ack),
+		.rxpkt_start(rxpkt_start),
+		.rxpkt_done_ok(rxpkt_done_ok),
+		.rxpkt_done_err(rxpkt_done_err),
+		.rxpkt_pid(rxpkt_pid),
+		.rxpkt_is_sof(rxpkt_is_sof),
+		.rxpkt_is_token(rxpkt_is_token),
+		.rxpkt_is_data(rxpkt_is_data),
+		.rxpkt_is_handshake(rxpkt_is_handshake),
+		.rxpkt_frameno(rxpkt_frameno),
+		.rxpkt_addr(rxpkt_addr),
+		.rxpkt_endp(rxpkt_endp),
+		.rxpkt_data(rxpkt_data),
+		.rxpkt_data_stb(rxpkt_data_stb),
+		.buf_tx_addr_0(buf_tx_addr_0),
+		.buf_tx_data_1(buf_tx_data_1),
+		.buf_tx_rden_0(buf_tx_rden_0),
+		.buf_rx_addr_0(buf_rx_addr_0),
+		.buf_rx_data_0(buf_rx_data_0),
+		.buf_rx_wren_0(buf_rx_wren_0),
+		.eps_read_0(eps_read_0),
+		.eps_zero_0(eps_zero_0),
+		.eps_write_0(eps_write_0),
+		.eps_addr_0(eps_addr_0),
+		.eps_wrdata_0(eps_wrdata_0),
+		.eps_rddata_3(eps_rddata_3),
+		.cr_addr_chk(cr_addr_chk),
+		.cr_addr(cr_addr),
+		.evt_data(evt_data),
+		.evt_stb(evt_stb),
+		.cel_state(cel_state),
+		.cel_rel(cel_rel),
+		.cel_ena(cr_cel_ena),
+		.clk(clk),
+		.rst(rst)
+	);
+	usb_ep_buf #(
+		.TARGET(TARGET),
+		.RWIDTH(8),
+		.WWIDTH(EPDW)
+	) tx_buf_I(
+		.rd_addr_0(buf_tx_addr_0),
+		.rd_data_1(buf_tx_data_1),
+		.rd_en_0(buf_tx_rden_0),
+		.rd_clk(clk),
+		.wr_addr_0(ep_tx_addr_0),
+		.wr_data_0(ep_tx_data_0),
+		.wr_en_0(ep_tx_we_0),
+		.wr_clk(ep_clk)
+	);
+	usb_ep_buf #(
+		.TARGET(TARGET),
+		.RWIDTH(EPDW),
+		.WWIDTH(8)
+	) rx_buf_I(
+		.rd_addr_0(ep_rx_addr_0),
+		.rd_data_1(ep_rx_data_1),
+		.rd_en_0(ep_rx_re_0),
+		.rd_clk(ep_clk),
+		.wr_addr_0(buf_rx_addr_0),
+		.wr_data_0(buf_rx_data_0),
+		.wr_en_0(buf_rx_wren_0),
+		.wr_clk(clk)
+	);
+	usb_ep_status ep_status_I(
+		.p_addr_0(eps_addr_0),
+		.p_read_0(eps_read_0),
+		.p_zero_0(eps_zero_0),
+		.p_write_0(eps_write_0),
+		.p_din_0(eps_wrdata_0),
+		.p_dout_3(eps_rddata_3),
+		.s_addr_0(wb_addr[7:0]),
+		.s_read_0(eps_bus_ready),
+		.s_zero_0(eps_bus_zero),
+		.s_write_0(eps_bus_write),
+		.s_din_0(wb_wdata),
+		.s_dout_3(eps_bus_dout),
+		.s_ready_0(eps_bus_ready),
+		.clk(clk),
+		.rst(rst)
+	);
+	always @(posedge clk)
+		if (csr_bus_clear) begin
+			csr_bus_req <= 1'b0;
+			cr_bus_we <= 1'b0;
+			cel_rel <= 1'b0;
+			rst_clear <= 1'b0;
+			sof_clear <= 1'b0;
+			evt_rd_ack <= 1'b0;
+			ir_bus_we <= 1'b0;
+		end
+		else begin
+			csr_bus_req <= 1'b1;
+			cr_bus_we <= (wb_addr[1:0] == 2'b00) & wb_we;
+			cel_rel <= ((wb_addr[1:0] == 2'b01) & wb_we) & wb_wdata[13];
+			rst_clear <= ((wb_addr[1:0] == 2'b01) & wb_we) & wb_wdata[9];
+			sof_clear <= ((wb_addr[1:0] == 2'b01) & wb_we) & wb_wdata[8];
+			evt_rd_ack <= ((wb_addr[1:0] == 2'b10) & ~wb_we) & evt_rd_rdy;
+			ir_bus_we <= (wb_addr[1:0] == 2'b11) & wb_we;
+		end
+	assign csr_readout = {cr_pu_ena, evt_pending, cel_state, cr_cel_ena, usb_suspend, usb_reset, rst_pending, sof_pending, cr_addr_chk, cr_addr};
+	assign ir_readout = (IRQ ? {10'b0000000000, ir_sfp, ir_evt, ir_bsa, ir_brr, ir_bra, ir_brp} : 16'h0000);
+	always @(*)
+		if (csr_bus_ack)
+			case (wb_addr[1:0])
+				2'b00: csr_bus_dout = csr_readout;
+				2'b10: csr_bus_dout = evt_rd_data;
+				2'b11: csr_bus_dout = ir_readout;
+				default: csr_bus_dout = 16'h0000;
+			endcase
+		else
+			csr_bus_dout = 16'h0000;
+	assign csr_bus_ack = csr_bus_req;
+	assign csr_bus_clear = (~wb_cyc | csr_bus_ack) | wb_addr[11];
+	always @(posedge clk or posedge rst)
+		if (rst) begin
+			cr_pu_ena <= 1'b0;
+			cr_cel_ena <= 1'b0;
+			cr_addr_chk <= 1'b0;
+			cr_addr <= 7'd0;
+		end
+		else if (cr_bus_we) begin
+			cr_pu_ena <= wb_wdata[15];
+			cr_cel_ena <= wb_wdata[12];
+			cr_addr_chk <= wb_wdata[7];
+			cr_addr <= wb_wdata[6:0];
+		end
+	always @(posedge clk or posedge rst)
+		if (IRQ) begin
+			if (rst) begin
+				ir_sfp <= 1'b0;
+				ir_evt <= 1'b0;
+				ir_bsa <= 1'b0;
+				ir_brr <= 1'b0;
+				ir_bra <= 1'b0;
+				ir_brp <= 1'b0;
+			end
+			else if (ir_bus_we) begin
+				ir_sfp <= wb_wdata[5];
+				ir_evt <= wb_wdata[4];
+				ir_bsa <= wb_wdata[3];
+				ir_brr <= wb_wdata[2];
+				ir_bra <= wb_wdata[1];
+				ir_brp <= wb_wdata[0];
+			end
+		end
+	always @(posedge clk)
+		if (eps_bus_clear) begin
+			eps_bus_read <= 1'b0;
+			eps_bus_write <= 1'b0;
+			eps_bus_req <= 1'b0;
+		end
+		else begin
+			eps_bus_read <= wb_addr[11] & ~wb_we;
+			eps_bus_write <= wb_addr[11] & wb_we;
+			eps_bus_req <= wb_addr[11];
+		end
+	assign eps_bus_zero = ~eps_bus_read;
+	assign eps_bus_clear = (~wb_cyc | eps_bus_ack_wait) | (eps_bus_req & eps_bus_ready);
+	assign eps_bus_req_ok = eps_bus_req & eps_bus_ready;
+	always @(posedge clk) eps_bus_req_ok_dly <= {eps_bus_req_ok_dly[1:0], eps_bus_req_ok & ~wb_we};
+	always @(posedge clk or posedge rst)
+		if (rst)
+			eps_bus_ack_wait <= 1'b0;
+		else
+			eps_bus_ack_wait <= ((eps_bus_ack_wait & ~wb_we) | eps_bus_req_ok) & ~eps_bus_req_ok_dly[2];
+	assign wb_ack = csr_bus_ack | (eps_bus_ack_wait & (wb_we | eps_bus_req_ok_dly[2]));
+	assign wb_rdata = csr_bus_dout | eps_bus_dout;
+	generate
+		if (EVT_DEPTH == 0) begin : genblk1
+			reg [3:0] evt_cnt;
+			always @(posedge clk or posedge rst)
+				if (rst)
+					evt_cnt <= 4'h0;
+				else
+					evt_cnt <= (evt_rd_ack ? {3'b000, evt_stb} : evt_cnt + evt_stb);
+			assign evt_rd_rdy = 1'b1;
+			assign evt_rd_data = {evt_cnt, 12'h000};
+			assign evt_pending = evt_cnt != 4'h0;
+		end
+		else if (EVT_DEPTH == 1) begin : genblk1
+			reg [11:0] evt_last;
+			reg [3:0] evt_cnt;
+			always @(posedge clk or posedge rst)
+				if (rst)
+					evt_cnt <= 4'h0;
+				else
+					evt_cnt <= (evt_rd_ack ? {3'b000, evt_stb} : evt_cnt + evt_stb);
+			always @(posedge clk)
+				if (evt_stb)
+					evt_last <= evt_data;
+			assign evt_rd_rdy = 1'b1;
+			assign evt_rd_data = {evt_cnt, evt_last};
+			assign evt_pending = evt_cnt != 4'h0;
+		end
+		else if (EVT_DEPTH > 1) begin : genblk1
+			wire [11:0] ef_wdata;
+			wire [11:0] ef_rdata;
+			wire ef_wren;
+			wire ef_full;
+			wire ef_rden;
+			wire ef_empty;
+			reg ef_overflow;
+			assign ef_wdata = evt_data;
+			assign ef_wren = evt_stb & ~ef_full;
+			always @(posedge clk or posedge rst)
+				if (rst)
+					ef_overflow <= 1'b0;
+				else
+					ef_overflow <= (ef_overflow & ~evt_rd_ack) | (evt_stb & ef_full);
+			assign evt_rd_rdy = ~ef_empty;
+			assign evt_rd_data = {~ef_empty, ef_overflow, 2'b00, ef_rdata};
+			assign ef_rden = evt_rd_ack;
+			assign evt_pending = ~ef_empty;
+			fifo_sync_shift #(
+				.DEPTH(EVT_DEPTH),
+				.WIDTH(12)
+			) evt_fifo_I(
+				.wr_data(ef_wdata),
+				.wr_ena(ef_wren),
+				.wr_full(ef_full),
+				.rd_data(ef_rdata),
+				.rd_ena(ef_rden),
+				.rd_empty(ef_empty),
+				.clk(clk),
+				.rst(rst)
+			);
+		end
+	endgenerate
+	assign oob_se0 = ~phy_rx_dp & ~phy_rx_dn;
+	assign oob_sof = rxpkt_start & rxpkt_is_sof;
+	always @(posedge clk)
+		if (oob_sof | usb_reset)
+			timeout_suspend <= 20'hdcd80;
+		else
+			timeout_suspend <= timeout_suspend + timeout_suspend[19];
+	assign usb_suspend = ~timeout_suspend[19];
+	always @(posedge clk)
+		if (~oob_se0)
+			timeout_reset <= 20'h8ad00;
+		else
+			timeout_reset <= timeout_reset + timeout_reset[19];
+	assign usb_reset = ~timeout_reset[19];
+	always @(posedge clk or posedge rst)
+		if (rst)
+			rst_pending <= 1'b1;
+		else
+			rst_pending <= (rst_pending & ~rst_clear) | usb_reset;
+	always @(posedge clk)
+		if (rst)
+			pad_pu <= 1'b0;
+		else
+			pad_pu <= cr_pu_ena;
+	always @(posedge clk) sof_ind <= rxpkt_start & rxpkt_is_sof;
+	always @(posedge clk) sof_pending <= (sof_pending & ~sof_clear) | (rxpkt_start & rxpkt_is_sof);
+	assign sof = sof_ind;
+	generate
+		if (IRQ) begin : genblk2
+			always @(posedge clk) begin
+				irq <= 1'b0;
+				if (ir_sfp & sof_pending)
+					irq <= 1'b1;
+				if (ir_evt & evt_pending)
+					irq <= 1'b1;
+				if (ir_bsa & usb_suspend)
+					irq <= 1'b1;
+				if ((ir_brr & rst_pending) & ~usb_reset)
+					irq <= 1'b1;
+				if (ir_bra & usb_reset)
+					irq <= 1'b1;
+				if (ir_brp & rst_pending)
+					irq <= 1'b1;
+			end
+		end
+		else begin : genblk2
+			always @(*) irq = 1'b0;
+		end
+	endgenerate
+endmodule
+module iocore_usb (
+	io_clk_i,
+	rst_n_i,
+	req_i,
+	kind_i,
+	we_i,
+	addr_i,
+	wdata_i,
+	busy_o,
+	done_o,
+	rdata_o,
+	irq_o,
+	usb_clk_i,
+	usb_dp_io,
+	usb_dn_io,
+	usb_pu_o
+);
+	input wire io_clk_i;
+	input wire rst_n_i;
+	input wire req_i;
+	input wire [1:0] kind_i;
+	input wire we_i;
+	input wire [11:0] addr_i;
+	input wire [31:0] wdata_i;
+	output wire busy_o;
+	output reg done_o;
+	output reg [31:0] rdata_o;
+	output wire irq_o;
+	input wire usb_clk_i;
+	inout wire usb_dp_io;
+	inout wire usb_dn_io;
+	output wire usb_pu_o;
+	localparam [1:0] K_CSR = 2'd0;
+	localparam [1:0] K_RX = 2'd1;
+	localparam [1:0] K_TX = 2'd2;
+	reg req_t;
+	reg busy_r;
+	reg [1:0] kind_r;
+	reg we_r;
+	reg [11:0] addr_r;
+	reg [31:0] wdata_r;
+	reg [2:0] ack_s;
+	reg [1:0] irq_s;
+	reg [31:0] ans_r;
+	reg ack_t;
+	wire u_irq;
+	always @(posedge io_clk_i or negedge rst_n_i)
+		if (!rst_n_i) begin
+			req_t <= 1'b0;
+			busy_r <= 1'b0;
+			kind_r <= K_CSR;
+			we_r <= 1'b0;
+			addr_r <= 12'h000;
+			wdata_r <= 32'h00000000;
+			ack_s <= 3'b000;
+			irq_s <= 2'b00;
+			done_o <= 1'b0;
+			rdata_o <= 32'h00000000;
+		end
+		else begin
+			ack_s <= {ack_s[1:0], ack_t};
+			irq_s <= {irq_s[0], u_irq};
+			done_o <= 1'b0;
+			if (req_i && !busy_r) begin
+				kind_r <= kind_i;
+				we_r <= we_i;
+				addr_r <= addr_i;
+				wdata_r <= wdata_i;
+				req_t <= !req_t;
+				busy_r <= 1'b1;
+			end
+			else if (busy_r && (ack_s[2] != ack_s[1])) begin
+				busy_r <= 1'b0;
+				done_o <= 1'b1;
+				rdata_o <= ans_r;
+			end
+		end
+	assign busy_o = busy_r;
+	assign irq_o = irq_s[1];
+	reg [1:0] rst_q;
+	wire u_rst;
+	always @(posedge usb_clk_i or negedge rst_n_i)
+		if (!rst_n_i)
+			rst_q <= 2'b00;
+		else
+			rst_q <= {rst_q[0], 1'b1};
+	assign u_rst = !rst_q[1];
+	reg [2:0] req_s;
+	reg wb_cyc;
+	reg rx_re;
+	reg rx_wait;
+	reg tx_we;
+	wire [15:0] wb_rdata;
+	wire wb_ack;
+	wire [31:0] ep_rx_data;
+	always @(posedge usb_clk_i or posedge u_rst)
+		if (u_rst) begin
+			req_s <= 3'b000;
+			ack_t <= 1'b0;
+			ans_r <= 32'h00000000;
+			wb_cyc <= 1'b0;
+			rx_re <= 1'b0;
+			rx_wait <= 1'b0;
+			tx_we <= 1'b0;
+		end
+		else begin
+			req_s <= {req_s[1:0], req_t};
+			rx_re <= 1'b0;
+			tx_we <= 1'b0;
+			if (req_s[2] != req_s[1])
+				case (kind_r)
+					K_CSR: wb_cyc <= 1'b1;
+					K_RX: begin
+						rx_re <= 1'b1;
+						rx_wait <= 1'b1;
+					end
+					default: begin
+						tx_we <= we_r;
+						ans_r <= 32'h00000000;
+						ack_t <= !ack_t;
+					end
+				endcase
+			if (wb_cyc && wb_ack) begin
+				wb_cyc <= 1'b0;
+				ans_r <= {16'h0000, wb_rdata};
+				ack_t <= !ack_t;
+			end
+			if (rx_wait && !rx_re) begin
+				rx_wait <= 1'b0;
+				ans_r <= ep_rx_data;
+				ack_t <= !ack_t;
+			end
+		end
+	usb #(
+		.TARGET("ICE40"),
+		.EPDW(32),
+		.EVT_DEPTH(0),
+		.IRQ(1)
+	) u_usb(
+		.pad_dp(usb_dp_io),
+		.pad_dn(usb_dn_io),
+		.pad_pu(usb_pu_o),
+		.ep_tx_addr_0(addr_r[8:0]),
+		.ep_tx_data_0(wdata_r),
+		.ep_tx_we_0(tx_we),
+		.ep_rx_addr_0(addr_r[8:0]),
+		.ep_rx_data_1(ep_rx_data),
+		.ep_rx_re_0(rx_re),
+		.ep_clk(usb_clk_i),
+		.wb_addr(addr_r),
+		.wb_rdata(wb_rdata),
+		.wb_wdata(wdata_r[15:0]),
+		.wb_we(we_r),
+		.wb_cyc(wb_cyc),
+		.wb_ack(wb_ack),
+		.irq(u_irq),
+		.sof(),
+		.clk(usb_clk_i),
+		.rst(u_rst)
+	);
+endmodule
+`default_nettype wire
+module iocore_timer (
+	clk_i,
+	rst_n_i,
+	sel_i,
+	we_i,
+	off_i,
+	wdata_i,
+	rdata_o,
+	irq_o,
+	us_tick_o,
+	ms_tick_o,
+	us_o,
+	ms_o
+);
+	reg _sv2v_0;
+	parameter [15:0] US_DIV_RESET = 16'd49;
+	input wire clk_i;
+	input wire rst_n_i;
+	input wire sel_i;
+	input wire we_i;
+	input wire [7:0] off_i;
+	input wire [31:0] wdata_i;
+	output reg [31:0] rdata_o;
+	output wire irq_o;
+	output wire us_tick_o;
+	output wire ms_tick_o;
+	output wire [31:0] us_o;
+	output wire [31:0] ms_o;
+	localparam [7:0] O_CYCLES = 8'h00;
+	localparam [7:0] O_DIV = 8'h04;
+	localparam [7:0] O_US = 8'h08;
+	localparam [7:0] O_MS = 8'h0c;
+	localparam [7:0] O_CMP = 8'h10;
+	localparam [7:0] O_CTRL = 8'h14;
+	reg [31:0] cycles_r;
+	reg [31:0] us_r;
+	reg [31:0] ms_r;
+	reg [31:0] cmp_r;
+	reg [15:0] div_r;
+	reg [15:0] dcnt_r;
+	reg [9:0] ucnt_r;
+	reg en_r;
+	reg pend_r;
+	wire us_tick;
+	wire ms_tick;
+	assign us_tick = dcnt_r == div_r;
+	assign ms_tick = us_tick && (ucnt_r == 10'd999);
+	assign us_tick_o = us_tick;
+	assign ms_tick_o = ms_tick;
+	assign us_o = us_r;
+	assign ms_o = ms_r;
+	assign irq_o = en_r && pend_r;
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		case (off_i)
+			O_CYCLES: rdata_o = cycles_r;
+			O_DIV: rdata_o = {16'h0000, div_r};
+			O_US: rdata_o = us_r;
+			O_MS: rdata_o = ms_r;
+			O_CMP: rdata_o = cmp_r;
+			O_CTRL: rdata_o = {30'h00000000, pend_r, en_r};
+			default: rdata_o = 32'h00000000;
+		endcase
+	end
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i) begin
+			cycles_r <= 32'h00000000;
+			us_r <= 32'h00000000;
+			ms_r <= 32'h00000000;
+			cmp_r <= 32'h00000000;
+			div_r <= US_DIV_RESET;
+			dcnt_r <= 16'h0000;
+			ucnt_r <= 10'h000;
+			en_r <= 1'b0;
+			pend_r <= 1'b0;
+		end
+		else begin
+			cycles_r <= cycles_r + 32'd1;
+			if ((sel_i && we_i) && (off_i == O_DIV)) begin
+				div_r <= wdata_i[15:0];
+				dcnt_r <= 16'h0000;
+			end
+			else
+				dcnt_r <= (us_tick ? 16'h0000 : dcnt_r + 16'd1);
+			if (us_tick) begin
+				us_r <= us_r + 32'd1;
+				ucnt_r <= (ms_tick ? 10'd0 : ucnt_r + 10'd1);
+			end
+			if (ms_tick)
+				ms_r <= ms_r + 32'd1;
+			if ((sel_i && we_i) && (off_i == O_CMP))
+				cmp_r <= wdata_i;
+			if ((sel_i && we_i) && (off_i == O_CTRL)) begin
+				en_r <= wdata_i[0];
+				if (wdata_i[1])
+					pend_r <= 1'b0;
+			end
+			if (us_tick && ((us_r + 32'd1) == cmp_r))
+				pend_r <= 1'b1;
+		end
+	initial _sv2v_0 = 0;
+endmodule
+module iocore_uart (
+	clk_i,
+	rst_n_i,
+	sel_i,
+	we_i,
+	off_i,
+	wdata_i,
+	ready_o,
+	rdata_o,
+	rxd_i,
+	txd_o,
+	irq_o,
+	rx_byte_o
+);
+	reg _sv2v_0;
+	parameter signed [31:0] FIFO_DEPTH = 16;
+	parameter [15:0] BAUD_RESET = 16'd0;
+	input wire clk_i;
+	input wire rst_n_i;
+	input wire sel_i;
+	input wire we_i;
+	input wire [7:0] off_i;
+	input wire [31:0] wdata_i;
+	output wire ready_o;
+	output reg [31:0] rdata_o;
+	input wire rxd_i;
+	output wire txd_o;
+	output wire irq_o;
+	output wire rx_byte_o;
+	localparam signed [31:0] FD = FIFO_DEPTH;
+	localparam signed [31:0] FPW = (FD > 1 ? $clog2(FD) : 1);
+	localparam signed [31:0] FCW = $clog2(FD + 1);
+	localparam [7:0] O_DATA = 8'h00;
+	localparam [7:0] O_STATUS = 8'h04;
+	localparam [7:0] O_BAUD = 8'h08;
+	localparam [7:0] O_IRQEN = 8'h0c;
+	localparam [7:0] O_CLR = 8'h10;
+	reg [15:0] baud_r;
+	wire [15:0] baud;
+	reg [1:0] irqen_r;
+	reg overrun_r;
+	reg ferr_r;
+	reg [7:0] rxq [0:FD - 1];
+	reg [7:0] txq [0:FD - 1];
+	reg [FPW - 1:0] rx_rd_r;
+	reg [FPW - 1:0] rx_wr_r;
+	reg [FPW - 1:0] tx_rd_r;
+	reg [FPW - 1:0] tx_wr_r;
+	reg [FCW - 1:0] rx_cnt_r;
+	reg [FCW - 1:0] tx_cnt_r;
+	wire rx_full;
+	wire tx_full;
+	wire rx_empty;
+	wire tx_empty;
+	reg txd_r;
+	reg tx_busy_r;
+	reg [8:0] tx_sh_r;
+	reg [3:0] tx_bit_r;
+	reg [15:0] tx_clk_r;
+	reg rxd_s1_r;
+	reg rxd_s2_r;
+	reg rxd_d_r;
+	reg rx_busy_r;
+	reg [3:0] rx_bit_r;
+	reg [15:0] rx_clk_r;
+	reg [7:0] rx_sh_r;
+	wire ser_valid;
+	wire ser_ferr;
+	wire take;
+	wire drop;
+	wire rx_pop;
+	wire tx_push;
+	wire tx_pop;
+	function automatic [31:0] sv2v_cast_32;
+		input reg [31:0] inp;
+		sv2v_cast_32 = inp;
+	endfunction
+	function automatic [FPW - 1:0] fnext;
+		input reg [FPW - 1:0] p;
+		fnext = (sv2v_cast_32(p) == (FD - 1) ? {FPW {1'sb0}} : p + 1'b1);
+	endfunction
+	assign baud = (baud_r < 16'd4 ? 16'd4 : baud_r);
+	assign rx_full = sv2v_cast_32(rx_cnt_r) == FD;
+	assign rx_empty = rx_cnt_r == {FCW {1'sb0}};
+	assign tx_full = sv2v_cast_32(tx_cnt_r) == FD;
+	assign tx_empty = tx_cnt_r == {FCW {1'sb0}};
+	assign ready_o = !((we_i && (off_i == O_DATA)) && tx_full);
+	assign tx_push = (sel_i && we_i) && (off_i == O_DATA);
+	assign rx_pop = ((sel_i && !we_i) && (off_i == O_DATA)) && !rx_empty;
+	assign tx_pop = !tx_busy_r && !tx_empty;
+	assign ser_valid = ((rx_busy_r && (rx_bit_r == 4'd9)) && (rx_clk_r == 16'h0000)) && rxd_s2_r;
+	assign ser_ferr = ((rx_busy_r && (rx_bit_r == 4'd9)) && (rx_clk_r == 16'h0000)) && !rxd_s2_r;
+	assign take = ser_valid && !rx_full;
+	assign drop = ser_valid && rx_full;
+	assign rx_byte_o = take;
+	assign txd_o = txd_r;
+	assign irq_o = (irqen_r[0] && !rx_empty) || ((irqen_r[1] && tx_empty) && !tx_busy_r);
+	function automatic [7:0] sv2v_cast_8;
+		input reg [7:0] inp;
+		sv2v_cast_8 = inp;
+	endfunction
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		case (off_i)
+			O_DATA: rdata_o = {!rx_empty, overrun_r, ferr_r, 21'h000000, (rx_empty ? 8'h00 : rxq[rx_rd_r])};
+			O_STATUS: rdata_o = {12'h000, !rx_empty, tx_full, rx_full, tx_busy_r || !tx_empty, sv2v_cast_8(tx_cnt_r), sv2v_cast_8(rx_cnt_r)};
+			O_BAUD: rdata_o = {16'h0000, baud_r};
+			O_IRQEN: rdata_o = {30'h00000000, irqen_r};
+			O_CLR: rdata_o = {1'b0, overrun_r, ferr_r, 29'h00000000};
+			default: rdata_o = 32'h00000000;
+		endcase
+	end
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i) begin
+			baud_r <= BAUD_RESET;
+			irqen_r <= 2'b00;
+			overrun_r <= 1'b0;
+			ferr_r <= 1'b0;
+			rx_rd_r <= 1'sb0;
+			rx_wr_r <= 1'sb0;
+			rx_cnt_r <= 1'sb0;
+			tx_rd_r <= 1'sb0;
+			tx_wr_r <= 1'sb0;
+			tx_cnt_r <= 1'sb0;
+			txd_r <= 1'b1;
+			tx_busy_r <= 1'b0;
+			tx_sh_r <= 9'h1ff;
+			tx_bit_r <= 4'h0;
+			tx_clk_r <= 16'h0000;
+			rxd_s1_r <= 1'b1;
+			rxd_s2_r <= 1'b1;
+			rxd_d_r <= 1'b1;
+			rx_busy_r <= 1'b0;
+			rx_bit_r <= 4'h0;
+			rx_clk_r <= 16'h0000;
+			rx_sh_r <= 8'h00;
+		end
+		else begin
+			if (sel_i && we_i) begin
+				if (off_i == O_BAUD)
+					baud_r <= wdata_i[15:0];
+				if (off_i == O_IRQEN)
+					irqen_r <= wdata_i[1:0];
+			end
+			if (((sel_i && we_i) && (off_i == O_CLR)) && wdata_i[30])
+				overrun_r <= 1'b0;
+			if (((sel_i && we_i) && (off_i == O_CLR)) && wdata_i[29])
+				ferr_r <= 1'b0;
+			if (drop)
+				overrun_r <= 1'b1;
+			if (ser_ferr)
+				ferr_r <= 1'b1;
+			if (take) begin
+				rxq[rx_wr_r] <= rx_sh_r;
+				rx_wr_r <= fnext(rx_wr_r);
+			end
+			if (rx_pop)
+				rx_rd_r <= fnext(rx_rd_r);
+			if (take && !rx_pop)
+				rx_cnt_r <= rx_cnt_r + 1'b1;
+			else if (rx_pop && !take)
+				rx_cnt_r <= rx_cnt_r - 1'b1;
+			if (tx_push) begin
+				txq[tx_wr_r] <= wdata_i[7:0];
+				tx_wr_r <= fnext(tx_wr_r);
+			end
+			if (tx_pop)
+				tx_rd_r <= fnext(tx_rd_r);
+			if (tx_push && !tx_pop)
+				tx_cnt_r <= tx_cnt_r + 1'b1;
+			else if (tx_pop && !tx_push)
+				tx_cnt_r <= tx_cnt_r - 1'b1;
+			if (tx_pop) begin
+				tx_busy_r <= 1'b1;
+				txd_r <= 1'b0;
+				tx_sh_r <= {1'b1, txq[tx_rd_r]};
+				tx_bit_r <= 4'd0;
+				tx_clk_r <= baud - 16'd1;
+			end
+			else if (tx_busy_r) begin
+				if (tx_clk_r != 16'h0000)
+					tx_clk_r <= tx_clk_r - 16'd1;
+				else if (tx_bit_r == 4'd9) begin
+					tx_busy_r <= 1'b0;
+					txd_r <= 1'b1;
+				end
+				else begin
+					txd_r <= tx_sh_r[0];
+					tx_sh_r <= {1'b1, tx_sh_r[8:1]};
+					tx_bit_r <= tx_bit_r + 4'd1;
+					tx_clk_r <= baud - 16'd1;
+				end
+			end
+			rxd_s1_r <= rxd_i;
+			rxd_s2_r <= rxd_s1_r;
+			rxd_d_r <= rxd_s2_r;
+			if (!rx_busy_r) begin
+				if (rxd_d_r && !rxd_s2_r) begin
+					rx_busy_r <= 1'b1;
+					rx_bit_r <= 4'd0;
+					rx_clk_r <= (baud >> 1) - 16'd1;
+				end
+			end
+			else if (rx_clk_r != 16'h0000)
+				rx_clk_r <= rx_clk_r - 16'd1;
+			else begin
+				rx_clk_r <= baud - 16'd1;
+				if (rx_bit_r == 4'd0) begin
+					if (rxd_s2_r)
+						rx_busy_r <= 1'b0;
+					else
+						rx_bit_r <= 4'd1;
+				end
+				else if (rx_bit_r == 4'd9)
+					rx_busy_r <= 1'b0;
+				else begin
+					rx_sh_r <= {rxd_s2_r, rx_sh_r[7:1]};
+					rx_bit_r <= rx_bit_r + 4'd1;
+				end
+			end
+		end
+	initial _sv2v_0 = 0;
+endmodule
+module iocore_bridge (
+	clk_i,
+	rst_n_i,
+	sel_i,
+	we_i,
+	off_i,
+	wdata_i,
+	ready_o,
+	rdata_o,
+	irq_o,
+	cmd_pop_o,
+	cmd_data_i,
+	cmd_empty_i,
+	cmd_level_i,
+	rsp_push_o,
+	rsp_data_o,
+	rsp_full_i,
+	evt_push_o,
+	evt_data_o,
+	evt_full_i,
+	con_pop_o,
+	con_data_i,
+	con_empty_i,
+	con_level_i,
+	conrx_push_o,
+	conrx_data_o,
+	conrx_full_i,
+	upd_push_o,
+	upd_data_o,
+	upd_full_i,
+	dn_pop_o,
+	dn_data_i,
+	dn_empty_i
+);
+	reg _sv2v_0;
+	parameter signed [31:0] NUP = 32;
+	parameter signed [31:0] NDN = 8;
+	input wire clk_i;
+	input wire rst_n_i;
+	input wire sel_i;
+	input wire we_i;
+	input wire [11:0] off_i;
+	input wire [31:0] wdata_i;
+	output wire ready_o;
+	output reg [31:0] rdata_o;
+	output wire irq_o;
+	output wire cmd_pop_o;
+	input wire [31:0] cmd_data_i;
+	input wire cmd_empty_i;
+	input wire [5:0] cmd_level_i;
+	output wire rsp_push_o;
+	output wire [31:0] rsp_data_o;
+	input wire rsp_full_i;
+	output wire evt_push_o;
+	output wire [15:0] evt_data_o;
+	input wire evt_full_i;
+	output wire con_pop_o;
+	input wire [8:0] con_data_i;
+	input wire con_empty_i;
+	input wire [6:0] con_level_i;
+	output wire conrx_push_o;
+	output wire [7:0] conrx_data_o;
+	input wire conrx_full_i;
+	output wire upd_push_o;
+	output wire [36:0] upd_data_o;
+	input wire upd_full_i;
+	output wire dn_pop_o;
+	input wire [34:0] dn_data_i;
+	input wire dn_empty_i;
+	localparam [11:0] O_CMD = 12'h000;
+	localparam [11:0] O_CMD_LEVEL = 12'h004;
+	localparam [11:0] O_RSP = 12'h008;
+	localparam [11:0] O_EVT = 12'h00c;
+	localparam [11:0] O_CON = 12'h010;
+	localparam [11:0] O_CONRX = 12'h014;
+	localparam [11:0] O_STATUS = 12'h018;
+	localparam [11:0] O_IRQEN = 12'h01c;
+	localparam [11:0] O_DN_NEW = 12'h020;
+	wire is_up;
+	wire is_dn;
+	reg [2:0] irqen_r;
+	reg [31:0] dn_r [0:NDN - 1];
+	reg [NDN - 1:0] dn_new_r;
+	assign is_up = off_i[11:10] == 2'b10;
+	assign is_dn = off_i[11:10] == 2'b11;
+	assign ready_o = !(we_i && (((((off_i == O_RSP) && rsp_full_i) || ((off_i == O_EVT) && evt_full_i)) || ((off_i == O_CONRX) && conrx_full_i)) || (is_up && upd_full_i)));
+	assign cmd_pop_o = ((sel_i && !we_i) && (off_i == O_CMD)) && !cmd_empty_i;
+	assign con_pop_o = ((sel_i && !we_i) && (off_i == O_CON)) && !con_empty_i;
+	assign rsp_push_o = (sel_i && we_i) && (off_i == O_RSP);
+	assign rsp_data_o = wdata_i;
+	assign evt_push_o = (sel_i && we_i) && (off_i == O_EVT);
+	assign evt_data_o = wdata_i[15:0];
+	assign conrx_push_o = (sel_i && we_i) && (off_i == O_CONRX);
+	assign conrx_data_o = wdata_i[7:0];
+	assign upd_push_o = (sel_i && we_i) && is_up;
+	assign upd_data_o = {off_i[2+:5], wdata_i};
+	assign dn_pop_o = !dn_empty_i;
+	assign irq_o = ((irqen_r[0] && !cmd_empty_i) || (irqen_r[1] && !con_empty_i)) || (irqen_r[2] && |dn_new_r);
+	function automatic [31:0] sv2v_cast_32;
+		input reg [31:0] inp;
+		sv2v_cast_32 = inp;
+	endfunction
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		rdata_o = 32'h00000000;
+		if (is_dn)
+			rdata_o = dn_r[off_i[2+:$clog2(NDN)]];
+		else
+			case (off_i)
+				O_CMD: rdata_o = (cmd_empty_i ? 32'h00000000 : cmd_data_i);
+				O_CMD_LEVEL: rdata_o = {26'h0000000, cmd_level_i};
+				O_CON: rdata_o = {!con_empty_i, 22'h000000, (con_empty_i ? 9'h000 : con_data_i)};
+				O_STATUS: rdata_o = {1'b0, con_level_i, 2'h0, cmd_level_i, 9'h000, !dn_empty_i, upd_full_i, evt_full_i, conrx_full_i, rsp_full_i, !con_empty_i, !cmd_empty_i};
+				O_IRQEN: rdata_o = {29'h00000000, irqen_r};
+				O_DN_NEW: rdata_o = sv2v_cast_32(dn_new_r);
+				default: rdata_o = 32'h00000000;
+			endcase
+	end
+	function automatic signed [NDN - 1:0] sv2v_cast_000E2_signed;
+		input reg signed [NDN - 1:0] inp;
+		sv2v_cast_000E2_signed = inp;
+	endfunction
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i) begin
+			irqen_r <= 3'h0;
+			dn_new_r <= 1'sb0;
+			begin : sv2v_autoblock_1
+				reg signed [31:0] i;
+				for (i = 0; i < NDN; i = i + 1)
+					dn_r[i] <= 32'h00000000;
+			end
+		end
+		else begin
+			if ((sel_i && we_i) && (off_i == O_IRQEN))
+				irqen_r <= wdata_i[2:0];
+			dn_new_r <= (dn_new_r & ~((sel_i && !we_i) && (off_i == O_DN_NEW) ? dn_new_r : {NDN {1'sb0}})) | (!dn_empty_i ? sv2v_cast_000E2_signed(1) << dn_data_i[32+:$clog2(NDN)] : {NDN {1'sb0}});
+			if (!dn_empty_i)
+				dn_r[dn_data_i[32+:$clog2(NDN)]] <= dn_data_i[31:0];
+		end
+	initial _sv2v_0 = 0;
+endmodule
+module iocore_gpio (
+	clk_i,
+	rst_n_i,
+	sel_i,
+	we_i,
+	off_i,
+	wdata_i,
+	rdata_o,
+	irq_o,
+	out_o,
+	oe_o,
+	pu_o,
+	pd_o,
+	in_i,
+	level_o,
+	hit_o
+);
+	reg _sv2v_0;
+	parameter signed [31:0] NPINS = 16;
+	input wire clk_i;
+	input wire rst_n_i;
+	input wire sel_i;
+	input wire we_i;
+	input wire [7:0] off_i;
+	input wire [31:0] wdata_i;
+	output reg [31:0] rdata_o;
+	output wire irq_o;
+	output wire [NPINS - 1:0] out_o;
+	output wire [NPINS - 1:0] oe_o;
+	output wire [NPINS - 1:0] pu_o;
+	output wire [NPINS - 1:0] pd_o;
+	input wire [NPINS - 1:0] in_i;
+	output wire [NPINS - 1:0] level_o;
+	output wire [NPINS - 1:0] hit_o;
+	localparam [7:0] O_OUT = 8'h00;
+	localparam [7:0] O_SET = 8'h04;
+	localparam [7:0] O_CLR = 8'h08;
+	localparam [7:0] O_XOR = 8'h0c;
+	localparam [7:0] O_OE = 8'h10;
+	localparam [7:0] O_PU = 8'h14;
+	localparam [7:0] O_PD = 8'h18;
+	localparam [7:0] O_IN = 8'h1c;
+	localparam [7:0] O_EDGE = 8'h20;
+	localparam [7:0] O_STATUS = 8'h24;
+	localparam [7:0] O_IRQEN = 8'h28;
+	reg [NPINS - 1:0] out_r;
+	reg [NPINS - 1:0] oe_r;
+	reg [NPINS - 1:0] pu_r;
+	reg [NPINS - 1:0] pd_r;
+	reg [NPINS - 1:0] s1_r;
+	reg [NPINS - 1:0] s2_r;
+	reg [NPINS - 1:0] in_r;
+	reg [NPINS - 1:0] stat_r;
+	reg [NPINS - 1:0] irqen_r;
+	reg [NPINS - 1:0] hit;
+	reg [(2 * NPINS) - 1:0] edge_r;
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		begin : sv2v_autoblock_1
+			reg signed [31:0] i;
+			for (i = 0; i < NPINS; i = i + 1)
+				case (edge_r[2 * i+:2])
+					2'd1: hit[i] = !in_r[i] && s2_r[i];
+					2'd2: hit[i] = in_r[i] && !s2_r[i];
+					2'd3: hit[i] = in_r[i] != s2_r[i];
+					default: hit[i] = 1'b0;
+				endcase
+		end
+	end
+	assign out_o = out_r;
+	assign oe_o = oe_r;
+	assign pu_o = pu_r;
+	assign pd_o = pd_r;
+	assign level_o = in_r;
+	assign hit_o = hit;
+	assign irq_o = |(stat_r & irqen_r);
+	function automatic [31:0] sv2v_cast_32;
+		input reg [31:0] inp;
+		sv2v_cast_32 = inp;
+	endfunction
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		case (off_i)
+			O_OUT: rdata_o = sv2v_cast_32(out_r);
+			O_OE: rdata_o = sv2v_cast_32(oe_r);
+			O_PU: rdata_o = sv2v_cast_32(pu_r);
+			O_PD: rdata_o = sv2v_cast_32(pd_r);
+			O_IN: rdata_o = sv2v_cast_32(in_r);
+			O_EDGE: rdata_o = sv2v_cast_32(edge_r);
+			O_STATUS: rdata_o = sv2v_cast_32(stat_r);
+			O_IRQEN: rdata_o = sv2v_cast_32(irqen_r);
+			default: rdata_o = 32'h00000000;
+		endcase
+	end
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i) begin
+			out_r <= 1'sb0;
+			oe_r <= 1'sb0;
+			pu_r <= 1'sb0;
+			pd_r <= 1'sb0;
+			s1_r <= 1'sb0;
+			s2_r <= 1'sb0;
+			in_r <= 1'sb0;
+			stat_r <= 1'sb0;
+			irqen_r <= 1'sb0;
+			edge_r <= 1'sb0;
+		end
+		else begin
+			s1_r <= in_i;
+			s2_r <= s1_r;
+			in_r <= s2_r;
+			if (sel_i && we_i)
+				case (off_i)
+					O_OUT: out_r <= wdata_i[NPINS - 1:0];
+					O_SET: out_r <= out_r | wdata_i[NPINS - 1:0];
+					O_CLR: out_r <= out_r & ~wdata_i[NPINS - 1:0];
+					O_XOR: out_r <= out_r ^ wdata_i[NPINS - 1:0];
+					O_OE: oe_r <= wdata_i[NPINS - 1:0];
+					O_PU: pu_r <= wdata_i[NPINS - 1:0];
+					O_PD: pd_r <= wdata_i[NPINS - 1:0];
+					O_EDGE: edge_r <= wdata_i[(2 * NPINS) - 1:0];
+					O_IRQEN: irqen_r <= wdata_i[NPINS - 1:0];
+					default:
+						;
+				endcase
+			stat_r <= (stat_r & ~((sel_i && we_i) && (off_i == O_STATUS) ? wdata_i[NPINS - 1:0] : {NPINS {1'sb0}})) | hit;
+		end
+	initial _sv2v_0 = 0;
+endmodule
+module iocore_pwm (
+	clk_i,
+	rst_n_i,
+	req_i,
+	we_i,
+	off_i,
+	wdata_i,
+	rdata_o,
+	pwm_o,
+	wrap_o
+);
+	reg _sv2v_0;
+	input wire clk_i;
+	input wire rst_n_i;
+	input wire req_i;
+	input wire we_i;
+	input wire [11:0] off_i;
+	input wire [31:0] wdata_i;
+	output reg [31:0] rdata_o;
+	output reg [3:0] pwm_o;
+	output wire wrap_o;
+	localparam [11:0] PWM_PRESC = 12'h200;
+	localparam [11:0] PWM_TOP = 12'h204;
+	localparam [11:0] PWM_EN = 12'h208;
+	localparam [11:0] PWM_COUNT = 12'h20c;
+	localparam [11:0] PWM_DUTY0 = 12'h210;
+	reg [15:0] presc_r;
+	reg [15:0] top_r;
+	reg [15:0] top_s;
+	reg [3:0] en_r;
+	reg [3:0] en_s;
+	reg [16:0] duty_r [0:3];
+	reg [16:0] duty_s [0:3];
+	reg [15:0] pre_r;
+	reg [15:0] cnt_r;
+	reg running_r;
+	wire step;
+	wire wrap;
+	wire wr;
+	assign wr = req_i && we_i;
+	assign step = running_r && (pre_r == presc_r);
+	assign wrap = step && (cnt_r == top_s);
+	assign wrap_o = wrap;
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		begin : sv2v_autoblock_1
+			reg signed [31:0] k;
+			for (k = 0; k < 4; k = k + 1)
+				pwm_o[k] = (running_r && en_s[k]) && ({1'b0, cnt_r} < duty_s[k]);
+		end
+	end
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		rdata_o = 32'h00000000;
+		if (req_i && !we_i)
+			case (off_i)
+				PWM_PRESC: rdata_o = {16'h0000, presc_r};
+				PWM_TOP: rdata_o = {16'h0000, top_r};
+				PWM_EN: rdata_o = {28'h0000000, en_r};
+				PWM_COUNT: rdata_o = {16'h0000, cnt_r};
+				12'h210: rdata_o = {15'h0000, duty_r[0]};
+				12'h214: rdata_o = {15'h0000, duty_r[1]};
+				12'h218: rdata_o = {15'h0000, duty_r[2]};
+				12'h21c: rdata_o = {15'h0000, duty_r[3]};
+				default: rdata_o = 32'h00000000;
+			endcase
+	end
+	function automatic signed [11:0] sv2v_cast_12_signed;
+		input reg signed [11:0] inp;
+		sv2v_cast_12_signed = inp;
+	endfunction
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i) begin
+			presc_r <= 16'h0000;
+			top_r <= 16'hffff;
+			top_s <= 16'hffff;
+			en_r <= 4'h0;
+			en_s <= 4'h0;
+			pre_r <= 16'h0000;
+			cnt_r <= 16'h0000;
+			running_r <= 1'b0;
+			begin : sv2v_autoblock_2
+				reg signed [31:0] k;
+				for (k = 0; k < 4; k = k + 1)
+					begin
+						duty_r[k] <= 17'h00000;
+						duty_s[k] <= 17'h00000;
+					end
+			end
+		end
+		else begin
+			if (wr && (off_i == PWM_PRESC))
+				presc_r <= wdata_i[15:0];
+			if (wr && (off_i == PWM_TOP))
+				top_r <= wdata_i[15:0];
+			if (wr && (off_i == PWM_EN))
+				en_r <= wdata_i[3:0];
+			begin : sv2v_autoblock_3
+				reg signed [31:0] k;
+				for (k = 0; k < 4; k = k + 1)
+					if (wr && (off_i == (PWM_DUTY0 + sv2v_cast_12_signed(4 * k))))
+						duty_r[k] <= wdata_i[16:0];
+			end
+			if (!running_r) begin
+				if (en_r != 4'h0) begin
+					running_r <= 1'b1;
+					pre_r <= 16'h0000;
+					cnt_r <= 16'h0000;
+					top_s <= top_r;
+					en_s <= en_r;
+					begin : sv2v_autoblock_4
+						reg signed [31:0] k;
+						for (k = 0; k < 4; k = k + 1)
+							duty_s[k] <= duty_r[k];
+					end
+				end
+			end
+			else if (step) begin
+				pre_r <= 16'h0000;
+				if (wrap) begin
+					cnt_r <= 16'h0000;
+					top_s <= top_r;
+					en_s <= en_r;
+					begin : sv2v_autoblock_5
+						reg signed [31:0] k;
+						for (k = 0; k < 4; k = k + 1)
+							duty_s[k] <= duty_r[k];
+					end
+					if (en_r == 4'h0)
+						running_r <= 1'b0;
+				end
+				else
+					cnt_r <= cnt_r + 16'd1;
+			end
+			else
+				pre_r <= pre_r + 16'd1;
+		end
+	initial _sv2v_0 = 0;
+endmodule
+module iocore_spi (
+	clk_i,
+	rst_n_i,
+	req_i,
+	we_i,
+	off_i,
+	wdata_i,
+	rdata_o,
+	sck_o,
+	mosi_o,
+	miso_i,
+	irq_o
+);
+	reg _sv2v_0;
+	parameter signed [31:0] SPI_FIFO_DEPTH = 8;
+	input wire clk_i;
+	input wire rst_n_i;
+	input wire req_i;
+	input wire we_i;
+	input wire [11:0] off_i;
+	input wire [31:0] wdata_i;
+	output reg [31:0] rdata_o;
+	output wire sck_o;
+	output wire mosi_o;
+	input wire miso_i;
+	output wire irq_o;
+	localparam signed [31:0] FD = SPI_FIFO_DEPTH;
+	localparam signed [31:0] FPW = (FD > 1 ? $clog2(FD) : 1);
+	localparam signed [31:0] FCW = $clog2(FD + 1);
+	localparam [11:0] SPI_CTRL = 12'h300;
+	localparam [11:0] SPI_DATA = 12'h304;
+	localparam [11:0] SPI_STATUS = 12'h308;
+	localparam [11:0] SPI_IRQEN = 12'h30c;
+	reg en_r;
+	reg cpol_r;
+	reg cpha_r;
+	reg [15:0] div_r;
+	reg [1:0] irqen_r;
+	reg [7:0] txq [0:FD - 1];
+	reg [7:0] rxq [0:FD - 1];
+	reg [FPW - 1:0] tx_rd_r;
+	reg [FPW - 1:0] tx_wr_r;
+	reg [FPW - 1:0] rx_rd_r;
+	reg [FPW - 1:0] rx_wr_r;
+	reg [FCW - 1:0] tx_cnt_r;
+	reg [FCW - 1:0] rx_cnt_r;
+	reg ovr_r;
+	reg busy_r;
+	reg half_r;
+	reg [2:0] bit_r;
+	reg [15:0] hcnt_r;
+	reg [7:0] tx_sh_r;
+	reg [7:0] rx_sh_r;
+	reg sck_r;
+	reg mosi_r;
+	wire tx_full;
+	wire tx_empty;
+	wire rx_full;
+	wire rx_empty;
+	wire wr_data;
+	wire rd_data;
+	wire tx_push;
+	wire tx_pop;
+	wire rx_push;
+	wire rx_pop;
+	wire half_end;
+	wire byte_done;
+	function automatic [31:0] sv2v_cast_32;
+		input reg [31:0] inp;
+		sv2v_cast_32 = inp;
+	endfunction
+	function automatic [FPW - 1:0] fnext;
+		input reg [FPW - 1:0] p;
+		fnext = (sv2v_cast_32(p) == (FD - 1) ? {FPW {1'sb0}} : p + 1'b1);
+	endfunction
+	assign tx_full = sv2v_cast_32(tx_cnt_r) == FD;
+	assign tx_empty = tx_cnt_r == {FCW {1'sb0}};
+	assign rx_full = sv2v_cast_32(rx_cnt_r) == FD;
+	assign rx_empty = rx_cnt_r == {FCW {1'sb0}};
+	assign wr_data = (req_i && we_i) && (off_i == SPI_DATA);
+	assign rd_data = (req_i && !we_i) && (off_i == SPI_DATA);
+	assign tx_push = wr_data && !tx_full;
+	assign tx_pop = (en_r && !busy_r) && !tx_empty;
+	assign rx_pop = rd_data && !rx_empty;
+	assign half_end = busy_r && (hcnt_r == div_r);
+	assign byte_done = (half_end && half_r) && (bit_r == 3'd7);
+	assign rx_push = byte_done && !rx_full;
+	assign sck_o = (busy_r ? sck_r : cpol_r);
+	assign mosi_o = mosi_r;
+	assign irq_o = ((irqen_r[0] && tx_empty) && !busy_r) || (irqen_r[1] && !rx_empty);
+	function automatic [4:0] sv2v_cast_5;
+		input reg [4:0] inp;
+		sv2v_cast_5 = inp;
+	endfunction
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		rdata_o = 32'h00000000;
+		if (req_i && !we_i)
+			case (off_i)
+				SPI_CTRL: rdata_o = {8'h00, div_r, 5'h00, cpha_r, cpol_r, en_r};
+				SPI_DATA: rdata_o = {!rx_empty, 23'h000000, (rx_empty ? 8'h00 : rxq[rx_rd_r])};
+				SPI_STATUS: rdata_o = {12'h000, ovr_r, !rx_empty, tx_empty, busy_r || !tx_empty, 3'h0, sv2v_cast_5(rx_cnt_r), 3'h0, sv2v_cast_5(tx_cnt_r)};
+				SPI_IRQEN: rdata_o = {30'h00000000, irqen_r};
+				default: rdata_o = 32'h00000000;
+			endcase
+	end
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i) begin
+			en_r <= 1'b0;
+			cpol_r <= 1'b0;
+			cpha_r <= 1'b0;
+			div_r <= 16'h0000;
+			irqen_r <= 2'b00;
+			tx_rd_r <= 1'sb0;
+			tx_wr_r <= 1'sb0;
+			tx_cnt_r <= 1'sb0;
+			rx_rd_r <= 1'sb0;
+			rx_wr_r <= 1'sb0;
+			rx_cnt_r <= 1'sb0;
+			ovr_r <= 1'b0;
+			busy_r <= 1'b0;
+			half_r <= 1'b0;
+			bit_r <= 3'h0;
+			hcnt_r <= 16'h0000;
+			tx_sh_r <= 8'h00;
+			rx_sh_r <= 8'h00;
+			sck_r <= 1'b0;
+			mosi_r <= 1'b0;
+		end
+		else begin
+			if ((req_i && we_i) && (off_i == SPI_CTRL)) begin
+				en_r <= wdata_i[0];
+				cpol_r <= wdata_i[1];
+				cpha_r <= wdata_i[2];
+				div_r <= wdata_i[23:8];
+			end
+			if ((req_i && we_i) && (off_i == SPI_IRQEN))
+				irqen_r <= wdata_i[1:0];
+			if (((req_i && we_i) && (off_i == SPI_STATUS)) && wdata_i[19])
+				ovr_r <= 1'b0;
+			if (byte_done && rx_full)
+				ovr_r <= 1'b1;
+			if (!busy_r)
+				sck_r <= cpol_r;
+			if (tx_push) begin
+				txq[tx_wr_r] <= wdata_i[7:0];
+				tx_wr_r <= fnext(tx_wr_r);
+			end
+			if (tx_pop)
+				tx_rd_r <= fnext(tx_rd_r);
+			if (tx_push && !tx_pop)
+				tx_cnt_r <= tx_cnt_r + 1'b1;
+			else if (tx_pop && !tx_push)
+				tx_cnt_r <= tx_cnt_r - 1'b1;
+			if (rx_push) begin
+				rxq[rx_wr_r] <= (cpha_r ? {rx_sh_r[6:0], miso_i} : rx_sh_r);
+				rx_wr_r <= fnext(rx_wr_r);
+			end
+			if (rx_pop)
+				rx_rd_r <= fnext(rx_rd_r);
+			if (rx_push && !rx_pop)
+				rx_cnt_r <= rx_cnt_r + 1'b1;
+			else if (rx_pop && !rx_push)
+				rx_cnt_r <= rx_cnt_r - 1'b1;
+			if (tx_pop) begin
+				busy_r <= 1'b1;
+				half_r <= 1'b0;
+				bit_r <= 3'd0;
+				hcnt_r <= 16'h0000;
+				tx_sh_r <= txq[tx_rd_r];
+				sck_r <= cpol_r;
+				if (!cpha_r)
+					mosi_r <= txq[tx_rd_r][7];
+			end
+			else if (busy_r) begin
+				if (!half_end)
+					hcnt_r <= hcnt_r + 16'd1;
+				else begin
+					hcnt_r <= 16'h0000;
+					sck_r <= !sck_r;
+					if (!half_r) begin
+						half_r <= 1'b1;
+						if (!cpha_r)
+							rx_sh_r <= {rx_sh_r[6:0], miso_i};
+						else
+							mosi_r <= tx_sh_r[3'd7 - bit_r];
+					end
+					else begin
+						half_r <= 1'b0;
+						if (cpha_r)
+							rx_sh_r <= {rx_sh_r[6:0], miso_i};
+						if (bit_r == 3'd7)
+							busy_r <= 1'b0;
+						else begin
+							bit_r <= bit_r + 3'd1;
+							if (!cpha_r)
+								mosi_r <= tx_sh_r[3'd6 - bit_r];
+						end
+					end
+				end
+			end
+		end
+	initial _sv2v_0 = 0;
+endmodule
+module iocore_i2c (
+	clk_i,
+	rst_n_i,
+	req_i,
+	we_i,
+	off_i,
+	wdata_i,
+	rdata_o,
+	scl_low_o,
+	sda_low_o,
+	scl_i,
+	sda_i,
+	irq_o
+);
+	reg _sv2v_0;
+	input wire clk_i;
+	input wire rst_n_i;
+	input wire req_i;
+	input wire we_i;
+	input wire [11:0] off_i;
+	input wire [31:0] wdata_i;
+	output reg [31:0] rdata_o;
+	output wire scl_low_o;
+	output wire sda_low_o;
+	input wire scl_i;
+	input wire sda_i;
+	output wire irq_o;
+	localparam [11:0] I2C_DIV = 12'h400;
+	localparam [11:0] I2C_CMD = 12'h404;
+	localparam [11:0] I2C_STATUS = 12'h408;
+	localparam [11:0] I2C_TIMEOUT = 12'h40c;
+	localparam [11:0] I2C_CTRL = 12'h410;
+	localparam [3:0] C_START = 4'd1;
+	localparam [3:0] C_STOP = 4'd2;
+	localparam [3:0] C_WRITE = 4'd3;
+	localparam [3:0] C_READ = 4'd4;
+	reg en_r;
+	reg [15:0] div_r;
+	reg [31:0] tmo_r;
+	reg [2:0] kind_r;
+	reg [3:0] cmd_r;
+	reg rd_nack_r;
+	reg [3:0] bit_r;
+	reg [1:0] q_r;
+	reg [15:0] cnt_r;
+	reg [31:0] wait_r;
+	reg waiting_r;
+	reg [7:0] sh_r;
+	reg [7:0] rx_r;
+	reg nack_r;
+	reg tmo_hit_r;
+	reg held_r;
+	reg scl_low_r;
+	reg sda_low_r;
+	wire busy;
+	wire start_cmd;
+	assign busy = kind_r != 3'd0;
+	assign start_cmd = (((req_i && we_i) && (off_i == I2C_CMD)) && !busy) && en_r;
+	assign scl_low_o = en_r && scl_low_r;
+	assign sda_low_o = en_r && sda_low_r;
+	assign irq_o = 1'b0;
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		rdata_o = 32'h00000000;
+		if (req_i && !we_i)
+			case (off_i)
+				I2C_DIV: rdata_o = {16'h0000, div_r};
+				I2C_STATUS: rdata_o = {16'h0000, rx_r, 4'h0, held_r, tmo_hit_r, nack_r, busy};
+				I2C_TIMEOUT: rdata_o = tmo_r;
+				I2C_CTRL: rdata_o = {31'h00000000, en_r};
+				default: rdata_o = 32'h00000000;
+			endcase
+	end
+	function automatic data_bit;
+		input reg [3:0] b;
+		input reg [7:0] sh;
+		input reg [3:0] cmd;
+		input reg nack;
+		if (b == 4'd8)
+			data_bit = (cmd == C_WRITE ? 1'b1 : nack);
+		else
+			data_bit = (cmd == C_WRITE ? sh[3'd7 - b[2:0]] : 1'b1);
+	endfunction
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i) begin
+			en_r <= 1'b0;
+			div_r <= 16'h0000;
+			tmo_r <= 32'h00100000;
+			kind_r <= 3'd0;
+			cmd_r <= 4'h0;
+			rd_nack_r <= 1'b0;
+			bit_r <= 4'h0;
+			q_r <= 2'h0;
+			cnt_r <= 16'h0000;
+			wait_r <= 32'h00000000;
+			waiting_r <= 1'b0;
+			sh_r <= 8'h00;
+			rx_r <= 8'h00;
+			nack_r <= 1'b0;
+			tmo_hit_r <= 1'b0;
+			held_r <= 1'b0;
+			scl_low_r <= 1'b0;
+			sda_low_r <= 1'b0;
+		end
+		else begin
+			if ((req_i && we_i) && (off_i == I2C_DIV))
+				div_r <= wdata_i[15:0];
+			if ((req_i && we_i) && (off_i == I2C_TIMEOUT))
+				tmo_r <= wdata_i;
+			if ((req_i && we_i) && (off_i == I2C_CTRL)) begin
+				en_r <= wdata_i[0];
+				if (!wdata_i[0]) begin
+					kind_r <= 3'd0;
+					held_r <= 1'b0;
+					scl_low_r <= 1'b0;
+					sda_low_r <= 1'b0;
+				end
+			end
+			if (start_cmd) begin
+				cmd_r <= wdata_i[3:0];
+				rd_nack_r <= wdata_i[16];
+				sh_r <= wdata_i[15:8];
+				q_r <= 2'd0;
+				cnt_r <= 16'h0000;
+				waiting_r <= 1'b0;
+				wait_r <= 32'h00000000;
+				bit_r <= 4'd0;
+				case (wdata_i[3:0])
+					C_START: begin
+						kind_r <= (held_r ? 3'd2 : 3'd1);
+						tmo_hit_r <= 1'b0;
+					end
+					C_STOP: kind_r <= 3'd4;
+					C_WRITE, C_READ: kind_r <= 3'd3;
+					default: kind_r <= 3'd0;
+				endcase
+			end
+			else if (busy) begin
+				if (waiting_r) begin
+					if (scl_i)
+						waiting_r <= 1'b0;
+					else if (wait_r >= tmo_r) begin
+						tmo_hit_r <= 1'b1;
+						kind_r <= 3'd0;
+						held_r <= 1'b0;
+						scl_low_r <= 1'b0;
+						sda_low_r <= 1'b0;
+					end
+					else
+						wait_r <= wait_r + 32'd1;
+				end
+				else if (cnt_r != div_r)
+					cnt_r <= cnt_r + 16'd1;
+				else begin
+					cnt_r <= 16'h0000;
+					q_r <= q_r + 2'd1;
+					case (kind_r)
+						3'd1:
+							case (q_r)
+								2'd0: sda_low_r <= 1'b1;
+								2'd1: scl_low_r <= 1'b1;
+								2'd2:
+									;
+								default: begin
+									kind_r <= 3'd0;
+									held_r <= 1'b1;
+								end
+							endcase
+						3'd2:
+							case (q_r)
+								2'd0: begin
+									scl_low_r <= 1'b0;
+									waiting_r <= 1'b1;
+									wait_r <= 32'h00000000;
+								end
+								2'd1: sda_low_r <= 1'b1;
+								2'd2: scl_low_r <= 1'b1;
+								default: kind_r <= 3'd0;
+							endcase
+						3'd4:
+							case (q_r)
+								2'd0: begin
+									scl_low_r <= 1'b0;
+									waiting_r <= 1'b1;
+									wait_r <= 32'h00000000;
+								end
+								2'd1: sda_low_r <= 1'b0;
+								2'd2:
+									;
+								default: begin
+									kind_r <= 3'd0;
+									held_r <= 1'b0;
+								end
+							endcase
+						3'd3:
+							case (q_r)
+								2'd0: begin
+									scl_low_r <= 1'b0;
+									waiting_r <= 1'b1;
+									wait_r <= 32'h00000000;
+								end
+								2'd1:
+									if (bit_r == 4'd8) begin
+										if (cmd_r == C_WRITE)
+											nack_r <= sda_i;
+									end
+									else if (cmd_r == C_READ)
+										rx_r <= {rx_r[6:0], sda_i};
+								2'd2: scl_low_r <= 1'b1;
+								default:
+									if (bit_r == 4'd8) begin
+										kind_r <= 3'd0;
+										sda_low_r <= 1'b0;
+									end
+									else begin
+										bit_r <= bit_r + 4'd1;
+										sda_low_r <= !data_bit(bit_r + 4'd1, sh_r, cmd_r, rd_nack_r);
+									end
+							endcase
+						default: kind_r <= 3'd0;
+					endcase
+				end
+			end
+			if (start_cmd && ((wdata_i[3:0] == C_WRITE) || (wdata_i[3:0] == C_READ)))
+				sda_low_r <= (wdata_i[3:0] == C_WRITE ? !wdata_i[15] : 1'b0);
+			if (start_cmd && (wdata_i[3:0] == C_STOP))
+				sda_low_r <= 1'b1;
+			if ((start_cmd && (wdata_i[3:0] == C_START)) && held_r)
+				sda_low_r <= 1'b0;
+			if ((start_cmd && (wdata_i[3:0] == C_START)) && !held_r) begin
+				scl_low_r <= 1'b0;
+				sda_low_r <= 1'b0;
+			end
+		end
+	initial _sv2v_0 = 0;
+endmodule
+module iocore_wdt (
+	clk_i,
+	rst_n_i,
+	req_i,
+	we_i,
+	off_i,
+	wdata_i,
+	rdata_o,
+	tick_i,
+	wdt_reset_o
+);
+	reg _sv2v_0;
+	input wire clk_i;
+	input wire rst_n_i;
+	input wire req_i;
+	input wire we_i;
+	input wire [11:0] off_i;
+	input wire [31:0] wdata_i;
+	output reg [31:0] rdata_o;
+	input wire tick_i;
+	output reg wdt_reset_o;
+	localparam [11:0] WDT_LOAD = 12'h500;
+	localparam [11:0] WDT_CTRL = 12'h504;
+	localparam [11:0] WDT_KICK = 12'h508;
+	localparam [11:0] WDT_COUNT = 12'h50c;
+	localparam [31:0] KEY = 32'h6b1df00d;
+	localparam [31:0] STOP_KEY = 32'h5709dead;
+	reg [31:0] load_r;
+	reg [31:0] count_r;
+	reg started_r;
+	wire wr;
+	assign wr = req_i && we_i;
+	wire [31:0] cur;
+	assign cur = ((wr && (off_i == WDT_KICK)) && (wdata_i == KEY) ? load_r : count_r);
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		rdata_o = 32'h00000000;
+		if (req_i && !we_i)
+			case (off_i)
+				WDT_LOAD: rdata_o = load_r;
+				WDT_CTRL: rdata_o = {31'h00000000, started_r};
+				WDT_COUNT: rdata_o = count_r;
+				default: rdata_o = 32'h00000000;
+			endcase
+	end
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i) begin
+			load_r <= 32'h00000000;
+			count_r <= 32'h00000000;
+			started_r <= 1'b0;
+			wdt_reset_o <= 1'b0;
+		end
+		else begin
+			wdt_reset_o <= 1'b0;
+			if ((wr && (off_i == WDT_LOAD)) && !started_r)
+				load_r <= wdata_i;
+			if (!started_r) begin
+				if ((wr && (off_i == WDT_CTRL)) && wdata_i[0]) begin
+					started_r <= 1'b1;
+					count_r <= load_r;
+				end
+			end
+			else if ((wr && (off_i == WDT_KICK)) && (wdata_i == STOP_KEY)) begin
+				started_r <= 1'b0;
+				count_r <= 32'h00000000;
+			end
+			else if (tick_i) begin
+				if (cur <= 32'd1) begin
+					count_r <= 32'h00000000;
+					started_r <= 1'b0;
+					wdt_reset_o <= 1'b1;
+				end
+				else
+					count_r <= cur - 32'd1;
+			end
+			else
+				count_r <= cur;
+		end
+	initial _sv2v_0 = 0;
+endmodule
+module iocore_adc (
+	clk_i,
+	rst_n_i,
+	req_i,
+	we_i,
+	off_i,
+	wdata_i,
+	rdata_o,
+	adc_start_o,
+	adc_chan_o,
+	adc_done_i,
+	adc_code_i
+);
+	reg _sv2v_0;
+	input wire clk_i;
+	input wire rst_n_i;
+	input wire req_i;
+	input wire we_i;
+	input wire [11:0] off_i;
+	input wire [31:0] wdata_i;
+	output reg [31:0] rdata_o;
+	output reg adc_start_o;
+	output reg [3:0] adc_chan_o;
+	input wire adc_done_i;
+	input wire [11:0] adc_code_i;
+	localparam [11:0] ADC_CTRL = 12'h800;
+	localparam [11:0] ADC_DATA = 12'h804;
+	localparam [11:0] ADC_STATUS = 12'h808;
+	reg busy_r;
+	reg valid_r;
+	reg [15:0] data_r;
+	wire start;
+	assign start = (((req_i && we_i) && (off_i == ADC_CTRL)) && wdata_i[8]) && !busy_r;
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		rdata_o = 32'h00000000;
+		if (req_i && !we_i)
+			case (off_i)
+				ADC_CTRL: rdata_o = {28'h0000000, adc_chan_o};
+				ADC_DATA: rdata_o = {valid_r, 15'h0000, data_r};
+				ADC_STATUS: rdata_o = {31'h00000000, busy_r};
+				default: rdata_o = 32'h00000000;
+			endcase
+	end
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i) begin
+			busy_r <= 1'b0;
+			valid_r <= 1'b0;
+			data_r <= 16'h0000;
+			adc_start_o <= 1'b0;
+			adc_chan_o <= 4'h0;
+		end
+		else begin
+			adc_start_o <= 1'b0;
+			if (start) begin
+				busy_r <= 1'b1;
+				valid_r <= 1'b0;
+				adc_chan_o <= wdata_i[3:0];
+				adc_start_o <= 1'b1;
+			end
+			else if (busy_r && adc_done_i) begin
+				busy_r <= 1'b0;
+				valid_r <= 1'b1;
+				data_r <= {adc_code_i, 4'h0};
+			end
+		end
+	initial _sv2v_0 = 0;
+endmodule
+module iocore_pinmux (
+	clk_i,
+	rst_n_i,
+	req_i,
+	we_i,
+	off_i,
+	wdata_i,
+	rdata_o,
+	gpio_out_i,
+	gpio_oe_i,
+	pwm_i,
+	spi_sck_i,
+	spi_mosi_i,
+	i2c_scl_low_i,
+	i2c_sda_low_i,
+	uart_txd_i,
+	uart_rxd_pin_i,
+	spi_miso_o,
+	i2c_scl_o,
+	i2c_sda_o,
+	uart_rxd_o,
+	pad_out_o,
+	pad_oe_o,
+	pad_in_i
+);
+	reg _sv2v_0;
+	input wire clk_i;
+	input wire rst_n_i;
+	input wire req_i;
+	input wire we_i;
+	input wire [11:0] off_i;
+	input wire [31:0] wdata_i;
+	output reg [31:0] rdata_o;
+	input wire [15:0] gpio_out_i;
+	input wire [15:0] gpio_oe_i;
+	input wire [3:0] pwm_i;
+	input wire spi_sck_i;
+	input wire spi_mosi_i;
+	input wire i2c_scl_low_i;
+	input wire i2c_sda_low_i;
+	input wire uart_txd_i;
+	input wire uart_rxd_pin_i;
+	output reg spi_miso_o;
+	output reg i2c_scl_o;
+	output reg i2c_sda_o;
+	output reg uart_rxd_o;
+	output reg [15:0] pad_out_o;
+	output reg [15:0] pad_oe_o;
+	input wire [15:0] pad_in_i;
+	localparam [11:0] PINMUX0 = 12'h900;
+	localparam [11:0] PINMUX1 = 12'h904;
+	localparam [3:0] F_GPIO = 4'd0;
+	localparam [3:0] F_SCK = 4'd5;
+	localparam [3:0] F_MOSI = 4'd6;
+	localparam [3:0] F_MISO = 4'd7;
+	localparam [3:0] F_SCL = 4'd8;
+	localparam [3:0] F_SDA = 4'd9;
+	localparam [3:0] F_TX = 4'd10;
+	localparam [3:0] F_RX = 4'd11;
+	reg [31:0] mux_r [0:1];
+	reg [3:0] fn [0:15];
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		begin : sv2v_autoblock_1
+			reg signed [31:0] i;
+			for (i = 0; i < 16; i = i + 1)
+				fn[i] = mux_r[i / 8][4 * (i % 8)+:4];
+		end
+	end
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		rdata_o = 32'h00000000;
+		if (req_i && !we_i) begin
+			if (off_i == PINMUX0)
+				rdata_o = mux_r[0];
+			if (off_i == PINMUX1)
+				rdata_o = mux_r[1];
+		end
+	end
+	always @(*) begin : sv2v_autoblock_2
+		reg miso_seen;
+		reg scl_seen;
+		reg sda_seen;
+		reg rx_seen;
+		if (_sv2v_0)
+			;
+		miso_seen = 1'b0;
+		scl_seen = 1'b0;
+		sda_seen = 1'b0;
+		rx_seen = 1'b0;
+		spi_miso_o = 1'b0;
+		i2c_scl_o = 1'b1;
+		i2c_sda_o = 1'b1;
+		uart_rxd_o = uart_rxd_pin_i;
+		begin : sv2v_autoblock_3
+			reg signed [31:0] i;
+			for (i = 0; i < 16; i = i + 1)
+				begin
+					case (fn[i])
+						F_GPIO: begin
+							pad_out_o[i] = gpio_out_i[i];
+							pad_oe_o[i] = gpio_oe_i[i];
+						end
+						4'd1, 4'd2, 4'd3, 4'd4: begin
+							pad_out_o[i] = pwm_i[fn[i] - 4'd1];
+							pad_oe_o[i] = 1'b1;
+						end
+						F_SCK: begin
+							pad_out_o[i] = spi_sck_i;
+							pad_oe_o[i] = 1'b1;
+						end
+						F_MOSI: begin
+							pad_out_o[i] = spi_mosi_i;
+							pad_oe_o[i] = 1'b1;
+						end
+						F_SCL: begin
+							pad_out_o[i] = 1'b0;
+							pad_oe_o[i] = i2c_scl_low_i;
+						end
+						F_SDA: begin
+							pad_out_o[i] = 1'b0;
+							pad_oe_o[i] = i2c_sda_low_i;
+						end
+						F_TX: begin
+							pad_out_o[i] = uart_txd_i;
+							pad_oe_o[i] = 1'b1;
+						end
+						default: begin
+							pad_out_o[i] = 1'b0;
+							pad_oe_o[i] = 1'b0;
+						end
+					endcase
+					if ((fn[i] == F_MISO) && !miso_seen) begin
+						spi_miso_o = pad_in_i[i];
+						miso_seen = 1'b1;
+					end
+					if ((fn[i] == F_SCL) && !scl_seen) begin
+						i2c_scl_o = pad_in_i[i];
+						scl_seen = 1'b1;
+					end
+					if ((fn[i] == F_SDA) && !sda_seen) begin
+						i2c_sda_o = pad_in_i[i];
+						sda_seen = 1'b1;
+					end
+					if ((fn[i] == F_RX) && !rx_seen) begin
+						uart_rxd_o = pad_in_i[i];
+						rx_seen = 1'b1;
+					end
+				end
+		end
+	end
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i) begin
+			mux_r[0] <= 32'h00000000;
+			mux_r[1] <= 32'h00000000;
+		end
+		else if (req_i && we_i) begin
+			if (off_i == PINMUX0)
+				mux_r[0] <= wdata_i;
+			if (off_i == PINMUX1)
+				mux_r[1] <= wdata_i;
+		end
+	initial _sv2v_0 = 0;
+endmodule
+module iocore_ahb2obi (
+	clk_i,
+	rst_n_i,
+	haddr_i,
+	hwrite_i,
+	htrans_i,
+	hsize_i,
+	hwdata_i,
+	hready_o,
+	hresp_o,
+	hrdata_o,
+	req_o,
+	gnt_i,
+	we_o,
+	be_o,
+	addr_o,
+	wdata_o,
+	rvalid_i,
+	rdata_i,
+	err_i
+);
+	reg _sv2v_0;
+	input wire clk_i;
+	input wire rst_n_i;
+	input wire [31:0] haddr_i;
+	input wire hwrite_i;
+	input wire [1:0] htrans_i;
+	input wire [2:0] hsize_i;
+	input wire [31:0] hwdata_i;
+	output wire hready_o;
+	output wire hresp_o;
+	output wire [31:0] hrdata_o;
+	output reg req_o;
+	input wire gnt_i;
+	output reg we_o;
+	output reg [3:0] be_o;
+	output reg [31:0] addr_o;
+	output wire [31:0] wdata_o;
+	input wire rvalid_i;
+	input wire [31:0] rdata_i;
+	input wire err_i;
+	reg dp;
+	reg dp_we;
+	reg need;
+	reg err2;
+	reg [31:0] dp_addr;
+	reg [2:0] dp_size;
+	wire aph_go;
+	wire aph_rd;
+	function automatic [3:0] be_of;
+		input reg [2:0] sz;
+		input reg [1:0] a;
+		case (sz)
+			3'd0: be_of = 4'b0001 << a;
+			3'd1: be_of = (a[1] ? 4'b1100 : 4'b0011);
+			default: be_of = 4'b1111;
+		endcase
+	endfunction
+	assign hready_o = !dp || ((!need && rvalid_i) && !err_i);
+	assign hresp_o = err2 || (((dp && !need) && rvalid_i) && err_i);
+	assign hrdata_o = rdata_i;
+	assign aph_go = htrans_i[1] && hready_o;
+	assign aph_rd = aph_go && !hwrite_i;
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		if (dp && need) begin
+			req_o = 1'b1;
+			we_o = dp_we;
+			addr_o = dp_addr;
+			be_o = be_of(dp_size, dp_addr[1:0]);
+		end
+		else begin
+			req_o = aph_rd;
+			we_o = 1'b0;
+			addr_o = haddr_i;
+			be_o = be_of(hsize_i, haddr_i[1:0]);
+		end
+	end
+	assign wdata_o = hwdata_i;
+	always @(posedge clk_i or negedge rst_n_i)
+		if (!rst_n_i) begin
+			dp <= 1'b0;
+			dp_we <= 1'b0;
+			need <= 1'b0;
+			err2 <= 1'b0;
+			dp_addr <= 32'h00000000;
+			dp_size <= 3'd0;
+		end
+		else begin
+			err2 <= ((dp && !need) && rvalid_i) && err_i;
+			if (dp && need) begin
+				if (gnt_i)
+					need <= 1'b0;
+			end
+			else begin
+				if ((dp && !need) && rvalid_i)
+					dp <= 1'b0;
+				if (aph_go) begin
+					dp <= 1'b1;
+					dp_we <= hwrite_i;
+					dp_addr <= haddr_i;
+					dp_size <= hsize_i;
+					need <= hwrite_i || !gnt_i;
+				end
+			end
+		end
+	initial _sv2v_0 = 0;
+endmodule
+module iocore_cpu (
+	clk_i,
+	rst_n_i,
+	i_req_o,
+	i_gnt_i,
+	i_addr_o,
+	i_rvalid_i,
+	i_rdata_i,
+	i_err_i,
+	d_req_o,
+	d_gnt_i,
+	d_we_o,
+	d_be_o,
+	d_addr_o,
+	d_wdata_o,
+	d_rvalid_i,
+	d_rdata_i,
+	d_err_i,
+	irq_timer_i,
+	irq_ext_i,
+	core_sleep_o
+);
+	parameter signed [31:0] CORE = 0;
+	parameter signed [31:0] MUL = 0;
+	input wire clk_i;
+	input wire rst_n_i;
+	output wire i_req_o;
+	input wire i_gnt_i;
+	output wire [31:0] i_addr_o;
+	input wire i_rvalid_i;
+	input wire [31:0] i_rdata_i;
+	input wire i_err_i;
+	output wire d_req_o;
+	input wire d_gnt_i;
+	output wire d_we_o;
+	output wire [3:0] d_be_o;
+	output wire [31:0] d_addr_o;
+	output wire [31:0] d_wdata_o;
+	input wire d_rvalid_i;
+	input wire [31:0] d_rdata_i;
+	input wire d_err_i;
+	input wire irq_timer_i;
+	input wire irq_ext_i;
+	output wire core_sleep_o;
+	localparam [31:0] BOOT = 32'h00000080;
+	generate
+		if (CORE == 0) begin : g_cve2
+			localparam [9:0] sv2v_uu_u_core_ext_ram_cfg_i_0 = 1'sb0;
+			localparam [31:0] sv2v_uu_u_core_cve2_pkg_X_DUAL_READ = 0;
+			localparam [31:0] sv2v_uu_u_core_cve2_pkg_X_DUAL_WRITE = 0;
+			localparam [31:0] sv2v_uu_u_core_cve2_pkg_X_NUM_RS = 3;
+			localparam [(2 + (sv2v_uu_u_core_cve2_pkg_X_NUM_RS + sv2v_uu_u_core_cve2_pkg_X_DUAL_READ)) - 1:0] sv2v_uu_u_core_ext_x_issue_resp_i_0 = 1'sb0;
+			localparam [31:0] sv2v_uu_u_core_cve2_pkg_X_HARTID_WIDTH = 32;
+			localparam [31:0] sv2v_uu_u_core_cve2_pkg_X_ID_WIDTH = 4;
+			localparam [31:0] sv2v_uu_u_core_cve2_pkg_X_RFW_WIDTH = 32;
+			localparam [((sv2v_uu_u_core_cve2_pkg_X_HARTID_WIDTH + sv2v_uu_u_core_cve2_pkg_X_ID_WIDTH) + sv2v_uu_u_core_cve2_pkg_X_RFW_WIDTH) + 5:0] sv2v_uu_u_core_ext_x_result_i_0 = 1'sb0;
+			cve2_top #(
+				.MHPMCounterNum(0),
+				.RV32E(1'b1),
+				.RV32M((MUL != 0 ? 32'sd2 : 32'sd1))
+			) u_core(
+				.clk_i(clk_i),
+				.rst_ni(rst_n_i),
+				.test_en_i(1'b0),
+				.ram_cfg_i(sv2v_uu_u_core_ext_ram_cfg_i_0),
+				.hart_id_i(32'h00000000),
+				.boot_addr_i(BOOT),
+				.instr_req_o(i_req_o),
+				.instr_gnt_i(i_gnt_i),
+				.instr_rvalid_i(i_rvalid_i),
+				.instr_addr_o(i_addr_o),
+				.instr_rdata_i(i_rdata_i),
+				.instr_err_i(i_err_i),
+				.data_req_o(d_req_o),
+				.data_gnt_i(d_gnt_i),
+				.data_rvalid_i(d_rvalid_i),
+				.data_we_o(d_we_o),
+				.data_be_o(d_be_o),
+				.data_addr_o(d_addr_o),
+				.data_wdata_o(d_wdata_o),
+				.data_rdata_i(d_rdata_i),
+				.data_err_i(d_err_i),
+				.x_issue_valid_o(),
+				.x_issue_ready_i(1'b0),
+				.x_issue_req_o(),
+				.x_issue_resp_i(sv2v_uu_u_core_ext_x_issue_resp_i_0),
+				.x_register_o(),
+				.x_commit_valid_o(),
+				.x_commit_o(),
+				.x_result_valid_i(1'b0),
+				.x_result_ready_o(),
+				.x_result_i(sv2v_uu_u_core_ext_x_result_i_0),
+				.irq_software_i(1'b0),
+				.irq_timer_i(irq_timer_i),
+				.irq_external_i(irq_ext_i),
+				.irq_fast_i(16'h0000),
+				.irq_nm_i(1'b0),
+				.debug_req_i(1'b0),
+				.debug_halted_o(),
+				.dm_halt_addr_i(32'h00000000),
+				.dm_exception_addr_i(32'h00000000),
+				.crash_dump_o(),
+				.fetch_enable_i(1'b1),
+				.core_sleep_o(core_sleep_o)
+			);
+		end
+		else begin : g_hazard3
+			wire [31:0] ih_addr;
+			wire [31:0] dh_addr;
+			wire [31:0] dh_wdata;
+			wire [31:0] ih_rdata;
+			wire [31:0] dh_rdata;
+			wire [1:0] ih_trans;
+			wire [1:0] dh_trans;
+			wire [2:0] ih_size;
+			wire [2:0] dh_size;
+			wire dh_write;
+			wire ih_ready;
+			wire dh_ready;
+			wire ih_resp;
+			wire dh_resp;
+			wire clk_en;
+			hazard3_cpu_2port #(
+				.RESET_VECTOR(BOOT),
+				.MTVEC_INIT(32'h00000001),
+				.EXTENSION_A(0),
+				.EXTENSION_C(1),
+				.EXTENSION_E(1),
+				.EXTENSION_M(1),
+				.EXTENSION_ZBA(0),
+				.EXTENSION_ZBB(0),
+				.EXTENSION_ZBC(0),
+				.EXTENSION_ZBKB(0),
+				.EXTENSION_ZBKX(0),
+				.EXTENSION_ZBS(0),
+				.EXTENSION_ZCB(0),
+				.EXTENSION_ZCLSD(0),
+				.EXTENSION_ZCMP(0),
+				.EXTENSION_ZIFENCEI(0),
+				.EXTENSION_ZILSD(0),
+				.EXTENSION_XH3BEXTM(0),
+				.EXTENSION_XH3IRQ(0),
+				.EXTENSION_XH3PMPM(0),
+				.EXTENSION_XH3POWER(0),
+				.CSR_M_MANDATORY(1),
+				.CSR_M_TRAP(1),
+				.CSR_COUNTER(0),
+				.U_MODE(0),
+				.PMP_REGIONS(0),
+				.DEBUG_SUPPORT(0),
+				.BREAKPOINT_TRIGGERS(0),
+				.NUM_IRQS(1),
+				.MUL_FAST((MUL != 0 ? 1 : 0)),
+				.MULH_FAST(0)
+			) u_core(
+				.clk(clk_i),
+				.clk_always_on(clk_i),
+				.rst_n(rst_n_i),
+				.pwrup_req(),
+				.pwrup_ack(1'b1),
+				.clk_en(clk_en),
+				.unblock_out(),
+				.unblock_in(1'b0),
+				.i_haddr(ih_addr),
+				.i_hwrite(),
+				.i_htrans(ih_trans),
+				.i_hsize(ih_size),
+				.i_hburst(),
+				.i_hprot(),
+				.i_hmastlock(),
+				.i_hmaster(),
+				.i_hready(ih_ready),
+				.i_hresp(ih_resp),
+				.i_hwdata(),
+				.i_hrdata(ih_rdata),
+				.d_haddr(dh_addr),
+				.d_hwrite(dh_write),
+				.d_htrans(dh_trans),
+				.d_hsize(dh_size),
+				.d_hburst(),
+				.d_hprot(),
+				.d_hmastlock(),
+				.d_hmaster(),
+				.d_hexcl(),
+				.d_hready(dh_ready),
+				.d_hresp(dh_resp),
+				.d_hexokay(1'b1),
+				.d_hwdata(dh_wdata),
+				.d_hrdata(dh_rdata),
+				.fence_i_vld(),
+				.fence_d_vld(),
+				.fence_rdy(1'b1),
+				.dbg_req_halt(1'b0),
+				.dbg_req_halt_on_reset(1'b0),
+				.dbg_req_resume(1'b0),
+				.dbg_halted(),
+				.dbg_running(),
+				.dbg_data0_rdata(32'h00000000),
+				.dbg_data0_wdata(),
+				.dbg_data0_wen(),
+				.dbg_instr_data(32'h00000000),
+				.dbg_instr_data_vld(1'b0),
+				.dbg_instr_data_rdy(),
+				.dbg_instr_caught_exception(),
+				.dbg_instr_caught_ebreak(),
+				.dbg_sbus_addr(32'h00000000),
+				.dbg_sbus_write(1'b0),
+				.dbg_sbus_size(2'b00),
+				.dbg_sbus_vld(1'b0),
+				.dbg_sbus_rdy(),
+				.dbg_sbus_err(),
+				.dbg_sbus_wdata(32'h00000000),
+				.dbg_sbus_rdata(),
+				.mhartid_val(32'h00000000),
+				.eco_version(4'h0),
+				.irq(irq_ext_i),
+				.soft_irq(1'b0),
+				.timer_irq(irq_timer_i)
+			);
+			assign core_sleep_o = !clk_en;
+			iocore_ahb2obi u_iad(
+				.clk_i(clk_i),
+				.rst_n_i(rst_n_i),
+				.haddr_i(ih_addr),
+				.hwrite_i(1'b0),
+				.htrans_i(ih_trans),
+				.hsize_i(ih_size),
+				.hwdata_i(32'h00000000),
+				.hready_o(ih_ready),
+				.hresp_o(ih_resp),
+				.hrdata_o(ih_rdata),
+				.req_o(i_req_o),
+				.gnt_i(i_gnt_i),
+				.we_o(),
+				.be_o(),
+				.addr_o(i_addr_o),
+				.wdata_o(),
+				.rvalid_i(i_rvalid_i),
+				.rdata_i(i_rdata_i),
+				.err_i(i_err_i)
+			);
+			iocore_ahb2obi u_dad(
+				.clk_i(clk_i),
+				.rst_n_i(rst_n_i),
+				.haddr_i(dh_addr),
+				.hwrite_i(dh_write),
+				.htrans_i(dh_trans),
+				.hsize_i(dh_size),
+				.hwdata_i(dh_wdata),
+				.hready_o(dh_ready),
+				.hresp_o(dh_resp),
+				.hrdata_o(dh_rdata),
+				.req_o(d_req_o),
+				.gnt_i(d_gnt_i),
+				.we_o(d_we_o),
+				.be_o(d_be_o),
+				.addr_o(d_addr_o),
+				.wdata_o(d_wdata_o),
+				.rvalid_i(d_rvalid_i),
+				.rdata_i(d_rdata_i),
+				.err_i(d_err_i)
+			);
+		end
+	endgenerate
+endmodule
+module iocore_top (
+	io_clk_i,
+	io_rst_n_i,
+	run_i,
+	con_mode_i,
+	ld_valid_i,
+	ld_data_i,
+	ld_pop_o,
+	cmd_pop_o,
+	cmd_data_i,
+	cmd_empty_i,
+	cmd_level_i,
+	rsp_push_o,
+	rsp_data_o,
+	rsp_full_i,
+	evt_push_o,
+	evt_data_o,
+	evt_full_i,
+	con_pop_o,
+	con_data_i,
+	con_empty_i,
+	con_level_i,
+	conrx_push_o,
+	conrx_data_o,
+	conrx_full_i,
+	upd_push_o,
+	upd_data_o,
+	upd_full_i,
+	dn_pop_o,
+	dn_data_i,
+	dn_empty_i,
+	uart_rxd_i,
+	uart_txd_o,
+	gpio_o,
+	gpio_oe_o,
+	gpio_pu_o,
+	gpio_pd_o,
+	gpio_i,
+	adc_start_o,
+	adc_chan_o,
+	adc_done_i,
+	adc_code_i,
+	wdt_toggle_o,
+	usb_clk_i,
+	usb_dp_io,
+	usb_dn_io,
+	usb_pu_o,
+	us_gray_o,
+	ms_gray_o,
+	dbg_valid_o,
+	dbg_byte_o,
+	halt_o,
+	halt_value_o,
+	sleep_o
+);
+	reg _sv2v_0;
+	parameter signed [31:0] CORE = 0;
+	parameter signed [31:0] MUL = 0;
+	parameter signed [31:0] CODE_WORDS = 4096;
+	parameter signed [31:0] DATA_WORDS = 1920;
+	parameter [15:0] US_DIV_RESET = 16'd49;
+	parameter [15:0] BAUD_RESET = 16'd0;
+	parameter signed [31:0] NPINS = 16;
+	parameter signed [31:0] IOCLK_HZ = 50000000;
+	input wire io_clk_i;
+	input wire io_rst_n_i;
+	input wire run_i;
+	input wire [1:0] con_mode_i;
+	input wire ld_valid_i;
+	input wire [48:0] ld_data_i;
+	output wire ld_pop_o;
+	output wire cmd_pop_o;
+	input wire [31:0] cmd_data_i;
+	input wire cmd_empty_i;
+	input wire [5:0] cmd_level_i;
+	output wire rsp_push_o;
+	output wire [31:0] rsp_data_o;
+	input wire rsp_full_i;
+	output wire evt_push_o;
+	output wire [15:0] evt_data_o;
+	input wire evt_full_i;
+	output wire con_pop_o;
+	input wire [8:0] con_data_i;
+	input wire con_empty_i;
+	input wire [6:0] con_level_i;
+	output wire conrx_push_o;
+	output wire [7:0] conrx_data_o;
+	input wire conrx_full_i;
+	output wire upd_push_o;
+	output wire [36:0] upd_data_o;
+	input wire upd_full_i;
+	output wire dn_pop_o;
+	input wire [34:0] dn_data_i;
+	input wire dn_empty_i;
+	input wire uart_rxd_i;
+	output wire uart_txd_o;
+	output wire [NPINS - 1:0] gpio_o;
+	output wire [NPINS - 1:0] gpio_oe_o;
+	output wire [NPINS - 1:0] gpio_pu_o;
+	output wire [NPINS - 1:0] gpio_pd_o;
+	input wire [NPINS - 1:0] gpio_i;
+	output wire adc_start_o;
+	output wire [3:0] adc_chan_o;
+	input wire adc_done_i;
+	input wire [11:0] adc_code_i;
+	output reg wdt_toggle_o;
+	input wire usb_clk_i;
+	inout wire usb_dp_io;
+	inout wire usb_dn_io;
+	output wire usb_pu_o;
+	output reg [31:0] us_gray_o;
+	output reg [31:0] ms_gray_o;
+	output reg dbg_valid_o;
+	output reg [7:0] dbg_byte_o;
+	output reg halt_o;
+	output reg [31:0] halt_value_o;
+	output wire sleep_o;
+	localparam signed [31:0] CAW = $clog2(CODE_WORDS);
+	localparam signed [31:0] DAW = $clog2(DATA_WORDS);
+	localparam [31:0] ID = 32'h494f4301;
+	reg [1:0] run_q;
+	wire core_rst_n;
+	always @(posedge io_clk_i or negedge io_rst_n_i)
+		if (!io_rst_n_i)
+			run_q <= 2'b00;
+		else
+			run_q <= {run_q[0], run_i};
+	assign core_rst_n = run_q[1];
+	wire i_req;
+	wire i_gnt;
+	reg i_rvalid;
+	reg i_err;
+	wire [31:0] i_addr;
+	wire [31:0] i_rdata;
+	wire d_req;
+	wire d_gnt;
+	reg d_rvalid;
+	wire d_we;
+	reg d_err;
+	wire [3:0] d_be;
+	wire [31:0] d_addr;
+	wire [31:0] d_wdata;
+	wire [31:0] d_rdata;
+	wire irq_timer;
+	wire irq_ext;
+	iocore_cpu #(
+		.CORE(CORE),
+		.MUL(MUL)
+	) u_cpu(
+		.clk_i(io_clk_i),
+		.rst_n_i(core_rst_n),
+		.i_req_o(i_req),
+		.i_gnt_i(i_gnt),
+		.i_addr_o(i_addr),
+		.i_rvalid_i(i_rvalid),
+		.i_rdata_i(i_rdata),
+		.i_err_i(i_err),
+		.d_req_o(d_req),
+		.d_gnt_i(d_gnt),
+		.d_we_o(d_we),
+		.d_be_o(d_be),
+		.d_addr_o(d_addr),
+		.d_wdata_o(d_wdata),
+		.d_rvalid_i(d_rvalid),
+		.d_rdata_i(d_rdata),
+		.d_err_i(d_err),
+		.irq_timer_i(irq_timer),
+		.irq_ext_i(irq_ext),
+		.core_sleep_o(sleep_o)
+	);
+	wire ld_we;
+	wire ld_data;
+	wire [15:0] ld_idx_i;
+	wire [31:0] ld_wdata_i;
+	assign ld_we = ld_valid_i;
+	assign ld_pop_o = ld_valid_i;
+	assign ld_data = ld_data_i[48];
+	assign ld_idx_i = ld_data_i[47:32];
+	assign ld_wdata_i = ld_data_i[31:0];
+	wire c_v;
+	wire c_w;
+	wire [CAW - 1:0] c_a;
+	wire [31:0] c_d;
+	wire [31:0] c_q;
+	wire i_bad;
+	function automatic signed [31:0] sv2v_cast_32_signed;
+		input reg signed [31:0] inp;
+		sv2v_cast_32_signed = inp;
+	endfunction
+	assign i_bad = i_addr >= sv2v_cast_32_signed(CODE_WORDS * 4);
+	assign i_gnt = i_req && core_rst_n;
+	assign c_v = (ld_we ? !ld_data : (i_req && i_gnt) && !i_bad);
+	assign c_w = ld_we;
+	function automatic [CAW - 1:0] sv2v_cast_5C013;
+		input reg [CAW - 1:0] inp;
+		sv2v_cast_5C013 = inp;
+	endfunction
+	assign c_a = (ld_we ? sv2v_cast_5C013(ld_idx_i) : i_addr[CAW + 1:2]);
+	assign c_d = ld_wdata_i;
+	bsg_mem_1rw_sync_mask_write_bit #(
+		.width_p(32),
+		.els_p(CODE_WORDS)
+	) u_code(
+		.clk_i(io_clk_i),
+		.reset_i(1'b0),
+		.data_i(c_d),
+		.addr_i(c_a),
+		.v_i(c_v),
+		.w_mask_i(32'hffffffff),
+		.w_i(c_w),
+		.data_o(c_q)
+	);
+	always @(posedge io_clk_i or negedge core_rst_n)
+		if (!core_rst_n) begin
+			i_rvalid <= 1'b0;
+			i_err <= 1'b0;
+		end
+		else begin
+			i_rvalid <= i_req && i_gnt;
+			i_err <= (i_req && i_gnt) && i_bad;
+		end
+	assign i_rdata = c_q;
+	localparam [3:0] R_NONE = 4'd0;
+	localparam [3:0] R_DATA = 4'd1;
+	localparam [3:0] R_SYS = 4'd2;
+	localparam [3:0] R_TIMER = 4'd3;
+	localparam [3:0] R_UART = 4'd4;
+	localparam [3:0] R_BRIDGE = 4'd5;
+	localparam [3:0] R_GPIO = 4'd6;
+	localparam [3:0] R_PWM = 4'd7;
+	localparam [3:0] R_SPI = 4'd8;
+	localparam [3:0] R_I2C = 4'd9;
+	localparam [3:0] R_WDT = 4'd10;
+	localparam [3:0] R_ADC = 4'd11;
+	localparam [3:0] R_MUX = 4'd12;
+	localparam [3:0] R_USB = 4'd13;
+	localparam [3:0] R_USB_RX = 4'd14;
+	localparam [3:0] R_USB_TX = 4'd15;
+	function automatic [17:0] sv2v_cast_18;
+		input reg [17:0] inp;
+		sv2v_cast_18 = inp;
+	endfunction
+	function automatic [20:0] sv2v_cast_21;
+		input reg [20:0] inp;
+		sv2v_cast_21 = inp;
+	endfunction
+	function automatic [3:0] region;
+		input reg [31:0] a;
+		reg [0:1] _sv2v_jump;
+		begin
+			_sv2v_jump = 2'b00;
+			if ((a >= 32'h00010000) && (a < (32'h00010000 + sv2v_cast_32_signed(DATA_WORDS * 4)))) begin
+				region = R_DATA;
+				_sv2v_jump = 2'b11;
+			end
+			if (_sv2v_jump == 2'b00) begin
+				if (a[31:12] == 20'h80000) begin
+					region = R_SYS;
+					_sv2v_jump = 2'b11;
+				end
+				if (_sv2v_jump == 2'b00) begin
+					if (a[31:12] == 20'h80001) begin
+						region = R_TIMER;
+						_sv2v_jump = 2'b11;
+					end
+					if (_sv2v_jump == 2'b00) begin
+						if (a[31:12] == 20'h80002) begin
+							region = R_UART;
+							_sv2v_jump = 2'b11;
+						end
+						if (_sv2v_jump == 2'b00) begin
+							if (a[31:12] == 20'h80003) begin
+								region = R_BRIDGE;
+								_sv2v_jump = 2'b11;
+							end
+							if (_sv2v_jump == 2'b00) begin
+								if (a[31:12] == 20'h80004) begin
+									region = R_GPIO;
+									_sv2v_jump = 2'b11;
+								end
+								if (_sv2v_jump == 2'b00) begin
+									if (a[31:12] == 20'h80005) begin
+										region = R_PWM;
+										_sv2v_jump = 2'b11;
+									end
+									if (_sv2v_jump == 2'b00) begin
+										if (a[31:12] == 20'h80006) begin
+											region = R_SPI;
+											_sv2v_jump = 2'b11;
+										end
+										if (_sv2v_jump == 2'b00) begin
+											if (a[31:12] == 20'h80007) begin
+												region = R_I2C;
+												_sv2v_jump = 2'b11;
+											end
+											if (_sv2v_jump == 2'b00) begin
+												if (a[31:12] == 20'h80008) begin
+													region = R_WDT;
+													_sv2v_jump = 2'b11;
+												end
+												if (_sv2v_jump == 2'b00) begin
+													if (a[31:12] == 20'h80009) begin
+														region = R_ADC;
+														_sv2v_jump = 2'b11;
+													end
+													if (_sv2v_jump == 2'b00) begin
+														if (a[31:12] == 20'h8000a) begin
+															region = R_MUX;
+															_sv2v_jump = 2'b11;
+														end
+														if (_sv2v_jump == 2'b00) begin
+															if (a[31:14] == sv2v_cast_18(32'h80010000 >> 14)) begin
+																region = R_USB;
+																_sv2v_jump = 2'b11;
+															end
+															if (_sv2v_jump == 2'b00) begin
+																if (a[31:11] == sv2v_cast_21(32'h80020000 >> 11)) begin
+																	region = R_USB_RX;
+																	_sv2v_jump = 2'b11;
+																end
+																if (_sv2v_jump == 2'b00) begin
+																	if (a[31:11] == sv2v_cast_21(32'h80030000 >> 11)) begin
+																		region = R_USB_TX;
+																		_sv2v_jump = 2'b11;
+																	end
+																	if (_sv2v_jump == 2'b00) begin
+																		region = R_NONE;
+																		_sv2v_jump = 2'b11;
+																	end
+																end
+															end
+														end
+													end
+												end
+											end
+										end
+									end
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+	endfunction
+	wire [3:0] rgn;
+	reg [3:0] sel_q;
+	wire take;
+	wire uart_ready;
+	wire br_ready;
+	reg [31:0] rdata_q;
+	wire [31:0] timer_rdata;
+	wire [31:0] uart_rdata;
+	reg [31:0] sys_rdata;
+	wire [31:0] br_rdata;
+	wire [31:0] gpio_rdata;
+	wire [31:0] pwm_rdata;
+	wire [31:0] spi_rdata;
+	wire [31:0] i2c_rdata;
+	wire [31:0] wdt_rdata;
+	wire [31:0] adc_rdata;
+	wire [31:0] mux_rdata;
+	wire uart_irq;
+	wire br_irq;
+	wire gpio_irq;
+	wire spi_irq;
+	wire i2c_irq;
+	wire [7:0] off;
+	wire bad_size;
+	assign rgn = region(d_addr);
+	assign off = d_addr[7:0];
+	assign bad_size = (rgn != R_DATA) && ((d_be != 4'hf) || (d_addr[1:0] != 2'b00));
+	reg pw_v;
+	reg pw_we;
+	reg [3:0] pw_rgn;
+	reg [7:0] pw_off;
+	reg [31:0] pw_wdata;
+	wire ep_take;
+	wire usb_busy;
+	wire usb_done;
+	wire usb_take;
+	wire usb_irq;
+	wire [31:0] usb_rdata;
+	assign d_gnt = ((d_req && !pw_v) && !usb_busy) && ((((rgn != R_UART) || uart_ready) && ((rgn != R_BRIDGE) || br_ready)) || bad_size);
+	assign take = d_req && d_gnt;
+	assign ep_take = ((take && !bad_size) && (rgn >= R_PWM)) && (rgn <= R_MUX);
+	assign usb_take = (take && !bad_size) && (rgn >= R_USB);
+	always @(posedge io_clk_i or negedge core_rst_n)
+		if (!core_rst_n) begin
+			pw_v <= 1'b0;
+			pw_we <= 1'b0;
+			pw_rgn <= R_NONE;
+			pw_off <= 8'h00;
+			pw_wdata <= 32'h00000000;
+		end
+		else begin
+			pw_v <= ep_take;
+			pw_we <= d_we;
+			pw_rgn <= rgn;
+			pw_off <= off;
+			pw_wdata <= d_wdata;
+		end
+	function automatic ep_req;
+		input reg [3:0] r;
+		ep_req = pw_v && (pw_rgn == r);
+	endfunction
+	reg m_v;
+	reg m_w;
+	reg [DAW - 1:0] m_a;
+	reg [31:0] m_d;
+	reg [31:0] m_mask;
+	wire [31:0] m_q;
+	function automatic [DAW - 1:0] sv2v_cast_99844;
+		input reg [DAW - 1:0] inp;
+		sv2v_cast_99844 = inp;
+	endfunction
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		if (ld_we) begin
+			m_v = ld_data;
+			m_w = 1'b1;
+			m_a = sv2v_cast_99844(ld_idx_i);
+			m_d = ld_wdata_i;
+			m_mask = 1'sb1;
+		end
+		else begin
+			m_v = take && (rgn == R_DATA);
+			m_w = d_we;
+			m_a = d_addr[DAW + 1:2];
+			m_d = d_wdata;
+			m_mask = {{8 {d_be[3]}}, {8 {d_be[2]}}, {8 {d_be[1]}}, {8 {d_be[0]}}};
+		end
+	end
+	bsg_mem_1rw_sync_mask_write_bit #(
+		.width_p(32),
+		.els_p(DATA_WORDS)
+	) u_data(
+		.clk_i(io_clk_i),
+		.reset_i(1'b0),
+		.data_i(m_d),
+		.addr_i(m_a),
+		.v_i(m_v),
+		.w_mask_i(m_mask),
+		.w_i(m_w),
+		.data_o(m_q)
+	);
+	localparam [7:0] S_ID = 8'h00;
+	localparam [7:0] S_DEBUG = 8'h04;
+	localparam [7:0] S_HALT = 8'h08;
+	localparam [7:0] S_IRQ_PEND = 8'h0c;
+	localparam [7:0] S_IRQ_EN = 8'h10;
+	localparam [7:0] S_SCRATCH = 8'h14;
+	localparam [7:0] S_FREQ = 8'h18;
+	localparam [7:0] S_CON_MODE = 8'h1c;
+	reg [1:0] cm_s1;
+	reg [1:0] cm_s2;
+	always @(posedge io_clk_i or negedge io_rst_n_i)
+		if (!io_rst_n_i) begin
+			cm_s1 <= 2'd0;
+			cm_s2 <= 2'd0;
+		end
+		else begin
+			cm_s1 <= con_mode_i;
+			cm_s2 <= cm_s1;
+		end
+	wire [31:0] freq;
+	assign freq = IOCLK_HZ;
+	localparam signed [31:0] NIRQ = 8;
+	wire [7:0] irq_src;
+	reg [7:0] irq_en_r;
+	reg [31:0] scratch_r;
+	wire sys_sel;
+	wire timer_sel;
+	wire uart_sel;
+	wire br_sel;
+	wire gpio_sel;
+	assign sys_sel = (take && !bad_size) && (rgn == R_SYS);
+	assign timer_sel = (take && !bad_size) && (rgn == R_TIMER);
+	assign uart_sel = (take && !bad_size) && (rgn == R_UART);
+	assign br_sel = (take && !bad_size) && (rgn == R_BRIDGE);
+	assign gpio_sel = (take && !bad_size) && (rgn == R_GPIO);
+	assign irq_src = {{2 {1'b0}}, usb_irq, i2c_irq, spi_irq, gpio_irq, br_irq, uart_irq};
+	assign irq_ext = |(irq_src & irq_en_r);
+	function automatic [31:0] sv2v_cast_32;
+		input reg [31:0] inp;
+		sv2v_cast_32 = inp;
+	endfunction
+	always @(*) begin
+		if (_sv2v_0)
+			;
+		case (off)
+			S_ID: sys_rdata = ID;
+			S_IRQ_PEND: sys_rdata = sv2v_cast_32(irq_src);
+			S_IRQ_EN: sys_rdata = sv2v_cast_32(irq_en_r);
+			S_SCRATCH: sys_rdata = scratch_r;
+			S_FREQ: sys_rdata = freq;
+			S_CON_MODE: sys_rdata = {30'h00000000, cm_s2};
+			default: sys_rdata = 32'h00000000;
+		endcase
+	end
+	always @(posedge io_clk_i or negedge core_rst_n)
+		if (!core_rst_n) begin
+			irq_en_r <= 1'sb0;
+			scratch_r <= 32'h00000000;
+			dbg_valid_o <= 1'b0;
+			dbg_byte_o <= 8'h00;
+			halt_o <= 1'b0;
+			halt_value_o <= 32'h00000000;
+		end
+		else begin
+			dbg_valid_o <= 1'b0;
+			if (sys_sel && d_we)
+				case (off)
+					S_DEBUG: begin
+						dbg_valid_o <= 1'b1;
+						dbg_byte_o <= d_wdata[7:0];
+					end
+					S_HALT: begin
+						halt_o <= 1'b1;
+						halt_value_o <= d_wdata;
+					end
+					S_IRQ_EN: irq_en_r <= d_wdata[7:0];
+					S_SCRATCH: scratch_r <= d_wdata;
+					default:
+						;
+				endcase
+		end
+	wire [31:0] us_bin;
+	wire [31:0] ms_bin;
+	wire ms_tick;
+	iocore_timer #(.US_DIV_RESET(US_DIV_RESET)) u_timer(
+		.clk_i(io_clk_i),
+		.rst_n_i(core_rst_n),
+		.sel_i(timer_sel),
+		.we_i(d_we),
+		.off_i(off),
+		.wdata_i(d_wdata),
+		.rdata_o(timer_rdata),
+		.irq_o(irq_timer),
+		.us_tick_o(),
+		.ms_tick_o(ms_tick),
+		.us_o(us_bin),
+		.ms_o(ms_bin)
+	);
+	always @(posedge io_clk_i or negedge core_rst_n)
+		if (!core_rst_n) begin
+			us_gray_o <= 32'h00000000;
+			ms_gray_o <= 32'h00000000;
+		end
+		else begin
+			us_gray_o <= us_bin ^ (us_bin >> 1);
+			ms_gray_o <= ms_bin ^ (ms_bin >> 1);
+		end
+	wire [NPINS - 1:0] g_out;
+	wire [NPINS - 1:0] g_oe;
+	iocore_gpio #(.NPINS(NPINS)) u_gpio(
+		.clk_i(io_clk_i),
+		.rst_n_i(core_rst_n),
+		.sel_i(gpio_sel),
+		.we_i(d_we),
+		.off_i(off),
+		.wdata_i(d_wdata),
+		.rdata_o(gpio_rdata),
+		.irq_o(gpio_irq),
+		.out_o(g_out),
+		.oe_o(g_oe),
+		.pu_o(gpio_pu_o),
+		.pd_o(gpio_pd_o),
+		.in_i(gpio_i),
+		.level_o(),
+		.hit_o()
+	);
+	wire [3:0] pwm;
+	wire spi_sck;
+	wire spi_mosi;
+	wire spi_miso;
+	wire scl_low;
+	wire sda_low;
+	wire scl_in;
+	wire sda_in;
+	wire uart_rxd_mux;
+	wire uart_txd;
+	wire wdt_reset;
+	iocore_pwm u_pwm(
+		.clk_i(io_clk_i),
+		.rst_n_i(core_rst_n),
+		.req_i(ep_req(R_PWM)),
+		.we_i(pw_we),
+		.off_i({4'h2, pw_off}),
+		.wdata_i(pw_wdata),
+		.rdata_o(pwm_rdata),
+		.pwm_o(pwm),
+		.wrap_o()
+	);
+	iocore_spi u_spi(
+		.clk_i(io_clk_i),
+		.rst_n_i(core_rst_n),
+		.req_i(ep_req(R_SPI)),
+		.we_i(pw_we),
+		.off_i({4'h3, pw_off}),
+		.wdata_i(pw_wdata),
+		.rdata_o(spi_rdata),
+		.sck_o(spi_sck),
+		.mosi_o(spi_mosi),
+		.miso_i(spi_miso),
+		.irq_o(spi_irq)
+	);
+	iocore_i2c u_i2c(
+		.clk_i(io_clk_i),
+		.rst_n_i(core_rst_n),
+		.req_i(ep_req(R_I2C)),
+		.we_i(pw_we),
+		.off_i({4'h4, pw_off}),
+		.wdata_i(pw_wdata),
+		.rdata_o(i2c_rdata),
+		.scl_low_o(scl_low),
+		.sda_low_o(sda_low),
+		.scl_i(scl_in),
+		.sda_i(sda_in),
+		.irq_o(i2c_irq)
+	);
+	iocore_wdt u_wdt(
+		.clk_i(io_clk_i),
+		.rst_n_i(core_rst_n),
+		.req_i(ep_req(R_WDT)),
+		.we_i(pw_we),
+		.off_i({4'h5, pw_off}),
+		.wdata_i(pw_wdata),
+		.rdata_o(wdt_rdata),
+		.tick_i(ms_tick),
+		.wdt_reset_o(wdt_reset)
+	);
+	iocore_adc u_adc(
+		.clk_i(io_clk_i),
+		.rst_n_i(core_rst_n),
+		.req_i(ep_req(R_ADC)),
+		.we_i(pw_we),
+		.off_i({4'h8, pw_off}),
+		.wdata_i(pw_wdata),
+		.rdata_o(adc_rdata),
+		.adc_start_o(adc_start_o),
+		.adc_chan_o(adc_chan_o),
+		.adc_done_i(adc_done_i),
+		.adc_code_i(adc_code_i)
+	);
+	iocore_pinmux u_mux(
+		.clk_i(io_clk_i),
+		.rst_n_i(core_rst_n),
+		.req_i(ep_req(R_MUX)),
+		.we_i(pw_we),
+		.off_i({4'h9, pw_off}),
+		.wdata_i(pw_wdata),
+		.rdata_o(mux_rdata),
+		.gpio_out_i(g_out),
+		.gpio_oe_i(g_oe),
+		.pwm_i(pwm),
+		.spi_sck_i(spi_sck),
+		.spi_mosi_i(spi_mosi),
+		.i2c_scl_low_i(scl_low),
+		.i2c_sda_low_i(sda_low),
+		.uart_txd_i(uart_txd),
+		.uart_rxd_pin_i(uart_rxd_i),
+		.spi_miso_o(spi_miso),
+		.i2c_scl_o(scl_in),
+		.i2c_sda_o(sda_in),
+		.uart_rxd_o(uart_rxd_mux),
+		.pad_out_o(gpio_o),
+		.pad_oe_o(gpio_oe_o),
+		.pad_in_i(gpio_i)
+	);
+	assign uart_txd_o = uart_txd;
+	always @(posedge io_clk_i or negedge io_rst_n_i)
+		if (!io_rst_n_i)
+			wdt_toggle_o <= 1'b0;
+		else if (wdt_reset)
+			wdt_toggle_o <= !wdt_toggle_o;
+	iocore_uart #(.BAUD_RESET(BAUD_RESET)) u_uart(
+		.clk_i(io_clk_i),
+		.rst_n_i(core_rst_n),
+		.sel_i(uart_sel),
+		.we_i(d_we),
+		.off_i(off),
+		.wdata_i(d_wdata),
+		.ready_o(uart_ready),
+		.rdata_o(uart_rdata),
+		.rxd_i(uart_rxd_mux),
+		.txd_o(uart_txd),
+		.irq_o(uart_irq),
+		.rx_byte_o()
+	);
+	iocore_bridge u_bridge(
+		.clk_i(io_clk_i),
+		.rst_n_i(core_rst_n),
+		.sel_i(br_sel),
+		.we_i(d_we),
+		.off_i(d_addr[11:0]),
+		.wdata_i(d_wdata),
+		.ready_o(br_ready),
+		.rdata_o(br_rdata),
+		.irq_o(br_irq),
+		.cmd_pop_o(cmd_pop_o),
+		.cmd_data_i(cmd_data_i),
+		.cmd_empty_i(cmd_empty_i),
+		.cmd_level_i(cmd_level_i),
+		.rsp_push_o(rsp_push_o),
+		.rsp_data_o(rsp_data_o),
+		.rsp_full_i(rsp_full_i),
+		.evt_push_o(evt_push_o),
+		.evt_data_o(evt_data_o),
+		.evt_full_i(evt_full_i),
+		.con_pop_o(con_pop_o),
+		.con_data_i(con_data_i),
+		.con_empty_i(con_empty_i),
+		.con_level_i(con_level_i),
+		.conrx_push_o(conrx_push_o),
+		.conrx_data_o(conrx_data_o),
+		.conrx_full_i(conrx_full_i),
+		.upd_push_o(upd_push_o),
+		.upd_data_o(upd_data_o),
+		.upd_full_i(upd_full_i),
+		.dn_pop_o(dn_pop_o),
+		.dn_data_i(dn_data_i),
+		.dn_empty_i(dn_empty_i)
+	);
+	iocore_usb u_usb(
+		.io_clk_i(io_clk_i),
+		.rst_n_i(core_rst_n),
+		.req_i(usb_take),
+		.kind_i((rgn == R_USB ? 2'd0 : (rgn == R_USB_RX ? 2'd1 : 2'd2))),
+		.we_i(d_we),
+		.addr_i(d_addr[13:2]),
+		.wdata_i(d_wdata),
+		.busy_o(usb_busy),
+		.done_o(usb_done),
+		.rdata_o(usb_rdata),
+		.irq_o(usb_irq),
+		.usb_clk_i(usb_clk_i),
+		.usb_dp_io(usb_dp_io),
+		.usb_dn_io(usb_dn_io),
+		.usb_pu_o(usb_pu_o)
+	);
+	always @(posedge io_clk_i or negedge core_rst_n)
+		if (!core_rst_n) begin
+			d_rvalid <= 1'b0;
+			d_err <= 1'b0;
+			sel_q <= R_NONE;
+			rdata_q <= 32'h00000000;
+		end
+		else begin
+			d_rvalid <= (((take && !ep_take) && !usb_take) || pw_v) || usb_done;
+			d_err <= take && ((rgn == R_NONE) || bad_size);
+			sel_q <= (pw_v ? pw_rgn : (usb_done ? R_USB : rgn));
+			if (usb_done)
+				rdata_q <= usb_rdata;
+			else if (pw_v)
+				case (pw_rgn)
+					R_PWM: rdata_q <= pwm_rdata;
+					R_SPI: rdata_q <= spi_rdata;
+					R_I2C: rdata_q <= i2c_rdata;
+					R_WDT: rdata_q <= wdt_rdata;
+					R_ADC: rdata_q <= adc_rdata;
+					default: rdata_q <= mux_rdata;
+				endcase
+			else
+				case (rgn)
+					R_SYS: rdata_q <= sys_rdata;
+					R_TIMER: rdata_q <= timer_rdata;
+					R_UART: rdata_q <= uart_rdata;
+					R_BRIDGE: rdata_q <= br_rdata;
+					R_GPIO: rdata_q <= gpio_rdata;
+					default: rdata_q <= 32'h00000000;
+				endcase
+		end
+	assign d_rdata = (sel_q == R_DATA ? m_q : rdata_q);
+	initial _sv2v_0 = 0;
+endmodule
 module mpy_soc (
 	clk_i,
 	rst_n_i,
@@ -19566,7 +33790,26 @@ module mpy_soc (
 	nand_mosi_o,
 	nand_miso_i,
 	boot_done_o,
-	boot_err_o
+	boot_err_o,
+	io_clk_i,
+	console_sel_i,
+	uart0_rxd_i,
+	uart0_txd_o,
+	gpio_o,
+	gpio_oe_o,
+	gpio_pu_o,
+	gpio_pd_o,
+	gpio_i,
+	adc_start_o,
+	adc_chan_o,
+	adc_done_i,
+	adc_code_i,
+	usb_clk_i,
+	usb_dp_io,
+	usb_dn_io,
+	usb_pu_o,
+	ioc_dbg_valid_o,
+	ioc_dbg_byte_o
 );
 	localparam signed [31:0] MPY_SRAM_LATENCY = 1;
 	parameter signed [31:0] SRAM_LATENCY = MPY_SRAM_LATENCY;
@@ -19577,7 +33820,7 @@ module mpy_soc (
 	parameter signed [31:0] FLASH_WAIT_STATES = MPY_FLASH_WAIT_STATES;
 	input wire clk_i;
 	input wire rst_n_i;
-	output reg con_valid_o;
+	output wire con_valid_o;
 	output reg con_err_o;
 	output reg [7:0] con_byte_o;
 	output wire halted_o;
@@ -19597,6 +33840,25 @@ module mpy_soc (
 	input wire nand_miso_i;
 	output wire boot_done_o;
 	output wire boot_err_o;
+	input wire io_clk_i;
+	input wire [1:0] console_sel_i;
+	input wire uart0_rxd_i;
+	output wire uart0_txd_o;
+	output wire [15:0] gpio_o;
+	output wire [15:0] gpio_oe_o;
+	output wire [15:0] gpio_pu_o;
+	output wire [15:0] gpio_pd_o;
+	input wire [15:0] gpio_i;
+	output wire adc_start_o;
+	output wire [3:0] adc_chan_o;
+	input wire adc_done_i;
+	input wire [11:0] adc_code_i;
+	input wire usb_clk_i;
+	inout wire usb_dp_io;
+	inout wire usb_dn_io;
+	output wire usb_pu_o;
+	output wire ioc_dbg_valid_o;
+	output wire [7:0] ioc_dbg_byte_o;
 	wire c_req;
 	wire c_we;
 	wire c_tag_we;
@@ -19720,6 +33982,7 @@ module mpy_soc (
 	wire [31:0] am_wdata;
 	wire [3:0] am_wtag;
 	wire core_halted;
+	wire io_evt_pend;
 	wire [3:0] core_hcode;
 	wire [31:0] core_hval;
 	wire [31:0] core_cycles;
@@ -19749,15 +34012,30 @@ module mpy_soc (
 	wire [31:0] ld_wdata;
 	wire [3:0] ld_wtag;
 	reg [1:0] por_q;
-	wire por_n;
+	wire pwr_n;
+	reg por_n;
 	reg boot_rst_n;
 	reg gc_rst_n;
+	wire sys_req;
+	reg [4:0] sys_hold;
 	always @(posedge clk_i or negedge rst_n_i)
 		if (!rst_n_i)
 			por_q <= 2'b00;
 		else
 			por_q <= {por_q[0], 1'b1};
-	assign por_n = por_q[1];
+	assign pwr_n = por_q[1];
+	always @(posedge clk_i or negedge pwr_n)
+		if (!pwr_n) begin
+			por_n <= 1'b0;
+			sys_hold <= 5'd0;
+		end
+		else begin
+			if (sys_req)
+				sys_hold <= 5'd31;
+			else if (sys_hold != 5'd0)
+				sys_hold <= sys_hold - 5'd1;
+			por_n <= !sys_req && (sys_hold == 5'd0);
+		end
 	always @(posedge clk_i or negedge por_n)
 		if (!por_n) begin
 			layout_error <= 1'b0;
@@ -19782,6 +34060,11 @@ module mpy_soc (
 				sys_rst_n <= 1'b1;
 		end
 	assign boot_done_o = sys_rst_n;
+	wire ioc_we;
+	wire ioc_stall;
+	wire ioc_loaded;
+	wire ioc_ld_idle;
+	wire [48:0] ioc_data;
 	mpy_boot u_boot(
 		.clk_i(clk_i),
 		.rst_n_i(boot_rst_n),
@@ -19793,6 +34076,10 @@ module mpy_soc (
 		.ld_idx_o(ld_idx),
 		.ld_wdata_o(ld_wdata),
 		.ld_wtag_o(ld_wtag),
+		.ioc_we_o(ioc_we),
+		.ioc_data_o(ioc_data),
+		.ioc_stall_i(ioc_stall),
+		.ioc_loaded_o(ioc_loaded),
 		.image_words_o(image_words),
 		.pool_bytes_o(requested_pool),
 		.done_o(boot_done),
@@ -19883,6 +34170,7 @@ module mpy_soc (
 		.ca_fault_i(ca_fault),
 		.ca_fault_reason_i(ca_fault_reason),
 		.ca_fault_addr_i(ca_fault_addr),
+		.evt_pend_i(io_evt_pend),
 		.halted_o(core_halted),
 		.halt_code_o(core_hcode),
 		.halt_value_o(core_hval),
@@ -20002,7 +34290,8 @@ module mpy_soc (
 	mpy_mem #(
 		.NP(4),
 		.FLASH_WAIT_STATES(FLASH_WAIT_STATES),
-		.SRAM_LATENCY(SRAM_LATENCY)
+		.SRAM_LATENCY(SRAM_LATENCY),
+		.EARLY(4'b0110)
 	) u_mem(
 		.clk_i(clk_i),
 		.rst_n_i(por_n),
@@ -20027,34 +34316,21 @@ module mpy_soc (
 		.init_done_o(mem_ready)
 	);
 	wire c_sim;
-	localparam [2:0] MPY_REGION_SIM = 3'd4;
-	localparam [31:0] MPY_FLASH_BYTES = MPY_MEM_BYTES;
-	localparam [31:0] MPY_MMIO_BASE = 32'h40000000;
-	localparam [31:0] MPY_MMIO_BYTES = 32'h00001000;
-	localparam [2:0] MPY_REGION_FLASH = 3'd1;
-	localparam [2:0] MPY_REGION_MMIO = 3'd3;
-	localparam [2:0] MPY_REGION_NONE = 3'd0;
-	localparam [2:0] MPY_REGION_SRAM = 3'd2;
+	wire c_io;
+	wire c_simpage;
 	localparam [31:0] MPY_SIM_BASE = 32'he0000000;
-	localparam [31:0] MPY_SIM_BYTES = 32'd256;
-	localparam [31:0] MPY_SRAM_BYTES = MPY_MEM_BYTES;
-	function automatic [2:0] mpy_region_of;
-		input reg [31:0] addr;
-		if (addr < MPY_FLASH_BYTES)
-			mpy_region_of = MPY_REGION_FLASH;
-		else if ((addr >= MPY_SRAM_BASE) && ((addr - MPY_SRAM_BASE) < MPY_SRAM_BYTES))
-			mpy_region_of = MPY_REGION_SRAM;
-		else if ((addr >= MPY_MMIO_BASE) && ((addr - MPY_MMIO_BASE) < MPY_MMIO_BYTES))
-			mpy_region_of = MPY_REGION_MMIO;
-		else if ((addr >= MPY_SIM_BASE) && ((addr - MPY_SIM_BASE) < MPY_SIM_BYTES))
-			mpy_region_of = MPY_REGION_SIM;
-		else
-			mpy_region_of = MPY_REGION_NONE;
-	endfunction
-	assign c_sim = mpy_region_of(c_addr) == MPY_REGION_SIM;
+	assign c_simpage = c_addr[31:8] == MPY_SIM_BASE[31:8];
+	localparam [31:0] MPY_MMIO_BASE = 32'h40000000;
+	assign c_io = ((c_addr[31:12] == MPY_MMIO_BASE[31:12]) && (c_addr[1:0] == 2'b00)) && ((((c_addr[11:6] == 6'd0) && (c_addr[5:2] <= 4'd13)) || (c_addr[11:7] == 5'b10000)) || (c_addr[11:5] == 7'b1100000));
+	assign c_sim = c_simpage || c_io;
 	reg k_we;
 	reg k_tag_we;
 	reg k_sim;
+	reg k_io;
+	wire p_io;
+	wire io_acc;
+	wire io_stall;
+	wire [31:0] io_rdata;
 	reg [3:0] k_be;
 	reg [3:0] k_wtag;
 	reg [31:0] k_addr;
@@ -20062,13 +34338,15 @@ module mpy_soc (
 	reg [2:0] c_out;
 	assign p_req = c_pend || c_req;
 	assign p_sim = (c_pend ? k_sim : c_sim);
+	assign p_io = (c_pend ? k_io : c_io);
 	assign p_we = (c_pend ? k_we : c_we);
 	assign p_tag_we = (c_pend ? k_tag_we : c_tag_we);
 	assign p_be = (c_pend ? k_be : c_be);
 	assign p_wtag = (c_pend ? k_wtag : c_wtag);
 	assign p_addr = (c_pend ? k_addr : c_addr);
 	assign p_wdata = (c_pend ? k_wdata : c_wdata);
-	assign sim_go = (p_req && p_sim) && (c_out == 3'd0);
+	assign sim_go = ((p_req && !io_stall) && (c_out == 3'd0)) && p_sim;
+	assign io_acc = sim_go && p_io;
 	assign p_taken = m_gnt[P_CORE] || sim_go;
 	always @(posedge clk_i or negedge por_n)
 		if (!por_n) begin
@@ -20077,6 +34355,7 @@ module mpy_soc (
 			k_we <= 1'b0;
 			k_tag_we <= 1'b0;
 			k_sim <= 1'b0;
+			k_io <= 1'b0;
 			k_be <= 4'd0;
 			k_wtag <= 4'd0;
 			k_addr <= 32'd0;
@@ -20092,6 +34371,7 @@ module mpy_soc (
 				k_we <= c_we;
 				k_tag_we <= c_tag_we;
 				k_sim <= c_sim;
+				k_io <= c_io;
 				k_be <= c_be;
 				k_wtag <= c_wtag;
 				k_addr <= c_addr;
@@ -20100,7 +34380,39 @@ module mpy_soc (
 			c_out <= (c_out + (m_gnt[P_CORE] ? 3'd1 : 3'd0)) - (m_ack[P_CORE] ? 3'd1 : 3'd0);
 		end
 	reg sim_ack;
+	reg con_valid_r;
 	reg [31:0] sim_rdata;
+	reg [1:0] con_sel_q;
+	reg [1:0] con_mode;
+	wire con_redir;
+	always @(posedge clk_i or negedge por_n)
+		if (!por_n) begin
+			con_sel_q <= 2'd0;
+			con_mode <= 2'd0;
+		end
+		else begin
+			con_sel_q <= console_sel_i;
+			con_mode <= con_sel_q;
+		end
+	assign con_redir = con_mode != 2'd0;
+	assign con_valid_o = con_valid_r && !con_redir;
+	reg io_q_v;
+	reg io_q_we;
+	reg [9:0] io_q_off;
+	reg [31:0] io_q_wdata;
+	always @(posedge clk_i or negedge por_n)
+		if (!por_n) begin
+			io_q_v <= 1'b0;
+			io_q_we <= 1'b0;
+			io_q_off <= 1'sb0;
+			io_q_wdata <= 1'sb0;
+		end
+		else begin
+			io_q_v <= io_acc;
+			io_q_we <= p_we;
+			io_q_off <= p_addr[11:2];
+			io_q_wdata <= p_wdata;
+		end
 	reg sim_halt;
 	reg [31:0] sim_halt_val;
 	localparam [31:0] ABI_SIM_BASE = 32'he0000000;
@@ -20116,7 +34428,7 @@ module mpy_soc (
 		if (!por_n) begin
 			sim_ack <= 1'b0;
 			sim_rdata <= 32'd0;
-			con_valid_o <= 1'b0;
+			con_valid_r <= 1'b0;
 			con_err_o <= 1'b0;
 			con_byte_o <= 8'd0;
 			sim_halt <= 1'b0;
@@ -20124,19 +34436,19 @@ module mpy_soc (
 		end
 		else begin
 			sim_ack <= 1'b0;
-			con_valid_o <= 1'b0;
+			con_valid_r <= 1'b0;
 			if (sim_go) begin
-				sim_ack <= 1'b1;
+				sim_ack <= !p_io;
 				sim_rdata <= 32'd0;
 				if (p_we)
 					case ((p_addr - ABI_SIM_BASE) >> 2)
 						sv2v_cast_32(ABI_SIM_STDOUT): begin
-							con_valid_o <= 1'b1;
+							con_valid_r <= 1'b1;
 							con_err_o <= 1'b0;
 							con_byte_o <= p_wdata[7:0];
 						end
 						sv2v_cast_32(ABI_SIM_STDERR): begin
-							con_valid_o <= 1'b1;
+							con_valid_r <= 1'b1;
 							con_err_o <= 1'b1;
 							con_byte_o <= p_wdata[7:0];
 						end
@@ -20150,13 +34462,17 @@ module mpy_soc (
 				else if (((p_addr - ABI_SIM_BASE) >> 2) == sv2v_cast_32(ABI_SIM_CYCLES))
 					sim_rdata <= core_cycles;
 			end
+			if (io_q_v) begin
+				sim_ack <= 1'b1;
+				sim_rdata <= io_rdata;
+			end
 		end
 	reg g_pend;
 	wire c_want;
 	wire g_want;
 	assign c_want = p_req && !p_sim;
 	assign g_want = g_pend || gm_req;
-	assign m_req = {am_req, f_req && sys_rst_n, c_want && !ca_busy, g_want};
+	assign m_req = {am_req, f_req && sys_rst_n, (c_want && !ca_busy) && !io_q_v, g_want};
 	assign m_we = {am_we, 1'b0, p_we, gm_we};
 	assign m_tag_we = {am_we, 1'b0, p_tag_we, gm_tag_we};
 	assign m_be = {8'hff, p_be, 4'hf};
@@ -20178,6 +34494,158 @@ module mpy_soc (
 	assign c_rtag = (sim_ack ? 4'd0 : m_rtag[4+:4]);
 	assign c_fault = !sim_ack && m_fault[P_CORE];
 	assign c_fault_reason = m_fault_reason[4+:4];
+	reg [1:0] io_por_q;
+	wire io_por_n;
+	always @(posedge io_clk_i or negedge rst_n_i)
+		if (!rst_n_i)
+			io_por_q <= 2'b00;
+		else
+			io_por_q <= {io_por_q[0], 1'b1};
+	assign io_por_n = io_por_q[1];
+	reg ioc_run;
+	always @(posedge clk_i or negedge pwr_n)
+		if (!pwr_n)
+			ioc_run <= 1'b0;
+		else if (((boot_done && ioc_loaded) && ioc_ld_idle) && !ioc_we)
+			ioc_run <= 1'b1;
+	wire b_cmd_pop;
+	wire b_cmd_empty;
+	wire b_rsp_push;
+	wire b_rsp_full;
+	wire b_evt_push;
+	wire b_evt_full;
+	wire b_con_pop;
+	wire b_con_empty;
+	wire b_conrx_push;
+	wire b_conrx_full;
+	wire b_upd_push;
+	wire b_upd_full;
+	wire b_dn_pop;
+	wire b_dn_empty;
+	wire b_ld_pop;
+	wire b_ld_empty;
+	wire [31:0] b_cmd_data;
+	wire [31:0] b_rsp_data;
+	wire [5:0] b_cmd_level;
+	wire [15:0] b_evt_data;
+	wire [8:0] b_con_data;
+	wire [6:0] b_con_level;
+	wire [7:0] b_conrx_data;
+	wire [36:0] b_upd_data;
+	wire [34:0] b_dn_data;
+	wire [48:0] b_ld_data;
+	wire [31:0] b_us_gray;
+	wire [31:0] b_ms_gray;
+	wire b_wdt_toggle;
+	mpy_iobr u_iobr(
+		.clk_i(clk_i),
+		.rst_n_i(pwr_n),
+		.hart_rst_n_i(por_n),
+		.sys_reset_o(sys_req),
+		.wdt_toggle_i(b_wdt_toggle),
+		.acc_i(io_q_v),
+		.we_i(io_q_we),
+		.off_i(io_q_off),
+		.wdata_i(io_q_wdata),
+		.rdata_o(io_rdata),
+		.acc_now_i(io_acc),
+		.stall_o(io_stall),
+		.con_push_i(con_valid_r && con_redir),
+		.con_data_i({con_err_o, con_byte_o}),
+		.con_mode_i(con_mode),
+		.evt_pend_o(io_evt_pend),
+		.ld_push_i(ioc_we && !ioc_run),
+		.ld_data_i(ioc_data),
+		.ld_idle_o(ioc_ld_idle),
+		.run_i(ioc_run),
+		.loaded_i(ioc_loaded),
+		.io_clk_i(io_clk_i),
+		.io_rst_n_i(io_por_n),
+		.us_gray_i(b_us_gray),
+		.ms_gray_i(b_ms_gray),
+		.cmd_pop_i(b_cmd_pop),
+		.cmd_data_o(b_cmd_data),
+		.cmd_empty_o(b_cmd_empty),
+		.cmd_level_o(b_cmd_level),
+		.rsp_push_i(b_rsp_push),
+		.rsp_data_i(b_rsp_data),
+		.rsp_full_o(b_rsp_full),
+		.evt_push_i(b_evt_push),
+		.evt_data_i(b_evt_data),
+		.evt_full_o(b_evt_full),
+		.con_pop_i(b_con_pop),
+		.con_data_o(b_con_data),
+		.con_empty_o(b_con_empty),
+		.con_level_o(b_con_level),
+		.conrx_push_i(b_conrx_push),
+		.conrx_data_i(b_conrx_data),
+		.conrx_full_o(b_conrx_full),
+		.upd_push_i(b_upd_push),
+		.upd_data_i(b_upd_data),
+		.upd_full_o(b_upd_full),
+		.dn_pop_i(b_dn_pop),
+		.dn_data_o(b_dn_data),
+		.dn_empty_o(b_dn_empty),
+		.ld_pop_i(b_ld_pop),
+		.ld_data_o(b_ld_data),
+		.ld_empty_o(b_ld_empty)
+	);
+	assign ioc_stall = io_stall;
+	iocore_top u_ioc(
+		.io_clk_i(io_clk_i),
+		.io_rst_n_i(io_por_n),
+		.run_i(ioc_run),
+		.con_mode_i(console_sel_i),
+		.ld_valid_i(!b_ld_empty),
+		.ld_data_i(b_ld_data),
+		.ld_pop_o(b_ld_pop),
+		.cmd_pop_o(b_cmd_pop),
+		.cmd_data_i(b_cmd_data),
+		.cmd_empty_i(b_cmd_empty),
+		.cmd_level_i(b_cmd_level),
+		.rsp_push_o(b_rsp_push),
+		.rsp_data_o(b_rsp_data),
+		.rsp_full_i(b_rsp_full),
+		.evt_push_o(b_evt_push),
+		.evt_data_o(b_evt_data),
+		.evt_full_i(b_evt_full),
+		.con_pop_o(b_con_pop),
+		.con_data_i(b_con_data),
+		.con_empty_i(b_con_empty),
+		.con_level_i(b_con_level),
+		.conrx_push_o(b_conrx_push),
+		.conrx_data_o(b_conrx_data),
+		.conrx_full_i(b_conrx_full),
+		.upd_push_o(b_upd_push),
+		.upd_data_o(b_upd_data),
+		.upd_full_i(b_upd_full),
+		.dn_pop_o(b_dn_pop),
+		.dn_data_i(b_dn_data),
+		.dn_empty_i(b_dn_empty),
+		.uart_rxd_i(uart0_rxd_i),
+		.uart_txd_o(uart0_txd_o),
+		.gpio_o(gpio_o),
+		.gpio_oe_o(gpio_oe_o),
+		.gpio_pu_o(gpio_pu_o),
+		.gpio_pd_o(gpio_pd_o),
+		.gpio_i(gpio_i),
+		.us_gray_o(b_us_gray),
+		.ms_gray_o(b_ms_gray),
+		.adc_start_o(adc_start_o),
+		.adc_chan_o(adc_chan_o),
+		.adc_done_i(adc_done_i),
+		.adc_code_i(adc_code_i),
+		.wdt_toggle_o(b_wdt_toggle),
+		.usb_clk_i(usb_clk_i),
+		.usb_dp_io(usb_dp_io),
+		.usb_dn_io(usb_dn_io),
+		.usb_pu_o(usb_pu_o),
+		.dbg_valid_o(ioc_dbg_valid_o),
+		.dbg_byte_o(ioc_dbg_byte_o),
+		.halt_o(),
+		.halt_value_o(),
+		.sleep_o()
+	);
 	assign halted_o = core_halted || sim_halt;
 	localparam [3:0] ABI_HALT_SYSEXIT = 4'd10;
 	assign halt_code_o = (core_halted ? core_hcode : ABI_HALT_SYSEXIT);

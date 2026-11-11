@@ -18,6 +18,13 @@
 # disabled: kept, not booted. Goldens still come from the unix oracle.
 # oracle = false: the unix port cannot import a filesystem module, so the
 # golden is the frozen-module result and regen leaves it alone.
+# halt = "BUS": the core must stop with that halt (mpy_abi.HALT) instead of
+# exiting; stdout and stderr are still compared.
+#
+# The board I/O areas (io, irq, system, console, usb) run with the I/O core
+# (upycore/docs/mpy_io_core.md). The unix port has no machine module, so
+# their goldens are written by hand (oracle = false); each program names
+# the MicroPython v1.29.0 source its expected output follows.
 # mpyc = false: mpy-cross still boots the program. The host uPy2 compiler
 # skips it. Generator programs match mpy-cross, so they stay in the compare.
 
@@ -47,7 +54,7 @@ compare_op_type_trap = { file = "hw/alu/compare_op_type_trap.py" }
 complex_abs = { file = "hw/alu/complex_abs.py", cycles = 30_000_000 }
 complex_div = { file = "hw/alu/complex_div.py", cycles = 30_000_000 }
 complex_pow = { file = "hw/alu/complex_pow.py", cycles = 60_000_000 }
-complex_fast = { file = "hw/alu/complex_fast.py", cycles = 60_000_000 }
+complex_fast = { file = "hw/alu/complex_fast.py", cycles = 60_000_000, timeout = 600 }
 abs_edge = { file = "hw/alu/abs_edge.py" }
 round_edge = { file = "hw/alu/round_edge.py", cycles = 30_000_000 }
 
@@ -332,6 +339,7 @@ method_getattr = { file = "hw/builtins/method_getattr.py" }
 sysmod = { file = "hw/builtins/sysmod.py" }
 gcmod = { file = "hw/builtins/gcmod.py", cycles = 40_000_000 }
 arraymod = { file = "hw/builtins/arraymod.py" }
+array_formats = { file = "hw/builtins/array_formats.py" }
 
 helper_containers = { file = "hw/builtins/helper_containers.py" }
 fw_range_zero_step = { file = "hw/builtins/fw_range_zero_step.py" }
@@ -349,6 +357,7 @@ builtin_ord_type_trap = { file = "hw/builtins/builtin_ord_type_trap.py" }
 builtin_chr_range_trap = { file = "hw/builtins/builtin_chr_range_trap.py" }
 builtin_chr_surrogate_trap = { file = "hw/builtins/builtin_chr_surrogate_trap.py" }
 builtin_int_type_trap = { file = "hw/builtins/builtin_int_type_trap.py" }
+bigint = { bigint = true }
 builtin_max_float = { file = "hw/builtins/builtin_max_float.py" }
 builtin_str_type_trap = { file = "hw/builtins/builtin_str_type_trap.py" }
 firmware_iterators = { file = "hw/builtins/firmware_iterators.py" }
@@ -384,8 +393,10 @@ import_star_all = { file = "hw/modules/import_star_all.py", modules = ["starred=
 import_getattr = { file = "hw/modules/import_getattr.py", modules = ["getattrmod=hw/modules/getattrmod.py"], oracle = false }
 import_usys = { file = "hw/modules/import_usys.py" }
 builtins_override_import = { file = "hw/modules/builtins_override_import.py" }
-math_funcs = { file = "hw/modules/math_funcs.py", cycles = 60_000_000 }
+math_funcs = { file = "hw/modules/math_funcs.py", cycles = 60_000_000, timeout = 600 }
 cmath_random = { file = "hw/modules/cmath_random.py" }
+math_extended = { file = "hw/modules/math_extended.py" }
+cmath_extended = { file = "hw/modules/cmath_extended.py" }
 io_stringio = { file = "hw/modules/io_stringio.py" }
 import_from_hook = { file = "hw/modules/import_from_hook.py", modules = ["pkg_hook=hw/modules/pkg_hook/__init__.py", "pkg_hook.sub=hw/modules/pkg_hook/sub.py"], oracle = false }
 
@@ -553,6 +564,7 @@ gen_pend = { file = "hw/generators/gen_pend.py" }
 gen_state = { file = "hw/generators/gen_state.py" }
 gen_repr = { file = "hw/generators/gen_repr.py" }
 gen_gc = { file = "hw/generators/gen_gc.py", cycles = 40_000_000, timeout = 240 }
+gen_resumed_local_gc = { file = "hw/generators/gen_resumed_local_gc.py" }
 gen_yield_from = { file = "hw/generators/gen_yield_from.py" }
 gen_yield_from_iter = { file = "hw/generators/gen_yield_from_iter.py" }
 gen_yield_from_throw = { file = "hw/generators/gen_yield_from_throw.py" }
@@ -570,3 +582,55 @@ gen_yield_from_send = { file = "hw/generators/gen_yield_from_send.py" }
 gen_yield_from_range = { file = "hw/generators/gen_yield_from_range.py" }
 gen_genexp_collect = { file = "hw/generators/gen_genexp_collect.py" }
 gen_user_next = { file = "hw/generators/gen_user_next.py" }
+
+[io]
+bridge_loopback = { file = "hw/io/bridge_loopback.py", cycles = 40_000_000, timeout = 300, oracle = false }
+bridge_regs = { file = "hw/io/bridge_regs.py", oracle = false }
+bridge_misaligned = { file = "hw/io/bridge_misaligned.py", oracle = false, halt = "UNALIGNED" }
+bridge_unmapped = { file = "hw/io/bridge_unmapped.py", oracle = false, halt = "BUS" }
+mem32_align = { file = "hw/io/mem32_align.py", oracle = false }
+pin_loop = { file = "hw/io/pin_loop.py", oracle = false, sim_args = ["+GPIO_LOOP=1"] }
+blink = { file = "hw/io/blink.py", oracle = false }
+uart_echo = { file = "hw/io/uart_echo.py", oracle = false, sim_args = ["+UART_IN=hello world\n", "+UART_IN_US=8000"] }
+uart_rx = { file = "hw/io/uart_rx.py", oracle = false, sim_args = ["+GPIO_LOOP=1"] }
+sleep_accuracy = { file = "hw/io/sleep_accuracy.py", cycles = 30_000_000, oracle = false }
+ticks = { file = "hw/io/ticks.py", oracle = false }
+
+[irq]
+sched = { file = "hw/irq/sched.py", oracle = false }
+heap_lock = { file = "hw/irq/heap_lock.py", oracle = false }
+pin_irq = { file = "hw/irq/pin_irq.py", oracle = false, sim_args = ["+GPIO_LOOP=1"], cycles = 40_000_000, timeout = 300 }
+pin_irq_hard = { file = "hw/irq/pin_irq_hard.py", oracle = false, sim_args = ["+GPIO_LOOP=1"], cycles = 40_000_000, timeout = 300 }
+timer_cb = { file = "hw/irq/timer_cb.py", oracle = false, cycles = 60_000_000, timeout = 400 }
+disable_irq = { file = "hw/irq/disable_irq.py", oracle = false }
+uart_irq = { file = "hw/irq/uart_irq.py", oracle = false, sim_args = ["+UART_IN=abcde", "+UART_IN_US=8000"], cycles = 40_000_000, timeout = 300 }
+ctrl_c = { file = "hw/irq/ctrl_c.py", oracle = false, sim_args = ["+CONSOLE=uart", '+UART_IN=\x03', "+UART_IN_US=5000"], cycles = 40_000_000, timeout = 300 }
+
+[system]
+pwm_duty = { file = "hw/system/pwm_duty.py", oracle = false, sim_args = ["+GPIO_LOOP=1"], cycles = 40_000_000, timeout = 300 }
+spi_flash = { file = "hw/system/spi_flash.py", oracle = false, sim_args = ["+SPI_FLASH=1"], cycles = 40_000_000, timeout = 300 }
+i2c_mem = { file = "hw/system/i2c_mem.py", oracle = false, sim_args = ["+I2C_TARGET=1"], cycles = 60_000_000, timeout = 400 }
+adc = { file = "hw/system/adc.py", oracle = false }
+reset_soft = { file = "hw/system/reset_soft.py", oracle = false, cycles = 40_000_000, timeout = 300 }
+reset_hard = { file = "hw/system/reset_hard.py", oracle = false, cycles = 40_000_000, timeout = 300 }
+wdt = { file = "hw/system/wdt.py", oracle = false, cycles = 40_000_000, timeout = 300 }
+
+[console]
+con_print = { file = "hw/console/con_print.py", oracle = false }
+con_print_uart = { file = "hw/console/con_print.py", golden_base = "hw/console/con_print_uart", oracle = false, sim_args = ["+CONSOLE=uart"], cycles = 40_000_000, timeout = 300 }
+con_input = { file = "hw/console/con_input.py", oracle = false }
+con_input_uart = { file = "hw/console/con_input.py", golden_base = "hw/console/con_input_uart", oracle = false, sim_args = ["+CONSOLE=uart", '+UART_IN=bob\rax\x08c\r\nxyzrest of line\n', "+UART_IN_US=3000"], cycles = 40_000_000, timeout = 300 }
+repl_friendly = { file = "hw/console/repl.py", golden_base = "hw/console/repl_friendly", repl = true, uart_script = "hw/console/repl_friendly.uart", oracle = false, sim_args = ["+CONSOLE=uart"], cycles = 400_000_000, timeout = 3600 }
+repl_raw = { file = "hw/console/repl.py", golden_base = "hw/console/repl_raw", repl = true, uart_script = "hw/console/repl_raw.uart", oracle = false, sim_args = ["+CONSOLE=uart"], cycles = 400_000_000, timeout = 3600 }
+con_print_usb = { file = "hw/console/con_print.py", golden_base = "hw/console/con_print_usb", oracle = false, usb_script = "hw/console/con_print_usb.usb", sim_args = ["+CONSOLE=usb"], cycles = 400_000_000, timeout = 1800 }
+con_input_usb = { file = "hw/console/con_input.py", golden_base = "hw/console/con_input_usb", oracle = false, usb_script = "hw/console/con_input_usb.usb", sim_args = ["+CONSOLE=usb"], cycles = 400_000_000, timeout = 1800 }
+repl_friendly_usb = { file = "hw/console/repl.py", golden_base = "hw/console/repl_friendly_usb", repl = true, usb_script = "hw/console/repl_friendly_usb.usb", oracle = false, sim_args = ["+CONSOLE=usb"], cycles = 800_000_000, timeout = 3600 }
+
+# USB CDC (phase 7): the I/O core's no2usb SIE and TinyUSB, the console on
+# USB (+CONSOLE=usb), and the bench's USB host (iocore/tb/tb_usb_host.sv)
+# running each test's .usb script. Hand-written goldens.
+[usb]
+usb_loopback = { file = "hw/usb/loopback.py", oracle = false, usb_script = "hw/usb/loopback.usb", sim_args = ["+CONSOLE=usb"], cycles = 400_000_000, timeout = 1800 }
+usb_ctrl_c = { file = "hw/usb/ctrl_c.py", oracle = false, usb_script = "hw/usb/ctrl_c.usb", sim_args = ["+CONSOLE=usb"], cycles = 400_000_000, timeout = 1800 }
+usb_suspend = { file = "hw/usb/suspend.py", oracle = false, usb_script = "hw/usb/suspend.usb", sim_args = ["+CONSOLE=usb"], cycles = 400_000_000, timeout = 1800 }
+usb_repl_raw = { file = "hw/usb/repl_raw.py", oracle = false, repl = true, usb_script = "hw/usb/repl_raw.usb", sim_args = ["+CONSOLE=usb"], cycles = 800_000_000, timeout = 3600 }

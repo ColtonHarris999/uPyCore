@@ -1,0 +1,6 @@
+scan [80]
+acks 6
+mem b'hello'
+mem2 [1, 2, 3]
+read [3, 67]
+OSError 19

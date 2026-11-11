@@ -28,7 +28,9 @@ module upycore_fp_add (
     // ---------------- stage 1: unpack / order ----------------
     logic        s1_valid_r;
     logic        s1_sign_big_r, s1_sign_small_r;
-    logic [10:0] s1_exp_big_r, s1_exp_small_r;
+    logic [10:0] s1_exp_big_r;
+    logic [5:0]  s1_shift_r;
+    logic [10:0] exp_a, exp_b, diff_ab, diff_ba;
     logic [52:0] s1_sig_big_r, s1_sig_small_r;
     logic        s1_special_r;          // result fully decided in C0
     logic [63:0] s1_special_val_r;
@@ -41,6 +43,11 @@ module upycore_fp_add (
 
     assign b_sign_eff = op_b_i[63] ^ sub_i;
     assign a_bigger   = (op_a_i[62:0] >= op_b_i[62:0]);
+    assign exp_a      = upycore_f64_exp_eff(op_a_i);
+    assign exp_b      = upycore_f64_exp_eff(op_b_i);
+    // Both differences are ready when magnitude ordering picks the sign.
+    assign diff_ab    = exp_a - exp_b;
+    assign diff_ba    = exp_b - exp_a;
     assign a_nan = upycore_f64_is_nan(op_a_i);
     assign b_nan = upycore_f64_is_nan(op_b_i);
     assign a_inf = upycore_f64_is_inf(op_a_i);
@@ -72,24 +79,26 @@ module upycore_fp_add (
     logic        s2_special_r;
     logic [63:0] s2_special_val_r;
 
-    logic [10:0] exp_diff;
     logic [55:0] ext_big, ext_small, aligned;
     logic [55:0] lost_mask;
     logic        sticky;
     logic [56:0] sum;
 
-    assign exp_diff = s1_exp_big_r - s1_exp_small_r;
     assign ext_big   = {s1_sig_big_r, 3'b000};
     assign ext_small = {s1_sig_small_r, 3'b000};
     always_comb begin
         lost_mask = '0;
         sticky    = 1'b0;
-        if (exp_diff > 11'd55) begin
+        if (s1_shift_r > 6'd55) begin
             aligned = {55'd0, |ext_small};
         end else begin
-            lost_mask = (56'd1 << exp_diff[5:0]) - 56'd1;
+            // Bits below the shift, as 56 compares of the shift against a
+            // constant (a thermometer); (1 << shift) - 1 put a 56-bit
+            // subtract in front of the sticky bit and the add
+            // (s1_shift_r -> s2_sum_r, 11.6 ns).
+            for (int i = 0; i < 56; i++) lost_mask[i] = (6'(i) < s1_shift_r);
             sticky    = |(ext_small & lost_mask);
-            aligned   = ext_small >> exp_diff[5:0];
+            aligned   = ext_small >> s1_shift_r;
             aligned[0] = aligned[0] | sticky;
         end
         if (s1_sign_big_r == s1_sign_small_r)
@@ -144,7 +153,7 @@ module upycore_fp_add (
         if (!rst_n_i) begin
             s1_valid_r <= 1'b0; s2_valid_r <= 1'b0; s3_valid_r <= 1'b0;
             s1_sign_big_r <= 1'b0; s1_sign_small_r <= 1'b0;
-            s1_exp_big_r <= '0; s1_exp_small_r <= '0;
+            s1_exp_big_r <= '0; s1_shift_r <= '0;
             s1_sig_big_r <= '0; s1_sig_small_r <= '0;
             s1_special_r <= 1'b0; s1_special_val_r <= '0;
             s2_sign_r <= 1'b0; s2_both_neg_r <= 1'b0; s2_exp_r <= '0; s2_sum_r <= '0;
@@ -162,15 +171,15 @@ module upycore_fp_add (
             if (a_bigger) begin
                 s1_sign_big_r   <= op_a_i[63];
                 s1_sign_small_r <= b_sign_eff;
-                s1_exp_big_r    <= upycore_f64_exp_eff(op_a_i);
-                s1_exp_small_r  <= upycore_f64_exp_eff(op_b_i);
+                s1_exp_big_r    <= exp_a;
+                s1_shift_r      <= (diff_ab > 11'd55) ? 6'd56 : diff_ab[5:0];
                 s1_sig_big_r    <= upycore_f64_sig(op_a_i);
                 s1_sig_small_r  <= upycore_f64_sig(op_b_i);
             end else begin
                 s1_sign_big_r   <= b_sign_eff;
                 s1_sign_small_r <= op_a_i[63];
-                s1_exp_big_r    <= upycore_f64_exp_eff(op_b_i);
-                s1_exp_small_r  <= upycore_f64_exp_eff(op_a_i);
+                s1_exp_big_r    <= exp_b;
+                s1_shift_r      <= (diff_ba > 11'd55) ? 6'd56 : diff_ba[5:0];
                 s1_sig_big_r    <= upycore_f64_sig(op_b_i);
                 s1_sig_small_r  <= upycore_f64_sig(op_a_i);
             end

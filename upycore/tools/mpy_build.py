@@ -27,6 +27,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -41,6 +42,7 @@ FW_SRC = ROOT / "upycore" / "firmware"
 ORACLE_SRC = ROOT / "build" / "oracle" / "src"
 MPY_CROSS = Path(os.environ.get("MPY_CROSS", ORACLE_SRC / "mpy-cross" / "build" / "mpy-cross"))
 ORACLE = Path(os.environ.get("MPY_ORACLE", ORACLE_SRC / "ports" / "unix" / "build-upycore" / "micropython"))
+MPZ_ORACLE = Path(os.environ.get("MPY_MPZ_ORACLE", ORACLE_SRC / "ports" / "unix" / "build-upycore-mpz" / "micropython"))
 SIM_DIR = ROOT / "build" / "mpy_soc"
 SIM = SIM_DIR / "obj" / "Vtb_mpy_soc"
 MPY_CROSS_FLAGS = ["-msmall-int-bits=31", "-O0"]
@@ -53,6 +55,17 @@ FW_ORDER = [
     "memview.py", "builtins.py", "modules.py", "boot.py", "load.py",
 ]
 
+# Board I/O firmware (upycore/firmware/io), appended after FW_ORDER only for
+# images that use board I/O (io_imports). Its own order, by file name.
+IO_FW_ORDER = ["io.py", "console.py", "irq.py"]
+# REPL images (build_program(repl=True)) add the REPL, which replaces _boot.
+REPL_FW_ORDER = ["repl.py"]
+IO_FW_SRC = FW_SRC / "io"
+# The I/O core's firmware (make -C iocore/sw), loaded from the boot stream's
+# IOCB section for those images.
+IOCORE_SW = ROOT / "iocore" / "sw"
+IOCORE_FW = ROOT / "build" / "iocore" / "fw"
+
 RTL = [
     "upycore/rtl/upycore_umul_seq.sv", "upycore/rtl/upycore_udiv_seq.sv", "upycore/rtl/upycore_umod_seq.sv",
     "upycore/rtl/upycore_int_alu.sv", "upycore/rtl/upycore_mul.sv", "upycore/rtl/upycore_div.sv",
@@ -61,9 +74,16 @@ RTL = [
     "upycore/rtl/mpy_alu.sv", "upycore/rtl/mpy_decode.sv", "upycore/rtl/mpy_fetch.sv", "upycore/rtl/mpy_core.sv",
     "upycore/rtl/mpy_hash.sv", "upycore/rtl/mpy_hash_slot.sv", "upycore/rtl/mpy_rehash_stream.sv", "upycore/rtl/mpy_key_equal.sv", "upycore/rtl/mpy_map_engine.sv", "upycore/rtl/mpy_bulk.sv", "upycore/rtl/mpy_bytecopy.sv", "upycore/rtl/mpy_shortlist.sv", "upycore/rtl/mpy_collection.sv",
     "upycore/rtl/mpy_gc.sv", "upycore/rtl/mpy_ca.sv", "upycore/rtl/bsg_mem_1rw_sync_mask_write_bit.sv",
-    "upycore/rtl/mpy_mem.sv", "upycore/rtl/mpy_boot.sv", "upycore/rtl/mpy_soc.sv",
-    "upycore/tb/tb_spi_nand.sv", "upycore/tb/tb_mpy_soc.sv",
+    "upycore/rtl/mpy_mem.sv", "upycore/rtl/mpy_boot.sv", "upycore/rtl/mpy_async_fifo.sv",
+    "upycore/rtl/mpy_iobr.sv", "upycore/rtl/mpy_soc.sv",
+    "upycore/tb/tb_spi_nand.sv", "iocore/tb/tb_uart_line.sv", "iocore/tb/tb_spi_flash.sv", "iocore/tb/tb_usb_host.sv",
+    "iocore/tb/tb_i2c_target.sv", "iocore/tb/tb_adc_model.sv", "upycore/tb/tb_mpy_soc.sv",
 ]
+# The I/O island (the I/O core, CVE2, and its peripherals): iocore/tools.
+sys.path.insert(0, str(ROOT / "iocore" / "tools"))
+import iocore_files  # noqa: E402
+
+ISLAND_RTL, ISLAND_INCDIRS = iocore_files.island("cve2")
 RTL_INCLUDES = [
     "upycore/rtl/mpy_abi.svh", "upycore/rtl/mpy_defs.svh", "upycore/rtl/upycore_defs.svh",
     "upycore/rtl/upycore_fp_defs.svh", "upycore/rtl/upycore_fp_pow_rom.svh",
@@ -83,27 +103,37 @@ def _newer(target: Path, sources: list[Path]) -> bool:
     return any(s.stat().st_mtime > t for s in sources)
 
 
-def build_sim(force: bool = False, quiet: bool = True) -> Path:
-    """Verilate tb_mpy_soc when any RTL source is newer than the binary."""
+def build_sim(force: bool = False, quiet: bool = True, saif: bool = False) -> Path:
+    """Verilate tb_mpy_soc when any RTL source is newer than the binary.
+    ``saif`` builds the switching-activity variant (--trace-saif -DMPY_SAIF)
+    in build/mpy_soc_saif instead."""
 
-    sources = [ROOT / p for p in RTL + RTL_INCLUDES]
-    if not force and not _newer(SIM, sources):
-        return SIM
-    (SIM_DIR / "obj").mkdir(parents=True, exist_ok=True)
+    sim_dir = BUILD.parent / "mpy_soc_saif" if saif else SIM_DIR
+    sim = sim_dir / "obj" / SIM.name
+    sources = [ROOT / p for p in ISLAND_RTL + RTL + RTL_INCLUDES]
+    if not force and not _newer(sim, sources):
+        return sim
+    (sim_dir / "obj").mkdir(parents=True, exist_ok=True)
     cmd = [
         os.environ.get("VERILATOR", "verilator"), "-sv", "--binary", "--timing",
         "--timescale", "1ns/1ps", "-O3", "--x-assign", "fast", "--x-initial", "fast",
+        # The model's C++ at -O2 instead of verilated.mk's -Os: about 12 %
+        # more cycles per second on the hardware suite's longest programs.
+        "-MAKEFLAGS", "OPT_FAST=-O2", "-MAKEFLAGS", "OPT_GLOBAL=-O2",
         f"+incdir+{ROOT / 'upycore' / 'rtl'}", "-y", str(ROOT / "upycore" / "rtl"),
+        *[f"+incdir+{ROOT / d}" for d in ISLAND_INCDIRS],
         "--top-module", "tb_mpy_soc",
-        "--Mdir", str(SIM_DIR / "obj"), "-Wno-fatal", "-Wno-WIDTH", "-Wno-UNUSED",
-        "-Wno-CASEINCOMPLETE", "-Wno-BLKSEQ", "-Wno-TIMESCALEMOD", "-j", str(os.cpu_count() or 4),
-    ] + [str(s) for s in sources if s.suffix == ".sv"]
+        *(["--trace-saif", "-DMPY_SAIF"] if saif else []),
+        "--Mdir", str(sim_dir / "obj"), "-Wno-fatal", "-Wno-WIDTH", "-Wno-UNUSED",
+        "-Wno-CASEINCOMPLETE", "-Wno-BLKSEQ", "-Wno-TIMESCALEMOD", "-Wno-lint", "-Wno-style",
+        "-Wno-MULTIDRIVEN", "-Wno-UNOPTFLAT", "-j", str(os.cpu_count() or 4),
+    ] + [str(s) for s in sources if s.suffix in (".sv", ".v")]
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
     if r.returncode != 0:
         raise BuildError("verilator failed:\n" + r.stdout[-4000:] + r.stderr[-4000:])
     if not quiet:
-        print(f"built {SIM.relative_to(ROOT)}")
-    return SIM
+        print(f"built {sim.relative_to(ROOT)}")
+    return sim
 
 
 def mpy_cross(src: Path, out: Path, source_name: str) -> None:
@@ -154,10 +184,12 @@ def compile_user(src: Path, out: Path, source_name: str, compiler: str = "mpy-cr
 _FW_IMPORT = re.compile(r"^\s*from\s+(\.?_abi|micropython)\s+import\s+")
 
 
-def firmware_source() -> str:
+def firmware_source(io: bool = False, repl: bool = False, *, bigint: bool = False) -> str:
     parts = []
-    for i, name in enumerate(FW_ORDER):
-        path = FW_SRC / name
+    order = [FW_SRC / n for n in FW_ORDER] + ([IO_FW_SRC / n for n in IO_FW_ORDER] if io else [])
+    order += [IO_FW_SRC / n for n in REPL_FW_ORDER] if repl else []
+    for i, path in enumerate(order):
+        name = path.relative_to(FW_SRC).as_posix()
         if not path.exists():
             continue
         lines = path.read_text().splitlines()
@@ -165,16 +197,27 @@ def firmware_source() -> str:
             lines = [ln for ln in lines if not _FW_IMPORT.match(ln)]
         parts.append(f"# ---- {name} ----")
         parts.extend(lines)
+        if i == 0:
+            parts.append(f"_BIGINT_ENABLED = const({int(bigint)})")
+    if bigint:
+        parts.append((FW_SRC / "bigint.py").read_text())
     return "\n".join(parts) + "\n"
 
 
-def build_firmware(out_dir: Path = BUILD / "fw") -> Path:
-    """Join and compile the firmware; returns the .mpy path."""
+def build_firmware(out_dir: Path | None = None, io: bool = False, repl: bool = False, *,
+                   bigint: bool = False) -> Path:
+    """Join and compile the firmware; returns the .mpy path. ``io`` appends
+    the board I/O firmware (a separate build in ``build/mpy/fw_io``), and
+    ``repl`` the REPL after it (``build/mpy/fw_repl``); ``bigint`` is the
+    wide-integer firmware (``build/mpy/fw-bigint``, with ``_io`` or ``_repl``
+    after it when those are on too)."""
 
+    base = "fw-bigint" if bigint else "fw"
+    out_dir = out_dir or BUILD / (base + ("_repl" if repl else "_io" if io else ""))
     out_dir.mkdir(parents=True, exist_ok=True)
     src = out_dir / "fw.py"
     mpy = out_dir / "fw.mpy"
-    text = firmware_source()
+    text = firmware_source(io or repl, repl, bigint=bigint)
     if not src.exists() or src.read_text() != text:
         src.write_text(text)
     if _newer(mpy, [src, MPY_CROSS]):
@@ -215,6 +258,7 @@ class SimResult:
         return None
 
 
+_SESSION_RE = re.compile(r"MPY_SESSION_END cycles=(\d+) ops=(\d+) gc=(\d+)")
 _HALT_RE = re.compile(r"MPY_HALT code=(\d+) value=([0-9a-f]+) cycles=(\d+) ops=(\d+) gc=(\d+)")
 _TIMEOUT_RE = re.compile(r"MPY_TIMEOUT cycles=(\d+) ops=(\d+) gc=(\d+)")
 
@@ -229,10 +273,14 @@ def run_image(image: Path, max_cycles: int = 50_000_000, trace: bool = False,
     err = Path(f"{image}.stderr")
     # MPY_SIM picks another build of the testbench (for instance one made
     # with --trace-saif); MPY_SIM_ARGS adds plusargs (+SAIF=<path>).
+    marker = Path(f"{image}.iocore")
+    ioc = Path(marker.read_text().strip()) if marker.exists() else None
     if nand:
-        boot = [f"+NAND={mpy_nand.write_files(image)[1]}"]
+        boot = [f"+NAND={mpy_nand.write_files(image, ioc)[1]}"]
     else:
         boot = [f"+IMAGE={image}.hex", f"+TAGS={image}.tags.hex"]
+        if ioc is not None:
+            boot += [f"+IOC_CODE={ioc / 'code.hex'}", f"+IOC_DATA={ioc / 'data.hex'}"]
     cmd = [str(sim_executable) if sim_executable else os.environ.get("MPY_SIM", str(SIM)), *boot,
            f"+STDOUT={out}", f"+STDERR={err}", f"+MAX_CYCLES={max_cycles}"]
     cmd += os.environ.get("MPY_SIM_ARGS", "").split()
@@ -248,6 +296,10 @@ def run_image(image: Path, max_cycles: int = 50_000_000, trace: bool = False,
         code = int(m.group(1))
         return SimResult(stdout, stderr, HALT_NAMES.get(code, str(code)), int(m.group(2), 16),
                          int(m.group(3)), int(m.group(4)), int(m.group(5)), log)
+    m = _SESSION_RE.search(log)
+    if m:
+        # A +UART_SCRIPT session ran to its end: a clean exit.
+        return SimResult(stdout, stderr, "CLEAN", 0, int(m.group(1)), int(m.group(2)), int(m.group(3)), log)
     m = _TIMEOUT_RE.search(log)
     if m:
         return SimResult(stdout, stderr, "TIMEOUT", 0, int(m.group(1)), int(m.group(2)), int(m.group(3)), log)
@@ -260,9 +312,13 @@ def _cached_mpy(src: Path, source_name: str) -> Path:
     cache = BUILD / "frozen"
     cache.mkdir(parents=True, exist_ok=True)
     out = cache / (source_name.replace("/", "_") + ".mpy")
-    if _newer(out, [src, MPY_CROSS]):
-        mpy_cross(src, out, source_name)
+    with _CACHE_LOCK:
+        if _newer(out, [src, MPY_CROSS]):
+            mpy_cross(src, out, source_name)
     return out
+
+
+_CACHE_LOCK = threading.Lock()
 
 
 # compile, exec and eval run the frozen uPy2 compiler. It is 167 KB of
@@ -295,7 +351,71 @@ def uses_compiler(sources: list[Path]) -> bool:
 # Standard-library modules written in Python (upycore/runtime). Each is frozen
 # only into programs that import it, so other images stay byte-identical.
 # A module's own imports of these are listed here too.
-RUNTIME_MODULES = {"math": (), "cmath": ("math",), "random": (), "io": ()}
+RUNTIME_MODULES = {"math": (), "cmath": ("math",), "random": (), "io": (), "machine": ("time",),
+                   "time": ()}
+
+# Imports that mean a program uses board I/O: it gets the board I/O firmware
+# (IO_FW_ORDER) and the I/O core's boot section. _io is the firmware's own
+# native module (upycore/firmware/io/io.py).
+IO_MODULES = {"machine", "time", "_io"}
+
+
+# Console input or the sys streams also need the board I/O firmware
+# (upycore/firmware/io/console.py): a call of input(), or sys.stdin,
+# sys.stdout or sys.stderr. So do micropython's event functions
+# (upycore/firmware/io/irq.py), which are real only there.
+_CONSOLE_ATTRS = {"stdin", "stdout", "stderr"}
+_MP_IO_ATTRS = {"schedule", "heap_lock", "heap_unlock", "kbd_intr"}
+
+
+def io_imports(sources: list[Path]) -> list[str]:
+    """The board I/O features any source uses (empty: no board I/O): the
+    I/O modules it imports, and "console" for input() or a sys stream."""
+
+    found: set[str] = set()
+    for p in sources:
+        try:
+            tree = ast.parse(p.read_bytes())
+        except (SyntaxError, ValueError):
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "input":
+                found.add("console")
+                continue
+            if (isinstance(node, ast.Attribute) and node.attr in _CONSOLE_ATTRS
+                    and isinstance(node.value, ast.Name) and node.value.id == "sys"):
+                found.add("console")
+                continue
+            if (isinstance(node, ast.Attribute) and node.attr in _MP_IO_ATTRS
+                    and isinstance(node.value, ast.Name) and node.value.id == "micropython"):
+                found.add("events")
+                continue
+            if isinstance(node, ast.Import):
+                names = [a.name for a in node.names]
+            elif isinstance(node, ast.ImportFrom) and not node.level and node.module:
+                names = [node.module]
+                if node.module == "sys" and any(a.name in _CONSOLE_ATTRS for a in node.names):
+                    found.add("console")
+                if node.module == "micropython" and any(a.name in _MP_IO_ATTRS for a in node.names):
+                    found.add("events")
+            else:
+                continue
+            found.update(n.split(".")[0] for n in names if n.split(".")[0] in IO_MODULES)
+    return sorted(found)
+
+
+_IOC_LOCK = threading.Lock()
+
+
+def build_iocore_fw() -> Path:
+    """Build the I/O core's production firmware; returns its output folder.
+    hw_tests.py builds images from several threads; make runs one at a time."""
+
+    with _IOC_LOCK:
+        r = subprocess.run(["make", "-s", "-C", str(IOCORE_SW), "APP=fw"], capture_output=True, text=True)
+    if r.returncode != 0:
+        raise BuildError("I/O core firmware failed:\n" + r.stdout[-3000:] + r.stderr[-3000:])
+    return IOCORE_FW
 
 
 def runtime_imports(sources: list[Path]) -> list[str]:
@@ -349,30 +469,43 @@ def frozen_runtime_specs(compiler: bool = True, runtime: list[str] | tuple = ())
 
 def build_program(src: Path, work: Path, source_name: str | None = None,
                   modules: dict[str, Path] | None = None,
-                  compiler: str = "mpy-cross") -> Path:
+                  compiler: str = "mpy-cross", repl: bool = False, *, bigint: bool = False) -> Path:
     """Compile and link one program (plus frozen modules); returns the image prefix.
 
     ``compiler`` selects the user-program compiler. The firmware is always
     built with ``mpy-cross``. ``mpyc`` is the vendored uPy2 compiler.
+    ``repl`` makes a REPL image: the board I/O firmware, the REPL and the
+    on-device compiler; on a uart or usb console it runs the program (its
+    main.py, often empty) and then the REPL.
     """
 
     work.mkdir(parents=True, exist_ok=True)
-    fw = build_firmware()
+    sources = [src, *(modules or {}).values()]
+    io = repl or bool(io_imports(sources))
+    # Without board I/O or bigint this is the call it always was (clock_bench.py
+    # and the other benches replace build_firmware with a no-argument function).
+    fw = (build_firmware(io=io, repl=repl, bigint=bigint) if io or bigint else build_firmware())
     name = source_name or src.name
     main_mpy = work / "main.mpy"
     compile_user(src, main_mpy, name, compiler)
     # The compiler is frozen bytecode. It is not compiled by itself.
-    sources = [src, *(modules or {}).values()]
     # A test that supplies its own module of the same name keeps it.
     runtime = [m for m in runtime_imports(sources) if m not in (modules or {})]
-    specs = frozen_runtime_specs(uses_compiler(sources), runtime)
+    specs = frozen_runtime_specs(repl or uses_compiler(sources), runtime)
     for mname, mpath in (modules or {}).items():
         mm = work / (mname.replace(".", "_") + ".mpy")
         mod_name = mpath.name if mpath.name != "__init__.py" else f"{mname.replace('.', '/')}/__init__.py"
         compile_user(mpath, mm, mod_name, compiler)
         kind = ":package" if mpath.name == "__init__.py" else ""
         specs.append(f"{mname}={mm}{kind}")
-    return link(main_mpy, fw, work / "image", specs)
+    image = link(main_mpy, fw, work / "image", specs)
+    # A board I/O image boots with the I/O core's firmware (the IOCB section).
+    marker = Path(f"{image}.iocore")
+    if io:
+        marker.write_text(str(build_iocore_fw()) + "\n")
+    elif marker.exists():
+        marker.unlink()
+    return image
 
 
 def run_oracle(src: Path, cwd: Path | None = None, timeout: float = 60) -> tuple[bytes, bytes, int]:
@@ -389,6 +522,7 @@ def main(argv: list[str] | None = None) -> int:
     rp.add_argument("src", type=Path)
     rp.add_argument("--max-cycles", type=int, default=50_000_000)
     rp.add_argument("--trace", action="store_true")
+    rp.add_argument("--bigint", action="store_true", help="enable the experimental wide-integer firmware")
     rp.add_argument("-v", "--verbose", action="store_true", help="print the halt line")
     rp.add_argument("--work", type=Path, default=None)
     rp.add_argument("--sim-arg", action="append", default=[],
@@ -412,7 +546,7 @@ def main(argv: list[str] | None = None) -> int:
             return rc
         build_sim()
         work = args.work or BUILD / "run" / args.src.stem
-        image = build_program(args.src.resolve(), work)
+        image = build_program(args.src.resolve(), work, bigint=args.bigint)
         res = run_image(image, args.max_cycles, args.trace, sim_args=args.sim_arg, nand=args.nand)
     except BuildError as exc:
         print(exc, file=sys.stderr)

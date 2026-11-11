@@ -29,9 +29,9 @@ ORACLE := build/oracle/src/ports/unix/build-upycore/micropython
 # area calls compile/exec/eval on the hart. `test-compiler` is the host
 # uPy2 byte compare plus the whole suite compiled with uPy2.
 HW_AREAS := smoke alu control calls containers strings exceptions objects \
-	builtins modules integ variables memory gc generators compiler
+	builtins modules integ variables memory gc generators compiler io irq system console usb
 
-.PHONY: test sim fw run oracle oracle-header oracle-variant oracle-smoke mpy-cross \
+.PHONY: test sim fw run oracle oracle-header oracle-variant oracle-mpz oracle-smoke mpy-cross \
 	docker-build docker-test test-hw test-host test-unit test-compiler regen-goldens check-goldens \
 	synth synth-gates dc-src clean
 
@@ -70,10 +70,13 @@ test-hw: $(MPY_CROSS)
 
 # One area, on its own. CI runs these in parallel. The uPy2 pass reuses the
 # simulator just built. Disabled programs in the area are skipped.
+# HW_SHARD=K/N runs shard K of N of the area (CI splits compiler this way).
+HW_SHARD ?=
+SHARD_ARG := $(if $(HW_SHARD),--shard $(HW_SHARD))
 test-hw-%: $(MPY_CROSS)
 	$(PYTHON) $(BUILD_PY) sim
-	$(PYTHON) upycore/tools/hw_tests.py --area $*
-	$(PYTHON) upycore/tools/hw_tests.py --area $* --compiler mpyc
+	$(PYTHON) upycore/tools/hw_tests.py --area $* $(SHARD_ARG)
+	$(PYTHON) upycore/tools/hw_tests.py --area $* --compiler mpyc $(SHARD_ARG)
 
 test-unit: $(MPY_CROSS)
 	$(PYTHON) upycore/tools/unit_tests.py
@@ -103,6 +106,9 @@ check-goldens:
 oracle-header:
 	variants/upycore/build.sh header
 
+oracle-mpz:
+	variants/upycore/build.sh mpz
+
 oracle-variant:
 	variants/upycore/build.sh variant
 
@@ -119,7 +125,7 @@ docker-test: docker-build
 
 # `make docker-test-hw-alu` and `make docker-test-host`. CI uses these.
 docker-test-%: docker-build
-	docker run --rm -v "$(CURDIR):/work" -w /work $(DOCKER_IMAGE) make test-$*
+	docker run --rm -v "$(CURDIR):/work" -w /work $(DOCKER_IMAGE) make test-$* HW_SHARD=$(HW_SHARD)
 
 # Yosys + yosys-slang (OSS CAD Suite). SYNTH_TOP=mpy_core limits the run.
 # synth elaborates every top; synth-gates maps the logic tops (not full mem/gc).

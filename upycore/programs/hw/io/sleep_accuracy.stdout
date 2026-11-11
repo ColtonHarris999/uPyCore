@@ -1,0 +1,11 @@
+sleep_ms 1 True
+sleep_ms 2 True
+sleep_ms 5 True
+sleep_ms 10 True
+sleep_ms 20 True
+sleep_us 50 True
+sleep_us 100 True
+sleep_us 500 True
+sleep_us 2000 True
+sleep float True
+all True

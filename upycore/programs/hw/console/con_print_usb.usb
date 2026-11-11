@@ -1,0 +1,3 @@
+# con_print.py with the console on USB: read everything up to the traceback's end.
+wait ValueError: boom\r\n
+finish

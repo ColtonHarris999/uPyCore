@@ -1,0 +1,6 @@
+# Ported from the epic branch's tests; waits are for cooked \r\n line ends.
+text go\n
+wait looping\r\n
+text \x03
+wait KeyboardInterrupt over USB True\r\n
+finish

@@ -14,6 +14,18 @@
 // magic, n == 0, or n beyond the image SRAM raises err_o and the hart stays
 // in reset.
 //
+// The image may be followed by the I/O core's firmware (plan §4.5):
+//
+//   MPY_IOCB_MAGIC ("IOCB"), code word count nc, data word count nd,
+//   nc code SRAM words, nd data SRAM words
+//
+// Each of those words leaves on ioc_we_o as {data SRAM, index, word} for
+// the island's load port (through mpy_iobr's LD FIFO); ioc_loaded_o rises
+// with done_o. Any other word after the image ends the stream: there is no
+// section, and the I/O core stays in reset. A count beyond the island's
+// SRAM raises err_o. The simulation stream (below) ends with a 0 word when
+// there is no +IOC_CODE, so the decoder sees the end.
+//
 // SPI mode 0, one data line each way, standard SPI NAND commands (W25N,
 // GD5F, MT29F): FFh reset, then per page 13h page read to the cache, 0Fh/C0h
 // status polls until OIP clears, 03h read from cache at column 0. SCK runs
@@ -30,7 +42,9 @@ module mpy_boot #(
     parameter int          SPI_DIV        = 2,
     parameter int          PAGE_BYTES     = 2048,
     parameter logic [15:0] FIRST_PAGE     = 16'd0,
-    parameter int          POWERUP_CYCLES = 0
+    parameter int          POWERUP_CYCLES = 0,
+    parameter int          IOC_CODE_WORDS = 4096,
+    parameter int          IOC_DATA_WORDS = 1920
 ) (
     input  logic        clk_i,
     input  logic        rst_n_i,
@@ -44,6 +58,13 @@ module mpy_boot #(
     output logic [MPY_FLASH_IDX_W-1:0] ld_idx_o,
     output logic [31:0]                ld_wdata_o,
     output logic [3:0]                 ld_wtag_o,
+
+    // The I/O core's firmware words; ioc_stall_i holds the simulation
+    // stream (the SPI stream is slower than the island drains it).
+    output logic        ioc_we_o,
+    output logic [48:0] ioc_data_o,
+    input  logic        ioc_stall_i,
+    output logic        ioc_loaded_o,
 
     output logic [31:0] image_words_o,
     output logic [31:0] pool_bytes_o, // optional image-requested heap cap (0: all remaining)
@@ -65,8 +86,14 @@ module mpy_boot #(
     assign src_w = use_fast ? fast_w : spi_w;
 
     // ------------------------------------------------------ stream decoder
-    typedef enum logic [2:0] { C_MAGIC, C_COUNT, C_TAG, C_DATA, C_DONE, C_ERR } cst_e;
+    // C_IERR is the IOCB section's error: one clock later it becomes C_ERR,
+    // so the count checks are not in C_ERR's own next-state logic and err_o
+    // is the image's compare.
+    typedef enum logic [3:0] { C_MAGIC, C_COUNT, C_TAG, C_DATA, C_DONE, C_ERR,
+                               C_IOCB, C_INC, C_IND, C_IOW, C_IERR } cst_e;
     cst_e        cst;
+    logic [15:0] ioc_nc, ioc_nd, ioc_i;
+    logic        ioc_sel;
     logic [31:0] nwords;
     logic [31:0] tagw;
     logic [2:0]  k;
@@ -89,9 +116,19 @@ module mpy_boot #(
             ld_wdata_o <= '0;
             ld_wtag_o  <= '0;
             done_o     <= 1'b0;
+            ioc_we_o   <= 1'b0;
+            ioc_data_o <= '0;
+            ioc_loaded_o <= 1'b0;
+            ioc_nc     <= '0;
+            ioc_nd     <= '0;
+            ioc_i      <= '0;
+            ioc_sel    <= 1'b0;
         end else begin
             ld_we_o <= 1'b0;
-            // done_o rises once the last load write has gone out.
+            ioc_we_o <= 1'b0;
+            // done_o rises once the last load write has gone out. The last
+            // IOCB word may still be on its way to the island; mpy_soc
+            // releases the I/O core only once LD has drained.
             if (cst == C_DONE && !ld_we_o) done_o <= 1'b1;
             if (src_v) begin
                 unique case (cst)
@@ -114,11 +151,36 @@ module mpy_boot #(
                         widx       <= widx + 1'b1;
                         k          <= k + 3'd1;
                         if (k == 3'd7)
-                            cst <= (32'(widx) + 32'd1 >= nwords) ? C_DONE : C_TAG;
+                            cst <= (32'(widx) + 32'd1 >= nwords) ? C_IOCB : C_TAG;
+                    end
+                    // After the image: the I/O core's section, or the end.
+                    C_IOCB: cst <= (src_w == MPY_IOCB_MAGIC) ? C_INC : C_DONE;
+                    C_INC: begin
+                        ioc_nc <= src_w[15:0];
+                        cst <= (src_w > 32'(IOC_CODE_WORDS)) ? C_IERR : C_IND;
+                    end
+                    C_IND: begin
+                        ioc_nd  <= src_w[15:0];
+                        ioc_i   <= '0;
+                        ioc_sel <= (ioc_nc == 16'd0);
+                        cst <= (src_w > 32'(IOC_DATA_WORDS)) ? C_IERR :
+                               (ioc_nc == 16'd0 && src_w == 32'd0) ? C_DONE : C_IOW;
+                        if (src_w <= 32'(IOC_DATA_WORDS)) ioc_loaded_o <= 1'b1;
+                    end
+                    C_IOW: begin
+                        ioc_we_o   <= 1'b1;
+                        ioc_data_o <= {ioc_sel, ioc_i, src_w};
+                        if (ioc_i + 16'd1 == (ioc_sel ? ioc_nd : ioc_nc)) begin
+                            ioc_i   <= '0;
+                            ioc_sel <= 1'b1;
+                            if (ioc_sel || ioc_nd == 16'd0) cst <= C_DONE;
+                        end else
+                            ioc_i <= ioc_i + 16'd1;
                     end
                     default: ;
                 endcase
             end
+            if (cst == C_IERR) cst <= C_ERR;
         end
     end
 
@@ -291,10 +353,28 @@ module mpy_boot #(
 `else
     logic [31:0] sim_img [0:MPY_FLASH_WORDS-1];
     logic [31:0] sim_tag [0:MPY_FLASH_WORDS/8-1];
+    logic [31:0] sim_ioc [0:IOC_CODE_WORDS+IOC_DATA_WORDS-1];
     logic        sim_on;
     int unsigned sim_n;      // image words
     int          sim_len;    // stream words
     int          sim_k;
+    int          sim_end;    // first word after the image groups
+    int          sim_nc, sim_nd;   // I/O core section (+IOC_CODE / +IOC_DATA), or 0
+
+    // One 32-bit hex word a line, after `at`; returns the count.
+    function automatic int read_ioc(input string path, input int at);
+        int fd, n;
+        logic [31:0] w;
+        n = 0;
+        fd = $fopen(path, "r");
+        if (fd == 0) $fatal(1, "mpy_boot: cannot open %s", path);
+        while (at + n < IOC_CODE_WORDS + IOC_DATA_WORDS && $fscanf(fd, "%h", w) == 1) begin
+            sim_ioc[at + n] = w;
+            n++;
+        end
+        $fclose(fd);
+        return n;
+    endfunction
 
     initial begin
         string path;
@@ -309,7 +389,12 @@ module mpy_boot #(
             // Image header word 2 is the image size in bytes.
             sim_n = 32'((64'(sim_img[2]) + 64'd3) >> 2);
             // Preserve an oversized count so simulation rejects it, just like SPI.
-            sim_len = 2 + 9 * ((sim_n + 7) / 8);
+            sim_end = 2 + 9 * ((sim_n + 7) / 8);
+            sim_nc = 0; sim_nd = 0;
+            if ($value$plusargs("IOC_CODE=%s", path)) sim_nc = read_ioc(path, 0);
+            if ($value$plusargs("IOC_DATA=%s", path)) sim_nd = read_ioc(path, sim_nc);
+            // The I/O core's section, or one 0 word that ends the stream.
+            sim_len = sim_end + ((sim_nc + sim_nd > 0) ? 3 + sim_nc + sim_nd : 1);
             sim_on = 1'b1;
         end
     end
@@ -318,6 +403,14 @@ module mpy_boot #(
         int g, j;
         if (i == 0) return MPY_BOOT_MAGIC;
         if (i == 1) return 32'(sim_n);
+        if (i >= sim_end) begin
+            j = i - sim_end;
+            if (sim_nc + sim_nd == 0) return 32'd0;
+            if (j == 0) return MPY_IOCB_MAGIC;
+            if (j == 1) return 32'(sim_nc);
+            if (j == 2) return 32'(sim_nd);
+            return sim_ioc[j - 3];
+        end
         g = (i - 2) / 9;
         j = (i - 2) % 9;
         if (g >= MPY_FLASH_WORDS / 8) return 0;
@@ -325,7 +418,7 @@ module mpy_boot #(
     endfunction
 
     assign use_fast = sim_on;
-    assign fast_v   = sim_on && rst_n_i && (sim_k < sim_len);
+    assign fast_v   = sim_on && rst_n_i && (sim_k < sim_len) && !(cst == C_IOW && ioc_stall_i);
     assign fast_w   = sim_word(sim_k);
 
     always_ff @(posedge clk_i or negedge rst_n_i) begin

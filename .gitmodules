@@ -6,3 +6,17 @@
 	path = vendor/upy2
 	url = https://github.com/ColtonHarris999/uPy2.git
 	shallow = true
+[submodule "vendor/cve2"]
+	path = vendor/cve2
+	url = https://github.com/openhwgroup/cve2.git
+[submodule "vendor/hazard3"]
+	path = vendor/hazard3
+	url = https://github.com/Wren6991/Hazard3.git
+[submodule "vendor/no2usb"]
+	path = vendor/no2usb
+	url = https://github.com/no2fpga/no2usb.git
+	shallow = true
+[submodule "vendor/tinyusb"]
+	path = vendor/tinyusb
+	url = https://github.com/hathach/tinyusb.git
+	shallow = true

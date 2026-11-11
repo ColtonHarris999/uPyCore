@@ -129,7 +129,7 @@ module upycore_fpu #(
         S_FD_FMOD, S_FD_SUB, S_FD_DIV, S_FD_FIX, S_FD_SUB1,
         S_FD_FLOORW, S_FD_FLOOR, S_FD_DIFF, S_FD_HALF, S_FD_ADD1,
         S_POW_NORM, S_POW_STEP, S_POW_SQR, S_POW_MUL, S_POW_FIN, S_POW_RECIP, S_POW_INV,
-        S_POW_END, S_POW_UNIT, S_POW_SQRT,
+        S_POW_END, S_POW_UNIT, S_POW_SQRT, S_POW_DEC,
         S_DONE, S_EXC
     } state_e;
 
@@ -197,7 +197,22 @@ module upycore_fpu #(
     assign b_trunc_abs = !b_trunc_ok || (br[62:52] < 11'd1023) ? 64'd0 :
                          (b_uexp < 11'd52) ? b_sig >> (11'd52 - b_uexp) :
                                             b_sig << (b_uexp - 11'd52);
-    assign pow_n_small = (b_trunc_abs <= 64'(POW_CHAIN_MAX));
+    // trunc(|b|) <= POW_CHAIN_MAX exactly when |b| < POW_CHAIN_MAX + 1, and
+    // positive doubles order as their bit patterns, so this is one compare
+    // against a constant. (It is only used with b_trunc_ok.) Taken from
+    // b_trunc_abs it put the 64-bit shift and a 64-bit compare in front of
+    // the accept decode: fb64_r -> state_r at 14.6 ns, and with it the
+    // start of every FPU unit.
+    localparam logic [63:0] POW_LIM = $realtobits(real'(POW_CHAIN_MAX + 1));
+    assign pow_n_small = (br[62:0] < POW_LIM[62:0]);
+
+    // dec_kind == K_DIRECT, from the opcode and b_zero alone: the units'
+    // start signals do not wait for the power special cases (b_int, the
+    // exponent tests), which led fb64_r -> the divider's and multiplier's
+    // first stages at 13.6 ns.
+    logic dec_direct;
+    assign dec_direct = (op_i == UPY_ALU_ADD) || (op_i == UPY_ALU_SUB) || (op_i == UPY_ALU_MUL) ||
+                        ((op_i == UPY_ALU_TRUE_DIV) && !b_zero);
 
     always_comb begin
         dec_kind      = K_EXC;
@@ -226,46 +241,11 @@ module upycore_fpu #(
                 dec_kind = b_zero ? K_EXC : K_SEQ;
                 dec_next = S_FD_FMOD;
             end
+            // float **: the special cases and the exponent's class are
+            // decoded in S_POW_DEC from registered flags (below).
             UPY_ALU_POWER: begin
-                // CPython float_pow(), special cases first.
-                dec_kind = K_COMB;
-                if (b_zero) begin
-                    dec_result = UPY_F64_ONE;
-                end else if (a_nan) begin
-                    dec_result = ar;
-                end else if (b_nan) begin
-                    dec_result = (ar == UPY_F64_ONE) ? UPY_F64_ONE : br;
-                end else if (b_inf) begin
-                    if (a_abs_one)                     dec_result = UPY_F64_ONE;
-                    else if (b_gt0 == a_abs_gt_one)    dec_result = UPY_F64_PINF;
-                    else                               dec_result = UPY_F64_PZERO;
-                end else if (a_inf) begin
-                    if (b_gt0) dec_result = b_odd ? ar : a_abs;
-                    else       dec_result = b_odd ? {ar[63], 63'd0} : UPY_F64_PZERO;
-                end else if (a_zero) begin
-                    if (b_lt0) dec_kind = K_EXC;                 // ZeroDivisionError
-                    else       dec_result = b_odd ? ar : UPY_F64_PZERO;
-                end else if (!b_int && ar[63]) begin
-                    dec_kind = K_EXC;   // complex result in Python: not in hardware
-                end else if (a_abs_one) begin
-                    dec_result = (ar[63] && b_odd) ? UPY_F64_NONE : UPY_F64_ONE;
-                end else if (br == UPY_F64_HALF) begin
-                    // x ** 0.5: correctly rounded square root on the divider
-                    dec_kind = K_SEQ;
-                    dec_next = S_POW_SQRT;
-                end else if (b_int && b_trunc_ok && pow_n_small) begin
-                    // x ** n, |n| <= POW_CHAIN_MAX: square-and-multiply
-                    dec_kind      = K_SEQ;
-                    dec_next      = S_POW_NORM;
-                    dec_pow_neg   = ar[63] && b_odd;
-                    dec_pow_recip = b_lt0;
-                    dec_pow_n     = b_trunc_abs;
-                end else begin
-                    // fractional, large or non-int64 exponent: 2 ** (y log2 |x|)
-                    dec_kind      = K_SEQ;
-                    dec_next      = S_POW_UNIT;
-                    dec_pow_neg   = ar[63] && b_odd;
-                end
+                dec_kind = K_SEQ;
+                dec_next = S_POW_DEC;
             end
             UPY_ALU_NEG: begin
                 dec_kind   = K_COMB;
@@ -290,6 +270,73 @@ module upycore_fpu #(
     end
 
     // ---------------------------------------------------------------------
+    // float ** decode (state S_POW_DEC)
+    // ---------------------------------------------------------------------
+    // The exponent's class (integer, odd, in int64 range, small) and its
+    // truncated magnitude are registered every cycle; the operands are held
+    // while start_i is high, so they are current one cycle after the
+    // accept. Decoding them in the accept cycle was fb64_r -> alu_res at
+    // 12.4 ns (is_integer's mask shift, then the special-case chain, then
+    // the result select). Cost: one cycle per float **, two for the
+    // special cases that used to answer in the accept cycle.
+    logic        pf_int_r, pf_odd_r, pf_tok_r, pf_small_r;
+    logic [63:0] pf_n_r;
+    always_ff @(posedge clk_i or negedge rst_n_i) begin
+        if (!rst_n_i) begin
+            pf_int_r <= 1'b0; pf_odd_r <= 1'b0; pf_tok_r <= 1'b0; pf_small_r <= 1'b0; pf_n_r <= '0;
+        end else begin
+            pf_int_r <= b_int; pf_odd_r <= b_odd; pf_tok_r <= b_trunc_ok;
+            pf_small_r <= pow_n_small; pf_n_r <= b_trunc_abs;
+        end
+    end
+    kind_e       pw_kind;
+    logic [63:0] pw_result, pw_n;
+    state_e      pw_next;
+    logic        pw_neg, pw_recip;
+    always_comb begin
+        pw_result = '0; pw_next = S_IDLE; pw_neg = 1'b0; pw_recip = 1'b0; pw_n = '0;
+                // CPython float_pow(), special cases first.
+                pw_kind = K_COMB;
+                if (b_zero) begin
+                    pw_result = UPY_F64_ONE;
+                end else if (a_nan) begin
+                    pw_result = ar;
+                end else if (b_nan) begin
+                    pw_result = (ar == UPY_F64_ONE) ? UPY_F64_ONE : br;
+                end else if (b_inf) begin
+                    if (a_abs_one)                     pw_result = UPY_F64_ONE;
+                    else if (b_gt0 == a_abs_gt_one)    pw_result = UPY_F64_PINF;
+                    else                               pw_result = UPY_F64_PZERO;
+                end else if (a_inf) begin
+                    if (b_gt0) pw_result = pf_odd_r ? ar : a_abs;
+                    else       pw_result = pf_odd_r ? {ar[63], 63'd0} : UPY_F64_PZERO;
+                end else if (a_zero) begin
+                    if (b_lt0) pw_kind = K_EXC;                 // ZeroDivisionError
+                    else       pw_result = pf_odd_r ? ar : UPY_F64_PZERO;
+                end else if (!pf_int_r && ar[63]) begin
+                    pw_kind = K_EXC;   // complex result in Python: not in hardware
+                end else if (a_abs_one) begin
+                    pw_result = (ar[63] && pf_odd_r) ? UPY_F64_NONE : UPY_F64_ONE;
+                end else if (br == UPY_F64_HALF) begin
+                    // x ** 0.5: correctly rounded square root on the divider
+                    pw_kind = K_SEQ;
+                    pw_next = S_POW_SQRT;
+                end else if (pf_int_r && pf_tok_r && pf_small_r) begin
+                    // x ** n, |n| <= POW_CHAIN_MAX: square-and-multiply
+                    pw_kind      = K_SEQ;
+                    pw_next      = S_POW_NORM;
+                    pw_neg   = ar[63] && pf_odd_r;
+                    pw_recip = b_lt0;
+                    pw_n     = pf_n_r;
+                end else begin
+                    // fractional, large or non-int64 exponent: 2 ** (y log2 |x|)
+                    pw_kind      = K_SEQ;
+                    pw_next      = S_POW_UNIT;
+                    pw_neg   = ar[63] && pf_odd_r;
+                end
+    end
+
+    // ---------------------------------------------------------------------
     // Issue logic: which primitive runs in the current state, on what
     // ---------------------------------------------------------------------
     always_comb begin
@@ -306,7 +353,7 @@ module upycore_fpu #(
         unique case (state_r)
             S_IDLE: begin
                 // Scalar add/sub/mul/div start in the accept cycle itself.
-                if (start_i && dec_kind == K_DIRECT) begin
+                if (start_i && dec_direct) begin
                     u_add_start = !dec_mul && !dec_div;
                     u_sub       = dec_sub;
                     u_mul_start = dec_mul;
@@ -387,7 +434,7 @@ module upycore_fpu #(
         end else begin
             unique case (state_r)
                 S_IDLE: begin
-                    if (dec_kind == K_DIRECT) begin
+                    if (dec_direct) begin
                         state_r <= S_DIRECT;
                         mul_run <= dec_mul;
                     end else if (dec_kind == K_SEQ) begin
@@ -400,6 +447,19 @@ module upycore_fpu #(
                         t1_r        <= a_abs;             // pow base
                     end
                     // K_COMB / K_EXC complete in this cycle.
+                end
+                S_POW_DEC: begin
+                    unique case (pw_kind)
+                        K_SEQ: begin
+                            state_r     <= pw_next;
+                            pow_neg_r   <= pw_neg;
+                            pow_recip_r <= pw_recip;
+                            pow_n_r     <= pw_n;
+                            pow_n0_r    <= pw_n;
+                        end
+                        K_COMB: begin res_r <= pw_result; state_r <= S_DONE; end
+                        default: state_r <= S_EXC;
+                    endcase
                 end
                 S_DIRECT: begin
                     if (u_done) begin

@@ -59,7 +59,7 @@ module tb_spi_nand #(
         in_sr = {in_sr[6:0], mosi};
         nbit++;
         if (nbit % 8 == 0) begin
-            int m = nbit / 8 - 1;
+            automatic int m = nbit / 8 - 1;
             if (m == 0) cmd = in_sr;
             else if (cmd == 8'h0F && m == 1) feat = in_sr;
             else if (cmd == 8'h13 && m <= 3) addr = {addr[15:0], in_sr};
