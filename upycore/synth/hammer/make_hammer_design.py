@@ -183,7 +183,8 @@ def main() -> int:
                          "SRAM macros need far more than a logic-only example")
     ap.add_argument("--syn-margin", type=float, default=0.0, metavar="NS",
                     help="extra clock uncertainty in synthesis only: Genus targets a clock this "
-                         "much faster, leaving slack for routed wires (try 10-15%% of the period)")
+                         "much faster, leaving slack for routed wires (try 10-15%% of the period). "
+                         "Place and route then needs the upycore_hammer.py driver to undo it")
     ap.add_argument("--par-effort", choices=["express", "standard", "extreme"],
                     help="Innovus design_flow_effort (Hammer default standard); extreme "
                          "optimizes timing harder and runs longer")
@@ -358,11 +359,13 @@ def main() -> int:
                                           "set_false_path -from $data_in -to [all_outputs]\n"
                                           if args.no_feedthrough else "")))
     if args.syn_margin:
-        # Genus and Innovus both read this file; Innovus reads it after the
-        # SDC Genus wrote, so the plain uncertainty above wins there.
+        # Only Genus reads this file. Innovus takes the SDC Genus writes,
+        # margin included, so par_settings.tcl below puts the plain value
+        # back before place_opt_design.
         with sdc.open("a") as f:
             f.write("\n# Synthesis margin (--syn-margin): Genus alone sees a tighter clock, so\n"
-                    "# the netlist keeps slack for routed wires. Innovus gets the plain value.\n"
+                    "# the netlist keeps slack for routed wires. Innovus gets the plain value\n"
+                    "# back from cfg/par_settings.tcl.\n"
                     "if {[string match -nocase *genus* [file tail [info nameofexecutable]]]} {\n"
                     f"    set_clock_uncertainty {float(args.uncertainty) + args.syn_margin:g} [all_clocks]\n"
                     "}\n")
@@ -410,6 +413,10 @@ def main() -> int:
     if args.cts:
         par_tcl = ["set_db cts_target_skew 0.15", "set_db cts_max_fanout 24",
                    "set_db opt_clock_gate_aware true"] + par_tcl
+    if args.syn_margin:
+        par_tcl += ["set_interactive_constraint_modes [all_constraint_modes -active]",
+                    f"set_clock_uncertainty -setup {float(args.uncertainty):g} [all_clocks]",
+                    f"set_clock_uncertainty -hold {float(args.uncertainty):g} [all_clocks]"]
     if args.diodes:
         par_tcl += ["set_db route_design_antenna_diode_insertion true",
                     "set_db route_design_antenna_cell_name sky130_fd_sc_hd__diode_2"]
