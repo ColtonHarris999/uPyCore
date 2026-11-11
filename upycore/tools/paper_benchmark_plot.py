@@ -12,6 +12,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.colors import to_rgba
 from matplotlib.ticker import FuncFormatter, MaxNLocator
 
 REFERENCE = Path(__file__).resolve().parents[2] / "docs/paper/benchmark-board-ms.csv"
@@ -69,19 +70,19 @@ def load_runtimes(path, cycles, clock_ns):
 
 def style_axis(ax):
     ax.set_axisbelow(True)
-    ax.grid(axis="x", color="#dddddd", linewidth=0.55)
+    ax.grid(axis="x", color="#dedede", linewidth=0.45)
     ax.spines[["top", "right", "left"]].set_visible(False)
     ax.tick_params(axis="y", length=0)
 
 
 def bar_style(device):
     color, hatch = STYLES[device]
-    return {"color": color if device == CORE else "white",
+    return {"color": color if device == CORE else to_rgba(color, 0.12),
             "edgecolor": color, "hatch": hatch}
 
 
 def device_bars(values, xlabel, labels):
-    fig, ax = plt.subplots(figsize=(3.45, 2.25), layout="constrained")
+    fig, ax = plt.subplots(figsize=(3.45, 2.1), layout="constrained")
     for index, (device, value) in enumerate(values.items()):
         ax.barh(index, value, height=0.64, linewidth=0.65, **bar_style(device))
         ax.annotate(labels[device], (value, index), xytext=(3, 0),
@@ -93,25 +94,39 @@ def device_bars(values, xlabel, labels):
     return fig, ax
 
 
-def suite_plot(suite, devices):
-    fig, ax = plt.subplots(figsize=(7.05, 6.6), layout="constrained")
-    for index in range(0, len(suite), 2):
-        ax.axhspan(index - 0.5, index + 0.5, color="#f4f4f4", zorder=0)
+def runtime_panel(ax, rows, devices, title):
     spacing = 0.88 / len(devices)
     for index, device in enumerate(devices):
         offset = (index - (len(devices) - 1) / 2) * spacing
-        positions = [(row, times[device]) for row, (_, times) in enumerate(suite.values())
+        positions = [(row, times[device]) for row, (_, times) in enumerate(rows)
                      if device in times]
-        rows, times = zip(*positions)
-        ax.barh([row + offset for row in rows], times, height=0.83 * spacing,
-                label=device, linewidth=0.5, zorder=3, **bar_style(device))
-    ax.set(xlim=(0, None), xlabel="Kernel runtime (ms)  ←  lower is better",
-           ylim=(len(suite) - 0.5, -0.5))
-    ax.set_yticks(range(len(suite)), [label for label, _ in suite.values()])
-    ax.xaxis.set_major_locator(MaxNLocator(7))
+        if positions:
+            indices, times = zip(*positions)
+            ax.barh([row + offset for row in indices], times, height=0.84 * spacing,
+                    label=device, linewidth=0.4, zorder=3, **bar_style(device))
+    ax.set_title(title, loc="left")
+    ax.set(ylim=(len(rows) - 0.5, -0.5))
+    ax.set_yticks(range(len(rows)), [label for label, _ in rows])
+    for row in range(len(rows) - 1):
+        ax.axhline(row + 0.5, color="#ededed", linewidth=0.45)
     style_axis(ax)
-    ax.legend(loc="lower left", bbox_to_anchor=(0, 1.01, 1, 0), mode="expand",
-              frameon=False, ncol=4, borderaxespad=0, handletextpad=0.25)
+
+
+def suite_plot(suite, devices):
+    fig, axes = plt.subplots(1, 2, figsize=(7.05, 3.7), sharex=True, layout="constrained")
+    left = [value for name, value in suite.items() if name.startswith("bm_")]
+    right = [value for name, value in suite.items() if not name.startswith("bm_")]
+    runtime_panel(axes[0], left, devices, "(a) Application kernels")
+    runtime_panel(axes[1], right, devices, "(b) Runtime and miscellaneous kernels")
+    axes[0].set_xlim(left=0)
+    axes[0].xaxis.set_major_locator(MaxNLocator(5))
+    fig.supxlabel("Kernel runtime (ms)", fontsize=8.5)
+    handles = {}
+    for ax in axes:
+        artists, labels = ax.get_legend_handles_labels()
+        handles.update(zip(labels, artists))
+    fig.legend([handles[device] for device in devices], devices, loc="outside upper center",
+               frameon=False, ncol=4, columnspacing=1.2, handletextpad=0.4)
     return fig
 
 
@@ -126,7 +141,7 @@ def suite_comparisons(suite, devices):
 
 
 def speedup_plot(comparisons, suite_size):
-    fig, ax = plt.subplots(figsize=(7.05, 2.45), layout="constrained")
+    fig, ax = plt.subplots(figsize=(7.05, 2.3), layout="constrained")
     labels = []
     for index, (device, (count, _, _, speedup)) in enumerate(comparisons.items()):
         bars = ax.bar(index, speedup, width=0.62, linewidth=0.75, **bar_style(device))
@@ -137,7 +152,7 @@ def speedup_plot(comparisons, suite_size):
     ax.set(ylim=(0, 1.2 * max(1, peak_speedup)), ylabel="Mean µPyCore speedup (×)\n(projected)")
     ax.yaxis.set_major_locator(MaxNLocator(5))
     ax.set_axisbelow(True)
-    ax.grid(axis="y", color="#dddddd", linewidth=0.55)
+    ax.grid(axis="y", color="#dedede", linewidth=0.45)
     ax.axhline(1, color="#595959", linestyle="--", linewidth=0.7)
     ax.spines[["top", "right"]].set_visible(False)
     ax.tick_params(axis="x", length=0)
@@ -145,8 +160,7 @@ def speedup_plot(comparisons, suite_size):
 
 
 def save(fig, directory, stem):
-    fig.savefig(directory / f"{stem}.pdf", metadata={"Creator": Path(__file__).name})
-    fig.savefig(directory / f"{stem}.png", dpi=300)
+    fig.savefig(directory / f"{stem}.png", dpi=600, facecolor="white")
     plt.close(fig)
 
 
@@ -175,11 +189,11 @@ def main():
 
     plt.rcParams.update({
         "font.family": "serif", "font.serif": ["STIXGeneral"], "font.size": 8,
-        "axes.labelsize": 8.5, "axes.linewidth": 0.6, "pdf.fonttype": 42,
-        "hatch.linewidth": 0.45, "axes.unicode_minus": False,
+        "axes.labelsize": 8.5, "axes.titlesize": 8.5, "axes.linewidth": 0.6,
+        "hatch.linewidth": 0.4, "axes.unicode_minus": False,
     })
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    fig, ax = device_bars(rates, "Pystone iterations per second  →  higher is better",
+    fig, ax = device_bars(rates, "Pystone throughput (iterations/s)",
                           {device: f"{rate:,.0f}" for device, rate in rates.items()})
     ax.xaxis.set_major_locator(MaxNLocator(5))
     ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:,.0f}"))

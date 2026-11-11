@@ -5465,6 +5465,7 @@ module mpy_core (
 	ca_fault_i,
 	ca_fault_reason_i,
 	ca_fault_addr_i,
+	evt_pend_i,
 	halted_o,
 	halt_code_o,
 	halt_value_o,
@@ -5566,6 +5567,7 @@ module mpy_core (
 	input wire ca_fault_i;
 	input wire [3:0] ca_fault_reason_i;
 	input wire [31:0] ca_fault_addr_i;
+	input wire evt_pend_i;
 	output wire halted_o;
 	output wire [3:0] halt_code_o;
 	output wire [31:0] halt_value_o;
@@ -5894,6 +5896,11 @@ module mpy_core (
 	reg [31:0] cbase;
 	reg [6:0] sp;
 	reg [7:0] nloc;
+	reg locals_in_image;
+	reg [8:0] stack_prefix_words;
+	reg [16:0] local_image_word;
+	reg [31:0] local_base;
+	reg gen_direct_locals;
 	reg [5:0] rf_base;
 	reg [15:0] spilled_reals;
 	reg [31:0] spill_hp;
@@ -6010,6 +6017,12 @@ module mpy_core (
 	reg [31:0] hval;
 	reg [31:0] cyc;
 	reg [31:0] nops;
+	reg evt_q;
+	reg soft_pt;
+	reg hl_r;
+	reg hl_skip;
+	reg [14:0] hl_cnt;
+	reg [31:0] wfe_n;
 	reg trace;
 	localparam signed [31:0] FE_QD = 3;
 	localparam signed [31:0] FE_OW = 4;
@@ -6395,22 +6408,31 @@ module mpy_core (
 		.extra_o(d_ext)
 	);
 	wire [31:0] ftop;
-	function automatic [31:0] sv2v_cast_32;
-		input reg [31:0] inp;
-		sv2v_cast_32 = inp;
+	function automatic [8:0] sv2v_cast_9;
+		input reg [8:0] inp;
+		sv2v_cast_9 = inp;
 	endfunction
-	assign ftop = fbase + (((32'd17 + sv2v_cast_32(nloc)) + (32'd3 * {27'd0, nexc})) << 2);
+	function automatic [8:0] frame_prefix;
+		input reg [7:0] locals;
+		input reg [4:0] exceptions;
+		frame_prefix = (9'd17 + sv2v_cast_9(locals)) + (9'd3 * sv2v_cast_9(exceptions));
+	endfunction
+	assign ftop = fbase + {21'd0, stack_prefix_words, 2'b00};
 	wire [9:0] stk_off;
 	wire [31:0] stk_top;
 	function automatic [9:0] sv2v_cast_10;
 		input reg [9:0] inp;
 		sv2v_cast_10 = inp;
 	endfunction
-	assign stk_off = ((10'd17 + sv2v_cast_10(nloc)) + (10'd3 * sv2v_cast_10(nexc))) + sv2v_cast_10(sp);
+	assign stk_off = sv2v_cast_10(stack_prefix_words) + sv2v_cast_10(sp);
 	assign stk_top = fbase + {20'd0, stk_off, 2'b00};
 	function automatic [31:0] loc_ptr;
 		input reg [7:0] idx;
-		loc_ptr = (fbase + 32'h00000044) + {22'd0, idx, 2'b00};
+		loc_ptr = (local_base + 32'h00000044) + {22'd0, idx, 2'b00};
+	endfunction
+	function automatic [31:0] sv2v_cast_32;
+		input reg [31:0] inp;
+		sv2v_cast_32 = inp;
 	endfunction
 	function automatic [31:0] exc_ptr;
 		input reg [31:0] base;
@@ -6606,8 +6628,8 @@ module mpy_core (
 			4'd1: hdr_word = {4'd0, rc};
 			4'd2: hdr_word = {4'd0, pc};
 			4'd3: hdr_word = {4'd0, op_pc};
-			4'd4: hdr_word = {4'd0, fflags, 1'b0, nloc[6:0], 3'b000, xsp, 1'b0, sp};
-			4'd5: hdr_word = {15'h0000, nexc, fcont, 4'd0, frk};
+			4'd4: hdr_word = {4'd0, fflags, 1'b0, nloc[6:0], 3'b000, xsp, locals_in_image, sp};
+			4'd5: hdr_word = {4'd0, local_image_word[16:6], nexc, fcont, local_image_word[5:2], frk};
 			4'd6: hdr_word = glb;
 			4'd7: hdr_word = loc;
 			4'd8: hdr_word = fun;
@@ -6618,7 +6640,7 @@ module mpy_core (
 			4'd13: hdr_word = {4'd0, cbase};
 			4'd14: hdr_word = gen;
 			4'd15: hdr_word = {4'd0, spill_hp};
-			32'd16: hdr_word = {6'h00, spilled_reals, nloc, rf_base};
+			32'd16: hdr_word = {4'd0, local_image_word[1:0], spilled_reals, nloc, rf_base};
 			default: hdr_word = VNULL;
 		endcase
 	endfunction
@@ -7219,6 +7241,7 @@ module mpy_core (
 	localparam [7:0] ABI_HOOK_IMPORT_FROM = 8'd14;
 	localparam [7:0] ABI_HOOK_IMPORT_STAR = 8'd15;
 	localparam [7:0] ABI_HOOK_INT_OVERFLOW = 8'd25;
+	localparam [7:0] ABI_HOOK_IRQ_DISPATCH = 8'd26;
 	localparam [7:0] ABI_HOOK_SETATTR = 8'd6;
 	localparam [7:0] ABI_HOOK_SETSUBSCR = 8'd8;
 	localparam [7:0] ABI_HOOK_SUBSCR = 8'd7;
@@ -7263,6 +7286,8 @@ module mpy_core (
 	localparam [7:0] ABI_N_GRESUME = 8'd27;
 	localparam [7:0] ABI_N_HALT = 8'd5;
 	localparam [7:0] ABI_N_HASH = 8'd29;
+	localparam [7:0] ABI_N_HLOCK = 8'd62;
+	localparam [7:0] ABI_N_HUNLOCK = 8'd63;
 	localparam [7:0] ABI_N_ID = 8'd2;
 	localparam [7:0] ABI_N_INEXT = 8'd26;
 	localparam [7:0] ABI_N_ISINSTANCE = 8'd1;
@@ -7304,6 +7329,7 @@ module mpy_core (
 	localparam [7:0] ABI_N_WCOPY = 8'd17;
 	localparam [7:0] ABI_N_WCOPY_STEP = 8'd47;
 	localparam [7:0] ABI_N_WE = 8'd4;
+	localparam [7:0] ABI_N_WFE = 8'd61;
 	localparam [7:0] ABI_N_WR = 8'd3;
 	localparam [31:0] ABI_OB_BIGINT = 32'd20;
 	localparam [31:0] ABI_OB_BOUND_METHOD = 32'd7;
@@ -7538,6 +7564,12 @@ module mpy_core (
 			cyc <= 32'd0;
 			nops <= 32'd0;
 			trace <= 1'b0;
+			evt_q <= 1'b0;
+			soft_pt <= 1'b0;
+			hl_r <= 1'b0;
+			hl_skip <= 1'b0;
+			hl_cnt <= 15'd0;
+			wfe_n <= 32'd0;
 			fe_flush <= 1'b0;
 			h_nq <= 32'd0;
 			h_qext <= 32'd0;
@@ -7545,6 +7577,7 @@ module mpy_core (
 			qd_nxt <= 10'd0;
 			sp <= 7'd0;
 			nloc <= 8'd0;
+			stack_prefix_words <= 9'd17;
 			rf_base <= 6'd0;
 			spilled_reals <= 16'd0;
 			spill_hp <= MPY_CORE_SCRATCH_BASE;
@@ -7580,6 +7613,10 @@ module mpy_core (
 			frk <= ABI_RK_HALT;
 			fbase <= ABI_FRAME_BASE;
 			fprev <= 32'd0;
+			local_base <= ABI_FRAME_BASE;
+			local_image_word <= 17'd0;
+			locals_in_image <= 1'b0;
+			gen_direct_locals <= 1'b0;
 			gen <= VNULL;
 			inj <= VNONE;
 			fl_img <= 1'b0;
@@ -7664,6 +7701,8 @@ module mpy_core (
 			trace <= 1'b0;
 			if (!halted)
 				cyc <= cyc + 32'd1;
+			evt_q <= evt_pend_i;
+			hl_r <= (hl_cnt != 15'd0) && !hl_skip;
 			if (sp_hold)
 				sp_hold <= 1'b0;
 			else if (sp < sp_d)
@@ -8111,9 +8150,13 @@ module mpy_core (
 						fprev <= (noframe ? 32'd0 : fbase);
 						fbase <= x3;
 						noframe <= 1'b0;
+						local_base <= x3;
+						local_image_word <= 17'd0;
 						rc <= c_rc;
 						nloc <= c_nst;
 						nexc <= c_nexc[4:0];
+						stack_prefix_words <= frame_prefix(c_nst, c_nexc[4:0]);
+						locals_in_image <= 1'b0;
 						sp <= 7'd0;
 						rf_base <= 6'd0;
 						spilled_reals <= 16'd0;
@@ -8292,7 +8335,7 @@ module mpy_core (
 							st <= 10'd555;
 						end
 						else begin
-							sw_i <= 32'd0;
+							sw_i <= (spill_to_img && locals_in_image ? 32'd2 : 32'd0);
 							sw_k <= 2'd0;
 							gosub(10'd588, 10'd509);
 						end
@@ -8300,11 +8343,16 @@ module mpy_core (
 						if (sw_i == 32'd17) begin
 							sw_i <= 32'd0;
 							sw_k <= 2'd0;
-							st <= (spill_to_img ? 10'd510 : 10'd512);
+							st <= (spill_to_img && !locals_in_image ? 10'd510 : 10'd512);
 						end
 						else begin
 							wr(fbase + (sw_i << 2), hdr_word(sw_i), 10'd509);
-							sw_i <= sw_i + 32'd1;
+							if ((spill_to_img && locals_in_image) && (sw_i == 32'd5))
+								sw_i <= 32'd9;
+							else if ((spill_to_img && locals_in_image) && (sw_i == 32'd11))
+								sw_i <= 32'd15;
+							else
+								sw_i <= sw_i + 32'd1;
 						end
 					10'd510:
 						if (sw_i == nloc) begin
@@ -8368,11 +8416,15 @@ module mpy_core (
 										sp <= m_rdata_i[6:0];
 										xsp <= m_rdata_i[12:8];
 										fflags <= m_rdata_i[31:24];
+										if (!fl_img)
+											locals_in_image <= m_rdata_i[7];
 									end
 									4'd5: begin
 										frk <= m_rdata_i[3:0];
 										fcont <= m_rdata_i[15:8];
 										nexc <= m_rdata_i[20:16];
+										if (!fl_img)
+											local_image_word[16:2] <= {m_rdata_i[31:21], m_rdata_i[7:4]};
 									end
 									4'd6: glb <= {m_rtag_i, m_rdata_i};
 									4'd7: loc <= {m_rtag_i, m_rdata_i};
@@ -8388,9 +8440,14 @@ module mpy_core (
 										if (fl_i == 32'd16) begin
 											rf_base <= m_rdata_i[5:0];
 											nloc <= m_rdata_i[13:6];
+											stack_prefix_words <= frame_prefix((locals_in_image ? 8'd0 : m_rdata_i[13:6]), nexc);
 											spilled_reals <= m_rdata_i[29:14];
 											exc_base <= (fl_base + 32'h00000044) + ({24'd0, m_rdata_i[13:6]} << 2);
-											stack_base <= fl_base + (((32'd17 + {24'd0, m_rdata_i[13:6]}) + (32'd3 * {27'd0, nexc})) << 2);
+											if (!fl_img) begin
+												local_image_word[1:0] <= m_rdata_i[31:30];
+												local_base <= (locals_in_image ? MPY_SRAM_BASE | {13'd0, local_image_word[16:2], m_rdata_i[31:30], 2'b00} : fl_base);
+											end
+											stack_base <= fl_base + {21'd0, frame_prefix((fl_img || !locals_in_image ? m_rdata_i[13:6] : 8'd0), nexc), 2'b00};
 										end
 								endcase
 								md <= m_rdata_i;
@@ -8399,7 +8456,11 @@ module mpy_core (
 									fl_i <= 32'd0;
 									fl_k <= 2'd0;
 									bl_n <= 8'd0;
-									if (fl_img)
+									if (fl_img && locals_in_image) begin
+										fl_img <= 1'b0;
+										st <= 10'd585;
+									end
+									else if (fl_img)
 										st <= 10'd583;
 									else begin
 										sw_k <= 2'd0;
@@ -8780,7 +8841,7 @@ module mpy_core (
 								default:
 									halt(ABI_HALT_BUS, ca_fault_addr_i);
 							endcase
-						else if (aalu_pend && ((sp >= sv2v_cast_7_signed(RF_SPILL_AT)) || (has_link && (sp <= sv2v_cast_7_signed(RF_RELOAD_AT))))) begin
+						else if (aalu_pend && (((sp >= sv2v_cast_7_signed(RF_SPILL_AT)) || (has_link && (sp <= sv2v_cast_7_signed(RF_RELOAD_AT)))) || (soft_pt && evt_q))) begin
 							if (aalu_go) begin
 								aalu_ret <= 10'd147;
 								st <= 10'd777;
@@ -8794,6 +8855,8 @@ module mpy_core (
 							rf_resume <= 10'd147;
 							st <= 10'd566;
 						end
+						else if (soft_pt && evt_q)
+							st <= 10'd811;
 						else if (fe_avail != 6'd0) begin
 							dq_bytes <= d_bytes;
 							dq_n <= d_n;
@@ -8820,6 +8883,7 @@ module mpy_core (
 							ext <= d_ext;
 							op_pc <= pc;
 							pc <= pc + d_len;
+							soft_pt <= 1'b0;
 							extv <= d_extv;
 							nops <= nops + 32'd1;
 							trace <= 1'b1;
@@ -8979,6 +9043,7 @@ module mpy_core (
 								8'h42: begin
 									pc <= jt_c;
 									st <= 10'd147;
+									soft_pt <= !(fflags & FF_FW);
 								end
 								8'h43, 8'h44, 8'h45, 8'h46: begin
 									tr_v <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))];
@@ -9003,6 +9068,7 @@ module mpy_core (
 									pc <= jt_c;
 									sw_k <= 2'd0;
 									gosub(10'd587, 10'd147);
+									soft_pt <= !(fflags & FF_FW);
 								end
 								8'h40: begin
 									rf[rf_base[3:0] + sv2v_cast_4(sp)] <= vint(jt_c);
@@ -9828,6 +9894,8 @@ module mpy_core (
 										sp <= sp - 7'd1;
 								default: rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))] <= vbool(!tr_r);
 							endcase
+							if (op[7:3] == 5'b01000)
+								soft_pt <= !(fflags & FF_FW);
 							st <= 10'd147;
 						end
 					10'd523: begin
@@ -10120,6 +10188,7 @@ module mpy_core (
 						if (uj[6:0] == 7'd0) begin
 							pc <= rf[rf_base[3:0] + sv2v_cast_4(sv2v_cast_6(sp - 7'd1))][31:0];
 							sp <= (sp - 7'd1) - (uj[7] ? 7'd4 : 7'd0);
+							soft_pt <= !(fflags & FF_FW);
 							st <= 10'd147;
 						end
 						else if (xsp == 5'd0)
@@ -11863,6 +11932,18 @@ module mpy_core (
 									rd(ab_ptr(ab_lo + 8'd1), 10'd674);
 							ABI_N_ID:
 								deliver(vint(v1), crk);
+							ABI_N_WFE: begin
+								wfe_n <= v1;
+								st <= 10'd813;
+							end
+							ABI_N_HLOCK: begin
+								hl_cnt <= hl_cnt + 15'd1;
+								deliver(VNONE, crk);
+							end
+							ABI_N_HUNLOCK: begin
+								hl_cnt <= hl_cnt - 15'd1;
+								deliver(vint({17'd0, hl_cnt - 15'd1}), crk);
+							end
 							ABI_N_WR, ABI_N_WE: begin
 								x4 <= ABI_SIM_BASE + (4 * (nid == ABI_N_WR ? ABI_SIM_STDOUT : ABI_SIM_STDERR));
 								if (tg(mv) == ABI_TAG_INT)
@@ -13223,10 +13304,14 @@ module mpy_core (
 					end
 					10'd162: begin
 						fbase <= x0;
+						if (locals_in_image)
+							stack_prefix_words <= frame_prefix(nloc, 5'd0);
 						gosub(10'd508, 10'd163);
 					end
 					10'd163: begin
 						fbase <= x4;
+						if (locals_in_image)
+							stack_prefix_words <= 9'd17;
 						spill_to_img <= 1'b0;
 						ret;
 					end
@@ -13348,7 +13433,7 @@ module mpy_core (
 					end
 					10'd186: begin
 						v0 = (noframe ? ABI_FRAME_BASE : stk_top);
-						v3 = sv2v_cast_32((12'd17 + sv2v_cast_12(x1[22:16])) + (12'd3 * sv2v_cast_12(md[20:16])));
+						v3 = sv2v_cast_32((12'd17 + sv2v_cast_12((md[20:16] == 0 ? 7'd0 : x1[22:16]))) + (12'd3 * sv2v_cast_12(md[20:16])));
 						v1 = (noframe ? ABI_FRAME_BASE + (v3 << 2) : fbase + {18'd0, sv2v_cast_12(stk_off) + v3[11:0], 2'b00});
 						if ((x1[6:0] == 7'd0) && (t[1] != VNONE)) begin
 							fflags <= fflags & ~FF_YFAST;
@@ -13361,6 +13446,7 @@ module mpy_core (
 						else begin
 							x3 <= v0;
 							b1 <= x1[6:0] != 7'd0;
+							gen_direct_locals <= md[20:16] == 0;
 							wr(aoff(adr(t[0]), 16), VNONE, 10'd187);
 						end
 					end
@@ -13375,6 +13461,9 @@ module mpy_core (
 						fprev <= (noframe ? 32'd0 : fbase);
 						fbase <= x3;
 						noframe <= 1'b0;
+						local_base <= (gen_direct_locals ? x4 : x3);
+						local_image_word <= (gen_direct_locals ? x4[18:2] : 17'd0);
+						locals_in_image <= gen_direct_locals;
 						fl_base <= x4;
 						fl_img <= 1'b1;
 						gosub(10'd148, 10'd188);
@@ -13522,9 +13611,34 @@ module mpy_core (
 							wb_i <= wb_i + 4'd1;
 						end
 					10'd3: begin
-						gc_alloc_req <= 1'b1;
 						al_gc <= 1'b0;
-						st <= 10'd8;
+						hl_skip <= 1'b0;
+						if (hl_r)
+							st <= 10'd812;
+						else begin
+							gc_alloc_req <= 1'b1;
+							st <= 10'd8;
+						end
+					end
+					10'd812:
+						if (al_soft) begin
+							al_ok <= 1'b0;
+							al_a <= 32'd0;
+							ret;
+						end
+						else begin
+							hl_skip <= 1'b1;
+							raise_msg(ABI_MSG_HEAP_LOCKED);
+						end
+					10'd811: begin
+						soft_pt <= 1'b0;
+						ab_lo <= 8'd32;
+						ab_pe <= 8'd32;
+						ab_nkw <= 8'd0;
+						crk <= ABI_RK_DISCARD;
+						ab_chunked <= 1'b0;
+						hk_id <= ABI_HOOK_IRQ_DISPATCH;
+						st <= 10'd241;
 					end
 					10'd8:
 						if (gc_alloc_done_i) begin
@@ -13563,6 +13677,13 @@ module mpy_core (
 						gc_alloc_req <= 1'b1;
 						st <= 10'd8;
 					end
+					10'd813:
+						if (evt_q)
+							deliver(VTRUE, crk);
+						else if ((wfe_n == 32'd0) || wfe_n[31])
+							deliver(VFALSE, crk);
+						else
+							wfe_n <= wfe_n - 32'd1;
 					10'd4:
 						wr(aoff(EMERG_ADDR, 12), VNULL, 10'd5);
 					10'd5:

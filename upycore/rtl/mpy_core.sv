@@ -1168,6 +1168,17 @@ module mpy_core
     logic [31:0] fbase, fprev, rc, pc, op_pc, qbase, cbase;
     logic [6:0]  sp;
     logic [7:0]  nloc;
+    // Exception-free resumed generators keep locals in their tagged heap image.
+    // The reserve frame still holds the header, active stack and caller link.
+    // Header word 4 saves the mode. Words 5 and 16 save the image word
+    // offset so a return into a suspended caller restores the local base.
+    // Keep the mode and current stack layout registered. Stack address
+    // calculation is shared by the bytecode paths and frame switches.
+    logic        locals_in_image;
+    logic [8:0]  stack_prefix_words;
+    logic [16:0] local_image_word;
+    logic [31:0] local_base;
+    logic        gen_direct_locals;
     logic [5:0]  rf_base;
     logic [15:0] spilled_reals;
     logic [31:0] spill_hp;
@@ -1550,12 +1561,6 @@ module mpy_core
     logic [31:0] ftop;
     // 17 header words: gen, spill_hp, and the ring metadata sit after the
     // original 14, and locals begin at byte 0x44.
-    // 17 + n_state + 3 * n_exc, registered. nloc and nexc change only in
-    // S_CF_SW and S_FL_H, and the state after either (S_LCLR; S_FL_H, S_XLOAD or
-    // S_FL_L) uses neither ftop nor stk_off, so the one-cycle lag is never
-    // seen (checked every cycle in simulation). As a sum in front of the
-    // call's frame bound and the spill check it was the nexc -> m_req, rstk,
-    // st family at 13.2 ns.
     // The callee's 17 + n_state + 3 * n_exc (S_CF_CHK), and a generator
     // image's (S_GR6B), each a flop so the frame bound is fbase plus one
     // narrow sum (c_nexc -> rsp and md -> the resume's bound were 11.3 and
@@ -1572,19 +1577,18 @@ module mpy_core
     // rsp and the resume's bound, 11.2 to 11.7 ns). fbase and spill_hp are
     // fixed through the header burst (S_CF_RC) and the image reads that
     // lead to the two checks; simulation compares both forms there.
-    // A second register takes the frame's own 17 + n_state + 3 * n_exc off
+    // A second register takes the frame's own stack prefix (stack_prefix_words) off
     // (hp_free_r), so the check adds only sp and the new frame's size, 13
     // bits wide; hp_big_r says there is more room than those can reach.
-    logic [9:0] fgeo_r, fgeo_c;
     logic [31:0] hp_room_r, hp_free_r;
     logic        hp_neg_r, hp_neg2_r, hp_big_r;
     always_ff @(posedge clk_i or negedge rst_n_i)
         if (!rst_n_i) begin hp_room_r <= '0; hp_neg_r <= 1'b0; hp_free_r <= '0; hp_neg2_r <= 1'b0; hp_big_r <= 1'b0; end
         else begin
             hp_room_r <= (spill_hp - fbase) >> 2; hp_neg_r <= (spill_hp < fbase);
-            hp_free_r <= hp_room_r - {22'd0, fgeo_r};
-            hp_neg2_r <= hp_neg_r || (hp_room_r < {22'd0, fgeo_r});
-            hp_big_r  <= (hp_room_r - {22'd0, fgeo_r}) >= 32'd8192;
+            hp_free_r <= hp_room_r - {23'd0, stack_prefix_words};
+            hp_neg2_r <= hp_neg_r || (hp_room_r < {23'd0, stack_prefix_words});
+            hp_big_r  <= (hp_room_r - {23'd0, stack_prefix_words}) >= 32'd8192;
         end
     // From S_DEC, for the instruction S_EXEC runs next: the local cache's
     // answer for the local it names, and whether a call's operands are all
@@ -1600,22 +1604,15 @@ module mpy_core
     logic [7:0]  lf_ix;      // the local a LOAD_FAST / STORE_FAST names, from S_DEC
     logic [15:0] bl_base;    // BUILD_LIST: stack depth below the items
     logic        ur_le;      // S_UR_SLOW's depth test
-    assign fgeo_c = 10'd17 + 10'(nloc) + 10'd3 * 10'(nexc);
-    always_ff @(posedge clk_i or negedge rst_n_i)
-        if (!rst_n_i) fgeo_r <= 10'd17;
-        else fgeo_r <= fgeo_c;
-`ifdef MPY_CHECK
-    always_ff @(posedge clk_i)
-        if (rst_n_i && fgeo_r != fgeo_c && st != S_LCLR && st != S_XLOAD && st != S_FL_L && st != S_FL_H)
-            $error("fgeo_r stale in state %0d", st);
-`endif
-    assign ftop = fbase + {20'd0, fgeo_r, 2'b00};
-    // ftop + 4 * sp, the top of the stack in the frame. The narrow fields
-    // are summed first (at most 17 + 255 + 3 * 31 + 127 = 492), so the
-    // value takes one 32-bit add instead of two in series.
+    function automatic logic [8:0] frame_prefix(input logic [7:0] locals, input logic [4:0] exceptions);
+        frame_prefix = 9'd17 + 9'(locals) + 9'd3 * 9'(exceptions);
+    endfunction
+    assign ftop = fbase + {21'd0, stack_prefix_words, 2'b00};
+    // Add the live stack depth to the registered prefix before adding the
+    // frame address. The combined word offset is at most 492.
     logic [9:0]  stk_off;
     logic [31:0] stk_top;
-    assign stk_off = fgeo_r + 10'(sp);
+    assign stk_off = 10'(stack_prefix_words) + 10'(sp);
     assign stk_top = fbase + {20'd0, stk_off, 2'b00};
     function automatic logic over_hp(input logic [31:0] words);
         over_hp = hp_neg2_r || (!hp_big_r && (13'(sp) + 13'(words[11:0]) > hp_free_r[12:0]));
@@ -1625,7 +1622,7 @@ module mpy_core
     // Logical stack slot -> physical register. Wraps at 16. rf_base[5:4] stay 0.
     `define SX(L) (4'(rf_base[3:0] + 4'(L)))
     function automatic logic [31:0] loc_ptr(input logic [7:0] idx);
-        loc_ptr = fbase + 32'h44 + {22'd0, idx, 2'b00};
+        loc_ptr = local_base + 32'h44 + {22'd0, idx, 2'b00};
     endfunction
     // Word 0 of exception slot `slot` in the frame at `base`.
     // fbase + 0x44 + 4 * nloc, registered: the live frame's exception
@@ -1843,8 +1840,8 @@ module mpy_core
             4'd1: hdr_word = {4'd0, rc};
             4'd2: hdr_word = {4'd0, pc};
             4'd3: hdr_word = {4'd0, op_pc};
-            4'd4: hdr_word = {4'd0, fflags, 1'b0, nloc[6:0], 3'b000, xsp, 1'b0, sp};
-            4'd5: hdr_word = {4'd0, 11'd0, nexc, fcont, 4'd0, frk};
+            4'd4: hdr_word = {4'd0, fflags, 1'b0, nloc[6:0], 3'b000, xsp, locals_in_image, sp};
+            4'd5: hdr_word = {4'd0, local_image_word[16:6], nexc, fcont, local_image_word[5:2], frk};
             4'd6: hdr_word = glb;
             4'd7: hdr_word = loc;
             4'd8: hdr_word = fun;
@@ -1855,7 +1852,7 @@ module mpy_core
             4'd13: hdr_word = {4'd0, cbase};
             4'd14: hdr_word = gen;
             4'd15: hdr_word = {4'd0, spill_hp};
-            32'd16: hdr_word = {4'd0, 2'b00, spilled_reals, nloc, rf_base};
+            32'd16: hdr_word = {4'd0, local_image_word[1:0], spilled_reals, nloc, rf_base};
             default: hdr_word = VNULL;
         endcase
     endfunction
@@ -1880,8 +1877,15 @@ module mpy_core
     assign sd_l  = spilled_reals + {9'd0, 7'(sp - 7'd1)};
     assign stk_depth = has_link ? sd_l : sd_nl;
 
+    // g is resident when g - spilled_reals is below the resident count: a
+    // subtract and a 7-bit compare, beside the count's decrement, instead
+    // of the depth sum and then two 16-bit compares (sp -> m_req at
+    // 10.7 ns). SAT-proven equal while spilled_reals + sp does not wrap
+    // 16 bits (the stack is far shallower).
     function automatic logic stk_hit(input logic [15:0] g);
-        stk_hit = (g >= spilled_reals) && (has_link ? (g < sd_l) : (g < sd_nl));
+        logic [16:0] d;
+        d = {1'b0, g} - {1'b0, spilled_reals};
+        stk_hit = !d[16] && (d[15:7] == 9'd0) && (d[6:0] < resident_reals[6:0]);
     endfunction
     function automatic logic [6:0] stk_slot(input logic [15:0] g);
         stk_slot = has_link ? (7'(g - spilled_reals) + 7'd1) : 7'(g - spilled_reals);
@@ -2198,7 +2202,7 @@ module mpy_core
             evt_q <= 1'b0; soft_pt <= 1'b0; hl_r <= 1'b0; hl_skip <= 1'b0; hl_cnt <= 15'd0; wfe_n <= 32'd0;
             fe_flush <= 1'b0;
             h_nq <= 32'd0; h_qext <= 32'd0; h_qextn <= 32'd0; qd_nxt <= S_BOOT;
-            sp <= 7'd0; nloc <= 8'd0; rf_base <= 6'd0; spilled_reals <= 16'd0;
+            sp <= 7'd0; nloc <= 8'd0; stack_prefix_words <= 9'd17; rf_base <= 6'd0; spilled_reals <= 16'd0;
             spill_hp <= MPY_CORE_SCRATCH_BASE; rf_pend <= 1'b0;
             scr_id <= SCR_NONE; scr_i <= 4'd0; scr_storing <= 1'b0; scr_gosub_p <= 1'b0;
             for (int k = 0; k < 8; k++) begin sA[k] <= 32'd0; sV[k] <= VNULL; end
@@ -2208,7 +2212,8 @@ module mpy_core
             noframe <= 1'b1; ovr <= ABI_OVR_NONE;
             cl_loc <= VNULL; al_soft <= 1'b0;
             fflags <= 8'd0; fcont <= 8'd0; frk <= ABI_RK_HALT;
-            fbase <= ABI_FRAME_BASE; fprev <= 32'd0;
+            fbase <= ABI_FRAME_BASE; fprev <= 32'd0; local_base <= ABI_FRAME_BASE;
+            local_image_word <= 17'd0; locals_in_image <= 1'b0; gen_direct_locals <= 1'b0;
             gen <= VNULL; inj <= VNONE; fl_img <= 1'b0; spill_to_img <= 1'b0;
             lc_fl_ret <= S_SPILL;
             ss_store<=0;ss_native<=0;ss_reverse<=0;ss_omitted<=0;
@@ -2573,8 +2578,10 @@ module mpy_core
             end
             S_CF_SW: begin
                 fprev <= noframe ? 32'd0 : fbase;
-                fbase <= x3; noframe <= 1'b0;
+                fbase <= x3; noframe <= 1'b0; local_base <= x3; local_image_word <= 17'd0;
                 rc <= c_rc; nloc <= c_nst; nexc <= c_nexc[4:0];
+                stack_prefix_words <= frame_prefix(c_nst, c_nexc[4:0]);
+                locals_in_image <= 1'b0;
                 sp <= 7'd0; rf_base <= 6'd0; spilled_reals <= 16'd0; rf_pend <= 1'b0;
                 xsp <= 5'd0; i0 <= 8'd0;
                 fflags <= ((c_rcf & ABI_RC_FLAG_FIRMWARE) ? FF_FW : 8'd0) |
@@ -2680,13 +2687,20 @@ module mpy_core
             // copy, or the register snapshot. A collection reaches GC roots
             // through this spill, so xp has to be in the frame.
             S_SPILL: if (lc_dirty_any) begin lc_fi <= 4'd0; lc_fl_ret <= S_SPILL; st <= S_LC_FL; end
-                     else begin sw_i <= 32'd0; sw_k <= 2'd0; gosub(S_XFLUSH, S_SP_H); end
+                     // A previously resumed generator already has its static
+                     // context in the heap image. The resumer supplies the caller link.
+                     else begin sw_i <= spill_to_img && locals_in_image ? 32'd2 : 32'd0; sw_k <= 2'd0; gosub(S_XFLUSH, S_SP_H); end
             S_SP_H: if (sw_i == 32'd17) begin
                         sw_i <= 32'd0; sw_k <= 2'd0;
-                        st <= spill_to_img ? S_SP_L : S_SP_R;
+                        st <= spill_to_img && !locals_in_image ? S_SP_L : S_SP_R;
                     end
-                    else begin wr(fbase + (sw_i << 2), hdr_word(sw_i), S_SP_H); sw_i <= sw_i + 32'd1; end
-            // Generator image: locals still sit in the reserve frame at x4.
+                    else begin
+                        wr(fbase + (sw_i << 2), hdr_word(sw_i), S_SP_H);
+                        if (spill_to_img && locals_in_image && sw_i == 32'd5) sw_i <= 32'd9;
+                        else if (spill_to_img && locals_in_image && sw_i == 32'd11) sw_i <= 32'd15;
+                        else sw_i <= sw_i + 32'd1;
+                    end
+            // Cold generator path: locals still sit in the reserve frame at x4.
             S_SP_L: if (sw_i == nloc) begin sw_i <= 32'd0; sw_k <= 2'd0; st <= S_SP_X; end
                     else rd(x4 + 32'h44 + (sw_i << 2), S_SP_L2);
             S_SP_L2: begin wr(fbase + 32'h44 + (sw_i << 2), mv, S_SP_L); sw_i <= sw_i + 32'd1; end
@@ -2728,8 +2742,14 @@ module mpy_core
                             4'd1: rc <= m_rdata_i;
                             4'd2: pc <= m_rdata_i;
                             4'd3: op_pc <= m_rdata_i;
-                            4'd4: begin sp <= m_rdata_i[6:0]; xsp <= m_rdata_i[12:8]; fflags <= m_rdata_i[31:24]; end
-                            4'd5: begin frk <= m_rdata_i[3:0]; fcont <= m_rdata_i[15:8]; nexc <= m_rdata_i[20:16]; end
+                            4'd4: begin
+                                sp <= m_rdata_i[6:0]; xsp <= m_rdata_i[12:8]; fflags <= m_rdata_i[31:24];
+                                if (!fl_img) locals_in_image <= m_rdata_i[7];
+                            end
+                            4'd5: begin
+                                frk <= m_rdata_i[3:0]; fcont <= m_rdata_i[15:8]; nexc <= m_rdata_i[20:16];
+                                if (!fl_img) local_image_word[16:2] <= {m_rdata_i[31:21], m_rdata_i[7:4]};
+                            end
                             4'd6: glb <= {m_rtag_i, m_rdata_i};
                             4'd7: loc <= {m_rtag_i, m_rdata_i};
                             4'd8: fun <= {m_rtag_i, m_rdata_i};
@@ -2743,15 +2763,25 @@ module mpy_core
                             default: if (fl_i == 32'd16) begin
                                 rf_base <= m_rdata_i[5:0];
                                 nloc <= m_rdata_i[13:6];
+                                stack_prefix_words <= frame_prefix(locals_in_image ? 8'd0 : m_rdata_i[13:6], nexc);
                                 spilled_reals <= m_rdata_i[29:14];
                                 exc_base <= fl_base + 32'h44 + ({24'd0, m_rdata_i[13:6]} << 2);
-                                stack_base <= fl_base + ((32'd17 + {24'd0, m_rdata_i[13:6]} + 32'd3 * {27'd0, nexc}) << 2);
+                                if (!fl_img) begin
+                                    local_image_word[1:0] <= m_rdata_i[31:30];
+                                    local_base <= locals_in_image
+                                                ? MPY_SRAM_BASE | {13'd0, local_image_word[16:2], m_rdata_i[31:30], 2'b00}
+                                                : fl_base;
+                                end
+                                stack_base <= fl_base + {21'd0,
+                                    frame_prefix(fl_img || !locals_in_image ? m_rdata_i[13:6] : 8'd0, nexc),
+                                    2'b00};
                             end
                         endcase
                         md <= m_rdata_i; mt <= m_rtag_i;
                         if (fl_i == 32'd16) begin
                             fl_i <= 32'd0; fl_k <= 2'd0; bl_n <= 8'd0;
-                            if (fl_img) st <= S_FL_L;
+                            if (fl_img && locals_in_image) begin fl_img <= 1'b0; st <= S_FL_S; end
+                            else if (fl_img) st <= S_FL_L;
                             else begin sw_k <= 2'd0; gosub(S_XLOAD, S_FL_S); end
                         end else fl_i <= fl_i + 32'd1;
                     end
@@ -5689,9 +5719,14 @@ module mpy_core
             end
             S_GSAVE1B: begin
                 fbase <= x0;
+                if (locals_in_image) stack_prefix_words <= frame_prefix(nloc, 5'd0);
                 gosub(S_SPILL, S_GSAVE2);
             end
-            S_GSAVE2: begin fbase <= x4; spill_to_img <= 1'b0; ret(); end
+            S_GSAVE2: begin
+                fbase <= x4;
+                if (locals_in_image) stack_prefix_words <= 9'd17;
+                spill_to_img <= 1'b0; ret();
+            end
 
             S_GN_AL: rd(TT + 4 * ABI_T_GENERATOR, S_GN_AL2);
             S_GN_AL2: begin t[3] <= mv; alloc(32'd6, S_GN_AL3); end
@@ -5782,7 +5817,9 @@ module mpy_core
             // md is the image's header word; its frame size is registered
             // here and the bound is checked in S_GR6B (one cycle per resume).
             S_GR6: begin
-                gr_geo_r <= 12'd17 + 12'(x1[22:16]) + 12'd3 * 12'(md[20:16]);
+                // An exception-free image keeps its locals in the heap image,
+                // so its reserve frame holds no locals.
+                gr_geo_r <= 12'd17 + 12'(md[20:16] == 0 ? 7'd0 : x1[22:16]) + 12'd3 * 12'(md[20:16]);
                 st <= S_GR6B;
             end
             S_GR6B: begin
@@ -5806,6 +5843,7 @@ module mpy_core
                 end else begin
                     x3 <= v0;
                     b1 <= (x1[6:0] != 7'd0);
+                    gen_direct_locals <= md[20:16] == 0;
                     wr(aoff(adr(t[0]), 16), VNONE, S_GR_CLR);
                 end
             end
@@ -5816,6 +5854,9 @@ module mpy_core
                 fprev <= noframe ? 32'd0 : fbase;
                 fbase <= x3;
                 noframe <= 1'b0;
+                local_base <= gen_direct_locals ? x4 : x3;
+                local_image_word <= gen_direct_locals ? x4[18:2] : 17'd0;
+                locals_in_image <= gen_direct_locals;
                 fl_base <= x4;
                 fl_img <= 1'b1;
                 gosub(S_FILL, S_GR_GO);
@@ -6696,14 +6737,25 @@ module mpy_core
                         ab_lo <= 8'd31;
                     end else begin ab_lo <= 8'd32; st <= S_CC_ARG; end
                 end
-            S_CC_ARG: if (gi == x1) st <= S_CC_DONE;
-                else if (stk_hit(x2[15:0] + gi[15:0])) begin
+            // An argument is resident when no more values sit above it than
+            // the ring holds: stk_depth - (x2 + gi), which is x3 minus the
+            // callable (and self) minus gi, against resident_reals. sp does
+            // not move in this loop. (stk_hit on x2 + gi put an add, the
+            // depth sum and two compares in front of m_req: 10.7 ns.)
+            S_CC_ARG: begin
+`ifdef MPY_CHECK
+                if (gi != x1 && stk_hit(x2[15:0] + gi[15:0]) != (16'(x3 - (b0 ? 32'd2 : 32'd1) - gi) <= resident_reals))
+                    $error("S_CC_ARG resident test differs");
+`endif
+                if (gi == x1) st <= S_CC_DONE;
+                else if (16'(x3 - (b0 ? 32'd2 : 32'd1) - gi) <= resident_reals) begin
                     wr(ab_ptr(8'(32 + gi)), stk_val(x2[15:0] + gi[15:0]), S_CC_ARG);
                     gi <= gi + 32'd1;
                 end else begin
                     srd_g <= x2[15:0] + gi[15:0];
                     gosub(S_SRD, S_CC_ARG2);
                 end
+            end
             S_CC_ARG2: begin
                     wr(ab_ptr(8'(32 + gi)), srd_v, S_CC_ARG);
                     gi <= gi + 32'd1;

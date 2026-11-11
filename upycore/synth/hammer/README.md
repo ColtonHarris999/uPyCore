@@ -213,14 +213,10 @@ python3 upycore/synth/hammer/make_hammer_design.py \
 ```
 
 After an RTL change, regenerate the files with `convert_rtl.sh` on a
-machine where sv2v runs, and commit them. **Stale now:** the board I/O
-work changed `mpy_core` (the soft-point check, the `_wfe` native, the heap
-lock) and added the I/O island to `mpy_soc`, and sv2v could not be run
-where that was done, so `converted/mpy_core.v` and `converted/mpy_soc.v`
-were not regenerated (`mpy_alu.v` and `mpy_decode.v` are current). Run
-`convert_rtl.sh` (which now covers the island through `mpy_soc`) before
-using `--rtl` or `--core-v` with them. Where sv2v runs on the lab
-machine itself, `--sv2v <binary>` converts while building the folder.
+machine where sv2v runs, and commit them. Update `converted/RTL_STAMP`
+to the source RTL commit used for the conversion. The `mpy_soc` view
+includes the I/O island. Where sv2v runs on the lab machine itself,
+`--sv2v <binary>` converts while building the folder.
 The converted files also read cleanly in Yosys's own Verilog parser.
 
 ## Power from simulated activity

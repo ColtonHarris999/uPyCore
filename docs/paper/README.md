@@ -33,7 +33,7 @@ Needs a TeX distribution with `tikz`, `booktabs`, `hyperref`, `listings`,
 ## Benchmark comparison figures
 
 Run from the repository root with the pinned submodules, Verilator, and
-Matplotlib installed. Set the projection period from the timing analysis for
+Matplotlib 3.7 or newer installed. Set the projection period from the timing analysis for
 the design being reported. For example, the mapped Sky130 HD TT estimate for
 the core RTL in `676d273` was 11.775 ns.
 
@@ -56,9 +56,10 @@ the MPZ oracle is unavailable. The shortlist comparison checks source and
 harness identity and result callbacks, whose correctness coverage varies by
 kernel.
 
-The script writes vector PDFs and 300 dpi PNGs. Pystone reports throughput for
-300 iterations. The suite plots the remaining 15 kernels as grouped bars on a
-linear runtime axis. An empty bar slot indicates a missing timing. The speedup
+The script writes 600 dpi PNGs sized for single- and double-column figures.
+Pystone reports throughput for 300 iterations. The suite plots the remaining
+15 kernels as grouped bars in two panels with a shared linear runtime axis.
+An empty bar slot indicates a missing timing. The speedup
 summary takes the arithmetic mean of the individual board-runtime-to-µPyCore
 runtime ratios on each board's subset of non-Pystone kernels with published
 timings. The figure shows each board's coverage and weights each eligible kernel
