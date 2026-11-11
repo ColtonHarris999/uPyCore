@@ -206,6 +206,13 @@ def main() -> int:
                          "A gate with thousands of flops sits near the clock root, about 1 ns "
                          "before the flops that drive its enable, and that skew was the worst "
                          "violation of every routed whole-chip run. Uses the upycore_hammer.py driver")
+    ap.add_argument("--no-clock-gate", action="append", default=[], metavar="PATTERN",
+                    help="registers Genus must not clock-gate, as an instance pattern such as "
+                         "'u_core/m_addr_reg*' (repeatable). Their enables become ordinary "
+                         "data-path muxes. A clock gate gets its clock 0.4 to 1.2 ns before its "
+                         "flops and has a 0.4 ns setup, so a late enable loses 1 to 1.6 ns "
+                         "against a flop; the core's m_addr, m_wdata, rf and x registers failed "
+                         "this way in every routed 10 ns run. Uses the upycore_hammer.py driver")
     ap.add_argument("--par-tcl", action="append", default=[], metavar="LINE",
                     help="an Innovus Tcl line to run before place_opt_design, after the class "
                          "settings (repeatable). Uses the upycore_hammer.py driver")
@@ -430,6 +437,8 @@ def main() -> int:
     syn_tcl = []
     if args.cg_max_flops:
         syn_tcl.append(f"set_db [get_db designs] .lp_clock_gating_max_flops {args.cg_max_flops}")
+    for pat in args.no_clock_gate:
+        syn_tcl.append(f"set_db [get_db insts {{{pat}}}] .lp_clock_gating_exclude true")
     if par_tcl or syn_tcl:
         # Our driver in place of the class one (upycore_hammer.py). The
         # wrapper keeps the class driver's interpreter line.
@@ -445,7 +454,7 @@ def main() -> int:
         tcl.write_text("# Run before place_opt_design (make_hammer_design.py --cts/--par-tcl).\n"
                        + "\n".join(par_tcl) + "\n")
         stcl = cfg_dir / "syn_settings.tcl"
-        stcl.write_text("# Run before syn_generic (make_hammer_design.py --cg-max-flops).\n"
+        stcl.write_text("# Run before syn_generic (make_hammer_design.py --cg-max-flops/--no-clock-gate).\n"
                         + "\n".join(syn_tcl) + "\n")
         wrapper = dest / "hammer_run_upycore"
         wrapper.write_text(f"{shebang}\n"

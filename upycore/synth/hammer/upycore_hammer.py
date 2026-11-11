@@ -6,7 +6,9 @@ whose hooks are fixed. This file loads that driver unchanged and adds two
 hooks: the Tcl in the design folder's cfg/par_settings.tcl runs in Innovus
 just before place_opt_design, after the class and sky130 settings, so its
 set_db lines win; cfg/syn_settings.tcl runs in Genus just before
-syn_generic, with the design elaborated. make_hammer_design.py --par-tcl/--cts writes that file
+syn_generic, with the design elaborated. (The class driver replaces the
+syn_generic step with its own genus_syn_with_preserve, so that is the name
+the hook targets.) make_hammer_design.py --par-tcl/--cts writes that file
 and a hammer_run_upycore wrapper next to the Makefile, and points the
 Makefile's HAMMER_EXEC at the wrapper. Without the Tcl file this is the
 class driver.
@@ -74,7 +76,7 @@ def main() -> None:
 
         def get_extra_synthesis_hooks(self):
             hooks = list(super().get_extra_synthesis_hooks())
-            hooks.append(hammer_vlsi.HammerTool.make_pre_insertion_hook("syn_generic", syn_settings))
+            hooks.append(hammer_vlsi.HammerTool.make_pre_insertion_hook("genus_syn_with_preserve", syn_settings))
             return hooks
 
     UpycoreHammerDriver().main()
