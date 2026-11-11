@@ -86,6 +86,14 @@ masked).
   `build/hw-test-cycles.json`, else the manifest's limits), so an area's
   slowest program, such as `compiler/compile_reject_locals` (about 420
   million cycles), does not start last.
+- `--shard K/N` runs shard K of N of the selected tests, balanced by
+  cycles (`upycore/programs/hw_test_cycles.json` is the fallback table; a
+  local run's `build/hw-test-cycles.json` wins). CI runs the `compiler` area
+  as three shards (`make docker-test-hw-compiler HW_SHARD=2/3`).
+- Testbench code must not declare a variable with an initializer inside an
+  `always`, `initial` or `always_comb` block without `automatic`: such a
+  variable is static and initialized once (Verilator 5.048, as in CI's
+  Debian image, follows the standard; 5.038 and older re-evaluated it).
 
 ### 4. Goldens against the oracle
 
