@@ -606,7 +606,6 @@ module mpy_core
         S_LK_RM4,
         S_LK_RV,
         S_LK_V,
-        S_LN_L,
         S_LN_R,
         S_LSUB,
         S_LS_D,
@@ -3517,7 +3516,11 @@ module mpy_core
                     8'h11, 8'h12: begin
                         b0 <= (op == 8'h11 && loc != VNULL) ? 1'b0 : 1'b1;
                         i2 <= (op == 8'h11 && loc != VNULL) ? 8'd0 : 8'd1;
-                        st <= S_LN_L;
+                        // The first dict's lookup starts here, and S_LN_R
+                        // starts the next one: each was one more cycle in
+                        // a state of its own (S_LN_L).
+                        lookup((op == 8'h11 && loc != VNULL) ? loc : glb, {ABI_TAG_QSTR, md},
+                               VNULL, LK_FIND, 1'b0, S_LN_R);
                     end
                     8'h16, 8'h17:
                         lookup((op == 8'h16 && loc != VNULL) ? loc : glb, {ABI_TAG_QSTR, md},
@@ -3542,16 +3545,19 @@ module mpy_core
                     default: halt(ABI_HALT_BAD_OPCODE, op_pc);
                 endcase
             end
-            S_LN_L: if (i2 == 8'd2 && bov != VNULL)
-                        lookup(bov, {ABI_TAG_QSTR, at_q}, VNULL, LK_FIND, 1'b0, S_LN_R);
-                    else lookup((i2 == 8'd0) ? loc : (i2 == 8'd1) ? glb : vmut(h_builtins, ABI_MUT_DICT),
-                                {ABI_TAG_QSTR, at_q}, VNULL, LK_FIND, 1'b0, S_LN_R);
             S_LN_R: if (lk_found) begin push(lk_res); st <= S_FETCH; end
                     else if (i2 == 8'd2 && bov != VNULL) begin
                         i2 <= 8'd3;
                         lookup(vmut(h_builtins, ABI_MUT_DICT), {ABI_TAG_QSTR, at_q}, VNULL, LK_FIND, 1'b0, S_LN_R);
                     end else if (i2 >= 8'd2) raise_err(ABI_ERR_NAME, {ABI_TAG_QSTR, at_q}, VNULL);
-                    else begin i2 <= i2 + 8'd1; st <= S_LN_L; end
+                    else begin
+                        // locals -> globals -> override dict or builtins
+                        i2 <= i2 + 8'd1;
+                        if (i2 == 8'd1 && bov != VNULL)
+                            lookup(bov, {ABI_TAG_QSTR, at_q}, VNULL, LK_FIND, 1'b0, S_LN_R);
+                        else lookup((i2 == 8'd0) ? glb : vmut(h_builtins, ABI_MUT_DICT),
+                                    {ABI_TAG_QSTR, at_q}, VNULL, LK_FIND, 1'b0, S_LN_R);
+                    end
             S_SN_R: if (lk_ro || lk_cx) raise_err(ABI_ERR_INTERNAL, t[4], VNULL);
                     else begin sp <= sp - 7'd1; st <= S_FETCH; end
             S_DN_R: if (!lk_found) raise_err(ABI_ERR_NAME, {ABI_TAG_QSTR, at_q}, VNULL);

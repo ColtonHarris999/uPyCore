@@ -458,3 +458,20 @@ compared with `--compare build/sta/base-soc/sta.txt`.
   9.472. Grew by more than 0.1 ns over change 22's run: `hm_start` 6.022
   -> 7.722, `lkA` 6.589 -> 6.950, `lk_hasav` 6.368 -> 6.633, `u_gc.zaddr`
   3.883 -> 4.003.
+
+### 24. LOAD_NAME / LOAD_GLOBAL start the lookup in `S_QOP` (cycles) — landed
+
+- Sink: opcode 0x12 (LOAD_GLOBAL) is 19 % of the cycles in the profile.
+  `S_QOP` set a counter and went to `S_LN_L`, which only called
+  `lookup()` on the dict the counter named.
+- Change (`mpy_core.sv`): `S_QOP` calls `lookup()` on the first dict
+  itself and `S_LN_R` calls it on the next one when the name is not
+  found. `S_LN_L` is removed. One cycle less per dict tried.
+- Cycles: geomean **0.7894** (was 0.7946), every `RESULT` identical
+  (`build/kern/b3`). `core_locals` 3185496 -> 3149318; `misc_pystone`
+  2157173 -> 2140658.
+- Proof: unit bench and kernels, not a miter (the state is gone, so
+  there is no cycle-for-cycle twin).
+- SoC STA (`build/sta/b3-soc/sta.txt`): worst 9.578, unchanged; `st`
+  9.446. Grew by more than 0.1 ns over change 23's run:
+  `shared_hash.part_r` 4.439 -> 4.559, `u_gc.raddr` 3.773 -> 3.880.
