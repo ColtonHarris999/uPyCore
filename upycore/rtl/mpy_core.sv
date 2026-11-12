@@ -1357,6 +1357,12 @@ module mpy_core
     // probe start instead of running the divider.
     logic [31:0] lk_am1;
     logic        lk_pow2;
+    // Probe look-ahead, registered while a key load is out: the position
+    // after lk_pos, whether it wraps to slot 0, and whether it is back at
+    // lk_start. S_LK_K then sends the next key load itself instead of going
+    // through S_LK_NX and S_LK_P (two cycles per probe after the first).
+    logic [31:0] lk_npos, ha_lk_nx;
+    logic        lk_nwrap, lk_nend;
     logic [31:0] al_n, al_a; logic al_ok, al_soft, al_gc;
     logic [31:0] sw_i; logic [1:0] sw_k;
     logic [31:0] fl_base, fl_i; logic [1:0] fl_k;
@@ -2132,6 +2138,20 @@ module mpy_core
         t[4] <= d; t[5] <= key; t[6] <= val; lk_mode <= mode; lk_set <= set;
         gosub_scr(SCR_LK, S_LK, back);
     endtask
+    // The probe after the one S_LK_K just read: the next slot's key load, and
+    // the look-ahead for the one after it. The last slot before lk_start
+    // goes to S_LK_NX, which ends the probe.
+    task automatic lk_next();
+        if (lk_nend) st <= S_LK_NX;
+        else begin
+            `lk_pos <= lk_npos;
+            `lk_slot <= lk_nwrap ? `lk_tab : ha_lk_nx;
+            lk_nwrap <= (lk_npos + 32'd1 == `lk_alloc);
+            lk_npos <= (lk_npos + 32'd1 == `lk_alloc) ? 32'd0 : lk_npos + 32'd1;
+            lk_nend <= (((lk_npos + 32'd1 == `lk_alloc) ? 32'd0 : lk_npos + 32'd1) == `lk_start);
+            rd(lk_nwrap ? `lk_tab : ha_lk_nx, S_LK_K);
+        end
+    endtask
     task automatic alloc(input logic [31:0] n, input state_e back);
         al_n <= (n == 32'd0) ? 32'd1 : n; gosub(S_AL, back);
     endtask
@@ -2154,6 +2174,7 @@ module mpy_core
     assign ha_m4     = aoff(m_addr, 4);
     assign ha_lk4    = aoff(`lk_slot, 4);
     assign lk_am1    = `lk_alloc - 32'd1;
+    assign ha_lk_nx  = `lk_slot + (lk_set ? 32'd4 : 32'd8);
     assign lk_pow2   = (`lk_alloc & lk_am1) == 32'd0;
     assign ha_qarg   = qbase + 4 * arg;
     assign ha_carg   = cbase + 4 * arg;
@@ -6260,22 +6281,32 @@ module mpy_core
                      end
             S_LK_P: begin
                 `lk_slot <= `lk_tab + (lk_set ? (`lk_pos << 2) : (`lk_pos << 3));
+                v0 = (`lk_pos + 32'd1 == `lk_alloc) ? 32'd0 : `lk_pos + 32'd1;
+                lk_npos <= v0; lk_nwrap <= (`lk_pos + 32'd1 == `lk_alloc); lk_nend <= (v0 == `lk_start);
                 rd(`lk_tab + (lk_set ? (`lk_pos << 2) : (`lk_pos << 3)), S_LK_K);
             end
-            S_LK_K: if (mv == VNULL) begin
+            S_LK_K: begin
+`ifdef MPY_CHECK
+                if (`lk_slot != `lk_tab + (lk_set ? (`lk_pos << 2) : (`lk_pos << 3)) ||
+                    lk_nwrap != (`lk_pos + 32'd1 == `lk_alloc) ||
+                    lk_npos != ((`lk_pos + 32'd1 == `lk_alloc) ? 32'd0 : `lk_pos + 32'd1) ||
+                    lk_nend != (lk_npos == `lk_start)) $error("lk probe look-ahead stale");
+`endif
+                    if (mv == VNULL) begin
                         if (lk_mode == LK_ADD) begin
                             if (lk_hasav) `lk_slot <= `lk_avail;
                             st <= S_LK_INS;
                         end else ret();
                     end else if (mv == VTOMB) begin
                         if (!lk_hasav) begin lk_hasav <= 1'b1; `lk_avail <= `lk_slot; end
-                        st <= S_LK_NX;
+                        lk_next();
                     end else if (mv == t[5]) st <= S_LK_HIT;
                     // Two different qstrs, or two different small ints, are
                     // different keys (S_KEYEQ's first answers): next slot.
                     else if ((tg(mv) == ABI_TAG_QSTR && tg(t[5]) == ABI_TAG_QSTR) ||
-                             (tg(mv) == ABI_TAG_INT && tg(t[5]) == ABI_TAG_INT)) st <= S_LK_NX;
+                             (tg(mv) == ABI_TAG_INT && tg(t[5]) == ABI_TAG_INT)) lk_next();
                     else begin ke_a <= mv; ke_b <= t[5]; gosub(S_KEYEQ, S_LK_KE); end
+            end
             S_LK_KE: if (ke_cx) begin lk_cx <= 1'b1; ret(); end
                      else if (scr_id != SCR_LK) scr_ensure(SCR_LK, S_LK_KE);
                      else if (ke_eq) st <= S_LK_HIT;

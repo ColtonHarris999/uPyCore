@@ -134,3 +134,21 @@ compared with `--compare build/sta/base-soc/sta.txt`.
 - Proof: `x % 2^k == x & (2^k - 1)` for unsigned x; kernel results.
 - Timing: `lk_am1` / `lk_pow2` hang off the alloc register. Gated in the
   SoC STA of change 8.
+
+### 6. Probe look-ahead (cycles) — landed
+
+- Sink: each further probe went `S_LK_K` -> `S_LK_NX` (next position, wrap,
+  end test) -> `S_LK_P` (slot address, load): two cycles around every key
+  load. Traced lookups take 2.0 to 5.1 probes.
+- Change (`mpy_core.sv`): `S_LK_P` registers the next position, whether it
+  wraps and whether it ends the probe (`lk_npos`, `lk_nwrap`, `lk_nend`).
+  On a tombstone or a different qstr / int key `S_LK_K` issues the next
+  key load itself (`lk_next`): the slot address is the old one plus 4 or 8,
+  or the table base on a wrap. The last slot still goes through `S_LK_NX`.
+- Cycles: geomean 0.9403 of baseline (cumulative), results identical
+  (`build/kern/k3-probe`).
+- Proof: registered form, checked in simulation: `+define+MPY_CHECK`
+  compares slot, next position, wrap and end against the unregistered
+  expressions in every `S_LK_K` (no error on `misc_pystone`,
+  `misc_raytrace`; the whole kernel set under MPY_CHECK is in change 8).
+- Timing: gated in the SoC STA of change 8.
