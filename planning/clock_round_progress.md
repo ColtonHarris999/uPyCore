@@ -122,3 +122,15 @@ compared with `--compare build/sta/base-soc/sta.txt`.
 - Proof: not an equivalence (the load is gone). Kernel results, and the
   hardware suite at the end of the round.
 - Timing: gated with changes 5 to 8 in one SoC STA, see change 8.
+
+### 5. Power-of-two tables take the probe start by mask (cycles) — landed
+
+- Sink: `S_LK_HM`, the sequential `hh % alloc`, 3.3 % of cycles. Traced
+  table sizes are {2, 4, 6, 8, 10, 12, 17, 23, ...}.
+- Change (`mpy_core.sv`, `S_LK_H`): when `alloc & (alloc - 1)` is 0 the
+  start is `hh & (alloc - 1)`, without the divider. `alloc` is not 0 here.
+- Cycles: geomean 0.9730 of baseline (cumulative with change 4), results
+  identical (`build/kern/k2-pow2`).
+- Proof: `x % 2^k == x & (2^k - 1)` for unsigned x; kernel results.
+- Timing: `lk_am1` / `lk_pow2` hang off the alloc register. Gated in the
+  SoC STA of change 8.

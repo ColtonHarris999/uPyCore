@@ -1353,6 +1353,10 @@ module mpy_core
     logic [1:0]  lk_mode; logic lk_set, lk_found, lk_cx, lk_ro;
     val_t        lk_res;
     logic        lk_hasav;
+    // A table whose size is a power of two takes hash & (alloc - 1) as the
+    // probe start instead of running the divider.
+    logic [31:0] lk_am1;
+    logic        lk_pow2;
     logic [31:0] al_n, al_a; logic al_ok, al_soft, al_gc;
     logic [31:0] sw_i; logic [1:0] sw_k;
     logic [31:0] fl_base, fl_i; logic [1:0] fl_k;
@@ -2149,6 +2153,8 @@ module mpy_core
     logic [31:0] ha_bl_rc, ha_bl_fl, ha_bl_stk, ha_bl_ab, ha_ab8, ha_bl_scr;
     assign ha_m4     = aoff(m_addr, 4);
     assign ha_lk4    = aoff(`lk_slot, 4);
+    assign lk_am1    = `lk_alloc - 32'd1;
+    assign lk_pow2   = (`lk_alloc & lk_am1) == 32'd0;
     assign ha_qarg   = qbase + 4 * arg;
     assign ha_carg   = cbase + 4 * arg;
     assign ha_mdarg  = md + 4 * arg;
@@ -6242,6 +6248,10 @@ module mpy_core
             S_LK_H: if (!hok) begin lk_cx <= 1'b1; ret(); end
                     else if (hh < `lk_alloc) begin
                         `lk_pos <= hh; `lk_start <= hh; lk_hasav <= 1'b0;
+                        st <= S_LK_P;
+                    end else if (lk_pow2) begin
+                        // hh % alloc for alloc = 2^k (alloc is not 0 here).
+                        `lk_pos <= hh & lk_am1; `lk_start <= hh & lk_am1; lk_hasav <= 1'b0;
                         st <= S_LK_P;
                     end else begin hm_start <= 1'b1; st <= S_LK_HM; end
             S_LK_HM: if (hm_done) begin
