@@ -722,7 +722,6 @@ module mpy_core
         S_RH_A3,
         S_RH_F1,
         S_RH_F2,
-        S_RH_F3,
         S_RH_H,
         S_RH_HM,
         S_RH_K,
@@ -1037,10 +1036,7 @@ module mpy_core
         S_N_STRNEW_A,
         S_N_STRNEW_B,
         S_SCR,
-        S_RH_LKA,
-        S_RH_LKB,
         S_RH_LKC,
-        S_RH_F3B,
         S_FI_PRE,
         S_N_SF0B,
         S_SA_K2,
@@ -1343,7 +1339,7 @@ module mpy_core
     // subroutine registers
     val_t        ty_v, ty_t;                       // TYPEOF
     val_t        hk; logic [31:0] hh; logic hok;   // HASH
-    logic        hm_start, hm_done;                // hh % sA[0] (upycore_umod_seq)
+    logic        hm_start, hm_done;                // hh % lkA[0] (upycore_umod_seq)
     logic [31:0] hm_rem;
     val_t        si_v; logic [31:0] si_len, si_hash, si_addr; logic si_na;  // SINFO
     val_t        se_a, se_b; logic se_eq;
@@ -1408,15 +1404,23 @@ module mpy_core
     state_e      scr_ret, scr_gt, scr_gb;
     val_t        sV [0:7];
     logic [31:0] sA [0:7];
+    // The dict / set probe (S_LK) has its own registers, not an image: a
+    // lookup under an attribute load, a for-iter or a list append leaves
+    // the caller's image resident. S_LK is never entered while a probe is
+    // live (S_KEYEQ, S_HASH and S_RH look nothing up), and no probe is live
+    // across S_DEC. The grow (S_RH) is only ever called from the probe and
+    // ends by restarting it at S_LK, so it sizes and fills the new table in
+    // the probe's own alloc and table words.
+    logic [31:0] lkA [0:5];
+    `define lk_alloc lkA[0]
+    `define lk_tab   lkA[1]
+    `define lk_pos   lkA[2]
+    `define lk_start lkA[3]
+    `define lk_avail lkA[4]
+    `define lk_slot  lkA[5]
     // Live names for whichever image scr_id says is resident.
-    `define lk_alloc sA[0]
-    `define lk_tab   sA[1]
-    `define lk_pos   sA[2]
-    `define lk_start sA[3]
-    `define lk_avail sA[4]
-    `define lk_slot  sA[5]
-    `define rh_alloc sA[0]
-    `define rh_tab   sA[1]
+    `define rh_alloc lkA[0]
+    `define rh_tab   lkA[1]
     `define rh_i     sA[2]
     `define rh_p     sA[3]
     `define rh_used  sA[4]
@@ -1528,10 +1532,10 @@ module mpy_core
         .done_o(alu_done), .res_o(alu_res), .rkind_o(alu_kind), .err_o(alu_err)
     );
 
-    // Probe start, pos = hh % alloc. Both callers divide by sA[0]
+    // Probe start, pos = hh % alloc. Both callers divide by lkA[0]
     // (`lk_alloc / `rh_alloc), which holds until the probe's done.
     upycore_umod_seq #(.BPC(4)) u_hmod (
-        .clk_i, .rst_n_i, .start_i(hm_start), .a_i(hh), .d_i(sA[0]),
+        .clk_i, .rst_n_i, .start_i(hm_start), .a_i(hh), .d_i(lkA[0]),
         .done_o(hm_done), .rem_o(hm_rem), .busy_o()
     );
 
@@ -2152,7 +2156,7 @@ module mpy_core
     task automatic lookup(input val_t d, input val_t key, input val_t val, input logic [1:0] mode,
                           input logic set, input state_e back);
         t[4] <= d; t[5] <= key; t[6] <= val; lk_mode <= mode; lk_set <= set;
-        gosub_scr(SCR_LK, S_LK, back);
+        gosub(S_LK, back);
     endtask
     // The probe after the one S_LK_K just read: the next slot's key load, and
     // the look-ahead for the one after it. The last slot before lk_start
@@ -2249,6 +2253,7 @@ module mpy_core
             spill_hp <= MPY_CORE_SCRATCH_BASE; rf_pend <= 1'b0;
             scr_id <= SCR_NONE; scr_i <= 4'd0; scr_storing <= 1'b0; scr_gosub_p <= 1'b0;
             for (int k = 0; k < 8; k++) begin sA[k] <= 32'd0; sV[k] <= VNULL; end
+            for (int k = 0; k < 6; k++) lkA[k] <= 32'd0;
             rf_mono <= 1'b1; sp_hold <= 1'b0; sp_d <= 7'd0; rf_reload_miss <= 1'b0;
             xsp <= 5'd0; nexc <= 5'd0;
             xh <= 32'd0; xv <= 16'd0; xf <= 1'b0; xp <= VNULL;
@@ -6275,15 +6280,14 @@ module mpy_core
             end
 
             // dict/set probe: t4 container, t5 key, t6 value; lk_mode, lk_set
-            S_LK: if (scr_id != SCR_LK) scr_adopt(SCR_LK, S_LK);
-                  else begin
-                      lk_found <= 1'b0; lk_cx <= 1'b0; lk_ro <= 1'b0; lk_res <= VNULL;
-                      // Only a store or a delete tests the flags word (ROM).
-                      // A find goes straight to the alloc word: one load less
-                      // on every name, global and attribute lookup.
-                      if (lk_mode == LK_FIND) rd(aoff(adr(t[4]), 4), S_LK_AL);
-                      else rd(aoff(adr(t[4]), 12), S_LK_FL);
-                  end
+            S_LK: begin
+                lk_found <= 1'b0; lk_cx <= 1'b0; lk_ro <= 1'b0; lk_res <= VNULL;
+                // Only a store or a delete tests the flags word (ROM).
+                // A find goes straight to the alloc word: one load less
+                // on every name, global and attribute lookup.
+                if (lk_mode == LK_FIND) rd(aoff(adr(t[4]), 4), S_LK_AL);
+                else rd(aoff(adr(t[4]), 12), S_LK_FL);
+            end
             S_LK_FL: if (lk_mode != LK_FIND && (md & ABI_DICT_FLAG_ROM)) begin lk_ro <= 1'b1; ret(); end
                      else rd(aoff(adr(t[4]), 4), S_LK_AL);
             S_LK_AL: begin `lk_alloc <= md; rd(aoff(adr(t[4]), 8), S_LK_TB); end
@@ -6342,7 +6346,6 @@ module mpy_core
                     else begin ke_a <= mv; ke_b <= t[5]; gosub(S_KEYEQ, S_LK_KE); end
             end
             S_LK_KE: if (ke_cx) begin lk_cx <= 1'b1; ret(); end
-                     else if (scr_id != SCR_LK) scr_ensure(SCR_LK, S_LK_KE);
                      else if (ke_eq) st <= S_LK_HIT;
                      else st <= S_LK_NX;
             S_LK_NX: begin
@@ -6384,13 +6387,12 @@ module mpy_core
             S_LK_INS3: rd(adr(t[4]), S_LK_INC);
             S_LK_INC: wr(adr(t[4]), vint(md + 32'd1), S_LK_RET);
 
-            // Grow t4. The caller's LK image is in SRAM. Pads sA[5]/sA[6] hold
-            // the re-read alloc and table for the copy loop. The new sizes are
-            // written back to LK words 0 and 1 before returning.
+            // Grow t4, from the probe only. `rh_alloc and `rh_tab are the
+            // probe's alloc and table words; the probe restarts at S_LK and
+            // reads both again from the dict. Pads sA[5]/sA[6] hold the
+            // re-read alloc and table for the copy loop.
             S_RH: if (scr_id != SCR_RH) scr_adopt(SCR_RH, S_RH);
-                  else st <= S_RH_LKA;
-            S_RH_LKA: rd(scr_addr(SCR_LK, 4'd0), S_RH_LKB);
-            S_RH_LKB: begin `rh_alloc <= md + 32'd1; st <= S_RH_LKC; end
+                  else begin `rh_alloc <= `lk_alloc + 32'd1; st <= S_RH_LKC; end
             // The size table lookup takes its own cycle: next_alloc in
             // front of the allocation request was sA -> al_n at 13.7 ns.
             S_RH_LKC: begin `rh_alloc <= next_alloc(`rh_alloc); st <= S_RH_LKD; end
@@ -6414,9 +6416,7 @@ module mpy_core
             S_RH_V2: wr(`rh_tab + (`rh_p << 3) + 4, mv, S_RH_NX);
             S_RH_NX: begin `rh_used <= `rh_used + 32'd1; `rh_i <= `rh_i + 32'd1; st <= S_RH_L; end
             S_RH_F1: wr(aoff(adr(t[4]), 8), {ABI_TAG_CONT, `rh_tab}, S_RH_F2);
-            S_RH_F2: wr(adr(t[4]), vint(`rh_used), S_RH_F3);
-            S_RH_F3: wr(scr_addr(SCR_LK, 4'd0), {4'd0, `rh_alloc}, S_RH_F3B);
-            S_RH_F3B: wr(scr_addr(SCR_LK, 4'd1), {4'd0, `rh_tab}, S_LK_RET);
+            S_RH_F2: wr(adr(t[4]), vint(`rh_used), S_LK_RET);
 
             // list append: t2 list, t3 value
             S_LA: if (scr_id != SCR_LA) scr_adopt(SCR_LA, S_LA);

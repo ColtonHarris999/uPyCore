@@ -173,3 +173,30 @@ compared with `--compare build/sta/base-soc/sta.txt`.
 - Proof: `+define+MPY_CHECK` at each fill: a valid entry with the same tag
   must hold the hash just read, and the descriptor must be in the image.
 - Cost: 64 x 24 flops. Timing gated in the SoC STA of change 8.
+
+### 8. The probe's own registers, not a scratch image (cycles) — landed
+
+- Sink: `S_SCR` is 4.2 % of cycles plus its waits. A lookup under an
+  attribute load stored the caller's image (8 stores), ran, and the
+  caller then stored the dead probe image (8 stores) and reloaded its own
+  (8 loads).
+- Change (`mpy_core.sv`): the probe's six words are `lkA[0:5]`, not
+  `sA[0:5]`. `lookup` is a plain `gosub`; `S_LK` has no adopt cycle and
+  `S_LK_KE` no reload. The grow (`S_RH`), called only from the probe and
+  ending by restarting it at `S_LK`, sizes and fills the new table in
+  `lkA[0]` / `lkA[1]`; its read of the stored probe image and the two
+  writes back (dead: `S_LK` reads alloc and table again) are gone, with
+  the states `S_RH_LKA`, `S_RH_LKB`, `S_RH_F3`, `S_RH_F3B`. `S_LK` is not
+  entered while a probe is live (`S_KEYEQ`, `S_HASH`, `S_RH` look nothing
+  up) and no probe is live across `S_DEC`. The probe has no tagged word,
+  so the collector's roots do not change.
+- Cycles: geomean **0.8589** of baseline (changes 4 to 8), every `RESULT`
+  identical to the baseline executable (`build/kern/k5-lkreg`).
+  `bm_chaos` 3415313 -> 2787850; `bm_wordcount` 6604660 -> 4287344; `core_locals` 4900777 -> 3740237; `misc_pystone` 2946340 -> 2436995; `misc_raytrace` 5666797 -> 4566080.
+- Cost: 192 flops. The LK slot of the scratch reservation is unused; the
+  memory map is unchanged.
+- SoC STA with changes 1, 3 to 8 (`build/sta/k5-lkreg-soc/sta.txt`): worst
+  10.332 -> 10.295 (`u_core.st`). No listed group grew by more than
+  0.1 ns; `c_addr` 9.986 -> 9.946. The state encoding moved (four states
+  fewer), which is where the 0.04 ns comes from; it is not a cut.
+- Gate: geomean of cycles x period = 0.8589 x 10.295 / 10.332 = 0.856.
