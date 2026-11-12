@@ -28,7 +28,21 @@ Defined in `docs/paper/figures/iscafig.tex`. Meaning is fixed:
 
 Every box has a text label. Color is not the only encoding. Do not add shadows, gradients, 3D, rounded corners, or a new hue.
 
-Arrows use the `arr` or `thinarr` style. No decorations other than a brace for a bit range or a span.
+Arrows on a layout figure use the `arr` or `thinarr` style. No decorations other than a brace for a bit range or a span.
+
+## Block diagrams
+
+A core or SoC figure is a flat block diagram, the kind in recent ISCA, MICRO, and HPCA papers: sharp rectangles, a thin dark stroke, the fills in the palette above, and the IEEEtran text face at `\footnotesize`. Do not switch the figure to sans-serif. Do not add a hue, a shadow, a gradient, a rounded corner, a 3D edge, an icon, or a trapezoidal mux. Color is not the only encoding. Every box has a name; a second line is the parameter that distinguishes it (`$16\times 36$`, `3 words`, `2 deep`).
+
+Composition:
+
+- Instruction flow runs left to right. Storage and the ALU sit beside the sequencer. Do not invent pipeline stages. A register between two boxes is drawn only when `architecture.md` names it.
+- A subsystem is an unfilled `grp`. A clock domain is a dashed `clkdom` (`domain` is TikZ's plot key). The title sits just outside the north-west corner, in `\footnotesize`, bold only for that title.
+- A shared memory port is one horizontal `bus` bar with orthogonal stubs and no arrowheads. A directed data path uses `arr`. A request, stall, or idle uses `ctrl` (dashed). No diagonal. Route with `-|` and `|-`.
+- Leave at least 2.5 mm between boxes. A wire label sits in the gap, in the `lbl` style, not on a border.
+- A core or SoC diagram uses `figure*` unless it fits in 8.6 cm at `\footnotesize` with that gap. Do not shrink it.
+
+The caption states the interaction a reader would otherwise misread: who wins a bank, what the scoreboard stalls, which clock a dashed box uses.
 
 ## Memory-map rows
 

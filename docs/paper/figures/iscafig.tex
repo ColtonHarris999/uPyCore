@@ -81,7 +81,19 @@
     align=center,
     inner sep=2pt,
     minimum height=4.2mm
-  }
+  },
+  % Shared interconnect. Draw it; do not attach it to a node.
+  bus/.style={draw=iscaInk, line width=1.15pt, line cap=round},
+  % Request, stall, or idle. Data stays on arr.
+  ctrl/.style={
+    -{Stealth[length=1.7mm]},
+    draw=iscaInk,
+    line width=0.55pt,
+    dashed
+  },
+  % A clock domain. Unfilled, like grp, but dashed.
+  % Not named domain: that key is TikZ's plot domain.
+  clkdom/.style={draw=iscaInk, line width=0.6pt, dashed, inner sep=6pt}
 }
 
 % \rfslot{prefix}{physical index}{style}{text}
