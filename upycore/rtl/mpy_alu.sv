@@ -302,29 +302,36 @@ module mpy_alu (
     assign bconv = mpy_i64_round(b[63], bzero, blz, bnorm);
 
     // Integer datapath (combinational ops).
+    // iop is the integer unit's code for op, registered wherever op is
+    // (iop_of): decoded from op in the cycle the unit answers it led the
+    // 64-bit subtract into res_o (op -> alu_res, 9.9 ns).
     logic [4:0]  iop;
     logic [63:0] ires;
     logic        izero, iovf, iverr;
-    always_comb begin
-        case (op)
-            ALU_ADD:    iop = UPY_ALU_ADD;
-            ALU_SUB:    iop = UPY_ALU_SUB;
-            ALU_AND:    iop = UPY_ALU_AND;
-            ALU_OR:     iop = UPY_ALU_OR;
-            ALU_XOR:    iop = UPY_ALU_XOR;
-            ALU_LSHIFT: iop = UPY_ALU_LSHIFT;
-            ALU_RSHIFT: iop = UPY_ALU_RSHIFT;
-            ALU_LT:     iop = UPY_ALU_LT;
-            ALU_GT:     iop = UPY_ALU_GT;
-            ALU_EQ:     iop = UPY_ALU_EQ;
-            ALU_LE:     iop = UPY_ALU_LE;
-            ALU_GE:     iop = UPY_ALU_GE;
-            ALU_NE:     iop = UPY_ALU_NE;
-            ALU_NEG:    iop = UPY_ALU_NEG;
-            ALU_INVERT: iop = UPY_ALU_INVERT;
-            default:    iop = UPY_ALU_PASS;
+    function automatic logic [4:0] iop_of(input logic [5:0] o);
+        case (o)
+            ALU_ADD:    iop_of = UPY_ALU_ADD;
+            ALU_SUB:    iop_of = UPY_ALU_SUB;
+            ALU_AND:    iop_of = UPY_ALU_AND;
+            ALU_OR:     iop_of = UPY_ALU_OR;
+            ALU_XOR:    iop_of = UPY_ALU_XOR;
+            ALU_LSHIFT: iop_of = UPY_ALU_LSHIFT;
+            ALU_RSHIFT: iop_of = UPY_ALU_RSHIFT;
+            ALU_LT:     iop_of = UPY_ALU_LT;
+            ALU_GT:     iop_of = UPY_ALU_GT;
+            ALU_EQ:     iop_of = UPY_ALU_EQ;
+            ALU_LE:     iop_of = UPY_ALU_LE;
+            ALU_GE:     iop_of = UPY_ALU_GE;
+            ALU_NE:     iop_of = UPY_ALU_NE;
+            ALU_NEG:    iop_of = UPY_ALU_NEG;
+            ALU_INVERT: iop_of = UPY_ALU_INVERT;
+            default:    iop_of = UPY_ALU_PASS;
         endcase
-    end
+    endfunction
+`ifdef MPY_CHECK
+    always_ff @(posedge clk_i)
+        if (rst_n_i && iop != iop_of(op)) $error("mpy_alu: iop is not the code of op %0d", op);
+`endif
     upycore_int_alu u_int (
         .op_a_i(a), .op_b_i(b), .op_i(iop),
         .result_o(ires), .zero_flag_o(izero), .overflow_flag_o(iovf), .value_error_o(iverr)
@@ -444,6 +451,7 @@ module mpy_alu (
             alz <= '0; blz <= '0; azero <= 1'b1; bzero <= 1'b1;
             aflt <= 1'b0; bflt <= 1'b0;
             op <= '0;
+            iop <= iop_of(6'd0);
             small_r <= 1'b0;
             a <= '0;
             b <= '0;
@@ -459,6 +467,7 @@ module mpy_alu (
                     logic        isf, conv, ok;
                     logic [63:0] v;
                     op <= op_i;
+                    iop <= iop_of(op_i);
                     small_r <= small_i;
                     a <= a_i;
                     b <= b_i;
@@ -498,8 +507,8 @@ module mpy_alu (
                             st <= A_DONE;
                         end else begin
                             // The integer unit answers next cycle (A_DONE reads it).
-                            if (op_i == ALU_ABS && !a_i[63]) op <= ALU_POS;
-                            else if (op_i == ALU_ABS) op <= ALU_NEG;
+                            if (op_i == ALU_ABS && !a_i[63]) begin op <= ALU_POS; iop <= iop_of(ALU_POS); end
+                            else if (op_i == ALU_ABS) begin op <= ALU_NEG; iop <= iop_of(ALU_NEG); end
                             st <= A_DONE;
                         end
                     end else if (op_i <= ALU_NE) begin

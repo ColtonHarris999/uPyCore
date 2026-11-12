@@ -313,3 +313,22 @@ compared with `--compare build/sta/base-soc/sta.txt`.
 - SoC STA (`build/sta/p3-cuts-soc/sta.txt`): `fd_floor_r` 9.959 -> 7.267;
   `u_add.s1_shift_r` 9.950 -> 9.203.
 - Cycles: none.
+
+### 17. Integer unit op code (family I, `alu_res`) — landed
+
+- Path: `u_alu.st` / `op` -> `case (op)` -> `iop` -> integer unit (64-bit
+  subtract) -> `res_o` -> `alu_res`, 9.878 ns.
+- Change (`mpy_alu.sv`): `iop` is a register, written with `iop_of(...)`
+  wherever `op` is written (accept, and the two ABS rewrites). 5 flops.
+- Proof: SAT, two parts (`build/proof/alu_iop.ys`, `alu_iop_base.ys`):
+  `iop == iop_of(op)` is kept by one clock from any state where it holds,
+  and holds out of reset. A wrong `iop_of` in the wrapper makes the proof
+  fail (`alu_iop_bad.ys`). `MPY_CHECK` asserts the same every clock. Unit
+  benches `mpy_alu`, `mpy_numeric` pass.
+- SoC STA (`build/sta/p3-cuts-soc/sta.txt`): `u_core.alu_res` 9.878 ->
+  9.165.
+- New group: the tool reads the `iop_of` table in front of a register of
+  its own, `$auto$proc_rom.cc:154:do_switch$1`, 9.185 ns from `sp` through
+  the `alu_op` select (`alu_op` itself is 7.5 ns). It is not in the
+  baseline list and it is below the worst path.
+- Cycles: none.
