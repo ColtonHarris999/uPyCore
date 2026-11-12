@@ -284,3 +284,18 @@ compared with `--compare build/sta/base-soc/sta.txt`.
   every `S_LK_RM`; hardware area `containers` (dict and set deletes).
 - SoC STA (`build/sta/p3-cuts-soc/sta.txt`): `c_addr` 9.946 -> 9.339.
 - Cycles: none.
+
+### 15. Map engine ERASE address (family E) — landed
+
+- Path: `op` -> slot select -> `+ 1` -> `== dn` -> wrap select -> shift ->
+  `+ dst` -> `addr_o`, 9.980 ns.
+- Change (`mpy_map_engine.sv`): `slot + 1 == dn ? dst : at(dst, slot + 1)`:
+  the compare selects between the table base and the summed address
+  instead of standing in front of the add.
+- Proof: SAT miter of the two address expressions over `op`, `idx`,
+  `pos`, `dn`, `dst`, `is_set` (`build/proof/erase_addr.ys`): passed. Unit
+  benches `mpy_map_engine`, `mpy_map_cache`, `mpy_bulk`, `mpy_collection`,
+  `mpy_rehash_stream` pass.
+- SoC STA (`build/sta/p3-cuts-soc/sta.txt`):
+  `bulk_engine.engine.addr_o` 9.980 -> 9.329.
+- Cycles: none.
