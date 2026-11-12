@@ -475,3 +475,34 @@ compared with `--compare build/sta/base-soc/sta.txt`.
 - SoC STA (`build/sta/b3-soc/sta.txt`): worst 9.578, unchanged; `st`
   9.446. Grew by more than 0.1 ns over change 23's run:
   `shared_hash.part_r` 4.439 -> 4.559, `u_gc.raddr` 3.773 -> 3.880.
+
+### 25. Qstr-operand memo (cycles) — landed, second form
+
+- Sink: every opcode with a qstr operand (LOAD_NAME, LOAD_GLOBAL,
+  LOAD_ATTR, LOAD_METHOD, STORE_*, LOAD_CONST_STRING) first loads the
+  word `qbase[arg]` of the module's qstr table: a request, the image's
+  wait and a cycle.
+- Change (`mpy_core.sv`): a table in the image cannot change (a store to
+  the image faults), so its words are kept: 32 direct-mapped entries
+  indexed by `arg[4:0]`, each {qbase, arg[15:5], id[15:0], tag} (1568
+  flops), filled in `S_LCS` / `S_QOP` when the word just read is at
+  `qbase + 4 * arg`, in the image, and its id fits 16 bits. A hit sets
+  `md`, `mt`, `m_addr` and `wret` as the load would and goes to the next
+  state. A table in SRAM is never entered.
+- First form, not landed: the entry was tagged with the word address, so
+  the hit waited for the `qbase + 4 * arg` adder: `u_core.st` became the
+  worst path at **9.865 ns** (`build/sta/b4-soc/sta.txt`, `arg` ->
+  `ha_qarg` -> `qa_hit` -> `st`). The tag is now the two operands, which
+  are compared beside the adder.
+- A 128-entry table was tried: `misc_pystone` 2101642 -> 2082438, not
+  worth four times the flops.
+- Cycles: geomean **0.7808** (was 0.7894), every `RESULT` identical
+  (`build/kern/b5`). `core_qstr` 38192 -> 37388; `core_locals` 3149318 ->
+  3113068; `misc_pystone` 2140658 -> 2101642.
+- Proof: not an equivalence. With `MPY_CHECK` the load is always made
+  and an entry with the same tag is compared with the word read; the 16
+  kernels ran clean with it (`build/kern/b5-chk`).
+- SoC STA (`build/sta/b5-soc/sta.txt`): worst 9.578, unchanged; `st`
+  9.445. Grew by more than 0.1 ns over change 24's run: `md`, `mt`,
+  `ha_mdarg` 6.123 -> 7.021; `shared_hash.tag` / `payload` 4.556 ->
+  4.676; `u_gc.rescanning` 3.585 -> 3.687.

@@ -2252,6 +2252,53 @@ module mpy_core
     assign ha_lk_nx  = `lk_slot + (lk_set ? 32'd4 : 32'd8);
     assign lk_pow2   = (`lk_alloc & lk_am1) == 32'd0;
     assign ha_qarg   = qbase + 4 * arg;
+    // Qstr-operand memo. An opcode with a qstr operand loads the module's
+    // qstr-table word qbase[arg] before it does anything else. A table in
+    // the image never changes (the image is read-only, a store to it
+    // faults), so its words are kept: QA_N direct-mapped entries, indexed
+    // by arg[4:0], each {qbase, arg[15:5], id[15:0], tag}. An entry is
+    // filled where the word has been read (S_LCS, S_QOP), when the word's
+    // address is still qbase + 4 * arg, is in the image, and the id fits 16
+    // bits. The hit compares qbase and arg with the entry, not their sum,
+    // so it does not wait for the address adder. A hit leaves md, mt,
+    // m_addr and wret as the load would. A table in SRAM (a module
+    // compiled on the hart) is never entered. With MPY_CHECK the load is
+    // always made and compared with the entry.
+    localparam int QA_N  = 32;
+    localparam int QA_BW = $clog2(MPY_FLASH_BYTES) - 2;
+    localparam int QA_TW = QA_BW + 11;
+    logic [QA_N-1:0]  qa_v;
+    logic [QA_TW-1:0] qa_tag [0:QA_N-1];
+    logic [15:0]      qa_id  [0:QA_N-1];
+    logic [3:0]       qa_mt  [0:QA_N-1];
+    logic [QA_TW-1:0] qa_key;
+    logic             qa_ok, qa_hit, qa_pend;
+    assign qa_key = {qbase[QA_BW+1:2], arg[15:5]};
+    assign qa_ok  = (qbase[31:QA_BW+2] == '0) && (qbase[1:0] == 2'b00) && (arg[31:16] == 16'd0);
+    assign qa_hit = qa_ok && qa_v[arg[4:0]] && (qa_tag[arg[4:0]] == qa_key);
+    task automatic rdq(input state_e nxt);
+`ifndef MPY_CHECK
+        if (qa_hit) begin
+            md <= {16'd0, qa_id[arg[4:0]]}; mt <= qa_mt[arg[4:0]];
+            m_addr <= ha_qarg; m_we <= 1'b0; m_tag_we <= 1'b0; m_be <= 4'hF; wret <= nxt;
+            st <= nxt;
+        end else
+`endif
+        begin rd(ha_qarg, nxt); qa_pend <= 1'b1; end
+    endtask
+    // In the state after the load: md / mt hold the word, m_addr its address.
+    task automatic qa_fill();
+        qa_pend <= 1'b0;
+        if (qa_pend && qa_ok && m_addr == ha_qarg && m_addr < MPY_FLASH_BYTES &&
+            md[31:16] == 16'd0) begin
+`ifdef MPY_CHECK
+            if (qa_hit && (qa_id[arg[4:0]] != md[15:0] || qa_mt[arg[4:0]] != mt))
+                $error("qstr-operand memo: entry differs from the image word");
+`endif
+            qa_v[arg[4:0]] <= 1'b1; qa_tag[arg[4:0]] <= qa_key;
+            qa_id[arg[4:0]] <= md[15:0]; qa_mt[arg[4:0]] <= mt;
+        end
+    endtask
     assign ha_carg   = cbase + 4 * arg;
     assign ha_mdarg  = md + 4 * arg;
     assign ha_cx_pa4 = aoff(cx_pa, 4);
@@ -2345,6 +2392,7 @@ module mpy_core
             lc_pick_r <= 3'd0;
             qm_v <= '0;
             hmm_v <= '0; lk_hq <= 16'd0;
+            qa_v <= '0; qa_pend <= 1'b0;
         end else begin
             // A request not taken stays presented (its fields are not
             // changed until it is: stores stop the sequencer, loads wait).
@@ -3258,7 +3306,7 @@ module mpy_core
                                 cx_operand(rf[`SX(6'(sp - 7'd2))]) && cx_operand(rf[`SX(6'(sp - 7'd1))]);
                 end
                 default: case (op)
-                8'h10: rd(ha_qarg, S_LCS);
+                8'h10: rdq(S_LCS);
                 8'h22: begin push(vint(arg)); go_next(); end
                 8'h23: rd(ha_carg, S_LCO);
                 8'h50: begin push(VFALSE); go_next(); end
@@ -3268,7 +3316,7 @@ module mpy_core
                 8'h24, 8'h25, 8'h26, 8'h27, 8'h28, 8'h29: halt(ABI_HALT_INTERNAL, 32'h0000_10CA);
                 8'h11, 8'h12, 8'h16, 8'h17, 8'h19, 8'h1a, 8'h13, 8'h14, 8'h18, 8'h15,
                 8'h1b, 8'h1c:
-                    rd(ha_qarg, S_QOP);
+                    rdq(S_QOP);
                 8'h54: rd(h_hooks + 4 * ABI_HOOK_BUILD_CLASS, S_LCO);
                 8'h55: begin t[0] <= rf[`SX(6'(sp - 7'd2))]; t[1] <= rf[`SX(6'(sp - 7'd1))]; st <= S_LSUB; end
                 8'h56: begin
@@ -3466,7 +3514,7 @@ module mpy_core
             end
             end
 
-            S_LCS: begin push({ABI_TAG_QSTR, md}); st <= S_FETCH; end
+            S_LCS: begin qa_fill(); push({ABI_TAG_QSTR, md}); st <= S_FETCH; end
             S_LCO: begin push(mv); st <= S_FETCH; end
             S_LDF: if (mv == VNULL && !(fflags & FF_FW)) raise_msg(ABI_MSG_LOCAL_UNBOUND);
                    else begin push(mv); lc_fill(i0, mv, 1'b0, 1'b1, S_FETCH); end
@@ -3511,6 +3559,7 @@ module mpy_core
 
             // ---- qstr-operand opcodes ----
             S_QOP: begin
+                qa_fill();
                 at_q <= md;
                 case (op)
                     8'h11, 8'h12: begin
