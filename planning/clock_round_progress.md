@@ -299,3 +299,17 @@ compared with `--compare build/sta/base-soc/sta.txt`.
 - SoC STA (`build/sta/p3-cuts-soc/sta.txt`):
   `bulk_engine.engine.addr_o` 9.980 -> 9.329.
 - Cycles: none.
+
+### 16. FP floor mask and alignment shift (family F) — landed
+
+- Paths: `state_r` -> operand select -> exponent -> `(1 << nfrac) - 1` ->
+  `fd_floor_r`, 9.959 ns; exponent difference -> `> 55` compare -> clamp ->
+  `s1_shift_r`, 9.950 ns.
+- Change: `frac_mask = ~(all-ones << nfrac)` (`upycore_fp_defs.svh`), a
+  shift without the 52-bit decrement; the clamp test is
+  `|diff[10:6] || &diff[5:3]` (`upycore_fp_add.sv`), which is `diff > 55`.
+- Proof: SAT miters of both pairs (`build/proof/fp_cuts.ys`): passed. Unit
+  benches `mpy_alu`, `mpy_numeric`, `upycore_fp_subnormal` pass.
+- SoC STA (`build/sta/p3-cuts-soc/sta.txt`): `fd_floor_r` 9.959 -> 7.267;
+  `u_add.s1_shift_r` 9.950 -> 9.203.
+- Cycles: none.
