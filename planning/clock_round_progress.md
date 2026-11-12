@@ -605,7 +605,8 @@ stores); the call frame fill and spill (`S_FL_H` 3.5 %, `S_SP_H` 3.2 %).
 
 ## Checks on the final tree
 
-All on commit 6a3a056 (the tree of change 25).
+RTL of commit 6a3a056 (the tree of change 25); `irq/pin_irq` as fixed
+in the commit after it.
 
 | check | command | result |
 |---|---|---|
@@ -615,41 +616,70 @@ All on commit 6a3a056 (the tree of change 25).
 | 16 kernels | `shortlist_bench.py` N=100 M=100 and `perf_inventory.py --bigint --only bm_pidigits --points 100x100`, on `build/mpy_soc/obj/Vtb_mpy_soc` | every `RESULT` the baseline's; table above |
 | 16 kernels, `+define+MPY_CHECK` build | same, on `build/sims/b5-chk` | every `RESULT` the baseline's, no assertion |
 | matched images | `clock_bench.py --before ... --after ... --before-ns 10.332 --after-ns 9.578` | exit 0 |
-| hardware suite, mpy-cross | `make test-hw` | **548 of 549 passed; `irq/pin_irq` fails** |
-| hardware suite, uPy2 | `python3 upycore/tools/hw_tests.py --compiler mpyc` | 548 of 549, the same failure. Every uPy2 image was byte-identical to mpy-cross's, so the tool reused the first pass's runs and simulated nothing again. |
-| clock-ratio sweep | `hw_tests.py --area irq` / `io` / `console` with `--sim-arg +IO_CLK_NS=10` and `+IO_CLK_NS=6.667` | all pass (8, 11 and 9 tests at each), `pin_irq` included |
+| hardware suite, mpy-cross | `make test-hw` | 549 of 549 passed. The first run, before the test fix, was 548 of 549 with `irq/pin_irq` failing; the rerun simulated the fixed `pin_irq` and reused the other 548 runs (same simulator, same images). |
+| hardware suite, uPy2 | `python3 upycore/tools/hw_tests.py --compiler mpyc` | 549 of 549. Every uPy2 image is byte-identical to mpy-cross's, so the tool reused the first pass's runs and simulated nothing again. |
+| clock-ratio sweep | `hw_tests.py --area irq` / `io` / `console` with `--sim-arg +IO_CLK_NS=10` and `+IO_CLK_NS=6.667` | all pass (8, 11 and 9 tests at each) |
 
-### `irq/pin_irq` fails at the default clock ratio
+### `irq/pin_irq`: the last line depended on the clock ratio; fixed in the test
 
-The last line of the golden is `coalesced 1`; the device prints
-`coalesced 2`. The program toggles a looped-back pad four times in one
-line and expects one call of the soft handler for the four edges. The
-rule the I/O core documents is that edges which arrive before the
-handler runs give one call. Whether all four arrive before the hart
-runs the handler is a race between the hart and the I/O core's firmware
-loop, and the golden holds only on one side of it:
+The last line of the golden is `coalesced 1`. The program toggled a
+looped-back pad four times in one line and expected one call of the soft
+handler for the four edges. The rule under test is that edges which
+arrive before the handler runs give one call (`_irq_dispatch` fires once
+when a pin's edge count has moved). Nothing in the program made the four
+edges arrive before the handler ran: whether they did was a race
+between the hart and the I/O core's firmware loop, and the golden held
+on one side of it only. The old program:
 
-| simulator | `+IO_CLK_NS` at which `pin_irq` passes | fails |
+| simulator | `+IO_CLK_NS` at which the old `pin_irq` passed | failed |
 |---|---|---|
 | baseline (`build/sta/base-soc/Vtb_mpy_soc`) | 6.667, 10, 20 (default), 22 | 25, 30, 40 |
 | change 22 (`build/sims/b1`) | 20 | |
 | changes 23 and 24 (`build/sims/b2`, `b3`) | | 20 |
 | change 25, this tree (`build/sims/b5`) | 6.667, 10, 12, 14, 16, 18 | 20 (default), 22, 25, 30, 40 |
 
-So the baseline RTL prints `coalesced 2` as well once the I/O clock is a
-quarter slower, and this tree prints `coalesced 1` at both ratios of the
-documented sweep. The hart now runs this code in fewer cycles (change 23
-is the one that crosses the default ratio), so its handler runs before
-the fourth edge has been counted. The other lines of the golden, and the
-other seven `irq` tests, pass at every ratio tried.
+So the baseline RTL printed `coalesced 2` as well once the I/O clock was
+a quarter slower. The hart now runs that line in fewer cycles (change 23
+is the one that crosses the default ratio), so its handler ran before
+the last edge had been counted.
 
-The golden and the program are unchanged: the round's rules do not allow
-editing a test to make it pass. The test is wrong in that its last line
-depends on the clock ratio, and it is left failing for the owner to
-decide. A copy of the program kept under `build/` that holds events off
-across the four toggles (`machine.disable_irq()`, the toggles,
-`time.sleep_ms(1)`, `machine.enable_irq()`) prints `coalesced 1` on this
-tree at `+IO_CLK_NS=6.667`, 20 and 40, so the coalescing itself works
-and that form of the test does not depend on the ratio.
-Without changes 23 to 25 the suite's default-ratio run passes and the
-kernel geomean is 0.8181 cycles, 0.7584 cycles x period.
+Fix (`upycore/programs/hw/irq/pin_irq.py`, golden unchanged): events are
+held off with `machine.disable_irq()` across the four toggles and a 2 ms
+wait, then enabled, so the handler's first chance comes after the I/O
+core has counted every edge. The expected output is the same five lines.
+
+- The fixed test passes on the baseline simulator and on this tree at
+  `+IO_CLK_NS` = 6.667, 10, 14, 18, 20, 22, 25, 30 and 40 (18 runs).
+- It still tests coalescing: with `_irq_dispatch` changed, for the
+  experiment only, to fire once per counted edge, the device prints
+  `coalesced 4` and the test fails. That also shows all four edges are
+  counted before the handler runs.
+
+## Flops
+
+Flop bits are the `endpoints` count of each `mpy_soc` `sta.txt` (flop D
+pins plus the top's output bits, which do not change).
+
+| tree | flop bits | change |
+|---|---|---|
+| baseline | 32289 | |
+| changes 1 to 8 (`k5-lkreg-soc`) | 34052 | +1763: the qstr hash memo of change 7 (64 x 24 = 1536), the probe's registers of change 8 (6 x 32 = 192), 35 more |
+| changes 9 to 22 (`b1-soc`) | 34090 | +38 |
+| change 23 (`b2-soc`) | 35258 | +1168: the probe-start memo (32 x 36 = 1152) and `lk_hq` (16) |
+| change 24 (`b3-soc`) | 35256 | -2 |
+| change 25 (`b5-soc`) | 36825 | +1569: the qstr-operand memo (32 x 49 = 1568) and `qa_pend` |
+
+The round adds 4536 flop bits, 14.0 % of the baseline's. 4256 of them
+are three direct-mapped memos, each kept in flops because its hit is
+used in the cycle it is read (an SRAM read is registered and would cost
+the cycle the memo saves) and its valid bits are cleared at reset:
+
+| memo | bits | what a hit saves | kernel cycles, geomean |
+|---|---|---|---|
+| qstr hash (change 7): 64 x {valid, id[12:6], hash[15:0]} | 1536 | the image load of a qstr's descriptor word for its hash, about 6.5 cycles a lookup | 0.9403 -> 0.9086 |
+| probe start (change 23): 32 x {valid, hash[15:5], alloc[11:0], rem[11:0]} | 1152 | the sequential `hash % alloc` on a table whose size is not a power of two, and `S_LK_H` | 0.8181 -> 0.7946 |
+| qstr operand (change 25): 32 x {valid, qbase[18:2], arg[15:5], id[15:0], tag[3:0]} | 1568 | the image load of `qbase[arg]` in front of every opcode with a qstr operand | 0.7894 -> 0.7808 |
+
+Change 25 is the dearest: 1568 bits for 1.1 % of the cycles. 352 of
+them are the `arg[15:5]` half of its tag, which the first form (tagged
+by word address, 9.865 ns) did not need.
