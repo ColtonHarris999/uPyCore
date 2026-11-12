@@ -348,3 +348,18 @@ compared with `--compare build/sta/base-soc/sta.txt`.
 - SoC STA (`build/sta/p4-soc/sta.txt`): `shared_hash.state` 9.649 ->
   6.814, `shared_hash.result` 9.511 -> 7.222.
 - Cycles: none.
+
+### 19. Bigint division check (family A, `st`) — landed, one cycle
+
+- Path: `alu_res` -> `bi_prefix - alu_res` (64 bits) -> `>= bi_q` -> `st`,
+  9.995 ns: the worst path of the SoC STA of changes 9 to 18.
+- Change (`mpy_core.sv`): `S_BI_DIV_CHECK` registers the remainder in
+  `bi_prefix` (reloaded by every division before it is read) and
+  `S_BI_DIV_CHECK2` compares it with the quotient.
+- Cycles: one more per bigint `//`. `bm_pidigits` 1365834 -> 1366316
+  (482 divisions); the other 15 kernels are unchanged
+  (`build/kern/p4`). Results identical.
+- Proof: not an equivalence (one more state). Kernel result of
+  `bm_pidigits`; hardware area `numbers`.
+- SoC STA (`build/sta/p4-soc/sta.txt`, changes 9 to 20): `u_core.st`
+  9.995 -> 9.637, now from the fetch queue (change 21).

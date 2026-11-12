@@ -352,7 +352,7 @@ module mpy_core
         S_BI_DIV_R0,
         S_BI_DIV_GO,
         S_BI_DIV_Q,
-        S_BI_DIV_CHECK,
+        S_BI_DIV_CHECK, S_BI_DIV_CHECK2,
         S_BL_A,
         S_BL_L,
         S_BM_A,
@@ -4854,11 +4854,17 @@ module mpy_core
                     alu_op <= ALU_MUL; alu_start <= 1'b1; st <= S_BI_DIV_CHECK;
                 end
             end
+            // The remainder is registered (it reuses bi_prefix, which every
+            // division reloads) and compared a cycle later: the 64-bit
+            // subtract and the compare in one cycle were alu_res -> st at
+            // 10.0 ns.
             S_BI_DIV_CHECK: if (alu_done) begin
-                if (alu_err == AE_NONE && bi_prefix - alu_res >= 64'(bi_q)) begin
+                if (alu_err != AE_NONE) st <= S_BIN_FB;
+                else begin bi_prefix <= bi_prefix - alu_res; st <= S_BI_DIV_CHECK2; end
+            end
+            S_BI_DIV_CHECK2: if (bi_prefix >= 64'(bi_q)) begin
                     t[2] <= vint(bi_q); st <= S_NUM_PUT;
                 end else st <= S_BIN_FB;
-            end
 
             S_EQ: begin
                 vb = (32'(n_o) == ABI_BINOP_NOT_EQUAL);
