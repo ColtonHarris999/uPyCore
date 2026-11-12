@@ -377,3 +377,26 @@ compared with `--compare build/sta/base-soc/sta.txt`.
   tool's net name `$10547y`, 8.986 ns (it was `u_core.wb_v[0]` 9.889 in
   the baseline). `u_core.t` 8.842 -> 7.642.
 - Cycles: none.
+
+### 21. Fetch fault test in S_FETCH (family A, `st`) — landed
+
+- Path: `u_fetch.qn` -> first faulted word -> `qb + 4 * vn` -> compare
+  with `pc` -> the last arm of `S_FETCH`'s `if / else` chain (five selects)
+  -> state case -> `st`, 9.637 ns: the worst path of the SoC STA of
+  changes 9 to 20.
+- Change (`mpy_core.sv`): the fault arm is tested first, and-ed with the
+  inverse of the or of the arms that used to come before it (accelerator
+  fault, spill, reload, soft point with an event). Same arm for every
+  input.
+- Proof: SAT miter of the old and new chain's arm choice over the six
+  conditions (`build/proof/fetch_chain.ys`): passed.
+- SoC STA (`build/sta/p5-soc/sta.txt`, changes 1 to 21 without 2): worst
+  **9.578** (`bulk_engine.engine.req_o`, family B); `u_core.st` 9.637 ->
+  9.453. Against the baseline over every group (not only the 60 listed):
+  two new groups, the tool's `iop_of` table register 9.204 (change 17)
+  and `wb_v` under its net name 8.986 (change 20); groups that grew by
+  more than 0.1 ns, all far below the worst: `rf_resume` 6.361 -> 7.443,
+  `rf_pend_v` 6.480 -> 7.321, `aalu_ret` 5.630 -> 7.305, `dq_bytes` and
+  `d_op` 7.045 -> 7.266, `aux` 6.949 -> 7.160, `scr_gt` 6.986 -> 7.158,
+  `at_q` 6.207 -> 7.010.
+- Cycles: none. Kernels on this tree (`build/kern/p5`): see the summary.

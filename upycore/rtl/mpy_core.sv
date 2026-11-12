@@ -3071,7 +3071,14 @@ module mpy_core
             S_RX_POP: begin rx_from <= 1'b1; st <= S_RAISE; end
 
             // ---------------- fetch / decode ----------------
-            S_FETCH: if (ca_fault_i) begin
+            // The fetch fault test (queue head + words -> compare with pc)
+            // arrives last, so it is tested first, with the or of the
+            // branches that come before it: at the end of the chain it was
+            // five selects from the state case (u_fetch.qn -> st, 9.6 ns).
+            S_FETCH: if (!(ca_fault_i || sp >= 7'(RF_SPILL_AT) || (has_link && sp <= 7'(RF_RELOAD_AT)) ||
+                           (soft_pt && evt_q)) &&
+                         fe_fault && fe_fault_addr[31:2] == pc[31:2]) fetch_fault();
+                     else if (ca_fault_i) begin
                          case (ca_fault_reason_i)
                              MPY_FAULT_UNALIGNED: halt(ABI_HALT_UNALIGNED, ca_fault_addr_i);
                              MPY_FAULT_FLASH_STORE: halt(ABI_HALT_FLASH_STORE, ca_fault_addr_i);
@@ -3090,8 +3097,7 @@ module mpy_core
                          // A soft point with an event pending (S_IRQ calls
                          // the dispatcher).
                          st <= S_IRQ;
-                     end else if (fe_fault && fe_fault_addr[31:2] == pc[31:2]) fetch_fault();
-                     else begin
+                     end else begin
                          // To S_DEC with whatever is queued. With nothing
                          // (dq_n = 0: the word at pc is still on its way)
                          // S_DEC comes back, so a wait alternates the two
