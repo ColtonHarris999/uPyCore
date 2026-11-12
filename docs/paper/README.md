@@ -9,6 +9,8 @@ or planning markdown.
 | Path | Topic |
 | --- | --- |
 | `systems/call_fsm.tex` | `S_CALL` FSM, shared argument binder, CPython call shapes |
+| `sections/introduction.tex` | Introduction skeleton for the ISCA 2027 paper (`\input` it from the main file) |
+| `references.bib` | BibTeX for the paper; each entry notes the claim it supports and how far it was checked |
 
 ## Build
 

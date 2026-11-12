@@ -1,0 +1,393 @@
+% =====================================================================
+% References for the µPyCore ISCA 2027 paper (introduction pass).
+% Use with:  \bibliographystyle{IEEEtran}  \bibliography{references}
+%
+% Each entry has a comment saying (a) the claim it supports in
+% sections/introduction.tex and (b) how far it was checked in November 2026:
+%   [verified]  title/authors/venue and the cited number were confirmed
+%               against the publisher, arXiv listing or the source page
+%   [secondary] confirmed only through press coverage or summaries;
+%               read the primary source before submission
+%   [check]     a bibliographic detail (pages, URL, exact title) is
+%               still to be confirmed
+% =====================================================================
+
+% ---------------- AI-assisted programming and code review -------------
+
+% Claim: >25% of new Google code is AI-generated (then reviewed by
+% engineers). Stated on the Alphabet Q3 2024 earnings call, 29 Oct 2024.
+% [secondary] Prefer citing the earnings-call remarks on blog.google.
+@misc{pichai2024,
+  author       = {Sundar Pichai},
+  title        = {Alphabet {Q3} 2024 earnings call: {CEO}'s remarks},
+  howpublished = {Reported in \emph{Fortune}, 30 Oct. 2024},
+  month        = oct,
+  year         = {2024},
+  url          = {https://fortune.com/2024/10/30/googles-code-ai-sundar-pichai/},
+  note         = {Accessed Nov. 2026}
+}
+
+% Claim: "maybe 20, 30 percent" of code in Microsoft repos is written by
+% AI. Fireside chat with M. Zuckerberg at LlamaCon, 29 Apr 2025.
+% [secondary]
+@misc{nadella2025,
+  author       = {Satya Nadella},
+  title        = {Fireside chat at {LlamaCon} 2025},
+  howpublished = {Reported in \emph{The Register}, 30 Apr. 2025},
+  month        = apr,
+  year         = {2025},
+  url          = {https://www.theregister.com/2025/04/30/microsoft_meta_autocoding/},
+  note         = {Accessed Nov. 2026}
+}
+
+% Claim: high-AI-adoption teams: +21% tasks, +98% merged PRs, +91% PR
+% review time, +154% PR size (~10,000 devs, 1,255 teams).
+% [secondary] Vendor telemetry, correlational; full report is behind
+% a registration form. A 2026 follow-up reports +441.5% median review
+% time if you want a stronger number:
+% https://www.faros.ai/research/ai-acceleration-whiplash
+@techreport{faros2025,
+  author       = {{Faros AI}},
+  title        = {The {AI} Productivity Paradox Report 2025},
+  institution  = {Faros AI},
+  year         = {2025},
+  url          = {https://www.faros.ai/blog/ai-productivity-paradox-report-2025},
+  note         = {Accessed Nov. 2026}
+}
+
+% Claim: RCT, 16 experienced OSS developers, 246 tasks; AI allowed ->
+% 19% longer completion time, against forecasts of a speedup.
+% [verified] arXiv listing.
+@misc{becker2025metr,
+  author        = {Joel Becker and Nate Rush and Elizabeth Barnes and David Rein},
+  title         = {Measuring the Impact of Early-2025 {AI} on Experienced Open-Source Developer Productivity},
+  year          = {2025},
+  eprint        = {2507.09089},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.AI},
+  url           = {https://arxiv.org/abs/2507.09089}
+}
+
+% Claims: (1) 46% of developers distrust AI accuracy (up from 31%);
+% 33% trust it. (2) Python usage 57.9%, +7 percentage points from 2024.
+% [verified] against the Stack Overflow press release and survey site.
+@misc{stackoverflow2025,
+  author       = {{Stack Overflow}},
+  title        = {2025 Developer Survey},
+  year         = {2025},
+  url          = {https://survey.stackoverflow.co/2025/},
+  note         = {Accessed Nov. 2026}
+}
+
+% ---------------- Python popularity and LLM preference ----------------
+
+% Claim: "Readability counts."
+@misc{pep20,
+  author       = {Tim Peters},
+  title        = {{PEP} 20 -- The {Zen} of {Python}},
+  year         = {2004},
+  url          = {https://peps.python.org/pep-0020/}
+}
+
+% Claim: in 2024 Python overtook JavaScript as the most popular
+% language on GitHub (first time). Data window Oct 2023 to Sep 2024.
+% Note: Octoverse 2025 reports TypeScript taking the top spot; if a
+% reviewer would notice, cite both and say "top two".
+% [verified]
+@misc{octoverse2024,
+  author       = {{GitHub}},
+  title        = {Octoverse: {AI} leads {Python} to top language as the number of global developers surges},
+  year         = {2024},
+  month        = oct,
+  url          = {https://github.blog/news-insights/octoverse/octoverse-2024/},
+  note         = {Accessed Nov. 2026}
+}
+
+% Claim: across 8 LLMs, Python chosen in ~90-97% of benchmark tasks and
+% 58% of project-initialisation tasks where it is not suitable.
+% [verified] arXiv abstract. Paper has since been retitled; check the
+% latest version's title before submission.
+@misc{twist2025,
+  author        = {Lukas Twist and Jie M. Zhang and Mark Harman and Don Syme and Joost Noppen and Detlef Nauck},
+  title         = {{LLMs} Love {Python}: A Study of {LLMs}' Bias for Programming Languages and Libraries},
+  year          = {2025},
+  eprint        = {2503.17181},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  url           = {https://arxiv.org/abs/2503.17181}
+}
+
+% Claim: Python is heavily represented in open code-LLM training data.
+% [check] Get Python's exact share from Table 1 of the paper if you want
+% a number in the text.
+@article{kocetkov2023,
+  author  = {Denis Kocetkov and Raymond Li and Loubna Ben Allal and Jia Li and Chenghao Mou and Carlos Mu{\~n}oz Ferrandis and Yacine Jernite and Margaret Mitchell and Sean Hughes and Thomas Wolf and Dzmitry Bahdanau and Leandro von Werra and Harm de Vries},
+  title   = {The {Stack}: 3 {TB} of permissively licensed source code},
+  journal = {Transactions on Machine Learning Research},
+  year    = {2023},
+  url     = {https://arxiv.org/abs/2211.15533}
+}
+
+% Claim: code-generation accuracy varies with a language's popularity
+% / representation in training data (HumanEval translated to 18 langs).
+% [check] Direction and strength of the popularity finding; volume/pages.
+@article{cassano2023,
+  author  = {Federico Cassano and John Gouwar and Daniel Nguyen and Sydney Nguyen and Luna Phipps-Costin and Donald Pinckney and Ming-Ho Yee and Yangtian Zi and Carolyn Jane Anderson and Molly Q. Feldman and Arjun Guha and Michael Greenberg and Abhinav Jangda},
+  title   = {{MultiPL-E}: A Scalable and Polyglot Approach to Benchmarking Neural Code Generation},
+  journal = {IEEE Transactions on Software Engineering},
+  volume  = {49},
+  number  = {7},
+  pages   = {3675--3691},
+  year    = {2023},
+  doi     = {10.1109/TSE.2023.3267446}
+}
+
+% ---------------- Cost of Python ---------------------------------------
+
+% Claim: 4096x4096 matmul: Java 10.8x over Python 2.7, C a further
+% 4.4x, "47 times faster than the original Python"; hardware-specific
+% tuning gives a further ~1300x. Python baseline 25,552 s.
+% [verified] via the published text quoted in search results.
+@article{leiserson2020,
+  author  = {Charles E. Leiserson and Neil C. Thompson and Joel S. Emer and Bradley C. Kuszmaul and Butler W. Lampson and Daniel Sanchez and Tao B. Schardl},
+  title   = {There's plenty of room at the {Top}: What will drive computer performance after {Moore's} law?},
+  journal = {Science},
+  volume  = {368},
+  number  = {6495},
+  pages   = {eaam9744},
+  year    = {2020},
+  doi     = {10.1126/science.aam9744}
+}
+
+% Claim: the Python/C performance gap is a named architecture
+% opportunity (alongside DSAs, open ISAs, agile HW).
+% [verified] CACM, DOI 10.1145/3282307.
+@article{hennessy2019,
+  author  = {John L. Hennessy and David A. Patterson},
+  title   = {A New Golden Age for Computer Architecture},
+  journal = {Communications of the ACM},
+  volume  = {62},
+  number  = {2},
+  pages   = {48--60},
+  year    = {2019},
+  doi     = {10.1145/3282307}
+}
+
+% Claim: Python ranks near the bottom on energy/time across 27 languages.
+% [verified] venue; [check] quote Python's exact normalized energy from
+% the tables if you want a number (commonly cited as ~76x C; NOT verified
+% here). Be aware of the 2025 critique (van Kempen et al., arXiv
+% 2410.05460) if a reviewer pushes back.
+@article{pereira2021,
+  author  = {Rui Pereira and Marco Couto and Francisco Ribeiro and Rui Rua and J{\'a}come Cunha and Jo{\~a}o Paulo Fernandes and Jo{\~a}o Saraiva},
+  title   = {Ranking programming languages by energy efficiency},
+  journal = {Science of Computer Programming},
+  volume  = {205},
+  pages   = {102609},
+  year    = {2021},
+  doi     = {10.1016/j.scico.2021.102609}
+}
+
+% Claim: quantifies CPython/PyPy overheads; C function calls are a large,
+% previously under-recognized source of interpreter overhead.
+% [verified]
+@inproceedings{ismail2018,
+  author    = {Mohamed Ismail and G. Edward Suh},
+  title     = {Quantitative Overhead Analysis for {Python}},
+  booktitle = {Proc. IEEE Int. Symp. Workload Characterization (IISWC)},
+  pages     = {36--47},
+  year      = {2018},
+  doi       = {10.1109/IISWC.2018.8573512}
+}
+
+% ---------------- Embedded Python --------------------------------------
+
+% Claim: MicroPython is a lean Python 3 implementation for MCUs (started
+% 2013 by D. George; Kickstarter 2013).
+@misc{micropython,
+  author       = {Damien P. George and {MicroPython contributors}},
+  title        = {{MicroPython}: {Python} for microcontrollers},
+  year         = {2013},
+  url          = {https://micropython.org},
+  note         = {Version 1.29.0 used in this work}
+}
+
+% Claim: for constrained devices, C 55%, C++ 36%, Python 32%, Java 29%.
+% [secondary] via i-programmer coverage; [check] cite the Eclipse
+% Foundation report PDF directly.
+@techreport{eclipse2024,
+  author      = {{Eclipse Foundation}},
+  title       = {2024 {IoT} \& Edge Developer Survey Report},
+  institution = {Eclipse Foundation},
+  year        = {2024},
+  url         = {https://www.i-programmer.info/news/91-hardware/17663-eclipse-iot-developer-survey-2024.html},
+  note        = {Accessed Nov. 2026}
+}
+
+% Optional MCU market-size sentence. Yole: MCU revenue ~US$27B in 2024,
+% targeting US$34B in 2030. A sourced UNIT count (often quoted as ~30B
+% MCUs/year) was NOT found in a primary source; do not use it without one.
+% [secondary]
+@misc{yole2025,
+  author       = {{Yole Group}},
+  title        = {Microcontrollers enter a new growth cycle as the market targets {US}\$34 billion in 2030},
+  year         = {2025},
+  month        = dec,
+  url          = {https://www.edge-ai-vision.com/2025/12/microcontrollers-enter-a-new-growth-cycle-as-the-market-targets-us34-billion-in-2030/},
+  note         = {Accessed Nov. 2026}
+}
+
+% ---------------- Software acceleration --------------------------------
+
+% Claim: CPython 3.11+ specializes bytecode in place by observed types.
+% [verified]
+@misc{pep659,
+  author       = {Mark Shannon},
+  title        = {{PEP} 659 -- Specializing Adaptive Interpreter},
+  year         = {2021},
+  url          = {https://peps.python.org/pep-0659/}
+}
+
+% Claim: experimental copy-and-patch JIT in CPython 3.13.
+% [verified]
+@misc{pep744,
+  author       = {Brandt Bucher and Savannah Ostrowski},
+  title        = {{PEP} 744 -- {JIT} Compilation},
+  year         = {2024},
+  url          = {https://peps.python.org/pep-0744/}
+}
+
+% Claim: tracing JIT for Python (PyPy).
+@inproceedings{bolz2009pypy,
+  author    = {Carl Friedrich Bolz and Antonio Cuni and Maciej Fija{\l}kowski and Armin Rigo},
+  title     = {Tracing the meta-level: {PyPy}'s tracing {JIT} compiler},
+  booktitle = {Proc. 4th Workshop on the Implementation, Compilation, Optimization of Object-Oriented Languages and Programming Systems (ICOOOLPS)},
+  pages     = {18--25},
+  year      = {2009},
+  doi       = {10.1145/1565824.1565827}
+}
+
+% ---------------- Language processors ----------------------------------
+
+% Claim: picoJava directly executes Java bytecode in hardware.
+% [verified]
+@article{mcghan1998,
+  author  = {Harlan McGhan and Mike O'Connor},
+  title   = {{PicoJava}: A direct execution engine for {Java} bytecode},
+  journal = {Computer},
+  volume  = {31},
+  number  = {10},
+  pages   = {22--30},
+  year    = {1998},
+  doi     = {10.1109/2.722273}
+}
+
+% Claim: JOP, a time-predictable Java processor for embedded real-time.
+% [verified] DOI; [check] volume/pages.
+@article{schoeberl2008,
+  author  = {Martin Schoeberl},
+  title   = {A {Java} processor architecture for embedded real-time systems},
+  journal = {Journal of Systems Architecture},
+  volume  = {54},
+  number  = {1--2},
+  pages   = {265--286},
+  year    = {2008},
+  doi     = {10.1016/j.sysarc.2007.06.001}
+}
+
+% Claim: ARM Jazelle DBX executes most bytecodes in hardware, traps the
+% rest to a software JVM.
+% [check] Exact white-paper title and year were not confirmed. ARM's
+% product brief is titled "Jazelle technology for execution
+% environments". The fallback is the ARM Architecture Reference Manual
+% (ARMv5TEJ) section on Jazelle state.
+@misc{porthouse2005,
+  author       = {Chris Porthouse},
+  title        = {High performance {Java} on embedded devices: {Jazelle} {DBX} technology},
+  howpublished = {ARM Ltd.\ white paper},
+  year         = {2005}
+}
+
+% Claim: tagged architecture with hardware type checks and GC support
+% for Lisp.
+% [verified] SIGARCH Comput. Archit. News 13(3), June 1985 (ISCA '85).
+@inproceedings{moon1985,
+  author    = {David A. Moon},
+  title     = {Architecture of the {Symbolics} 3600},
+  booktitle = {Proc. 12th Int. Symp. Computer Architecture (ISCA)},
+  pages     = {76--83},
+  year      = {1985}
+}
+% [check] Add the DOI from the ACM DL.
+
+% PyXL: Python-native processor on a Zynq-7000 FPGA, 100 MHz; compiles
+% CPython bytecode to a custom stack ISA (PySM) on a host. Presented
+% at PyCon US 2025. Only published benchmark is a GPIO round trip
+% (480 ns vs 15 us MicroPython on PyBoard), self-reported.
+% [verified] via PyCon schedule and Hackaday/Hackster coverage.
+% [check] Use the talk's exact title from the PyCon schedule page.
+@misc{pyxl2025,
+  author       = {Ron Livne},
+  title        = {{PyXL}: a hardware processor that executes {Python}},
+  howpublished = {Talk, PyCon US 2025},
+  year         = {2025},
+  url          = {https://pycon-archive.python.org/2025/schedule/presentation/40/}
+}
+
+% ---------------- Architectural assists for managed languages ----------
+
+% Claim: ISA-level type tags for JS/Lua on RISC-V; 11.2% / 9.9% geomean
+% speedups, 1.6% area at 40 nm.
+% [secondary] numbers via summaries; [verified] venue.
+@inproceedings{kim2017typed,
+  author    = {Channoh Kim and Jaehyeok Kim and Sungmin Kim and Dooyoung Kim and Namho Kim and Gitae Na and Young H. Oh and Hyeon Gyu Cho and Jae W. Lee},
+  title     = {Typed Architectures: Architectural Support for Lightweight Scripting},
+  booktitle = {Proc. 22nd Int. Conf. Architectural Support for Programming Languages and Operating Systems (ASPLOS)},
+  pages     = {77--90},
+  year      = {2017}
+}
+% [check] Add the DOI from the ACM DL.
+
+% Claim: hardware bypass of type dispatchers in V8; -30% time (baseline
+% compiler), -11% (max optimization).
+% [verified] venue/pages; [check] DOI (sources disagree).
+@inproceedings{choi2017shortcut,
+  author    = {Jiho Choi and Thomas Shull and Mar{\'i}a Jes{\'u}s Garzar{\'a}n and Josep Torrellas},
+  title     = {{ShortCut}: Architectural Support for Fast Object Access in Scripting Languages},
+  booktitle = {Proc. 44th Int. Symp. Computer Architecture (ISCA)},
+  pages     = {494--506},
+  year      = {2017},
+  doi       = {10.1145/3079856.3080237}
+}
+
+% Claim: accelerators for hash tables, heap management, strings and
+% regex in server-side PHP (HHVM).
+% [verified]
+@inproceedings{gope2017php,
+  author    = {Dibakar Gope and David J. Schlais and Mikko H. Lipasti},
+  title     = {Architectural Support for Server-Side {PHP} Processing},
+  booktitle = {Proc. 44th Int. Symp. Computer Architecture (ISCA)},
+  pages     = {507--520},
+  year      = {2017},
+  doi       = {10.1145/3079856.3080234}
+}
+
+% Claim: GC accelerator near the memory controller; apps spend 10-35%
+% of cycles in GC; mark phase 4.2x an in-order CPU at 18.5% area.
+% [verified] venue; [check] pages/DOI.
+@inproceedings{maas2018gc,
+  author    = {Martin Maas and Krste Asanovi{\'c} and John Kubiatowicz},
+  title     = {A Hardware Accelerator for Tracing Garbage Collection},
+  booktitle = {Proc. 45th Int. Symp. Computer Architecture (ISCA)},
+  year      = {2018},
+  url       = {https://people.eecs.berkeley.edu/~krste/papers/maas-isca18-hwgc.pdf}
+}
+
+% ---------------- Implementation ---------------------------------------
+
+@misc{skywater130,
+  author       = {{SkyWater Technology Foundry} and {Google}},
+  title        = {{SkyWater} {SKY130} Open Source {PDK}},
+  year         = {2020},
+  url          = {https://github.com/google/skywater-pdk}
+}
