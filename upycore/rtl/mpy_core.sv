@@ -3344,7 +3344,10 @@ module mpy_core
                         x1 <= v0 + (v1 << 1);
                         ab_nkw <= v1[7:0];
                         x0 <= 32'(stk_depth) - v2;
-                        x2 <= 32'(stk_depth) - v2 + ((op == 8'h36) ? 32'd2 : 32'd1);
+                        // stk_depth - v2 + (1 or 2): v2 is v0 + 2 * v1 plus that
+                        // same 1 or 2, so one subtract behind stk_depth, not two
+                        // adds in series (rf -> x2, 10.0 ns).
+                        x2 <= 32'(stk_depth) - (v0 + (v1 << 1));
                         x3 <= v2;
                         gi <= 32'd0;
                         st <= S_CC_FUN;

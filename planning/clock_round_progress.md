@@ -216,3 +216,15 @@ compared with `--compare build/sta/base-soc/sta.txt`.
   (change 12). SoC STA of changes 9 to 18, `build/sta/p3-cuts-soc/sta.txt`:
   `u_core.st` 10.295 -> 9.995.
 - Cycles: none (same branch for every op).
+
+### 10. `x2` in the call setup (family C) — landed
+
+- Path: `rf` -> `has_link` -> `stk_depth` -> `- v2` -> `+ (1 or 2)` ->
+  `x2`, 10.021 ns.
+- Change (`mpy_core.sv`): `x2 <= stk_depth - (v0 + (v1 << 1))`. `v2` is
+  `v0 + 2 * v1` plus that same 1 or 2, so the two adds behind `stk_depth`
+  are one.
+- Proof: SAT miter of the two expressions over `stk_depth`, `v0`, `v1`
+  and the op bit (`build/proof/core_arith.ys`): passed.
+- SoC STA (`build/sta/p3-cuts-soc/sta.txt`): `u_core.x2` 10.021 -> 8.530.
+- Cycles: none.
