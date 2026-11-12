@@ -21,7 +21,8 @@ Environment (set by the wrapper):
                              as one more -p after the Makefile's: the USB
                              RAM macro's views from usb_ram_macro.py, which
                              the class SRAM generator (one-port only) does
-                             not make. Required for every action but `sram`.
+                             not make. Not passed to `build` and `sram-generator`;
+                             required for the syn and par actions.
 """
 
 import importlib.machinery
@@ -76,9 +77,15 @@ def add_extra_libs(argv: list) -> list:
     path = os.environ.get("UPYCORE_EXTRA_LIBS", "")
     if not path:
         return argv
+    # make runs the `build` action (it writes build/hammer.d) and then
+    # `sram-generator` before the macro exists: those never take the file.
+    # Synthesis and place and route cannot run without it.
+    action = argv[-1] if len(argv) > 1 else ""
+    if action == "build" or action.startswith("sram"):
+        return argv
     if not os.path.isfile(path):
-        if any(a.startswith("sram") for a in argv[1:]):
-            return argv       # the macro is generated after `make sram`
+        if not action.startswith(("syn", "par")):
+            return argv
         sys.exit(f"upycore_hammer.py: no {path}: run usb_ram_macro.py in the design folder "
                  "after `make sram` (the USB RAM macro's library)")
     at = max((i for i, a in enumerate(argv) if a in ("-p", "--project_config")), default=None)
