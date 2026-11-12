@@ -1372,6 +1372,7 @@ module mpy_core
     // after lk_pos, whether it wraps to slot 0, and whether it is back at
     // lk_start. S_LK_K then sends the next key load itself instead of going
     // through S_LK_NX and S_LK_P (two cycles per probe after the first).
+    logic [31:0] bf_db;
     logic [31:0] lk_npos, ha_lk_nx;
     logic        lk_nwrap, lk_nend;
     // Hash memo for image qstrs. A lookup key that is a qstr takes its
@@ -2269,6 +2270,7 @@ module mpy_core
             scr_id <= SCR_NONE; scr_i <= 4'd0; scr_storing <= 1'b0; scr_gosub_p <= 1'b0;
             for (int k = 0; k < 8; k++) begin sA[k] <= 32'd0; sV[k] <= VNULL; end
             for (int k = 0; k < 6; k++) lkA[k] <= 32'd0;
+            bf_db <= 32'd0;
             rf_mono <= 1'b1; sp_hold <= 1'b0; sp_d <= 7'd0; rf_reload_miss <= 1'b0;
             xsp <= 5'd0; nexc <= 5'd0;
             xh <= 32'd0; xv <= 16'd0; xf <= 1'b0; xp <= VNULL;
@@ -2685,6 +2687,10 @@ module mpy_core
             end
             // fast positional binding
             S_BF: begin
+                // Where default 0 would be if every positional had one: the
+                // default for positional i0 is one add from here. Summed in
+                // S_BF_DEF with i0 it was c_ndef -> c_addr at 10.0 ns.
+                bf_db <= adr(c_defs) + 32'd4 - ((32'(c_npos) - 32'(c_ndef)) << 2);
                 i0 <= 8'(ab_pe - ab_lo);
                 i1 <= 8'd0;
                 st <= S_BF_P;
@@ -2693,8 +2699,14 @@ module mpy_core
                     else rd(ab_ptr(ab_lo + i1), S_BF_PR);
             S_BF_PR: wr(loc_ptr(i1), mv, S_BF_P2);
             S_BF_P2: begin i1 <= i1 + 8'd1; st <= S_BF_P; end
-            S_BF_DEF: if (i0 >= c_npos) st <= S_BF_VA;
-                      else rd(adr(c_defs) + 4 + 4 * (i0 - (c_npos - c_ndef)), S_BF_DEF2);
+            S_BF_DEF: begin
+`ifdef MPY_CHECK
+                if (bf_db + {22'd0, i0, 2'b00} != adr(c_defs) + 4 + 4 * (i0 - (c_npos - c_ndef)))
+                    $error("bf_db stale");
+`endif
+                if (i0 >= c_npos) st <= S_BF_VA;
+                else rd(bf_db + {22'd0, i0, 2'b00}, S_BF_DEF2);
+            end
             S_BF_DEF2: begin wr(loc_ptr(i0), mv, S_BF_DEF); i0 <= i0 + 8'd1; end
             S_BF_VA: if (c_scope & ABI_SCOPE_VARARGS) begin
                     tb_src <= 1'b0; tb_nz <= 1'b0;

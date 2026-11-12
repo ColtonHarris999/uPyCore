@@ -228,3 +228,18 @@ compared with `--compare build/sta/base-soc/sta.txt`.
   and the op bit (`build/proof/core_arith.ys`): passed.
 - SoC STA (`build/sta/p3-cuts-soc/sta.txt`): `u_core.x2` 10.021 -> 8.530.
 - Cycles: none.
+
+### 11. Default-argument address (family D, `c_addr`) — landed
+
+- Path: `c_ndef` / `c_npos` -> `i0 - (npos - ndef)` -> `* 4` -> `+ defs + 4`
+  -> `m_addr` (`c_addr` 9.986 ns in the baseline).
+- Change (`mpy_core.sv`): `S_BF`, which every fast bind passes, registers
+  `bf_db = adr(c_defs) + 4 - 4 * (c_npos - c_ndef)`; `S_BF_DEF` loads
+  `bf_db + 4 * i0`. 32 flops.
+- Proof: SAT miter of `bf_db + 4 * i0` against the old sum
+  (`build/proof/core_arith.ys`): passed. The registered value is compared
+  with the old expression in `S_BF_DEF` under `+define+MPY_CHECK`; the 16
+  kernels ran clean with it.
+- SoC STA (`build/sta/p3-cuts-soc/sta.txt`): `c_addr` 9.946 -> 9.339
+  (with change 14).
+- Cycles: none (`S_BF` already existed).
