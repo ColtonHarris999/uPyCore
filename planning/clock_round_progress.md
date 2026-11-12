@@ -200,3 +200,19 @@ compared with `--compare build/sta/base-soc/sta.txt`.
   0.1 ns; `c_addr` 9.986 -> 9.946. The state encoding moved (four states
   fewer), which is where the 0.04 ns comes from; it is not a cut.
 - Gate: geomean of cycles x period = 0.8589 x 10.295 / 10.332 = 0.856.
+
+### 9. S_EXEC op class (family A, `st`) — landed
+
+- Path: `sp` -> register-file read -> the arms of `case (op)` in `S_EXEC`
+  -> six selects in series (the op-range `if / else` chain in front of the
+  case) -> state case -> `st`, 10.332 ns in the baseline, the worst path.
+- Change (`mpy_core.sv`): `xcls`, a seven-value class decoded from `op`
+  alone by the same chain; `S_EXEC` is `case (xcls)` with the old
+  `case (op)` as its default arm. Every arm's value now passes one select.
+- Proof: SAT miter of the old chain's branch choice against `xcls` over
+  every `op` (`build/proof/xcls.ys`): passed.
+- STA: `mpy_core` alone with this change, `build/sta/p1-xcls-core/sta.txt`:
+  worst 10.295 (`st`), now from `md` through the `S_RF_RELOAD_G` fit test
+  (change 12). SoC STA of changes 9 to 18, `build/sta/p3-cuts-soc/sta.txt`:
+  `u_core.st` 10.295 -> 9.995.
+- Cycles: none (same branch for every op).

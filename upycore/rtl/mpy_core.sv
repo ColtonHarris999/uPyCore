@@ -1260,6 +1260,21 @@ module mpy_core
 
     // current instruction
     logic [7:0]  op, ext;
+    // S_EXEC's op class. The six op ranges were an if / else chain in front
+    // of case (op): six selects in series behind every case arm (sp -> st,
+    // 10.3 ns). The same chain picks the class here, from op alone, and
+    // S_EXEC selects on it in one case.
+    typedef enum logic [2:0] { XC_OP, XC_LF, XC_SF, XC_DR, XC_SI, XC_UN, XC_BIN } xcls_e;
+    xcls_e xcls;
+    always_comb begin
+        if ((op >= 8'hb0 && op < 8'hc0) || op == 8'h24) xcls = XC_LF;
+        else if ((op >= 8'hc0 && op < 8'hd0) || op == 8'h26) xcls = XC_SF;
+        else if (op == 8'h25 || op == 8'h27 || op == 8'h29 || op == 8'h28) xcls = XC_DR;
+        else if (op >= 8'h70 && op < 8'hb0) xcls = XC_SI;
+        else if (op >= 8'hd0 && op < 8'hd7) xcls = XC_UN;
+        else if (op >= 8'hd7 && op < 8'hfa) xcls = XC_BIN;
+        else xcls = XC_OP;
+    end
     logic [31:0] arg, jt;
     // Branch target of the decoded instruction. S_DEC registers the
     // operands and S_EXEC forms the sum from flops: pc is already past the
@@ -3117,7 +3132,8 @@ module mpy_core
             if (aalu_pend && !aalu_pass(op)) begin
                 if (aalu_go) begin aalu_ret <= S_EXEC; st <= S_AALU_WB; end
             end else begin
-                if ((op >= 8'hb0 && op < 8'hc0) || op == 8'h24) begin
+                case (xcls)
+                XC_LF: begin
                     vi = lf_ix;   // (op == 8'h24) ? arg[7:0] : (op - 8'hb0), registered in S_DEC
 `ifdef MPY_CHECK
                     if (lc_hit_r != lc_is_hit(vi) || (lc_hit_r && lc_way_r != lc_hit_way(vi))) $error("lc_hit_r stale (load)");
@@ -3129,7 +3145,8 @@ module mpy_core
                     end else begin
                         i0 <= vi; rd(loc_ptr(vi), S_LDF);
                     end
-                end else if ((op >= 8'hc0 && op < 8'hd0) || op == 8'h26) begin
+                end
+                XC_SF: begin
                     vi = lf_ix;   // (op == 8'h26) ? arg[7:0] : (op - 8'hc0)
                     if (cfg_lc_n != 4'd0 && cfg_lc_wb) begin
                         sp <= sp - 7'd1;
@@ -3139,7 +3156,8 @@ module mpy_core
                         sp <= sp - 7'd1;
                         if (cfg_lc_n != 4'd0) lc_fill(vi, rf[`SX(6'(sp - 7'd1))], 1'b0, 1'b0, S_FETCH);
                     end
-                end else if (op == 8'h25 || op == 8'h27 || op == 8'h29 || op == 8'h28) begin
+                end
+                XC_DR: begin
                     vi = arg[7:0];
 `ifdef MPY_CHECK
                     if (lc_hit_r != lc_is_hit(vi) || (lc_hit_r && lc_way_r != lc_hit_way(vi))) $error("lc_hit_r stale (deref)");
@@ -3166,10 +3184,12 @@ module mpy_core
                         else if (op == 8'h29) rd(loc_ptr(vi), S_DDREF);
                         else rd(loc_ptr(vi), S_LDEL);
                     end
-                end else if (op >= 8'h70 && op < 8'hb0) begin push(vint(32'(op) - 32'h80)); go_next(); end
-                else if (op >= 8'hd0 && op < 8'hd7) begin
+                end
+                XC_SI: begin push(vint(32'(op) - 32'h80)); go_next(); end
+                XC_UN: begin
                     n_o <= op - 8'hd0; st <= S_UN;
-                end else if (op >= 8'hd7 && op < 8'hfa) begin
+                end
+                XC_BIN: begin
                     n_o <= op - 8'hd7; st <= S_BIN;
                     // The operands' classes, for S_BIN (which runs next with
                     // the same ring): read and classified there they were
@@ -3177,7 +3197,8 @@ module mpy_core
                     bin_num_r <= numlike(rf[`SX(6'(sp - 7'd2))]) && numlike(rf[`SX(6'(sp - 7'd1))]);
                     bin_cx_r <= (tg(rf[`SX(6'(sp - 7'd2))]) == ABI_TAG_COMPLEX || tg(rf[`SX(6'(sp - 7'd1))]) == ABI_TAG_COMPLEX) &&
                                 cx_operand(rf[`SX(6'(sp - 7'd2))]) && cx_operand(rf[`SX(6'(sp - 7'd1))]);
-                end else case (op)
+                end
+                default: case (op)
                 8'h10: rd(ha_qarg, S_LCS);
                 8'h22: begin push(vint(arg)); go_next(); end
                 8'h23: rd(ha_carg, S_LCO);
@@ -3378,6 +3399,7 @@ module mpy_core
                          (loc == VNULL) ? glb : loc, VNULL, VNULL);
                 end
                 default: halt(ABI_HALT_BAD_OPCODE, op_pc);
+                endcase
                 endcase
             end
             end
