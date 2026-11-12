@@ -30,7 +30,7 @@ Tools on the prepared image:
 
 - `YOSYS` is `yowasp-yosys` 0.70.0.0.post1259 (Yosys 0.70, `read_slang` built in). Do not install a different Yosys.
 - `SKY130_LIB` is `/opt/sky130/sky130_fd_sc_hd__tt_025C_1v80.lib`, sha256 `ec0e1067a35c8bf20b11e58d1e8ac53326067e4dac84a125cc1b917a3518d0d9`, OpenROAD-flow-scripts `b5dceb3c08fd30c9a1c5c0587bc6a57e0392080a`. Do not swap the liberty.
-- Verilator 5.032 and Python 3.14 are installed. `make mpy-cross` has been run. Vendor submodules are checked out.
+- Verilator 5.048 (Debian forky's, as in the repository's `Dockerfile`), the RISC-V toolchain for the I/O core's firmware, tmux and Python 3.14 are installed. `make mpy-cross` has been run and the `smoke` hardware area has built `build/mpy_soc/obj/Vtb_mpy_soc`. Vendor submodules are checked out. Trixie's Verilator 5.032 does not build the simulator. If `verilator --version` prints 5.032, the pod booted from the older image: take 5.048 from Debian forky before the first build.
 - `i686-linux-gnu-gcc` is installed. `make oracle-mpz` builds the bigint oracle. It is not prebuilt.
 
 If `yowasp-yosys` or that liberty file is missing, this pod booted from the older image. Install those two pins and continue. Do not pick another version.

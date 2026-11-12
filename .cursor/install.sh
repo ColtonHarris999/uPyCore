@@ -1,7 +1,8 @@
 #!/bin/bash
 # Image tools come from the Dockerfile. This step fetches the pinned
-# sources and builds mpy-cross, which every simulator run needs and which
-# does not change when the RTL changes.
+# sources, builds mpy-cross, which every simulator run needs and which
+# does not change when the RTL changes, and builds the SoC simulator once
+# to show that this image's Verilator and RISC-V toolchain can.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -18,4 +19,7 @@ grep -q "read_slang" /tmp/read_slang_help.txt
 git submodule update --init
 make mpy-cross
 test -x build/oracle/src/mpy-cross/build/mpy-cross
+riscv64-unknown-elf-gcc --version | head -n 1
+python3 upycore/tools/hw_tests.py --area smoke
+test -x build/mpy_soc/obj/Vtb_mpy_soc
 echo "install ok"

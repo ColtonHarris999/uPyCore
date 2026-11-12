@@ -1,23 +1,39 @@
+FROM debian:forky-slim AS simulator
+RUN apt-get update && apt-get install -y --no-install-recommends verilator
+
 FROM python:3.14-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Verilator 5.032 (Debian trixie) builds the uPyCore hart. Ubuntu's 5.020
-# rejects slices of function-call return values used in the RTL.
-# The i686 toolchain is the unix oracle (make oracle / make oracle-mpz).
+# Verilator comes from Debian forky, as in the repository's own Dockerfile:
+# trixie's 5.032 crashes on the GC's indexed writes and does not build the
+# SoC simulator. The RISC-V compiler and picolibc build the I/O core's
+# firmware (iocore/sw/TOOLCHAIN.md), which every image with board I/O
+# carries. The i686 toolchain is the unix oracle (make oracle / make
+# oracle-mpz). tmux holds the timing runs and hardware areas that outlive
+# one command.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
         build-essential \
+        ccache \
         make \
-        verilator \
+        perl \
         git \
         curl \
         ca-certificates \
         patch \
+        tmux \
+        gcc-riscv64-unknown-elf \
+        binutils-riscv64-unknown-elf \
+        picolibc-riscv64-unknown-elf \
         gcc-i686-linux-gnu \
         libc6-dev-i386-cross \
         libc6-i386 \
  && rm -rf /var/lib/apt/lists/*
+
+COPY --from=simulator /usr/bin/verilator /usr/bin/verilator_bin /usr/bin/
+COPY --from=simulator /usr/share/verilator /usr/share/verilator
+RUN verilator --version
 
 # Yosys 0.70 with read_slang. This is the open timing flow's elaborator
 # (upycore/tools/sta/run.py). There is no native yosys binary.
