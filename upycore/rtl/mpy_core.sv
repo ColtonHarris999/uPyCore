@@ -2242,6 +2242,7 @@ module mpy_core
     // ------------------------------------------------------------------
     always_ff @(posedge clk_i or negedge rst_n_i) begin : seq
         logic [31:0] v0, v1, v2, v3;
+        logic [8:0]  vrl;
         logic [7:0]  vi;
         logic [6:0]  vs0, vs1;
         logic        vb;
@@ -6765,7 +6766,19 @@ module mpy_core
                     // Registers only, so the compare stays off the reload's
                     // header decode.
                     reload_top <= (spill_addr == spill_hp);
-                    if (v0 < 32'(MPY_RF_CHUNK_MIN) || v0 > 32'(MPY_RF_CHUNK_MAX) || v2 > 32'(MPY_RF_DEPTH)) begin
+                    // v2 > MPY_RF_DEPTH, with the link test selecting between
+                    // the two answers: v2 is sp + count, or one less without
+                    // a link (below 0 when both are 0, which is over). The
+                    // sum behind the 32-bit link test was md -> st at
+                    // 10.3 ns.
+                    vrl = {2'b00, sp} + {1'b0, v0[7:0]};
+`ifdef MPY_CHECK
+                    if ((v2 > 32'(MPY_RF_DEPTH)) !=
+                        ((v1 != 32'd0) ? (vrl > 9'(MPY_RF_DEPTH)) : (vrl == 9'd0 || vrl > 9'(MPY_RF_DEPTH + 1))))
+                        $error("reload fit test differs");
+`endif
+                    if (v0 < 32'(MPY_RF_CHUNK_MIN) || v0 > 32'(MPY_RF_CHUNK_MAX) ||
+                        ((v1 != 32'd0) ? (vrl > 9'(MPY_RF_DEPTH)) : (vrl == 9'd0 || vrl > 9'(MPY_RF_DEPTH + 1)))) begin
                         if (rf_resume == S_EXEC_W) begin
                             rf_reload_miss <= 1'b1;
                             st <= S_EXEC_W;

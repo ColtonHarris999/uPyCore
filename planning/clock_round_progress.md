@@ -243,3 +243,18 @@ compared with `--compare build/sta/base-soc/sta.txt`.
 - SoC STA (`build/sta/p3-cuts-soc/sta.txt`): `c_addr` 9.946 -> 9.339
   (with change 14).
 - Cycles: none (`S_BF` already existed).
+
+### 12. Reload fit test (family A, `st`) — landed
+
+- Path: `md` -> chunk count -> `v2 = sp + count (+ link)` (32 bits) ->
+  `v2 > MPY_RF_DEPTH` -> `st`, 10.295 ns: the worst path once change 9 is
+  in.
+- Change (`mpy_core.sv`, `S_RF_RELOAD_G`): the fit is tested on nine
+  bits, `{2'b00, sp} + {1'b0, count[7:0]}`, beside the range test of the
+  count instead of behind a 32-bit sum.
+- Proof: SAT miter of the old and new branch condition over `md`, `sp`
+  and the link bit (`build/proof/reload_fit.ys`): passed. `MPY_CHECK`
+  compares the two in every `S_RF_RELOAD_G`.
+- SoC STA (`build/sta/p3-cuts-soc/sta.txt`): `u_core.st` 10.295 -> 9.995,
+  now from `alu_res` in `S_BI_DIV_CHECK` (change 19).
+- Cycles: none.
