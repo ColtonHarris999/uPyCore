@@ -332,3 +332,19 @@ compared with `--compare build/sta/base-soc/sta.txt`.
   the `alu_op` select (`alu_op` itself is 7.5 ns). It is not in the
   baseline list and it is below the worst path.
 - Cycles: none.
+
+### 18. String hash byte count (family J) — landed
+
+- Path: `ptr` -> bytes left in the word -> `len < count` (32 bits) ->
+  `count` -> byte hash chain -> `len == count` -> `state` / `result`,
+  9.649 / 9.511 ns.
+- Change (`mpy_hash.sv`): `count` is at most 4, so the clamp is
+  `len[31:3] == 0 && len[2:0] < count`, and the last-word test is
+  `len[31:3] == 0 && len[2:0] <= count` taken before the clamp.
+- Proof: SAT miters of the old and new `count` and last-word flag for
+  BYTES_PER_CYCLE 1 and 4 (`build/proof/hash_count1.ys`,
+  `hash_count4.ys`): passed. Unit benches `mpy_hash`, `mpy_hash4`,
+  `mpy_hash_slot`, `mpy_hash_slot4` pass.
+- SoC STA (`build/sta/p4-soc/sta.txt`): `shared_hash.state` 9.649 ->
+  6.814, `shared_hash.result` 9.511 -> 7.222.
+- Cycles: none.
