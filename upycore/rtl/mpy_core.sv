@@ -6416,9 +6416,16 @@ module mpy_core
             S_LK_V: begin lk_res <= mv; ret(); end
             S_LK_RET: ret();
             S_LK_RV: begin lk_res <= mv; st <= S_LK_RM; end
+            // The slot after the one being removed: the probe's look-ahead
+            // (S_LK_P / lk_next) already has its wrap and its address. Summed
+            // here from the position it was lkA -> m_addr at 9.9 ns.
             S_LK_RM: begin
+`ifdef MPY_CHECK
                 v0 = (`lk_pos + 32'd1 == `lk_alloc) ? 32'd0 : `lk_pos + 32'd1;
-                rd(`lk_tab + (lk_set ? (v0 << 2) : (v0 << 3)), S_LK_RM2);
+                if ((lk_nwrap ? `lk_tab : ha_lk_nx) != `lk_tab + (lk_set ? (v0 << 2) : (v0 << 3)))
+                    $error("lk remove: next slot address stale");
+`endif
+                rd(lk_nwrap ? `lk_tab : ha_lk_nx, S_LK_RM2);
             end
             S_LK_RM2: begin
                 wr(`lk_slot, (mv == VNULL) ? VNULL : VTOMB, S_LK_RM3);

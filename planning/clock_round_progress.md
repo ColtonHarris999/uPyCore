@@ -271,3 +271,16 @@ compared with `--compare build/sta/base-soc/sta.txt`.
   9.743, `wb_v[3]` 9.552 -> 9.406; `u_core.rf` 8.948 -> 8.682 in the same
   run.
 - Cycles: none.
+
+### 14. Next slot of a delete (family D, `c_addr`) — landed
+
+- Path: `lkA` (position, alloc) -> `pos + 1 == alloc` -> select -> shift
+  -> `+ table` -> `m_addr`, about 9.9 ns after change 8 (`c_addr` 9.946
+  in `build/sta/k5-lkreg-soc/sta.txt`).
+- Change (`mpy_core.sv`, `S_LK_RM`): the address is `lk_nwrap ? table :
+  slot + 4 or 8`, the look-ahead that change 6 already keeps for the slot
+  being removed.
+- Proof: registered form. `MPY_CHECK` compares it with the old sum in
+  every `S_LK_RM`; hardware area `containers` (dict and set deletes).
+- SoC STA (`build/sta/p3-cuts-soc/sta.txt`): `c_addr` 9.946 -> 9.339.
+- Cycles: none.
