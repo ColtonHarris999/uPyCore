@@ -385,12 +385,34 @@ macro footprints from their LEFs.
 `TOP=mpy_soc sweep.sh par 15` places and routes the whole chip. Between
 `make sram` and `make syn` it runs `place_macros.py`, which reads the LEFs,
 places the 33 memory and GC macros as `hardmacro` constraints and sets the
-die (DIE is ignored). It does not place the I/O island's 11 macros yet (the
-4096 x 32 code SRAM, the 1920 x 32 data SRAM, the USB SIE's nine 256 x 16):
-they came with the I/O core (main) after this floorplan was written, and
-the 4096-word code SRAM is probably as long as a main-memory macro, so it may
-not fit the logic channel. Check them in `sweep.sh floorplan` before a full
-run. A 4096-word macro is 3.95 x 0.16 mm with every signal pin on one
+die (DIE is ignored). With the I/O island it also places the island's two
+one-port SRAMs: the 4096 x 32 code SRAM (3.95 mm long, like a memory macro)
+as a 17th row on top of the right column and the 1920 x 32 data SRAM
+opposite on the left column, pins on the channel.
+
+**The I/O island in the class flow.** Three `DESIGN_ARGS` choices:
+
+- `--no-island`: an empty `iocore_top`, the 10 ns domain alone (35 fewer
+  things to get wrong while closing the core's timing).
+- `--usb-flops`: the whole chip. The USB core's nine 256 x 16 RAMs are
+  one-read-one-write (`bsg_mem_1r1w_sync_mask_write_bit`), and the class's
+  fakeram generator makes one-port macros only (its Hammer plugin refuses
+  any family but `1rw`, the class swap hook runs BaseJump's generator for
+  `1rw` only, and bsg_fakeram's LEF and lib writers know one port). With
+  this switch they are flops, 36,864 bits; `place_macros.py --island-area`
+  is the room they and the island's logic get in the channel (an estimate,
+  check it against the synthesized area).
+- neither: the generator is asked for nine `fakeram_d256_w16` 1r1w macros.
+  That needs a bsg_fakeram that writes a second port and a 1r1w swap header
+  for BaseJump's `bsg_mem_generator.py` (which has the 1r1w template); not
+  done yet.
+
+no2usb's `usb.v` has an asynchronous-reset process inside a test of its IRQ
+parameter, which Genus refuses (CDFG-364). `mpy_dc_unit.py` (`UNIT_PATCH`)
+turns the test into a generate-if as it inlines the file; the submodule is
+not edited.
+
+A 4096-word macro is 3.95 x 0.16 mm with every signal pin on one
 short edge. `python3 place_macros.py <folder> --dry-run` prints
 the layout without writing it.
 

@@ -25,8 +25,9 @@
 # first, with the core from converted/mpy_core.v. SOC_RTL=converted takes the
 # whole chip from converted/mpy_soc.v instead. status then also counts the
 # macros in each netlist (want 44: 32 x d4096_w36, 1 x d600_w64, 1 x d4096_w32,
-# 1 x d1920_w32, 9 x d256_w16). place_macros.py places the 33 memory and GC
-# macros only; the island's 11 are left to Innovus (see the README).
+# 1 x d1920_w32, 9 x d256_w16; DESIGN_ARGS=--usb-flops makes the nine USB RAMs
+# flops, 35 macros, and --no-island leaves the island out, 33). place_macros.py
+# places the memory, GC and the island's code and data macros (see the README).
 # With `par`, place_macros.py places the macros, keeps standard cells in the
 # channel between them, puts the I/O pins on the channel's top edge and sets
 # the die size (DIE is ignored).

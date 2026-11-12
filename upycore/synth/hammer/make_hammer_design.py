@@ -310,9 +310,15 @@ def main() -> int:
     ap.add_argument("--no-island", action="store_true",
                     help="for mpy_soc with --core-v: leave the I/O island (iocore_top: CVE2, the "
                          "peripherals, USB and their 11 SRAM macros) out and put an empty "
-                         "iocore_top in its place. The class flow cannot build the island yet "
-                         "(fakeram has no 1r1w macro for the USB RAMs, Genus rejects no2usb's "
-                         "usb.v), and it runs on its own 20 ns clock, off the 10 ns paths")
+                         "iocore_top in its place: a run of the 10 ns domain alone. The island "
+                         "runs on its own 20 ns clock, off the 10 ns paths (with it, see "
+                         "--usb-flops)")
+    ap.add_argument("--usb-flops", action="store_true",
+                    help="for mpy_soc with the island: build the USB core's nine 256 x 16 "
+                         "one-read-one-write RAMs from flops (BaseJump's synth model, 36,864 "
+                         "bits) and ask the SRAM generator for no macro for them. The class's "
+                         "fakeram generator makes one-port macros only and refuses the 1r1w "
+                         "shape; BaseJump itself has the two-port wrapper and its macro swap")
     ap.add_argument("--par-tcl", action="append", default=[], metavar="LINE",
                     help="an Innovus Tcl line to run before place_opt_design, after the class "
                          "settings (repeatable). Uses the upycore_hammer.py driver")
@@ -379,7 +385,11 @@ def main() -> int:
     if args.no_island and not (island and args.core_v):
         sys.exit("--no-island needs --top mpy_soc with --core-v")
     if srams and island and not args.no_island:
-        macros += [IOCORE_CODE_SRAM_MACRO, IOCORE_DATA_SRAM_MACRO, USB_SRAM_MACRO]
+        macros += [IOCORE_CODE_SRAM_MACRO, IOCORE_DATA_SRAM_MACRO]
+        if not args.usb_flops:
+            macros.append(USB_SRAM_MACRO)
+    if args.usb_flops and not (island and not args.no_island):
+        sys.exit("--usb-flops needs --top mpy_soc with the island (no --no-island)")
     io_clock = args.io_clock or ("io_clk_i" if island else None)
     extra_v: list[Path] = []
     if args.core_v:

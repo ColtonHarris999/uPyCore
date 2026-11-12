@@ -26,7 +26,8 @@ from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
-from mpy_synth import GC_SRAM_MACRO, SRAM_MACRO, SRAM_MACROS
+from mpy_synth import (GC_SRAM_MACRO, IOCORE_CODE_SRAM_MACRO, IOCORE_DATA_SRAM_MACRO, SRAM_MACRO, SRAM_MACROS,  # noqa: E402
+                       USB_SRAM_BLOCKS, USB_SRAM_MACRO)
 
 # Flip-flop bits counted with slang/Yosys from the generated unit.
 # Genus removes flops that are constant or duplicate another, so a few
@@ -119,6 +120,13 @@ def main() -> int:
                            "mpy_mem": {SRAM_MACRO["name"]: SRAM_MACROS},
                            "mpy_gc": {GC_SRAM_MACRO["name"]: 1}}.get(top or "", {})
         allowed_macros = set(expected_macros)
+        # The I/O island's macros, when the run has the island: its code and
+        # data SRAMs, and the USB RAMs unless they are flops (--usb-flops).
+        island_macros = {}
+        if top == "mpy_soc":
+            island_macros = {IOCORE_CODE_SRAM_MACRO["name"]: (0, 1), IOCORE_DATA_SRAM_MACRO["name"]: (0, 1),
+                             USB_SRAM_MACRO["name"]: (0, USB_SRAM_BLOCKS)}
+            allowed_macros |= set(island_macros)
         unknown = {k: v for k, v in cells.items()
                    if k not in defined and not k.startswith("sky130_") and k not in allowed_macros}
         print(f"  latch cells: {latches}" + ("  CHECK: the RTL has no latches" if latches else ""))
@@ -134,6 +142,11 @@ def main() -> int:
             print(f"  SRAM macros: {macros} x {name} (expected {want})"
                   + ("  CHECK: SRAM geometry/count mismatch" if bad_macros else ""))
             failed |= bad_macros
+        for name, ok in island_macros.items():
+            macros = cells.get(name, 0)
+            print(f"  island SRAM macros: {macros} x {name} (expected {ok[1]} with the island's macro, else 0)"
+                  + ("" if macros in ok else "  CHECK: count mismatch"))
+            failed |= macros not in ok
 
     print("== Flops and timing (final_qor.rpt)")
     qor = run / "reports" / "final_qor.rpt"

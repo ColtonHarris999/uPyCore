@@ -34,6 +34,22 @@ INCLUDE_RE = re.compile(r'^\s*`include\s+"([^"]+)"')
 # becomes the library's ICG cell, so the tool maps no latch of its own.
 UNIT_SUBST = {"vendor/cve2/rtl/cve2_clock_gate.sv": "iocore/rtl/asic/cve2_clock_gate.sv"}
 
+# Text changes to vendored sources as they are inlined, (old, new) pairs that
+# must each match once; the submodule itself stays as upstream has it.
+# no2usb's usb.v puts an asynchronous-reset process inside a test of the IRQ
+# parameter, which Genus refuses (CDFG-364, "Unsynthesizable Process"): the
+# reset has to be the process's outermost test. The same registers and the
+# same logic with the parameter test as a generate-if around the process.
+UNIT_PATCH = {
+    "vendor/no2usb/rtl/usb.v": [
+        ("\talways @(posedge clk or posedge rst)\n\t\tif (IRQ) begin\n\t\t\tif (rst) begin\n",
+         "\tgenerate if (IRQ) begin : g_ir_cfg\n\talways @(posedge clk or posedge rst)\n\t\tbegin\n"
+         "\t\t\tif (rst) begin\n"),
+        ("\t\t\t\tir_brp <= wb_wdata[0];\n\t\t\tend\n\t\tend\n",
+         "\t\t\t\tir_brp <= wb_wdata[0];\n\t\t\tend\n\t\tend\n\tend endgenerate\n"),
+    ],
+}
+
 
 def _src(name: str) -> Path:
     # TOPS entries with a '/' are paths from the repository root (the I/O
@@ -83,7 +99,15 @@ def write_unit(top: str, out_dir: Path, skip: tuple[str, ...] = (), name: str | 
     incdirs = [ROOT / d for d in INCDIRS.get(top, [])]
     for src in TOPS[top]:
         if src not in skip:
-            lines += _inline(_src(UNIT_SUBST.get(src, src)), [], incdirs)
+            part = _inline(_src(UNIT_SUBST.get(src, src)), [], incdirs)
+            if src in UNIT_PATCH:
+                text = "".join(part)
+                for old, new in UNIT_PATCH[src]:
+                    if text.count(old) != 1:
+                        raise SystemExit(f"{src}: a UNIT_PATCH entry matches {text.count(old)} times, want 1")
+                    text = text.replace(old, new)
+                part = [text]
+            lines += part
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / f"{name or top}.sv"
     out.write_text("".join(lines))

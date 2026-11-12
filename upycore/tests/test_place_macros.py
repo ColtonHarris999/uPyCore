@@ -11,10 +11,12 @@ import place_macros as pm  # noqa: E402
 
 BANK = (3952.32, 157.76, "left")     # fakeram_d4096_w36, measured on the lab machine
 GC = (648.14, 212.16, "left")        # fakeram_d600_w64
+CODE = (3947.26, 133.28, "left")     # fakeram_d4096_w32, the I/O island's code SRAM
+DATA = (1881.40, 116.96, "left")     # fakeram_d1920_w32, its data SRAM
 
 
 def args(**kw):
-    base = dict(logic_area=2.0e6, util=0.45, stack_gap=21.76, margin=100.0, spacing=60.0)
+    base = dict(logic_area=2.0e6, island_area=1.7e6, util=0.45, stack_gap=21.76, margin=100.0, spacing=60.0)
     base.update(kw)
     return argparse.Namespace(**base)
 
@@ -105,6 +107,48 @@ class Pins(unittest.TestCase):
             self.assertEqual((q["side"], q["layers"], q["location"][1]), ("top", ["met2"], 3032.8))
         clk = [i for i, q in enumerate(plan) if q["pins"] == "clk_i"][0]
         self.assertLessEqual(abs(clk - len(plan) // 2), 1)
+
+
+class Island(unittest.TestCase):
+    """With the I/O island: its two SRAMs on top of the columns."""
+
+    def setUp(self):
+        self.base = pm.layout(BANK, GC, args(util=0.25))
+        self.die_w, self.die_h, self.place, self.blocks = pm.layout(BANK, GC, args(util=0.25), (CODE, DATA))
+        self.code = next(p for p in self.place if p[0] == pm.CODE_PATH)
+        self.data = next(p for p in self.place if p[0] == pm.DATA_PATH)
+
+    def test_thirty_five_macros_and_the_memory_unmoved_in_y(self):
+        self.assertEqual(len(self.place), 35)
+        self.assertEqual([p[2] for p in self.place[:32]], [p[2] for p in self.base[2][:32]])
+
+    def test_on_top_of_the_columns_inside_the_die(self):
+        top = max(p[2] for p in self.place if "/u_mem/" in p[0]) + BANK[1]
+        for p, shape in ((self.code, CODE), (self.data, DATA)):
+            self.assertGreaterEqual(p[2], top + 21.76 - pm.ROW_H)
+            self.assertLess(p[2] + shape[1], self.die_h - 99)
+            self.assertAlmostEqual(p[1] / pm.SITE_W, round(p[1] / pm.SITE_W), places=6)
+            self.assertAlmostEqual(p[2] / pm.ROW_H, round(p[2] / pm.ROW_H), places=6)
+
+    def test_pin_edges_on_the_channel(self):
+        left_edge = max(p[1] + BANK[0] for p in self.place if "/u_mem/" in p[0] and p[1] < self.die_w / 2)
+        right_edge = min(p[1] for p in self.place if "/u_mem/" in p[0] and p[1] > self.die_w / 2)
+        # Code SRAM on the right column, pins (LEF left edge) on the channel.
+        self.assertEqual(self.code[3], "r0")
+        self.assertAlmostEqual(self.code[1], right_edge, delta=pm.SITE_W)
+        # Data SRAM mirrored on the left column, its pin edge flush with the column's.
+        self.assertEqual(self.data[3], "my")
+        self.assertAlmostEqual(self.data[1] + DATA[0], left_edge, delta=pm.SITE_W)
+
+    def test_die_grows_for_the_row_and_the_island_logic(self):
+        self.assertGreater(self.die_h, self.base[1] + CODE[1])
+        self.assertLess(self.die_h, self.base[1] + CODE[1] + 21.76 + 2 * pm.ROW_H)
+        self.assertGreater(self.die_w, self.base[0] + 1000)
+
+    def test_macros_are_under_the_blockages(self):
+        for p, shape in ((self.code, CODE), (self.data, DATA)):
+            inside = any(x <= p[1] and p[1] + shape[0] <= x + w + 10.01 for x, _, w, _ in self.blocks)
+            self.assertTrue(inside, p)
 
 
 if __name__ == "__main__":
