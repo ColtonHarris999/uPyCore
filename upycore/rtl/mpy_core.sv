@@ -1194,11 +1194,18 @@ module mpy_core
     logic        rf_pend;
     // The pending push (rf_pend) lands before the state runs, except in the
     // states that take memory acks or move the register file themselves.
-    logic        rf_icpt;
-    assign rf_icpt = rf_pend && st != S_MWAIT && st != S_FL_H && st != S_FL_S &&
-        st != S_CF_B && st != S_CF_RC && st != S_CF_Q && st != S_CX && st != S_SCR && st != S_AALU_WB &&
-        st != S_RF_SPILL && st != S_RF_SPILL2 && st != S_RF_SPILL_W &&
-        st != S_RF_RELOAD && st != S_RF_RELOAD_R && st != S_RF_RELOAD_G;
+    // The excepted states are one case, so their compares meet in a tree:
+    // as fifteen `st != X &&` terms they were a chain in front of every
+    // register the microcode writes (st -> wb_v, 9.9 ns).
+    logic        rf_icpt, rf_icpt_st;
+    always_comb
+        case (st)
+            S_MWAIT, S_FL_H, S_FL_S, S_CF_B, S_CF_RC, S_CF_Q, S_CX, S_SCR, S_AALU_WB,
+            S_RF_SPILL, S_RF_SPILL2, S_RF_SPILL_W,
+            S_RF_RELOAD, S_RF_RELOAD_R, S_RF_RELOAD_G: rf_icpt_st = 1'b0;
+            default: rf_icpt_st = 1'b1;
+        endcase
+    assign rf_icpt = rf_pend && rf_icpt_st;
     val_t        rf_pend_v;
     state_e      rf_resume;
     logic [31:0] spill_addr;

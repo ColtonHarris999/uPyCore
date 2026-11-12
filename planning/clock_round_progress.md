@@ -258,3 +258,16 @@ compared with `--compare build/sta/base-soc/sta.txt`.
 - SoC STA (`build/sta/p3-cuts-soc/sta.txt`): `u_core.st` 10.295 -> 9.995,
   now from `alu_res` in `S_BI_DIV_CHECK` (change 19).
 - Cycles: none.
+
+### 13. `rf_icpt` state test (family H, `wb_v`) — landed
+
+- Path: `st` -> fifteen `st != X &&` terms in series -> `rf_icpt` -> the
+  enable of every register the microcode writes; `wb_v[0]` 9.889 ns.
+- Change (`mpy_core.sv`): the fifteen excepted states are one `case`, so
+  their compares meet in a tree.
+- Proof: SAT miter of the old and new `rf_icpt` over `st` and `rf_pend`
+  (`build/proof/rf_icpt.ys`): passed.
+- SoC STA (`build/sta/p3-cuts-soc/sta.txt`): `u_core.wb_v[0]` 9.889 ->
+  9.743, `wb_v[3]` 9.552 -> 9.406; `u_core.rf` 8.948 -> 8.682 in the same
+  run.
+- Cycles: none.
