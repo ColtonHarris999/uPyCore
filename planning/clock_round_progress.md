@@ -506,3 +506,150 @@ compared with `--compare build/sta/base-soc/sta.txt`.
   9.445. Grew by more than 0.1 ns over change 24's run: `md`, `mt`,
   `ha_mdarg` 6.123 -> 7.021; `shared_hash.tag` / `payload` 4.556 ->
   4.676; `u_gc.rescanning` 3.585 -> 3.687.
+
+## Result (HEAD of this branch against main at a09ca4f)
+
+| item | baseline | now | from |
+|---|---|---|---|
+| `mpy_soc` worst | 10.332 ns (`u_core.st`) | 9.578 ns (`u_ca.bulk_engine.engine.req_o`) | `build/sta/b5-soc/sta.txt` |
+| `mpy_core` worst | 10.314 ns (`st`) | 9.532 ns (`x0`) | `build/sta/b5-core/sta.txt` |
+| 16 kernels, cycles, geomean | 1 | 0.7808 | `build/kern/final` |
+| 16 kernels, cycles x period, geomean | 1 | 0.7238 | same, 10.332 -> 9.578 |
+
+Both periods are the open flow's (unmapped, `--no-fsm`, sky130 typical, no
+wires). They compare this RTL with the baseline RTL under one command.
+They are not Genus numbers and not post-route periods.
+
+Kernels on `build/mpy_soc/obj/Vtb_mpy_soc` built from this tree against
+`build/sta/base-soc/Vtb_mpy_soc`; time ratio is (cycles x 9.578) /
+(cycles x 10.332); every `RESULT` is the baseline's:
+
+| kernel | cycles before | cycles after | time ratio | result |
+|---|---|---|---|---|
+| bm_chaos | 3415313 | 2492581 | 0.6766 | same |
+| bm_fannkuch | 1003198 | 1000755 | 0.9248 | same |
+| bm_fft | 9403387 | 8156344 | 0.8041 | same |
+| bm_float | 2884645 | 2202469 | 0.7078 | same |
+| bm_hexiom | 9999798 | 7597945 | 0.7044 | same |
+| bm_nqueens | 11891921 | 10030763 | 0.7819 | same |
+| bm_pidigits | 1383634 | 1342992 | 0.8998 | same |
+| bm_wordcount | 6604660 | 4066383 | 0.5708 | same |
+| core_locals | 4900777 | 3113068 | 0.5889 | same |
+| core_qstr | 61539 | 37388 | 0.5632 | same |
+| core_str | 5944651 | 4619140 | 0.7203 | same |
+| core_yield_from | 3210984 | 3114483 | 0.8992 | same |
+| misc_aes | 1370947 | 1168765 | 0.7903 | same |
+| misc_mandel | 4948750 | 4081921 | 0.7646 | same |
+| misc_pystone | 2946340 | 2101642 | 0.6613 | same |
+| misc_raytrace | 5666797 | 4015826 | 0.6569 | same |
+
+`clock_bench.py --before build/sta/base-soc/Vtb_mpy_soc --after
+build/mpy_soc/obj/Vtb_mpy_soc --before-ns 10.332 --after-ns 9.578` exits 0
+(same images, same output on both executables): every workload has fewer
+cycles; pystone 2905788 -> 2070059, the arithmetic loops -0.2 to -0.4 %.
+
+The one change that adds cycles is 19 (one cycle per bigint `//`);
+`bm_pidigits` is still 1383634 -> 1342992.
+
+Groups of the final `mpy_soc` report slower than in the baseline by more
+than 0.1 ns (every group of both reports compared, `build/sta_trace.py`
+with all groups printed). The highest of them is 9.185 ns:
+
+- new groups: `$auto$proc_rom.cc:154:do_switch$1` 9.185 (the register the
+  tool puts in front of the `iop_of` table of change 17), a tool-named
+  group 9.008 (`wb_v`, packed in change 20; the baseline's `wb_v[0..4]`
+  were 9.889 .. 9.286), `lkA` 6.950 (the probe's registers of change 8),
+  `qa_pend` 6.558, and the memo and burst registers below that.
+- grew: `hm_start` 4.884 -> 7.722; `rf_resume` 6.361 -> 7.443; `rf_pend_v`
+  6.480 -> 7.321; `aalu_ret` 5.630 -> 7.305; `dq_bytes`, `d_op` 7.045 ->
+  7.266; `aux` 6.949 -> 7.174; `scr_gt` 6.986 -> 7.157; `scr_i` 6.860 ->
+  7.035; `md`, `mt`, `ha_mdarg` 6.241 -> 7.021; `at_q` 6.207 -> 7.010;
+  `tr_v` 6.318 -> 6.949; `tb_nz`, `tb_n`, `tb_from` 6.397 -> 6.904; `xc`
+  6.455 -> 6.887; `inj` 5.904 -> 6.887; `cv_i` 5.909 -> 6.874; `lk_set`
+  6.189 -> 6.844; `sw_k` 6.074 -> 6.822; `fflags` 6.156 -> 6.771;
+  `rf_pend` 6.358 -> 6.732; `rx_from` 6.145 -> 6.731; `tb_src` 6.203 ->
+  6.711; `lk_mode` 6.074 -> 6.711; `b0` 6.078 -> 6.678; `ovr` 5.892 ->
+  6.656; `lk_hasav` 6.051 -> 6.633; `scr_ret` 6.244 -> 6.564; `cv_n`,
+  `cv_j`, `cv_fidx`, `cv_bm`, `cv_base` 6.190 -> 6.470; `s0`, `s1` 6.073
+  -> 6.354; `cv_wide` 6.054 -> 6.320; `ke_a`, `ke_b` 6.024 -> 6.262; `qid`
+  5.976 -> 6.149; `lc_dirty` 5.876 -> 6.140; `bl_k` 5.761 -> 5.971;
+  `lk_ro` 5.696 -> 5.956; `u_alu.op` 3.580 -> 3.689; `hm_done` 3.214 ->
+  3.374 (all `u_core`).
+
+## Paths left, and why
+
+Top of `build/sta/b5-soc/sta.txt`:
+
+| ns | group | start | why it stays |
+|---|---|---|---|
+| 9.578 | `bulk_engine.engine.req_o` | `c_pend` | `c_pend` -> core address mux -> the accelerator scoreboard's range compares (`chk_busy`) -> `ca_busy` -> core request -> `mpy_mem` `lost` -> accelerator grant -> engine next state. A cut registers the scoreboard test, which is a cycle on every core memory access, or reorders the grant on an invariant that has no proof. |
+| 9.423, 9.389 | `copy_engine.fc`, `rpend` | `c_pend` | the same path into the copy engine |
+| 9.532 | `u_core.x0` | `ha_mdarg` | `S_SRD_T1` address expression into an add; 0.17 ns above the wall |
+| 9.473 | `u_fpu.u_div.s1_exp_a_r` | `state_r` | FP divide stage 1, untouched; 0.11 ns above the wall |
+| 9.445 | `u_core.st` | `sp` | ring read of the top of stack into the `S_EXEC` case; was 10.332 |
+| 9.390, 9.376 | `cv_fun_g`, `c_addr` | `rf`, `xsp` | start with `has_link`, a ring read through `rf_base` (2.56 ns) |
+| 9.366 | `u_hmod.*`, three `modulo.*` | `d3_r` | the sequential modulo at `BPC=4`: two radix-4 steps of a 35-bit subtract and select in a clock. `BPC=2` halves the path and doubles the steps of every `%` the memos do not catch. |
+
+The worst path is 0.21 ns above that 9.366 ns wall. It and seven more
+groups sit above the wall, so cutting all eight is worth 2.2 % of the
+period, and the first one costs a cycle per core memory access. Below the wall the list is dense
+(`addr_o` 9.329, `short_engine.st` 9.246, `pc` 9.207, `s1_shift_r` 9.203).
+Cycle changes 22 and 23 each bought more than that (4.8 % and 2.9 %).
+
+Cycle sinks measured in the profile of change 22's simulator and not
+taken: one stream of key and value loads over several probe slots with a
+count of answers to drop (about 3 % by the profile's `S_LK_PB` share and
+1.5 to 3.6 probes per lookup; it changes the core's ack bookkeeping); the
+allocator's wait (about 18 cycles per allocation: scan, claim, zero
+stores); the call frame fill and spill (`S_FL_H` 3.5 %, `S_SP_H` 3.2 %).
+
+## Checks on the final tree
+
+All on commit 6a3a056 (the tree of change 25).
+
+| check | command | result |
+|---|---|---|
+| SoC STA | `python3 upycore/tools/sta/run.py mpy_soc --lib "$SKY130_LIB" --no-fsm` | worst 9.578 ns, baseline 10.332 |
+| core STA | same, `mpy_core` | worst 9.532 ns, baseline 10.314 |
+| unit benches | `make test-unit` | 37 of 37 passed |
+| 16 kernels | `shortlist_bench.py` N=100 M=100 and `perf_inventory.py --bigint --only bm_pidigits --points 100x100`, on `build/mpy_soc/obj/Vtb_mpy_soc` | every `RESULT` the baseline's; table above |
+| 16 kernels, `+define+MPY_CHECK` build | same, on `build/sims/b5-chk` | every `RESULT` the baseline's, no assertion |
+| matched images | `clock_bench.py --before ... --after ... --before-ns 10.332 --after-ns 9.578` | exit 0 |
+| hardware suite, mpy-cross | `make test-hw` | **548 of 549 passed; `irq/pin_irq` fails** |
+| hardware suite, uPy2 | `python3 upycore/tools/hw_tests.py --compiler mpyc` | 548 of 549, the same failure. Every uPy2 image was byte-identical to mpy-cross's, so the tool reused the first pass's runs and simulated nothing again. |
+| clock-ratio sweep | `hw_tests.py --area irq` / `io` / `console` with `--sim-arg +IO_CLK_NS=10` and `+IO_CLK_NS=6.667` | all pass (8, 11 and 9 tests at each), `pin_irq` included |
+
+### `irq/pin_irq` fails at the default clock ratio
+
+The last line of the golden is `coalesced 1`; the device prints
+`coalesced 2`. The program toggles a looped-back pad four times in one
+line and expects one call of the soft handler for the four edges. The
+rule the I/O core documents is that edges which arrive before the
+handler runs give one call. Whether all four arrive before the hart
+runs the handler is a race between the hart and the I/O core's firmware
+loop, and the golden holds only on one side of it:
+
+| simulator | `+IO_CLK_NS` at which `pin_irq` passes | fails |
+|---|---|---|
+| baseline (`build/sta/base-soc/Vtb_mpy_soc`) | 6.667, 10, 20 (default), 22 | 25, 30, 40 |
+| change 22 (`build/sims/b1`) | 20 | |
+| changes 23 and 24 (`build/sims/b2`, `b3`) | | 20 |
+| change 25, this tree (`build/sims/b5`) | 6.667, 10, 12, 14, 16, 18 | 20 (default), 22, 25, 30, 40 |
+
+So the baseline RTL prints `coalesced 2` as well once the I/O clock is a
+quarter slower, and this tree prints `coalesced 1` at both ratios of the
+documented sweep. The hart now runs this code in fewer cycles (change 23
+is the one that crosses the default ratio), so its handler runs before
+the fourth edge has been counted. The other lines of the golden, and the
+other seven `irq` tests, pass at every ratio tried.
+
+The golden and the program are unchanged: the round's rules do not allow
+editing a test to make it pass. The test is wrong in that its last line
+depends on the clock ratio, and it is left failing for the owner to
+decide. A copy of the program kept under `build/` that holds events off
+across the four toggles (`machine.disable_irq()`, the toggles,
+`time.sleep_ms(1)`, `machine.enable_irq()`) prints `coalesced 1` on this
+tree at `+IO_CLK_NS=6.667`, 20 and 40, so the coalescing itself works
+and that form of the test does not depend on the ratio.
+Without changes 23 to 25 the suite's default-ratio run passes and the
+kernel geomean is 0.8181 cycles, 0.7584 cycles x period.
