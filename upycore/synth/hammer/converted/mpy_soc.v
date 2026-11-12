@@ -16940,7 +16940,7 @@ module mpy_hash (
 		end
 	endtask
 	initial if ((DEPTH < 1) || ((BYTES_PER_CYCLE != 1) && (BYTES_PER_CYCLE != 4)))
-		$display("Error [%0t] /tmp/tmp.QxSBci6NnL/mpy_soc.sv:21146:13 - mpy_hash.<unnamed_block>.<unnamed_block>\n msg: ", $time, "mpy_hash: invalid parameters");
+		$display("Error [%0t] /tmp/tmp.2ATguyVhAk/mpy_soc.sv:21146:13 - mpy_hash.<unnamed_block>.<unnamed_block>\n msg: ", $time, "mpy_hash: invalid parameters");
 	always @(posedge clk_i or negedge rst_n_i)
 		if (!rst_n_i) begin
 			state <= 5'd0;
@@ -27662,7 +27662,7 @@ module cve2_pmp (
 	wire [(PMPNumChan * PMPNumRegions) - 1:0] region_basic_perm_check;
 	reg [(PMPNumChan * PMPNumRegions) - 1:0] region_mml_perm_check;
 	reg [PMPNumChan - 1:0] access_fault;
-	initial $display("Warning [elaboration] /tmp/tmp.QxSBci6NnL/mpy_soc.sv:42059:3 - cve2_pmp\n msg: ", "CVE2 does not officially support PMP, see rule PVL-40.");
+	initial $display("Warning [elaboration] /tmp/tmp.2ATguyVhAk/mpy_soc.sv:42059:3 - cve2_pmp\n msg: ", "CVE2 does not officially support PMP, see rule PVL-40.");
 	genvar _gv_r_1;
 	generate
 		for (_gv_r_1 = 0; _gv_r_1 < PMPNumRegions; _gv_r_1 = _gv_r_1 + 1) begin : g_addr_exp
@@ -30804,25 +30804,27 @@ module usb (
 			cr_addr_chk <= wb_wdata[7];
 			cr_addr <= wb_wdata[6:0];
 		end
-	always @(posedge clk or posedge rst)
-		if (IRQ) begin
-			if (rst) begin
-				ir_sfp <= 1'b0;
-				ir_evt <= 1'b0;
-				ir_bsa <= 1'b0;
-				ir_brr <= 1'b0;
-				ir_bra <= 1'b0;
-				ir_brp <= 1'b0;
-			end
-			else if (ir_bus_we) begin
-				ir_sfp <= wb_wdata[5];
-				ir_evt <= wb_wdata[4];
-				ir_bsa <= wb_wdata[3];
-				ir_brr <= wb_wdata[2];
-				ir_bra <= wb_wdata[1];
-				ir_brp <= wb_wdata[0];
-			end
+	generate
+		if (IRQ) begin : g_ir_cfg
+			always @(posedge clk or posedge rst)
+				if (rst) begin
+					ir_sfp <= 1'b0;
+					ir_evt <= 1'b0;
+					ir_bsa <= 1'b0;
+					ir_brr <= 1'b0;
+					ir_bra <= 1'b0;
+					ir_brp <= 1'b0;
+				end
+				else if (ir_bus_we) begin
+					ir_sfp <= wb_wdata[5];
+					ir_evt <= wb_wdata[4];
+					ir_bsa <= wb_wdata[3];
+					ir_brr <= wb_wdata[2];
+					ir_bra <= wb_wdata[1];
+					ir_brp <= wb_wdata[0];
+				end
 		end
+	endgenerate
 	always @(posedge clk)
 		if (eps_bus_clear) begin
 			eps_bus_read <= 1'b0;
@@ -30846,7 +30848,7 @@ module usb (
 	assign wb_ack = csr_bus_ack | (eps_bus_ack_wait & (wb_we | eps_bus_req_ok_dly[2]));
 	assign wb_rdata = csr_bus_dout | eps_bus_dout;
 	generate
-		if (EVT_DEPTH == 0) begin : genblk1
+		if (EVT_DEPTH == 0) begin : genblk2
 			reg [3:0] evt_cnt;
 			always @(posedge clk or posedge rst)
 				if (rst)
@@ -30857,7 +30859,7 @@ module usb (
 			assign evt_rd_data = {evt_cnt, 12'h000};
 			assign evt_pending = evt_cnt != 4'h0;
 		end
-		else if (EVT_DEPTH == 1) begin : genblk1
+		else if (EVT_DEPTH == 1) begin : genblk2
 			reg [11:0] evt_last;
 			reg [3:0] evt_cnt;
 			always @(posedge clk or posedge rst)
@@ -30872,7 +30874,7 @@ module usb (
 			assign evt_rd_data = {evt_cnt, evt_last};
 			assign evt_pending = evt_cnt != 4'h0;
 		end
-		else if (EVT_DEPTH > 1) begin : genblk1
+		else if (EVT_DEPTH > 1) begin : genblk2
 			wire [11:0] ef_wdata;
 			wire [11:0] ef_rdata;
 			wire ef_wren;
@@ -30934,7 +30936,7 @@ module usb (
 	always @(posedge clk) sof_pending <= (sof_pending & ~sof_clear) | (rxpkt_start & rxpkt_is_sof);
 	assign sof = sof_ind;
 	generate
-		if (IRQ) begin : genblk2
+		if (IRQ) begin : genblk3
 			always @(posedge clk) begin
 				irq <= 1'b0;
 				if (ir_sfp & sof_pending)
@@ -30951,7 +30953,7 @@ module usb (
 					irq <= 1'b1;
 			end
 		end
-		else begin : genblk2
+		else begin : genblk3
 			always @(*) irq = 1'b0;
 		end
 	endgenerate
