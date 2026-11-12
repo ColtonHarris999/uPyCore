@@ -399,13 +399,25 @@ opposite on the left column, pins on the channel.
   fakeram generator makes one-port macros only (its Hammer plugin refuses
   any family but `1rw`, the class swap hook runs BaseJump's generator for
   `1rw` only, and bsg_fakeram's LEF and lib writers know one port). With
-  this switch they are flops, 36,864 bits; `place_macros.py --island-area`
-  is the room they and the island's logic get in the channel (an estimate,
-  check it against the synthesized area).
-- neither: the generator is asked for nine `fakeram_d256_w16` 1r1w macros.
-  That needs a bsg_fakeram that writes a second port and a 1r1w swap header
-  for BaseJump's `bsg_mem_generator.py` (which has the 1r1w template); not
-  done yet.
+  this switch they are flops, 36,864 bits; `place_macros.py --usb-flop-area`
+  is the room they get in the channel and `--island-area` the island's own
+  logic (estimates, check them against the synthesized area).
+- neither (the default with the island): the nine are macros,
+  `fakeram_d256_w16` with one write and one read port on one clock, made
+  outside the class generator, which is not asked for them and not changed:
+  - `usb_ram_macro.py <folder>` (after `make sram`; `sweep.sh` runs it)
+    runs a patched copy of bsg_fakeram, `~/upycore-lab/fakeram-1r1w`
+    (`FAKERAM_1R1W` names another), with the folder's own process settings,
+    and writes the LEF, lib and Verilog under `build/fakeram_1r1w/` plus
+    `libs.json`, the macro's extra-library entries cloned from the ones the
+    class generator wrote for a one-port macro. The copy's one-port output
+    is byte-identical to the class tool's; the patch stays on the lab
+    machine (`1r1w.patch` in the copy).
+  - `v/bsg_mem_1r1w_fakeram.v` is our own `bsg_mem_1r1w_sync_mask_write_bit`
+    with the macro inside (BaseJump's 1r1w files are not read).
+  - `hammer_run_upycore` passes `libs.json` as one more `-p`.
+  - `place_macros.py` puts the nine on the channel floor either side of the
+    GC table (385 x 95 um each).
 
 no2usb's `usb.v` has an asynchronous-reset process inside a test of its IRQ
 parameter, which Genus refuses (CDFG-364). `mpy_dc_unit.py` (`UNIT_PATCH`)
