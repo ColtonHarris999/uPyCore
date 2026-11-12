@@ -584,7 +584,7 @@ module mpy_core
         S_LCO,
         S_LCS,
         S_LK,
-        S_LK_AL,
+        S_LK_B,
         S_LK_DEC,
         S_LK_FL,
         S_LK_H,
@@ -597,7 +597,7 @@ module mpy_core
         S_LK_K,
         S_LK_KE,
         S_LK_NX,
-        S_LK_P,
+        S_LK_P, S_LK_PB,
         S_LK_RET,
         S_LK_RH,
         S_LK_RM,
@@ -605,7 +605,6 @@ module mpy_core
         S_LK_RM3,
         S_LK_RM4,
         S_LK_RV,
-        S_LK_TB,
         S_LK_V,
         S_LN_L,
         S_LN_R,
@@ -1201,6 +1200,7 @@ module mpy_core
     always_comb
         case (st)
             S_MWAIT, S_FL_H, S_FL_S, S_CF_B, S_CF_RC, S_CF_Q, S_CX, S_SCR, S_AALU_WB,
+            S_LK_B, S_LK_PB,
             S_RF_SPILL, S_RF_SPILL2, S_RF_SPILL_W,
             S_RF_RELOAD, S_RF_RELOAD_R, S_RF_RELOAD_G: rf_icpt_st = 1'b0;
             default: rf_icpt_st = 1'b1;
@@ -1369,6 +1369,9 @@ module mpy_core
     logic [3:0]  key_tuple_len, key_tuple_index;
     val_t        key_tuple_item;
     logic [1:0]  lk_mode; logic lk_set, lk_found, lk_cx, lk_ro;
+    // A dict find loads each slot's key and value as a burst (S_LK_PB).
+    logic        lk_burst;
+    assign lk_burst = (lk_mode == LK_FIND) && !lk_set;
     val_t        lk_res;
     logic        lk_hasav;
     // A table whose size is a power of two takes hash & (alloc - 1) as the
@@ -2184,6 +2187,10 @@ module mpy_core
         t[4] <= d; t[5] <= key; t[6] <= val; lk_mode <= mode; lk_set <= set;
         gosub(S_LK, back);
     endtask
+    // The first of the two header loads of a lookup (S_LK_B).
+    task automatic lk_hdr();
+        bload(aoff(adr(t[4]), 4)); bl_n <= 8'd1; bl_k <= 3'd0; st <= S_LK_B;
+    endtask
     // The probe after the one S_LK_K just read: the next slot's key load, and
     // the look-ahead for the one after it. The last slot before lk_start
     // goes to S_LK_NX, which ends the probe.
@@ -2195,7 +2202,9 @@ module mpy_core
             lk_nwrap <= (lk_npos + 32'd1 == `lk_alloc);
             lk_npos <= (lk_npos + 32'd1 == `lk_alloc) ? 32'd0 : lk_npos + 32'd1;
             lk_nend <= (((lk_npos + 32'd1 == `lk_alloc) ? 32'd0 : lk_npos + 32'd1) == `lk_start);
-            rd(lk_nwrap ? `lk_tab : ha_lk_nx, S_LK_K);
+            if (lk_burst) begin
+                bload(lk_nwrap ? `lk_tab : ha_lk_nx); bl_n <= 8'd1; bl_k <= 3'd0; st <= S_LK_PB;
+            end else rd(lk_nwrap ? `lk_tab : ha_lk_nx, S_LK_K);
         end
     endtask
     task automatic alloc(input logic [31:0] n, input state_e back);
@@ -6345,23 +6354,37 @@ module mpy_core
                 // Only a store or a delete tests the flags word (ROM).
                 // A find goes straight to the alloc word: one load less
                 // on every name, global and attribute lookup.
-                if (lk_mode == LK_FIND) rd(aoff(adr(t[4]), 4), S_LK_AL);
+                if (lk_mode == LK_FIND) lk_hdr();
                 else rd(aoff(adr(t[4]), 12), S_LK_FL);
             end
             S_LK_FL: if (lk_mode != LK_FIND && (md & ABI_DICT_FLAG_ROM)) begin lk_ro <= 1'b1; ret(); end
-                     else rd(aoff(adr(t[4]), 4), S_LK_AL);
-            S_LK_AL: begin `lk_alloc <= md; rd(aoff(adr(t[4]), 8), S_LK_TB); end
-            S_LK_TB: begin
-                `lk_tab <= md;
-                if (`lk_alloc == 32'd0) begin
-                    if (lk_mode == LK_ADD) gosub_scr(SCR_RH, S_RH, S_LK_RH);
-                    else ret();
-                end else if (qm_hit) begin
-                    // What S_HASH leaves for this qstr, without the load.
-                    hk <= t[5]; hok <= 1'b1; hh <= {16'd0, qm_hash[t[5][5:0]]};
-                    qid <= t[5][31:0]; qd_nxt <= S_HASH_W16;
-                    st <= S_LK_H;
-                end else begin hk <= t[5]; gosub(S_HASH, S_LK_H); end
+                     else lk_hdr();
+            // The alloc word and the table word are one burst of two loads
+            // (lk_hdr sent the first): the second is on its way while the
+            // first is answered, where two single loads each waited alone.
+            S_LK_B: begin
+                if (bl_n != 8'd2 && !m_wait) begin
+                    bload(aoff(adr(t[4]), 8));
+                    bl_n <= 8'd2;
+                end
+                if (m_ack_i && wpend == 3'd0) begin
+                    md <= m_rdata_i; mt <= m_rtag_i;
+                    if (m_fault_i)
+                        halt(fault_code(m_fault_reason_i), aoff(adr(t[4]), (bl_k == 3'd0) ? 6'd4 : 6'd8));
+                    else if (bl_k == 3'd0) begin `lk_alloc <= m_rdata_i; bl_k <= 3'd1; end
+                    else begin
+                        `lk_tab <= m_rdata_i;
+                        if (`lk_alloc == 32'd0) begin
+                            if (lk_mode == LK_ADD) gosub_scr(SCR_RH, S_RH, S_LK_RH);
+                            else ret();
+                        end else if (qm_hit) begin
+                            // What S_HASH leaves for this qstr, without the load.
+                            hk <= t[5]; hok <= 1'b1; hh <= {16'd0, qm_hash[t[5][5:0]]};
+                            qid <= t[5][31:0]; qd_nxt <= S_HASH_W16;
+                            st <= S_LK_H;
+                        end else begin hk <= t[5]; gosub(S_HASH, S_LK_H); end
+                    end
+                end
             end
             S_LK_RH: if (lk_cx) ret(); else st <= S_LK;
             S_LK_H: if (!hok) begin lk_cx <= 1'b1; ret(); end
@@ -6381,7 +6404,48 @@ module mpy_core
                 `lk_slot <= `lk_tab + (lk_set ? (`lk_pos << 2) : (`lk_pos << 3));
                 v0 = (`lk_pos + 32'd1 == `lk_alloc) ? 32'd0 : `lk_pos + 32'd1;
                 lk_npos <= v0; lk_nwrap <= (`lk_pos + 32'd1 == `lk_alloc); lk_nend <= (v0 == `lk_start);
-                rd(`lk_tab + (lk_set ? (`lk_pos << 2) : (`lk_pos << 3)), S_LK_K);
+                if (lk_burst) begin
+                    bload(`lk_tab + (lk_set ? (`lk_pos << 2) : (`lk_pos << 3)));
+                    bl_n <= 8'd1; bl_k <= 3'd0; st <= S_LK_PB;
+                end else rd(`lk_tab + (lk_set ? (`lk_pos << 2) : (`lk_pos << 3)), S_LK_K);
+            end
+            // A dict find: the slot's key load (sent by S_LK_P or lk_next)
+            // and its value load are a burst. The key is compared when the
+            // value arrives, in the cycle S_LK_K would have run, so a hit
+            // takes the value from the bus instead of a second load and its
+            // wait, and a miss sends the next key load as before. The
+            // answers are S_LK_K's; a key that needs S_KEYEQ goes on through
+            // S_LK_KE and S_LK_HIT, which loads the value again.
+            S_LK_PB: begin
+                if (bl_n != 8'd2 && !m_wait) begin
+                    bload(ha_lk4);
+                    bl_n <= 8'd2;
+                end
+                if (m_ack_i && wpend == 3'd0) begin
+                    if (m_fault_i)
+                        halt(fault_code(m_fault_reason_i), (bl_k == 3'd0) ? `lk_slot : ha_lk4);
+                    else if (bl_k == 3'd0) begin md <= m_rdata_i; mt <= m_rtag_i; bl_k <= 3'd1; end
+                    else begin
+`ifdef MPY_CHECK
+                        if (`lk_slot != `lk_tab + (`lk_pos << 3) ||
+                            lk_nwrap != (`lk_pos + 32'd1 == `lk_alloc) ||
+                            lk_npos != ((`lk_pos + 32'd1 == `lk_alloc) ? 32'd0 : `lk_pos + 32'd1) ||
+                            lk_nend != (lk_npos == `lk_start)) $error("lk probe look-ahead stale (burst)");
+                        if (bl_n != 8'd2 || m_addr != ha_lk4 || !lk_burst) $error("lk burst: value load not sent");
+`endif
+                        if (mv == VNULL) ret();
+                        else if (mv == VTOMB) begin
+                            if (!lk_hasav) begin lk_hasav <= 1'b1; `lk_avail <= `lk_slot; end
+                            lk_next();
+                        end else if (mv == t[5]) begin
+                            lk_found <= 1'b1; lk_res <= {m_rtag_i, m_rdata_i};
+                            md <= m_rdata_i; mt <= m_rtag_i;
+                            ret();
+                        end else if ((tg(mv) == ABI_TAG_QSTR && tg(t[5]) == ABI_TAG_QSTR) ||
+                                     (tg(mv) == ABI_TAG_INT && tg(t[5]) == ABI_TAG_INT)) lk_next();
+                        else begin ke_a <= mv; ke_b <= t[5]; gosub(S_KEYEQ, S_LK_KE); end
+                    end
+                end
             end
             S_LK_K: begin
 `ifdef MPY_CHECK

@@ -400,3 +400,34 @@ compared with `--compare build/sta/base-soc/sta.txt`.
   `d_op` 7.045 -> 7.266, `aux` 6.949 -> 7.160, `scr_gt` 6.986 -> 7.158,
   `at_q` 6.207 -> 7.010.
 - Cycles: none. Kernels on this tree (`build/kern/p5`): see the summary.
+
+### 22. Lookup loads as bursts (cycles) — landed
+
+- Sink: after change 8 the profile's lookup states and their memory waits
+  still lead: each single load is a request, about 2.7 cycles of wait and
+  a cycle to use the word. A lookup made two in a row for its header
+  (alloc word, table word), and a dict find that hits made two more in a
+  row (key, then value).
+- Change (`mpy_core.sv`): two bursts of two loads, in the style of the
+  call-setup bursts (`S_CF_Q`): the second load is presented as soon as
+  the first is taken and the acks are taken in order.
+  `S_LK_B` (replaces `S_LK_AL`, `S_LK_TB`) reads alloc and table.
+  `S_LK_PB`, for a dict find only, reads a slot's key and value; the key
+  is compared in the cycle the value arrives, which is the cycle `S_LK_K`
+  would have run, so a hit takes the value from the bus and a miss sends
+  the next key load as before. A key that needs `S_KEYEQ` goes on through
+  the old states and loads the value again. Sets, stores and deletes keep
+  the single loads. Both states are in the `rf_icpt` exception list (they
+  take acks). The value load is inside the table, so no new address is
+  read.
+- Cycles: geomean **0.8181** of baseline (was 0.8589), every `RESULT`
+  identical (`build/kern/b1`). `bm_chaos` 2787850 -> 2610289; `bm_hexiom`
+  8444132 -> 7970511; `core_locals` 3740237 -> 3465226; `misc_pystone`
+  2436995 -> 2271211; `misc_raytrace` 4566080 -> 4230237.
+- Proof: not an equivalence. `MPY_CHECK` checks the look-ahead and that
+  the value load was sent in every `S_LK_PB` answer; the 16 kernels ran
+  clean with it (`build/kern/b1-chk`).
+- SoC STA (`build/sta/b1-soc/sta.txt`): worst 9.578, unchanged. Against
+  change 21's run over every group: `core_hval` 8.113 -> 8.268; about a
+  hundred `u_core` registers at 5.9 to 6.5 ns moved up by 0.19 ns (the
+  state decode, `st[4]`); nothing above 8.3 ns grew.
