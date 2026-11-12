@@ -1411,7 +1411,10 @@ module mpy_core
     val_t        at_v;
     val_t        tr_v; logic tr_r, tr_x;
     logic        tb_src, tb_nz; logic [7:0] tb_from; logic [15:0] tb_n, tb_i; logic [31:0] tb_a; val_t tb_v;
-    val_t        wb_v [0:7]; logic [31:0] wb_a; logic [3:0] wb_n, wb_i;
+    // Packed, so the timing flow builds one select per word from the state
+    // case. As an unpacked array it became a memory whose write enables
+    // were merged in a serial OR chain (st -> wb_v[0] at 9.7 ns).
+    val_t [0:7]  wb_v; logic [31:0] wb_a; logic [3:0] wb_n, wb_i;
     logic it_stop, it_py, it_h; val_t it_val;
     // Resident microcode image. One subsystem at a time; SRAM holds the rest.
     localparam logic [3:0] SCR_NONE = 4'd0;

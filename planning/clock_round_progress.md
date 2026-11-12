@@ -363,3 +363,17 @@ compared with `--compare build/sta/base-soc/sta.txt`.
   `bm_pidigits`; hardware area `numbers`.
 - SoC STA (`build/sta/p4-soc/sta.txt`, changes 9 to 20): `u_core.st`
   9.995 -> 9.637, now from the fetch queue (change 21).
+
+### 20. `wb_v` packed (family H) — landed
+
+- Path: `st` -> `rf_icpt` -> write-enable of the `wb_v` memory -> a serial
+  OR of its write ports -> write select -> `wb_v[0]`, 9.743 ns after
+  change 13. The tool made the unpacked array a memory and merged its
+  twenty writers in a chain.
+- Change (`mpy_core.sv`): `val_t [0:7] wb_v`. Same words, same indexes.
+- Proof: none needed beyond the language (same storage); kernels and the
+  hardware suite.
+- SoC STA (`build/sta/p4-soc/sta.txt`): the group is now listed under the
+  tool's net name `$10547y`, 8.986 ns (it was `u_core.wb_v[0]` 9.889 in
+  the baseline). `u_core.t` 8.842 -> 7.642.
+- Cycles: none.
