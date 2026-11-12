@@ -48,9 +48,21 @@
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../../.." && pwd)
-DESIGNS=${DESIGNS:-$HOME/ee477/ee477-designs-module1}
+# Run folders go in ~/ee477/upycore-runs when it exists (the class Makefile
+# needs a run folder two levels below ~/ee477, so a sibling of the class
+# designs folder works), and the template stays the class's pow2.
+CLASS_DESIGNS=$HOME/ee477/ee477-designs-module1
+if [ -z "$DESIGNS" ] && [ -d "$HOME/ee477/upycore-runs" ]; then
+    DESIGNS=$HOME/ee477/upycore-runs
+    TEMPLATE=${TEMPLATE:-$CLASS_DESIGNS/pow2}
+fi
+DESIGNS=${DESIGNS:-$CLASS_DESIGNS}
 TOP=${TOP:-mpy_core}
 TEMPLATE=${TEMPLATE:-$DESIGNS/pow2}
+# Collected reports: ~/upycore-lab/par_data when ~/upycore-lab exists.
+if [ -z "$PAR_DATA" ] && [ -d "$HOME/upycore-lab" ]; then
+    PAR_DATA=$HOME/upycore-lab/par_data
+fi
 
 # Hash of everything converted/*.v is generated from.
 rtl_stamp() {

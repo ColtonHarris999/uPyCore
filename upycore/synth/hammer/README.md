@@ -338,6 +338,22 @@ override the defaults (`RTL` is gone: the core comes from
 `sweep.sh par-status` lists each one's post-route slack, shortest period and
 total power, and where its area, power and timing reports are.
 
+### Where things live on the lab machine
+
+Nothing of upycore sits loose in the home folder or among the class designs:
+
+| Folder | Holds |
+|---|---|
+| `~/upycore` | this repository |
+| `~/ee477/upycore-runs/` | every run folder (`<prefix>_p<period>`). `sweep.sh` uses it when it exists; the template stays `~/ee477/ee477-designs-module1/pow2`. A run folder has to be two levels below `~/ee477`, because the class Makefile finds the flow at `../../ee477-hammer-cad` |
+| `~/upycore-lab/par_data/` | collected reports (`sweep.sh collect`, `deep_reports.tcl`); used in place of `~/par_data` when `~/upycore-lab` exists |
+| `~/upycore-lab/runs.md` | one line per run: settings, result, status |
+| `~/upycore-lab/scripts`, `reports`, `experiments` | one-off scripts, saved reports and side experiments |
+
+A finished run keeps absolute paths to its own folder in `build/`, so moving
+one makes it read-only (reports and logs) unless a symlink stays at the old
+path. None of this goes in git.
+
 `sweep.sh collect` gathers the finished `par` runs into one file,
 `~/par_data/par_<prefix>.txt` (set `PAR_DATA` to use another folder): constraints, the flow's timing reports (50 paths
 each), area and power by module, the Innovus log's density and clock lines,

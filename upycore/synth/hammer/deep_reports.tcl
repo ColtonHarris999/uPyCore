@@ -5,7 +5,13 @@
 # ~/par_data); sweep.sh collect then folds those files into
 # ~/par_data/par_<prefix>.txt. A command this Innovus does not have
 # is skipped and noted in <name>.err; the rest still run.
-if {[info exists env(PAR_DATA)]} { set deep_root $env(PAR_DATA) } else { set deep_root $env(HOME)/par_data }
+if {[info exists env(PAR_DATA)]} {
+    set deep_root $env(PAR_DATA)
+} elseif {[file isdirectory $env(HOME)/upycore-lab]} {
+    set deep_root $env(HOME)/upycore-lab/par_data
+} else {
+    set deep_root $env(HOME)/par_data
+}
 set deep_dir $deep_root/[file tail [file dirname [file dirname [file normalize [pwd]]]]]/deep
 file mkdir $deep_dir
 proc deep_try {name cmd} {
