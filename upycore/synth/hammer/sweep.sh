@@ -127,11 +127,14 @@ if [ "$TOP" = mpy_soc ]; then
         src=(--core-v "$here/converted/mpy_core.v")
     fi
     src+=(--die ${DIE:-4000 3000})
-    syn_steps="make sram && make syn"
     # Place and route: place the macros and size the die from the generated
     # LEFs (place_macros.py) between `make sram` and `make syn`.
-    par_steps="make sram && python3 $here/place_macros.py . ${PLACE_ARGS:-} && make syn && make par"
-    fp_steps="make sram && python3 $here/place_macros.py . ${PLACE_ARGS:-} && make syn && make par-to-floorplan"
+    # The USB RAM macro (one read and one write port) is not the class
+    # generator's: usb_ram_macro.py makes it when the folder asks for it.
+    usb_step="{ [ ! -f cfg/usb_ram_macro.json ] || python3 $here/usb_ram_macro.py . ; }"
+    syn_steps="make sram && $usb_step && make syn"
+    par_steps="make sram && $usb_step && python3 $here/place_macros.py . ${PLACE_ARGS:-} && make syn && make par"
+    fp_steps="make sram && $usb_step && python3 $here/place_macros.py . ${PLACE_ARGS:-} && make syn && make par-to-floorplan"
 else
     syn_prefix=${PREFIX:-upycore_v2}
     par_prefix=${PREFIX:-upycore_par}

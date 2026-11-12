@@ -15,8 +15,10 @@ synthesis. It rewrites cfg/*cfg.yml: the toplevel width and height, and one
     SRAM, mpy_soc/u_ioc/u_code/macro.mem (as long as a memory macro), as a
     17th row on top of the right column, and its data SRAM, .../u_data/
     macro.mem, opposite on top of the left column, both with their pins on
-    the channel. The USB RAMs are flops (make_hammer_design.py --usb-flops)
-    and take --island-area more room in the channel.
+    the channel. The nine USB RAM macros (usb_ram_macro.py, when their
+    LEF is in the folder) go on the channel floor either side of the GC
+    table; as flops (make_hammer_design.py --usb-flops) they take
+    --usb-flop-area more room in the channel instead.
 
 Layout. fakeram puts every signal pin on one side edge, and a 4096 x 36
 macro is 3.95 mm x 0.16 mm. Two columns of 16 face each other across a
@@ -53,7 +55,7 @@ except ImportError:
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1] / "tools"))
 from mpy_synth import (GC_SRAM_MACRO, IOCORE_CODE_SRAM_MACRO, IOCORE_DATA_SRAM_MACRO, SRAM_BLOCKS,  # noqa: E402
-                       SRAM_MACRO, SRAM_MACROS, SRAM_MACROS_PER_BLOCK)
+                       SRAM_MACRO, SRAM_MACROS, SRAM_MACROS_PER_BLOCK, USB_SRAM_INSTS, USB_SRAM_MACRO)
 
 SITE_W, ROW_H = 0.46, 2.72      # sky130 hd placement site
 TOP = "mpy_soc"
@@ -64,6 +66,7 @@ MET2_PITCH, MET2_OFFSET = 0.46, 0.23   # sky130 met2 tracks (vertical)
 GC_PATH = TOP + "/u_gc/u_atb/macro.mem"
 CODE_PATH = TOP + "/u_ioc/u_code/macro.mem"
 DATA_PATH = TOP + "/u_ioc/u_data/macro.mem"
+USB_PATHS = [TOP + "/u_ioc/" + p.replace("[", "\\[").replace("]", "\\]") + "/macro.mem" for p in USB_SRAM_INSTS]
 
 
 def snap(v: float, grid: float, up: bool = False) -> float:
@@ -100,14 +103,38 @@ def find_lef(folder: Path, name: str, optional: bool = False) -> Path | None:
     return hits[0]
 
 
-def layout(bank, gc, args, island=None):
+def usb_slots(n, x0, x1, y0, gc_x, gc_w, gc_h, uw, uh, s):
+    """n (x, y) places for the USB RAM macros in the channel x0..x1 from
+    y0 up: the first row shares the floor with the GC table (gc_x, gc_w,
+    gc_h), s apart from it and from each other; later rows span the channel."""
+    slots, y, row = [], y0, 0
+    while len(slots) < n:
+        spans = [(x0 + s, gc_x - s), (gc_x + gc_w + s, x1 - s)] if row == 0 else [(x0 + s, x1 - s)]
+        got = len(slots)
+        for a, b in spans:
+            x = a
+            while x + uw <= b and len(slots) < n:
+                slots.append((x, y))
+                x += uw + s
+        if len(slots) == got and row > 0:
+            sys.exit("the channel is too narrow for one USB RAM macro")
+        y += (max(gc_h, uh) if row == 0 else uh) + s
+        row += 1
+    return slots
+
+
+def layout(bank, gc, args, island=None, usb=None):
     """Return (die_w, die_h, [(path, x, y, orient)], [(x, y, w, h) place blockages]).
 
-    island is (code, data) LEF shapes when the run has the I/O island."""
+    island is (code, data) LEF shapes when the run has the I/O island, usb
+    the USB RAM macro's shape when those are macros."""
     bw, bh, bside = bank
     gw, gh, _ = gc
     m, s = args.margin, args.spacing
-    logic = (args.logic_area + (args.island_area if island else 0.0)) / args.util
+    logic = args.logic_area
+    if island:
+        logic += args.island_area + (0.0 if usb else args.usb_flop_area)
+    logic /= args.util
     place, blocks = [], []
     # Orientation that puts the pin edge on the given side.
     face = {"right": "r0" if bside == "right" else "my",
@@ -138,6 +165,14 @@ def layout(bank, gc, args, island=None):
             # Pin edge on the channel: flush with the column's channel side.
             place.append((CODE_PATH, x_right, y, "r0" if cside == "left" else "my"))
             place.append((DATA_PATH, x_left + bw - dw, y, "r0" if dside == "right" else "my"))
+        if usb:
+            if not island:
+                sys.exit("USB RAM macros without the island's SRAMs")
+            uw, uh, _ = usb
+            gc_x = x_left + bw + (chan - gw) / 2
+            for path, (x, y) in zip(USB_PATHS, usb_slots(len(USB_PATHS), x_left + bw + halo, x_right - halo, m,
+                                                         gc_x, gw, gh, uw, uh, s)):
+                place.append((path, x, y, "r0"))
         # No standard cells outside the channel: the die margins and the
         # gaps between stacked macros would otherwise take logic.
         edge = x_left + bw + halo
@@ -220,10 +255,12 @@ def main() -> int:
     ap.add_argument("folder", nargs="?", default=".", type=Path, help="mpy_soc design folder")
     ap.add_argument("--logic-area", type=float, default=2.0e6,
                     help="standard-cell area in um^2 (mpy_soc synthesis: about 1.9e6 without macros)")
-    ap.add_argument("--island-area", type=float, default=1.7e6,
+    ap.add_argument("--island-area", type=float, default=0.3e6,
                     help="standard-cell area the I/O island adds, um^2, when its SRAM LEFs are in "
-                         "the folder (an estimate: 36,864 USB RAM bits as flops with their read "
-                         "muxes about 1.4e6, CVE2 and the peripherals about 0.3e6)")
+                         "the folder (an estimate for CVE2, the peripherals and the USB core)")
+    ap.add_argument("--usb-flop-area", type=float, default=1.4e6,
+                    help="more standard-cell area when the USB RAMs are flops (no USB RAM macro LEF "
+                         "in the folder): 36,864 bits with their read muxes, an estimate")
     ap.add_argument("--util", type=float, default=0.45, help="target utilization of the logic area")
     ap.add_argument("--stack-gap", type=float, default=21.76, help="between stacked memory macros, um (whole rows)")
     ap.add_argument("--ports", type=Path, default=HERE / "converted" / (TOP + ".v"),
@@ -244,7 +281,13 @@ def main() -> int:
     island = tuple(read_lef(p) for p in isl) if all(isl) else None
     if island and SRAM_MACROS <= SRAM_BLOCKS:
         sys.exit("the island's SRAMs are placed in the two-column layout only")
-    die_w, die_h, place, blocks = layout(bank, gc, args, island)
+    usb_lef = find_lef(folder, USB_SRAM_MACRO["name"], optional=True)
+    want_usb = (folder / "cfg" / "usb_ram_macro.json").is_file()
+    if want_usb and not usb_lef:
+        sys.exit(f"cfg/usb_ram_macro.json asks for {USB_SRAM_MACRO['name']} but its LEF is not under build/: "
+                 "run usb_ram_macro.py first")
+    usb = read_lef(usb_lef) if usb_lef else None
+    die_w, die_h, place, blocks = layout(bank, gc, args, island, usb)
     # Chip I/O on the edge next to the logic. Left as the class has it, the
     # ~250 ports spread along the whole 36 mm bottom edge of the strip die
     # and drag the logic out after them.
@@ -260,6 +303,8 @@ def main() -> int:
     if island:
         for m, shape in zip((IOCORE_CODE_SRAM_MACRO, IOCORE_DATA_SRAM_MACRO), island):
             print(f"{m['name']}: {shape[0]} x {shape[1]} um, pins on the {shape[2]} (I/O island)")
+    if usb:
+        print(f"{USB_SRAM_MACRO['name']}: {usb[0]} x {usb[1]} um, pins on the {usb[2]} (USB, {len(USB_PATHS)} macros)")
     print(f"die {die_w} x {die_h} um ({die_w * die_h / 1e6:.1f} mm^2)")
     for p, x, y, o in place:
         print(f"  {p:45s} x {x:10.2f}  y {y:8.2f}  {o}")

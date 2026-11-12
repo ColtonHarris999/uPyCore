@@ -16,7 +16,7 @@ DATA = (1881.40, 116.96, "left")     # fakeram_d1920_w32, its data SRAM
 
 
 def args(**kw):
-    base = dict(logic_area=2.0e6, island_area=1.7e6, util=0.45, stack_gap=21.76, margin=100.0, spacing=60.0)
+    base = dict(logic_area=2.0e6, island_area=0.3e6, usb_flop_area=1.4e6, util=0.45, stack_gap=21.76, margin=100.0, spacing=60.0)
     base.update(kw)
     return argparse.Namespace(**base)
 
@@ -149,6 +149,50 @@ class Island(unittest.TestCase):
         for p, shape in ((self.code, CODE), (self.data, DATA)):
             inside = any(x <= p[1] and p[1] + shape[0] <= x + w + 10.01 for x, _, w, _ in self.blocks)
             self.assertTrue(inside, p)
+
+
+class UsbMacros(unittest.TestCase):
+    """The nine USB RAM macros on the channel floor."""
+
+    USB = (120.52, 81.6, "left")     # a stand-in shape; the real one comes from the LEF
+
+    def setUp(self):
+        self.flops = pm.layout(BANK, GC, args(util=0.25), (CODE, DATA))
+        self.die_w, self.die_h, self.place, self.blocks = pm.layout(BANK, GC, args(util=0.25), (CODE, DATA), self.USB)
+        self.usb = [p for p in self.place if p[0] in pm.USB_PATHS]
+
+    def test_nine_named_macros(self):
+        self.assertEqual([p[0] for p in self.usb], pm.USB_PATHS)
+        self.assertEqual(len(self.usb), 9)
+        self.assertEqual(len(self.place), 44)
+        self.assertTrue(all("\\[" in p for p in pm.USB_PATHS[:8]))
+
+    def test_no_flop_area_with_macros(self):
+        self.assertLess(self.die_w, self.flops[0] - 1000)
+
+    def test_in_the_channel_clear_of_everything(self):
+        x0 = self.blocks[0][0] + self.blocks[0][2]
+        x1 = self.blocks[1][0]
+        shapes = {pm.GC_PATH: GC, pm.CODE_PATH: CODE, pm.DATA_PATH: DATA}
+        rects = []
+        for path, x, y, _ in self.place:
+            w, h = (self.USB if path in pm.USB_PATHS else shapes.get(path, BANK))[:2]
+            rects.append((path, x, y, x + w, y + h))
+        for path, ax0, ay0, ax1, ay1 in rects:
+            if path in pm.USB_PATHS:
+                self.assertTrue(x0 + 50 <= ax0 and ax1 <= x1 - 50, path)
+                self.assertTrue(ay1 < self.die_h - 100)
+        for i, a in enumerate(rects):
+            for b in rects[i + 1:]:
+                if a[0] in pm.USB_PATHS or b[0] in pm.USB_PATHS:
+                    gap_x = max(b[1] - a[3], a[1] - b[3])
+                    gap_y = max(b[2] - a[4], a[2] - b[4])
+                    self.assertTrue(gap_x >= 59 or gap_y >= 59, (a, b))
+
+    def test_narrow_channel_wraps_rows(self):
+        slots = pm.usb_slots(9, 0, 1300, 100, 326, 648, 212, 120, 80, 60)
+        self.assertEqual(len(set(slots)), 9)
+        self.assertGreater(len({y for _, y in slots}), 1)
 
 
 if __name__ == "__main__":

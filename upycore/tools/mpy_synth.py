@@ -113,6 +113,11 @@ USB_SRAM_MACRO = {"name": "fakeram_d256_w16", "family": "1r1w", "depth": 256, "w
                   "mask": True, "mux": 1, "vt": ""}
 USB_SRAM_BLOCKS = 9
 USB_SRAM_MODEL = "iocore/rtl/usb/bsg_mem_1r1w_sync_mask_write_bit.sv"
+# Where the nine sit under iocore_top (u_ioc in mpy_soc), down to BaseJump's
+# wrapper: no2usb's SB_RAM40_4K instances (four per endpoint buffer, one for
+# the endpoint status) through iocore/rtl/usb/ice40_cells.sv.
+USB_SRAM_INSTS = ([f"u_usb/u_usb/{buf}_buf_I/block[{i}].ram_I/g_ram.u_ram/u_mem" for buf in ("tx", "rx") for i in range(4)]
+                  + ["u_usb/u_usb/ep_status_I/ebr_I/g_ram.u_ram/u_mem"])
 
 # Gate mapping the SRAM blocks as flops is a long memory job (the class
 # flow uses macros instead), so mem and soc stay elaborate-only here.

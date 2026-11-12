@@ -17,6 +17,11 @@ Environment (set by the wrapper):
   UPYCORE_CLASS_HAMMER_RUN   the class hammer_run
   UPYCORE_PAR_TCL            the Tcl file to insert in Innovus
   UPYCORE_SYN_TCL            the Tcl file to insert in Genus
+  UPYCORE_EXTRA_LIBS         a Hammer config (JSON) with extra libraries, passed
+                             as one more -p after the Makefile's: the USB
+                             RAM macro's views from usb_ram_macro.py, which
+                             the class SRAM generator (one-port only) does
+                             not make. Required for every action but `sram`.
 """
 
 import importlib.machinery
@@ -64,7 +69,25 @@ def syn_settings(tool: "HammerTool") -> bool:  # noqa: F821
     return _append_tcl(tool, "UPYCORE_SYN_TCL")
 
 
+def add_extra_libs(argv: list) -> list:
+    """argv with `-p $UPYCORE_EXTRA_LIBS` after the last -p (a later project
+    config adds to the earlier ones: the file's extra_libraries are meta
+    append)."""
+    path = os.environ.get("UPYCORE_EXTRA_LIBS", "")
+    if not path:
+        return argv
+    if not os.path.isfile(path):
+        if any(a.startswith("sram") for a in argv[1:]):
+            return argv       # the macro is generated after `make sram`
+        sys.exit(f"upycore_hammer.py: no {path}: run usb_ram_macro.py in the design folder "
+                 "after `make sram` (the USB RAM macro's library)")
+    at = max((i for i, a in enumerate(argv) if a in ("-p", "--project_config")), default=None)
+    at = 1 if at is None else at + 2
+    return argv[:at] + ["-p", path] + argv[at:]
+
+
 def main() -> None:
+    sys.argv = add_extra_libs(sys.argv)
     base = load_class_driver()
     import hammer_vlsi
 
