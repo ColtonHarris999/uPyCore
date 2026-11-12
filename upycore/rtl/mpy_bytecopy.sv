@@ -33,7 +33,10 @@ module mpy_bytecopy (
         src_room=back ? {1'b0,src_offset}+3'd1 : 3'd4-{1'b0,src_offset};
         dst_room=back ? {1'b0,dst_offset}+3'd1 : 3'd4-{1'b0,dst_offset};
         next_n=src_room<dst_room ? src_room : dst_room;
-        if(remaining<32'(next_n))next_n=remaining[2:0];
+        // remaining<next_n with next_n at most 4: the high bits are all zero
+        // and the low three compare. As a 32-bit compare behind the room
+        // select it led SETUP's subtract into sa and da.
+        if(remaining[31:3]==29'd0 && remaining[2:0]<next_n)next_n=remaining[2:0];
     end
     always_ff @(posedge clk_i or negedge rst_n_i)begin
         if(!rst_n_i)begin

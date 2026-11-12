@@ -52,6 +52,7 @@ module mpy_hash #(
     logic reading;
     logic [31:0] word_hash, shifted;
     integer count;
+    logic str_last;
 
     assign ready_o = state == IDLE || (state == RESP && ready_i);
     assign valid_o = state == RESP;
@@ -75,7 +76,12 @@ module mpy_hash #(
         shifted = state == STR_STEP ? byte_buffer : mem_data_i >> (8 * ptr[1:0]);
         count = BYTES_PER_CYCLE;
         if (count > 4 - integer'(ptr[1:0])) count = 4 - integer'(ptr[1:0]);
-        if (len < 32'(count)) count = integer'(len);
+        // count is at most 4 here, so `len < count` and `len == count`
+        // after the clamp (which is `len <= count` before it) are the high
+        // bits of len being zero and a three-bit compare. As 32-bit
+        // compares, one behind the other, they were ptr -> state at 9.6 ns.
+        str_last = (len[31:3] == 29'd0) && (len[2:0] <= 3'(count));
+        if (len[31:3] == 29'd0 && len[2:0] < 3'(count)) count = integer'({29'd0, len[2:0]});
         word_hash = acc;
         for (integer i = 0; i < BYTES_PER_CYCLE; i = i + 1)
             if (i < count) word_hash = hash_byte(word_hash, shifted[8*i +: 8]);
@@ -176,7 +182,7 @@ module mpy_hash #(
             STR_DATA, STR_STEP: if (state == STR_STEP || mem_ack_i) begin
                 acc <= word_hash; ptr <= ptr + 32'(count); len <= len - 32'(count);
                 byte_buffer <= shifted >> (8 * count);
-                if (len == 32'(count)) finish(hash_string_finish(word_hash));
+                if (str_last) finish(hash_string_finish(word_hash));
                 else if (integer'(ptr[1:0]) + count == 4) state <= STR_DATA;
                 else state <= STR_STEP;
             end

@@ -20,8 +20,9 @@
 // number wins and the other waits. Ports that want different blocks are
 // granted in the same cycle, so up to four accesses run at once. An access
 // that faults (an image store, an unaligned word, an address outside both
-// regions) needs no block and is granted on its own; it never reaches an
-// SRAM. be_i picks the bytes a store writes and tag_we_i also writes the tag,
+// regions) never reaches an SRAM, but it waits its turn for the block its
+// address bits name like any other access: the grant does not wait for the
+// fault decode. be_i picks the bytes a store writes and tag_we_i also writes the tag,
 // through the write mask, so a store is one SRAM write.
 //
 // Each port is pipelined one deep. A request can be granted while the
@@ -276,7 +277,12 @@ module mpy_mem #(
                 // otherwise sit between the fetch queue and the grants of
                 // the ports below it (12.1 ns).
                 lost = lost | (req_i[j] && ready[j] && (p_blk[j] == p_blk[p]));
-            gnt_o[p] = req_i[p] && ready[p] && (!p_mem[p] || !lost);
+            // Without p_mem[p] as well: a faulting request waits while its
+            // block index is taken instead of being granted beside the other
+            // access. The bound compares of p_mem sat between every master's
+            // address and its own grant (the byte engine's address select ->
+            // the map and copy engines' request flops, 10.2 ns).
+            gnt_o[p] = req_i[p] && ready[p] && !lost;
         end
         for (int b = 0; b < NB; b++)
             for (int p = 0; p < NP; p++)
