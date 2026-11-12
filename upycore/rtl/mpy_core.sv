@@ -1447,6 +1447,27 @@ module mpy_core
     `define lk_start lkA[3]
     `define lk_avail lkA[4]
     `define lk_slot  lkA[5]
+    // Probe-start memo. hash % alloc is a function of its two operands
+    // alone, so a remainder the divider produced for a 16-bit hash and an
+    // alloc below 4096 is kept: HMM_N direct-mapped entries {hash[15:5],
+    // alloc, remainder}, indexed by hash[4:0] ^ alloc[4:0], filled in
+    // S_LK_HM. Nothing ever makes an entry wrong. It is read for a key
+    // whose hash came from the qstr memo: lk_hq is that hash, registered in
+    // S_LK, so S_LK_B picks the probe start (S_LK_H's choice) in the cycle
+    // the table word arrives.
+    localparam int HMM_N = 32;
+    logic [HMM_N-1:0] hmm_v;
+    logic [10:0]      hmm_hh [0:HMM_N-1];
+    logic [11:0]      hmm_d  [0:HMM_N-1];
+    logic [11:0]      hmm_r  [0:HMM_N-1];
+    logic [15:0]      lk_hq;
+    logic [4:0]       hmm_ix, hmm_fx;
+    logic             hmm_hit, hmm_fill;
+    assign hmm_ix   = lk_hq[4:0] ^ lkA[0][4:0];
+    assign hmm_hit  = (lkA[0][31:12] == 20'd0) && hmm_v[hmm_ix] &&
+                      (hmm_hh[hmm_ix] == lk_hq[15:5]) && (hmm_d[hmm_ix] == lkA[0][11:0]);
+    assign hmm_fx   = hh[4:0] ^ lkA[0][4:0];
+    assign hmm_fill = (hh[31:16] == 16'd0) && (lkA[0][31:12] == 20'd0);
     // Live names for whichever image scr_id says is resident.
     `define rh_alloc lkA[0]
     `define rh_tab   lkA[1]
@@ -2324,6 +2345,7 @@ module mpy_core
             lc_fi <= 4'd0;
             lc_pick_r <= 3'd0;
             qm_v <= '0;
+            hmm_v <= '0; lk_hq <= 16'd0;
         end else begin
             // A request not taken stays presented (its fields are not
             // changed until it is: stores stop the sequencer, loads wait).
@@ -6351,6 +6373,7 @@ module mpy_core
             // dict/set probe: t4 container, t5 key, t6 value; lk_mode, lk_set
             S_LK: begin
                 lk_found <= 1'b0; lk_cx <= 1'b0; lk_ro <= 1'b0; lk_res <= VNULL;
+                lk_hq <= qm_hash[t[5][5:0]];
                 // Only a store or a delete tests the flags word (ROM).
                 // A find goes straight to the alloc word: one load less
                 // on every name, global and attribute lookup.
@@ -6378,10 +6401,27 @@ module mpy_core
                             if (lk_mode == LK_ADD) gosub_scr(SCR_RH, S_RH, S_LK_RH);
                             else ret();
                         end else if (qm_hit) begin
-                            // What S_HASH leaves for this qstr, without the load.
-                            hk <= t[5]; hok <= 1'b1; hh <= {16'd0, qm_hash[t[5][5:0]]};
+                            // What S_HASH leaves for this qstr, without the
+                            // load, and S_LK_H's choice of the probe start.
+`ifdef MPY_CHECK
+                            if (lk_hq != qm_hash[t[5][5:0]]) $error("lk_hq is not the memo hash");
+                            if (hmm_hit && 32'(hmm_r[hmm_ix]) != (32'(lk_hq) % `lk_alloc))
+                                $error("probe-start memo: wrong remainder");
+`endif
+                            hk <= t[5]; hok <= 1'b1; hh <= {16'd0, lk_hq};
                             qid <= t[5][31:0]; qd_nxt <= S_HASH_W16;
-                            st <= S_LK_H;
+                            if ({16'd0, lk_hq} < `lk_alloc) begin
+                                `lk_pos <= {16'd0, lk_hq}; `lk_start <= {16'd0, lk_hq}; lk_hasav <= 1'b0;
+                                st <= S_LK_P;
+                            end else if (lk_pow2) begin
+                                `lk_pos <= {16'd0, lk_hq} & lk_am1; `lk_start <= {16'd0, lk_hq} & lk_am1;
+                                lk_hasav <= 1'b0;
+                                st <= S_LK_P;
+                            end else if (hmm_hit) begin
+                                `lk_pos <= {20'd0, hmm_r[hmm_ix]}; `lk_start <= {20'd0, hmm_r[hmm_ix]};
+                                lk_hasav <= 1'b0;
+                                st <= S_LK_P;
+                            end else begin hm_start <= 1'b1; st <= S_LK_HM; end
                         end else begin hk <= t[5]; gosub(S_HASH, S_LK_H); end
                     end
                 end
@@ -6398,6 +6438,10 @@ module mpy_core
                     end else begin hm_start <= 1'b1; st <= S_LK_HM; end
             S_LK_HM: if (hm_done) begin
                          `lk_pos <= hm_rem; `lk_start <= hm_rem; lk_hasav <= 1'b0;
+                         if (hmm_fill) begin
+                             hmm_v[hmm_fx] <= 1'b1; hmm_hh[hmm_fx] <= hh[15:5];
+                             hmm_d[hmm_fx] <= lkA[0][11:0]; hmm_r[hmm_fx] <= hm_rem[11:0];
+                         end
                          st <= S_LK_P;
                      end
             S_LK_P: begin

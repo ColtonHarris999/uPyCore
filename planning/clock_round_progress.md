@@ -431,3 +431,30 @@ compared with `--compare build/sta/base-soc/sta.txt`.
   change 21's run over every group: `core_hval` 8.113 -> 8.268; about a
   hundred `u_core` registers at 5.9 to 6.5 ns moved up by 0.19 ns (the
   state decode, `st[4]`); nothing above 8.3 ns grew.
+
+### 23. Probe-start memo; the probe start is picked in `S_LK_B` (cycles) — landed
+
+- Sink: in the profile of change 22's simulator `S_LK_HM`, the wait for
+  `hash % alloc` on the sequential divider, is 3.6 % of all cycles (mean
+  of ten kernels), and `S_LK_H` is one more cycle on every lookup.
+- Change (`mpy_core.sv`): `hash % alloc` depends on its two operands
+  only, so a remainder the divider produced is kept: 32 direct-mapped
+  entries {hash[15:5], alloc[11:0], remainder[11:0]}, indexed by
+  `hash[4:0] ^ alloc[4:0]`, filled in `S_LK_HM` when the hash fits 16 bits
+  and alloc is below 4096 (1152 flops). No store ever makes an entry
+  wrong, so there is no invalidation. The qstr hash of the key is
+  registered in `S_LK` (`lk_hq`), so for a key whose hash comes from the
+  qstr memo `S_LK_B` picks the probe start itself in the cycle the table
+  word arrives (hash below alloc, power-of-two mask, memo hit, or start
+  the divider): `S_LK_H` is skipped on that path.
+- Cycles: geomean **0.7946** of baseline (was 0.8181), every `RESULT`
+  identical (`build/kern/b2`). `core_locals` 3465226 -> 3185496;
+  `misc_pystone` 2271211 -> 2157173; `bm_hexiom` 7970511 -> 7741409.
+- Proof: not an equivalence. `MPY_CHECK` compares every memo hit with
+  `lk_hq % alloc` and `lk_hq` with the qstr memo's hash; the 16 kernels
+  ran clean with it (`build/kern/b5-chk`, the tree of change 25, where
+  the check build keeps this memo live).
+- SoC STA (`build/sta/b2-soc/sta.txt`): worst 9.578, unchanged; `st`
+  9.472. Grew by more than 0.1 ns over change 22's run: `hm_start` 6.022
+  -> 7.722, `lkA` 6.589 -> 6.950, `lk_hasav` 6.368 -> 6.633, `u_gc.zaddr`
+  3.883 -> 4.003.
