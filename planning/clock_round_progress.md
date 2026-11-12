@@ -107,3 +107,18 @@ compared with `--compare build/sta/base-soc/sta.txt`.
 - Cycles: none (equivalent logic).
 - Unit benches `mpy_bytecopy`, `mpy_collection` pass.
 - Landed on the STA compare alone.
+
+### 4. A find skips the dict flags word (cycles) — landed
+
+- Sink: the profile's top opcode is `LOAD_GLOBAL` (25.5 % of cycles, 65.9
+  cycles each), up to three dict probes; `S_LK*` and its memory waits lead
+  the state table.
+- Change (`mpy_core.sv`, `S_LK`): a find reads the alloc word first. The
+  flags word (ROM bit) is only tested by a store or a delete; a find read
+  it and ignored it. One load (about 3.7 cycles) less per lookup.
+- Cycles: geomean of the 16 kernels 0.9816 of baseline at an unchanged
+  period; every `RESULT` matches the baseline executable
+  (`build/kern/k1-lkfind`). `bm_wordcount` 6604660 -> 6547503; `core_locals` 4900777 -> 4759162; `core_qstr` 61539 -> 59121.
+- Proof: not an equivalence (the load is gone). Kernel results, and the
+  hardware suite at the end of the round.
+- Timing: gated with changes 5 to 8 in one SoC STA, see change 8.

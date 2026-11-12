@@ -6220,7 +6220,14 @@ module mpy_core
 
             // dict/set probe: t4 container, t5 key, t6 value; lk_mode, lk_set
             S_LK: if (scr_id != SCR_LK) scr_adopt(SCR_LK, S_LK);
-                  else begin lk_found <= 1'b0; lk_cx <= 1'b0; lk_ro <= 1'b0; lk_res <= VNULL; rd(aoff(adr(t[4]), 12), S_LK_FL); end
+                  else begin
+                      lk_found <= 1'b0; lk_cx <= 1'b0; lk_ro <= 1'b0; lk_res <= VNULL;
+                      // Only a store or a delete tests the flags word (ROM).
+                      // A find goes straight to the alloc word: one load less
+                      // on every name, global and attribute lookup.
+                      if (lk_mode == LK_FIND) rd(aoff(adr(t[4]), 4), S_LK_AL);
+                      else rd(aoff(adr(t[4]), 12), S_LK_FL);
+                  end
             S_LK_FL: if (lk_mode != LK_FIND && (md & ABI_DICT_FLAG_ROM)) begin lk_ro <= 1'b1; ret(); end
                      else rd(aoff(adr(t[4]), 4), S_LK_AL);
             S_LK_AL: begin `lk_alloc <= md; rd(aoff(adr(t[4]), 8), S_LK_TB); end
