@@ -152,3 +152,24 @@ compared with `--compare build/sta/base-soc/sta.txt`.
   expressions in every `S_LK_K` (no error on `misc_pystone`,
   `misc_raytrace`; the whole kernel set under MPY_CHECK is in change 8).
 - Timing: gated in the SoC STA of change 8.
+
+### 7. Hash memo for image qstrs (cycles) — landed
+
+- Sink: every qstr-keyed lookup loads the qstr's descriptor word from the
+  image for its 16-bit hash (`S_HASH` -> `S_QD` -> `S_HASH_W16`), about 6.5
+  cycles; almost every traced key is a qstr.
+- Change (`mpy_core.sv`): 64 direct-mapped entries {id[12:6], hash[15:0]},
+  indexed by id[5:0], filled in `S_HASH_W16` for ids below `h_nq` and
+  below 8192. `S_LK_TB` takes the hash from a hit and goes to `S_LK_H`
+  with the registers `S_HASH` would have left. The image is read-only
+  (`MPY_FAULT_FLASH_STORE`) and `S_BOOT` runs only out of reset, so an
+  entry never goes stale. Run-time qstrs are never entered. Traced hit
+  rate of this shape: 85 to 96 %.
+- Not chosen: a memo of the probe position or of the found slot. Tables
+  are rewritten and reused, so it needs invalidation the core does not
+  have.
+- Cycles: geomean 0.9086 of baseline (cumulative), results identical
+  (`build/kern/k4-qmemo`).
+- Proof: `+define+MPY_CHECK` at each fill: a valid entry with the same tag
+  must hold the hash just read, and the descriptor must be in the image.
+- Cost: 64 x 24 flops. Timing gated in the SoC STA of change 8.

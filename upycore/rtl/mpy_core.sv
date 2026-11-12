@@ -1363,6 +1363,22 @@ module mpy_core
     // through S_LK_NX and S_LK_P (two cycles per probe after the first).
     logic [31:0] lk_npos, ha_lk_nx;
     logic        lk_nwrap, lk_nend;
+    // Hash memo for image qstrs. A lookup key that is a qstr takes its
+    // 16-bit hash from the qstr's descriptor word in the image (S_QD, a
+    // flash load). The image is read-only (a store to it faults in mpy_mem)
+    // and S_BOOT runs only out of reset, so the hash of qstr id q < h_nq
+    // never changes: QM_N direct-mapped entries {id[12:6], hash}, indexed by
+    // id[5:0], filled where S_HASH_W16 reads the word. Ids of 8192 and up
+    // and run-time qstrs (id >= h_nq, whose descriptors are in SRAM) are
+    // never entered.
+    localparam int QM_N = 64;
+    logic [QM_N-1:0] qm_v;
+    logic [6:0]      qm_tag  [0:QM_N-1];
+    logic [15:0]     qm_hash [0:QM_N-1];
+    logic            qm_hit, qm_fill;
+    assign qm_hit  = (t[5][35:32] == ABI_TAG_QSTR) && (t[5][31:13] == 19'd0) &&
+                     qm_v[t[5][5:0]] && (qm_tag[t[5][5:0]] == t[5][12:6]);
+    assign qm_fill = (hk[35:32] == ABI_TAG_QSTR) && (hk[31:13] == 19'd0) && (hk[31:0] < h_nq);
     logic [31:0] al_n, al_a; logic al_ok, al_soft, al_gc;
     logic [31:0] sw_i; logic [1:0] sw_k;
     logic [31:0] fl_base, fl_i; logic [1:0] fl_k;
@@ -2265,6 +2281,7 @@ module mpy_core
             end
             lc_fi <= 4'd0;
             lc_pick_r <= 3'd0;
+            qm_v <= '0;
         end else begin
             // A request not taken stays presented (its fields are not
             // changed until it is: stores stop the sequencer, loads wait).
@@ -6116,7 +6133,19 @@ module mpy_core
                     default: begin hok <= 1'b0; ret(); end
                 endcase
             end
-            S_HASH_W16: begin hh <= {16'd0, md[15:0]}; ret(); end
+            S_HASH_W16: begin
+                hh <= {16'd0, md[15:0]};
+                if (qm_fill) begin
+`ifdef MPY_CHECK
+                    if (qm_v[hk[5:0]] && qm_tag[hk[5:0]] == hk[12:6] && qm_hash[hk[5:0]] != md[15:0])
+                        $error("qstr hash memo: entry differs from the descriptor of qstr %0d", hk[31:0]);
+                    if (h_qdesc + (hk[31:0] << 3) >= MPY_FLASH_BYTES)
+                        $error("qstr hash memo: descriptor of qstr %0d is not in the image", hk[31:0]);
+`endif
+                    qm_v[hk[5:0]] <= 1'b1; qm_tag[hk[5:0]] <= hk[12:6]; qm_hash[hk[5:0]] <= md[15:0];
+                end
+                ret();
+            end
             S_HASH_I64: begin hh <= sx31(md); ret(); end
             // Short tuples of unboxed integers and bools use the same
             // additive, signed-31-bit hash as firmware's _hashv.
@@ -6263,6 +6292,11 @@ module mpy_core
                 if (`lk_alloc == 32'd0) begin
                     if (lk_mode == LK_ADD) gosub_scr(SCR_RH, S_RH, S_LK_RH);
                     else ret();
+                end else if (qm_hit) begin
+                    // What S_HASH leaves for this qstr, without the load.
+                    hk <= t[5]; hok <= 1'b1; hh <= {16'd0, qm_hash[t[5][5:0]]};
+                    qid <= t[5][31:0]; qd_nxt <= S_HASH_W16;
+                    st <= S_LK_H;
                 end else begin hk <= t[5]; gosub(S_HASH, S_LK_H); end
             end
             S_LK_RH: if (lk_cx) ret(); else st <= S_LK;
