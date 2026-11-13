@@ -1,6 +1,28 @@
 # Builtin/function tags and fixed string offset: progress
 
-## Status — Step 0 blocked (2026-11-13)
+## Status — Step 0 environment verified (2026-11-13)
+
+The host kernel has `CONFIG_IA32_EMULATION` disabled. QEMU 10.0.13
+user-mode i386 now runs the pinned 32-bit MicroPython ELF with the
+local i386 loader and libc. The workspace's `toolchain/env.sh` enables
+a build-directory launcher at the path used by the existing Make targets,
+test runner, and benchmark runners. Only the oracle runs under QEMU.
+Verilator still produces RTL cycle counts, and the prescribed timing
+flows run on the host with YoWASP Yosys, slang, and the Sky130 TT liberty.
+
+| Environment check | Result |
+| --- | --- |
+| `make oracle` on `e12d6fe` and `tags` | Passed on both. Header `4d 06 00 1f`, four-byte pointers, binary32 floats, smoke passed, stdout and stderr separate. |
+| `make oracle-mpz` | Built on both trees. |
+| `python3 upycore/tools/hw_tests.py --check-goldens` | On each tree, 500 passed and zero failed. The existing manifest excludes 49 cases from oracle comparison. |
+| Baseline Pi digits runner at 100×100 | Passed against pinned MicroPython MPZ. The RTL simulator reported 1,342,992 cycles. |
+| Step 0 gate | Pending the remaining benchmark workloads and both timing flows. |
+
+From the current workspace, source `toolchain/env.sh` before running the
+repository commands in either checkout. The launcher is local to the
+build outputs. No tracked build scripts, tests, or goldens were changed.
+
+## Initial Step 0 blocker (2026-11-13)
 
 The full `builtin_function_tags_plan.md` was read before changes. The
 implementation branch is `tags`, starting at
@@ -9,7 +31,7 @@ implementation branch is `tags`, starting at
 that exact baseline was used for the build. No RTL, firmware, linker,
 goldens, timing constraints, clock settings, or synthesis options changed.
 
-### Step 0 work and gate
+### Initial Step 0 work and gate
 
 | Item | Result |
 | --- | --- |
@@ -19,7 +41,7 @@ goldens, timing constraints, clock settings, or synthesis options changed.
 | Sky130 liberty | Available; library declaration is `sky130_fd_sc_hd__tt_025C_1v80` |
 | Baseline `make mpy-cross sim` | Passed after pinned vendor checkouts were populated; built `build/mpy_soc/obj/Vtb_mpy_soc` |
 | Baseline `make oracle` | **Blocked:** compiled the pinned i686 MicroPython variant, but execution fails with `Exec format error` |
-| Benchmark cycles | Not measured; no baseline numbers claimed |
+| Benchmark cycles | No measurements during the initial attempt |
 | Timing / area | Mapped `sta/run.py` started, then interrupted after the oracle blocker was confirmed; no completed timing or area numbers claimed |
 | Generic depth flow | Not run |
 | Step 0 gate: numbers recorded | **NOT PASSED** |
@@ -43,12 +65,10 @@ variants/upycore/build.sh smoke
 make: *** [Makefile:116: oracle-smoke] Error 126
 ```
 
-Per the task's missing-tool/runtime stop rule, implementation stops here.
-Resume in an environment capable of executing native i386 Linux binaries
-and rerun `make oracle`, then complete **all** Step 0 benchmarks and both
-timing flows before beginning Step 1. Do not reuse historical benchmark or
-timing numbers as this baseline. The timing documentation includes mapped
-measurements, so mapped timing must be included identically on both trees.
+The runtime issue is resolved by the verified environment above.
+Complete **all** Step 0 benchmarks and both timing flows before beginning
+Step 1. The timing documentation includes mapped measurements, so mapped
+timing must be included identically on both trees.
 
 ### Remaining steps
 
@@ -63,4 +83,6 @@ remain unchanged.
 - A documentation-only Step 0 blocker checkpoint is committed before its
   gate passes, to preserve the investigation and the explicit blocked
   status. This is not a completed Step 0 commit and does not authorize Step 1.
-- No alternative oracle or timing measurement method was substituted.
+- The local launcher uses QEMU user-mode emulation to execute the same
+  pinned i386 oracle binary. The oracle source and both measurement
+  methods are unchanged.
