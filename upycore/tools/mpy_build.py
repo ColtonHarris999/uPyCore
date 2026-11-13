@@ -67,6 +67,7 @@ IOCORE_SW = ROOT / "iocore" / "sw"
 IOCORE_FW = ROOT / "build" / "iocore" / "fw"
 
 RTL = [
+    "upycore/rtl/upycore_add.sv", "upycore/rtl/upycore_smul.sv",
     "upycore/rtl/upycore_umul_seq.sv", "upycore/rtl/upycore_udiv_seq.sv", "upycore/rtl/upycore_umod_seq.sv",
     "upycore/rtl/upycore_int_alu.sv", "upycore/rtl/upycore_mul.sv", "upycore/rtl/upycore_div.sv",
     "upycore/rtl/upycore_ipow.sv", "upycore/rtl/upycore_fp_add.sv", "upycore/rtl/upycore_fp_mul.sv",

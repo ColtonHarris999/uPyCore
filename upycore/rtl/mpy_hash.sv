@@ -56,20 +56,55 @@ module mpy_hash #(
 
     assign ready_o = state == IDLE || (state == RESP && ready_i);
     assign valid_o = state == RESP;
+
+    // Every address the state mux can select, as its own prefix add. The
+    // mux used to sit inside one carry chain (payload -> addr_o, six adds,
+    // 14.9 ns post-route). payload+4 and the qstr form are the long ones;
+    // the rest are the same width and would be the next ripple.
+    logic [31:0] pay4, pay8, al4, al8, al12, q_in, q_out, q_addr, elem_addr;
+    logic        q_ge;
+    logic [SP_W-1:0] sp_prev;
+    assign sp_prev = (sp == 0) ? '0 : SP_W'(sp - 1'b1);
+    upycore_add #(.W(32)) u_pay4 (.a_i(payload), .b_i(32'd4), .cin_i(1'b0), .sum_o(pay4), .cout_o());
+    upycore_add #(.W(32)) u_pay8 (.a_i(payload), .b_i(32'd8), .cin_i(1'b0), .sum_o(pay8), .cout_o());
+    upycore_add #(.W(32)) u_al4  (.a_i({payload[31:2], 2'b00}), .b_i(32'd4),  .cin_i(1'b0), .sum_o(al4), .cout_o());
+    upycore_add #(.W(32)) u_al8  (.a_i({payload[31:2], 2'b00}), .b_i(32'd8),  .cin_i(1'b0), .sum_o(al8), .cout_o());
+    upycore_add #(.W(32)) u_al12 (.a_i({payload[31:2], 2'b00}), .b_i(32'd12), .cin_i(1'b0), .sum_o(al12), .cout_o());
+    upycore_add #(.W(32)) u_qsub (
+        .a_i(payload), .b_i(~qstr_count_i), .cin_i(1'b1), .sum_o(), .cout_o(q_ge));
+    upycore_add #(.W(32)) u_qin (
+        .a_i(qstr_base_i), .b_i({payload[28:0], 3'b000}), .cin_i(1'b0), .sum_o(q_in), .cout_o());
+    // ext + ((payload - count) << 3) = ext + (payload << 3) - (count << 3).
+    // The subtract used to feed this add, so the qstr form was two carries
+    // in series inside the six-add address cone (14.9 ns post-route).
+    upycore_sum3 #(.W(32)) u_qout (
+        .a_i(qstr_ext_i), .b_i({payload[28:0], 3'b000}),
+        .c_i(~{qstr_count_i[28:0], 3'b000}), .cin_i(1'b1), .sum_o(q_out));
+    assign q_addr = q_ge ? q_out : q_in;   // q_ge means payload >= count
+    upycore_add #(.W(32)) u_elem (
+        .a_i(frame_ptr[sp_prev]), .b_i({frame_idx[sp_prev][29:0], 2'b00}),
+        .cin_i(1'b0), .sum_o(elem_addr), .cout_o());
+    logic [31:0] frame_sum_plus, ptr_next, len_next;
+    upycore_add #(.W(32)) u_fsum (
+        .a_i(frame_sum[sp_prev]), .b_i(result), .cin_i(1'b0), .sum_o(frame_sum_plus), .cout_o());
+    upycore_add #(.W(32)) u_ptr (
+        .a_i(ptr), .b_i(32'(count)), .cin_i(1'b0), .sum_o(ptr_next), .cout_o());
+    upycore_add #(.W(32)) u_len (
+        .a_i(len), .b_i(~32'(count)), .cin_i(1'b1), .sum_o(len_next), .cout_o());
+
     always_comb begin
         reading = 1'b1;
         mem_addr_o = payload;
         case (state)
             I64, REAL_PART, STR_LEN, TUPLE_LEN: mem_addr_o = payload;
-            IMAG_PART, STR_HASH: mem_addr_o = payload + 4;
-            QSTR: mem_addr_o = payload < qstr_count_i ?
-                qstr_base_i + (payload << 3) : qstr_ext_i + ((payload - qstr_count_i) << 3);
-            STR_PTR: mem_addr_o = payload + 8;
+            IMAG_PART, STR_HASH: mem_addr_o = pay4;
+            QSTR: mem_addr_o = q_addr;
+            STR_PTR: mem_addr_o = pay8;
             STR_DATA: mem_addr_o = {ptr[31:2], 2'b00};
-            ELEM: mem_addr_o = frame_ptr[sp-1] + (frame_idx[sp-1] << 2);
-            SET_FLAGS: mem_addr_o = (payload & 32'hfffffffc) + 12;
-            SET_LEN: mem_addr_o = (payload & 32'hfffffffc) + 4;
-            SET_PTR: mem_addr_o = (payload & 32'hfffffffc) + 8;
+            ELEM: mem_addr_o = elem_addr;
+            SET_FLAGS: mem_addr_o = al12;
+            SET_LEN: mem_addr_o = al4;
+            SET_PTR: mem_addr_o = al8;
             default: reading = 1'b0;
         endcase
         mem_req_o = reading;
@@ -149,9 +184,9 @@ module mpy_hash #(
             endcase
             RESULT: if (sp == 0) begin hash_o <= result; state <= RESP; end
                 else begin
-                    frame_sum[sp-1] <= frame_sum[sp-1] + result;
+                    frame_sum[sp-1] <= frame_sum_plus;
                     if (frame_idx[sp-1] + 1 == frame_len[sp-1]) begin
-                        result <= hash_sx31(frame_sum[sp-1] + result); sp <= sp - 1;
+                        result <= hash_sx31(frame_sum_plus); sp <= sp - 1;
                     end else begin frame_idx[sp-1] <= frame_idx[sp-1] + 1; state <= ELEM; end
                 end
             RESP: if (ready_i) begin
@@ -180,7 +215,7 @@ module mpy_hash #(
                 if (len == 0) finish(5381); else state <= STR_DATA;
             end
             STR_DATA, STR_STEP: if (state == STR_STEP || mem_ack_i) begin
-                acc <= word_hash; ptr <= ptr + 32'(count); len <= len - 32'(count);
+                acc <= word_hash; ptr <= ptr_next; len <= len_next;
                 byte_buffer <= shifted >> (8 * count);
                 if (str_last) finish(hash_string_finish(word_hash));
                 else if (integer'(ptr[1:0]) + count == 4) state <= STR_DATA;
@@ -189,7 +224,7 @@ module mpy_hash #(
             TUPLE_LEN: if (mem_ack_i) begin
                 if (mem_data_i == 0) finish(TUPLE_SEED);
                 else begin
-                    frame_ptr[sp] <= payload + 4; frame_len[sp] <= mem_data_i;
+                    frame_ptr[sp] <= pay4; frame_len[sp] <= mem_data_i;
                     frame_idx[sp] <= 0; frame_sum[sp] <= TUPLE_SEED;
                     frame_set[sp] <= 0; sp <= sp + 1; state <= ELEM;
                 end

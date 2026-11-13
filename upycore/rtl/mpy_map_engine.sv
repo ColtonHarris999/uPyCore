@@ -110,9 +110,37 @@ module mpy_map_engine #(parameter bit EXTERNAL_HASH=0, TYPE_CACHE=0) (
     function automatic logic extended(input logic [3:0] t);
         return t==ABI_TAG_INT64 || t==ABI_TAG_FLOAT || t==ABI_TAG_COMPLEX || t==ABI_TAG_STR || t==ABI_TAG_BYTES;
     endfunction
-    function automatic logic [31:0] at(input logic [31:0] base, input logic [31:0] slot);
-        return base + (slot << (is_set ? 2 : 3));
-    endfunction
+    // base + (slot << (is_set ? 2 : 3)), one prefix add per (base, slot) the state mux
+    // selects. Putting the add after the state decode is what made
+    // state -> addr_o a ripple at 15.0 ns post-route.
+    logic [31:0] sh_idx, sh_pos, sh_sn, sh_dn;
+    assign sh_idx = is_set ? {idx[29:0], 2'b00} : {idx[28:0], 3'b000};
+    assign sh_pos = is_set ? {pos[29:0], 2'b00} : {pos[28:0], 3'b000};
+    assign sh_sn  = is_set ? {sn[29:0],  2'b00} : {sn[28:0],  3'b000};
+    assign sh_dn  = is_set ? {dn[29:0],  2'b00} : {dn[28:0],  3'b000};
+    logic [31:0] at_src_idx, at_dst_idx, at_act_idx, at_src_idx4, hash_idx;
+    logic [31:0] at_probe, at_dst_pos, at_dst_pos4, src_span, dst_span;
+    logic [31:0] er_slot, er_slot1, er_sh, er_addr, er_addr1;
+    assign er_slot = (op == 2 || op == 3) ? idx : pos;
+    assign er_sh   = is_set ? {er_slot[29:0],  2'b00} : {er_slot[28:0],  3'b000};
+    upycore_add #(.W(32)) u_src_idx  (.a_i(src),         .b_i(sh_idx), .cin_i(1'b0), .sum_o(at_src_idx),  .cout_o());
+    upycore_add #(.W(32)) u_dst_idx  (.a_i(dst),         .b_i(sh_idx), .cin_i(1'b0), .sum_o(at_dst_idx),  .cout_o());
+    upycore_add #(.W(32)) u_act_idx  (.a_i(active_base), .b_i(sh_idx), .cin_i(1'b0), .sum_o(at_act_idx),  .cout_o());
+    // +4 is a third operand, not a second prefix chained on the first sum.
+    upycore_sum3 #(.W(32)) u_src_idx4 (
+        .a_i(src), .b_i(sh_idx), .c_i(32'd4), .cin_i(1'b0), .sum_o(at_src_idx4));
+    upycore_add #(.W(32)) u_hash_idx (.a_i(hashes), .b_i({idx[29:0], 2'b00}), .cin_i(1'b0), .sum_o(hash_idx), .cout_o());
+    upycore_add #(.W(32)) u_probe    (.a_i(probe_base),  .b_i(sh_pos), .cin_i(1'b0), .sum_o(at_probe),    .cout_o());
+    upycore_add #(.W(32)) u_dst_pos  (.a_i(dst),         .b_i(sh_pos), .cin_i(1'b0), .sum_o(at_dst_pos),  .cout_o());
+    upycore_sum3 #(.W(32)) u_dst_pos4 (
+        .a_i(dst), .b_i(sh_pos), .c_i(32'd4), .cin_i(1'b0), .sum_o(at_dst_pos4));
+    upycore_add #(.W(32)) u_src_span (.a_i(src),         .b_i(sh_sn),  .cin_i(1'b0), .sum_o(src_span),    .cout_o());
+    upycore_add #(.W(32)) u_dst_span (.a_i(dst),         .b_i(sh_dn),  .cin_i(1'b0), .sum_o(dst_span),    .cout_o());
+    upycore_add #(.W(32)) u_er_inc   (.a_i(er_slot),     .b_i(32'd1),  .cin_i(1'b0), .sum_o(er_slot1),    .cout_o());
+    upycore_add #(.W(32)) u_er_addr  (.a_i(dst),         .b_i(er_sh),  .cin_i(1'b0), .sum_o(er_addr),     .cout_o());
+    // (slot+1)<<k is slot<<k plus 4 or 8. That keeps the +1 off the address carry.
+    upycore_sum3 #(.W(32)) u_er_addr1 (
+        .a_i(dst), .b_i(er_sh), .c_i(is_set ? 32'd4 : 32'd8), .cin_i(1'b0), .sum_o(er_addr1));
     assign ready_o = state == IDLE;
     // Aggregate keys require overrides/fallback, so no recursive hash stack
     // is needed in this integration. Keep the standalone full hash unit intact.
@@ -138,7 +166,8 @@ module mpy_map_engine #(parameter bit EXTERNAL_HASH=0, TYPE_CACHE=0) (
     );
     end endgenerate
     assign hmack = state == HASH_MEM_WAIT && ack_i;
-    upycore_umod_seq modulo (.clk_i, .rst_n_i, .start_i(state == MOD_GO && hash_value >= probe_n),
+    // Same post-route step as the core's divider (15.2 ns at BPC=4).
+    upycore_umod_seq #(.BPC(2)) modulo (.clk_i, .rst_n_i, .start_i(state == MOD_GO && hash_value >= probe_n),
         .a_i(hash_value), .d_i(probe_n), .done_o(mod_done), .rem_o(rem), .busy_o());
     task automatic read_word(input logic [31:0] a, input state_t next_state);
         req_o <= 1; we_o <= 0; addr_o <= a; granted <= 0;
@@ -225,21 +254,21 @@ module mpy_map_engine #(parameter bit EXTERNAL_HASH=0, TYPE_CACHE=0) (
                     else if (idx == sn) begin
                         if(TYPE_CACHE)begin
                             cache_valid[0]<=1;cache_set[0]<=is_set;cache_base[0]<=src;cache_n[0]<=sn;
-                            cache_end[0]<=src+(sn<<(is_set?2:3));cache_used[0]<=src_used;cache_tags[0]<=scan_tags[0];
+                            cache_end[0]<=src_span;cache_used[0]<=src_used;cache_tags[0]<=scan_tags[0];
                         end
                         idx <= 0; state <= CHECK_DST;
                     end
-                    else begin check_dst <= 0; read_word(at(src,idx), CHECK_KEY); end
+                    else begin check_dst <= 0; read_word(at_src_idx, CHECK_KEY); end
                 CHECK_DST: if (idx == dn || (idx==0 && dst_hit)) begin
                     if(TYPE_CACHE && !dst_hit)begin
                         cache_valid[1]<=1;cache_set[1]<=is_set;cache_base[1]<=dst;cache_n[1]<=dn;
-                        cache_end[1]<=dst+(dn<<(is_set?2:3));cache_used[1]<=dst_scan_used;cache_tags[1]<=scan_tags[1];
+                        cache_end[1]<=dst_span;cache_used[1]<=dst_scan_used;cache_tags[1]<=scan_tags[1];
                     end
                     idx <= 0;
                     // Conservative capacity bound: no mid-command allocation.
                     if ((op == 1 || op == 4) && src_used > dn - used_o) reject();
                     else begin admitted_o <= 1;if(op==7)read_word(src,SEQ_TARGET);else state <= SCAN;end
-                end else begin check_dst <= 1; read_word(at(dst,idx), CHECK_KEY); end
+                end else begin check_dst <= 1; read_word(at_dst_idx, CHECK_KEY); end
                 CHECK_KEY: begin
                     if (!empty(rtag_i,rdata_i) && !tomb(rtag_i,rdata_i)) begin
                         if (!scalar(rtag_i,rdata_i) || (op==7 && (rtag_i==ABI_TAG_FLOAT || rtag_i==ABI_TAG_COMPLEX))) reject();
@@ -251,13 +280,13 @@ module mpy_map_engine #(parameter bit EXTERNAL_HASH=0, TYPE_CACHE=0) (
                     end else begin idx <= idx + 1; state <= check_dst ? CHECK_DST : CHECK_SRC; end
                 end
                 SEQ_TARGET:begin key<=rdata_i;key_tag<=rtag_i;state<=SEQ_SCAN;end
-                SEQ_SCAN:if(idx==dn)state<=FINISH;else read_word(at(dst,idx),SEQ_KEY);
+                SEQ_SCAN:if(idx==dn)state<=FINISH;else read_word(at_dst_idx,SEQ_KEY);
                 SEQ_KEY:if(equal_key(rtag_i,rdata_i))found_key();
                     else if(extended(rtag_i) || extended(key_tag))begin probe_key<={rtag_i,rdata_i};state<=EQ_GO;end
                     else state<=SEQ_NEXT;
                 SEQ_NEXT:begin idx<=idx+1;state<=SEQ_SCAN;end
                 SCAN: if (idx == active_n) state <= FINISH;
-                    else read_word(at(active_base,idx),KEY);
+                    else read_word(at_act_idx,KEY);
                 KEY: if (empty(rtag_i,rdata_i) || tomb(rtag_i,rdata_i)) state <= NEXT;
                     else begin
                         key <= rdata_i; key_tag <= rtag_i;
@@ -266,14 +295,14 @@ module mpy_map_engine #(parameter bit EXTERNAL_HASH=0, TYPE_CACHE=0) (
                             else if (op == 3) state <= ERASE;
                             else if (op == 2) state <= NEXT;
                             else reject();
-                        end else if (!is_set) read_word(at(src,idx)+4,VALUE);
-                        else if (op == 0 && hashes != 0) read_word(hashes+(idx<<2),OVERRIDE);
+                        end else if (!is_set) read_word(at_src_idx4,VALUE);
+                        else if (op == 0 && hashes != 0) read_word(hash_idx,OVERRIDE);
                         else if (op == 0 && (rtag_i == ABI_TAG_OBJECT || rtag_i == ABI_TAG_TUPLE || rtag_i == ABI_TAG_MUT)) reject();
                         else state <= HASH_GO;
                     end
                 VALUE: begin
                     value <= rdata_i; value_tag <= rtag_i;
-                    if (op == 0 && hashes != 0) read_word(hashes+(idx<<2),OVERRIDE);
+                    if (op == 0 && hashes != 0) read_word(hash_idx,OVERRIDE);
                     else if (op == 0 && (key_tag == ABI_TAG_OBJECT || key_tag == ABI_TAG_TUPLE || key_tag == ABI_TAG_MUT)) reject();
                     else state <= HASH_GO;
                 end
@@ -301,7 +330,7 @@ module mpy_map_engine #(parameter bit EXTERNAL_HASH=0, TYPE_CACHE=0) (
                     pos <= hash_value; start_pos <= hash_value; avail <= 32'hffffffff; state <= PROBE;
                 end else state <= MOD_WAIT;
                 MOD_WAIT: if (mod_done) begin pos <= rem; start_pos <= rem; avail <= 32'hffffffff; state <= PROBE; end
-                PROBE: read_word(at(probe_base,pos),PROBE_KEY);
+                PROBE: read_word(at_probe,PROBE_KEY);
                 PROBE_KEY: if (empty(rtag_i,rdata_i)) missing();
                     else if (op != 0 && !tomb(rtag_i,rdata_i) && equal_key(rtag_i,rdata_i)) found_key();
                     else if (op != 0 && !tomb(rtag_i,rdata_i) && (extended(rtag_i) || extended(key_tag))) begin
@@ -320,17 +349,17 @@ module mpy_map_engine #(parameter bit EXTERNAL_HASH=0, TYPE_CACHE=0) (
                 end
                 WRITE_KEY: begin
                     used_o <= used_o + 1;
-                    write_word(at(dst,pos),key_tag,key,is_set ? NEXT : WRITE_VALUE);
+                    write_word(at_dst_pos,key_tag,key,is_set ? NEXT : WRITE_VALUE);
                 end
-                WRITE_VALUE: write_word(at(dst,pos)+4,value_tag,value,NEXT);
+                WRITE_VALUE: write_word(at_dst_pos4,value_tag,value,NEXT);
                 // The slot after the erased one, slot 0 after the last. The
                 // wrap selects between the table base and the summed address:
                 // selecting the slot number first put the compare with dn in
                 // front of the address add (op -> addr_o, 10.0 ns).
-                ERASE: read_word(((op == 2 || op == 3) ? idx : pos) + 1 == dn ? dst : at(dst, ((op == 2 || op == 3) ? idx : pos) + 1), ERASE_WRITE);
+                ERASE: read_word(er_slot1 == dn ? dst : er_addr1, ERASE_WRITE);
                 ERASE_WRITE: begin
                     used_o <= used_o - 1;
-                    write_word(at(dst,(op == 2 || op == 3) ? idx : pos),ABI_TAG_CONTROL,
+                    write_word(er_addr,ABI_TAG_CONTROL,
                         empty(rtag_i,rdata_i) ? ABI_CTL_NULL : ABI_CTL_TOMB,NEXT);
                 end
                 NEXT: begin idx <= idx + 1; state <= SCAN; end

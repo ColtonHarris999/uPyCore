@@ -16,15 +16,31 @@ module upycore_int_alu (
     logic signed [63:0] b_s;
     logic signed [64:0] add_ext;
     logic signed [64:0] sub_ext;
+    logic signed [63:0] neg_v;
     logic signed [63:0] sra;
     logic signed [63:0] sll;
     logic signed [63:0] sll_back;
     logic cmp_result;
+    logic        lt, eq;
 
     assign a_s = op_a_i;
     assign b_s = op_b_i;
-    assign add_ext = {a_s[63], a_s} + {b_s[63], b_s};
-    assign sub_ext = {a_s[63], a_s} - {b_s[63], b_s};
+    // One prefix add and one prefix subtract. The compares read the 65-bit
+    // difference (sign-extended operands cannot overflow it) so a `<` does
+    // not build a second ripple beside the subtract.
+    upycore_add #(.W(65)) u_add (
+        .a_i({a_s[63], a_s}), .b_i({b_s[63], b_s}), .cin_i(1'b0),
+        .sum_o(add_ext), .cout_o()
+    );
+    upycore_add #(.W(65)) u_sub (
+        .a_i({a_s[63], a_s}), .b_i(~{b_s[63], b_s}), .cin_i(1'b1),
+        .sum_o(sub_ext), .cout_o()
+    );
+    upycore_add #(.W(64)) u_neg (
+        .a_i(64'b0), .b_i(~op_a_i), .cin_i(1'b1), .sum_o(neg_v), .cout_o()
+    );
+    assign lt = sub_ext[64];
+    assign eq = (op_a_i == op_b_i);
     // Arithmetic shift in its own signed assignment: inside the unsigned
     // ternary below `>>>` would silently degrade to a logical shift.
     assign sra = a_s >>> op_b_i[5:0];
@@ -41,15 +57,15 @@ module upycore_int_alu (
 
         unique case (op_i)
             UPY_ALU_ADD: begin
-                result_o = op_a_i + op_b_i;
+                result_o = add_ext[63:0];
                 overflow_flag_o = add_ext[64] != add_ext[63];
             end
             UPY_ALU_SUB: begin
-                result_o = op_a_i - op_b_i;
+                result_o = sub_ext[63:0];
                 overflow_flag_o = sub_ext[64] != sub_ext[63];
             end
             UPY_ALU_NEG: begin
-                result_o = -op_a_i;
+                result_o = neg_v;
                 overflow_flag_o = op_a_i == 64'h8000_0000_0000_0000;
             end
             UPY_ALU_POS, UPY_ALU_PASS: begin
@@ -95,19 +111,19 @@ module upycore_int_alu (
                 result_o = {63'b0, cmp_result};
             end
             UPY_ALU_LT: begin
-                cmp_result = a_s < b_s;
+                cmp_result = lt;
                 result_o = {63'b0, cmp_result};
             end
             UPY_ALU_LE: begin
-                cmp_result = a_s <= b_s;
+                cmp_result = lt || eq;
                 result_o = {63'b0, cmp_result};
             end
             UPY_ALU_GT: begin
-                cmp_result = a_s > b_s;
+                cmp_result = !lt && !eq;
                 result_o = {63'b0, cmp_result};
             end
             UPY_ALU_GE: begin
-                cmp_result = a_s >= b_s;
+                cmp_result = !lt;
                 result_o = {63'b0, cmp_result};
             end
             default: begin

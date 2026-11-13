@@ -115,8 +115,9 @@ The recursion stack stores four 32-bit words and one flag per frame:
 1032 bits at DEPTH=8, implemented as flops/muxes in this synthesis.
 Four-byte hashing adds 329 bit cells (3.8% of the hash engine; 2.9% of the
 combined pipeline). Its 71-level path remains below the BPC=4 modulo path
-in this proxy. BPC=2 is the option to investigate when clock timing is
-more constrained than per-key cycle count.
+in this proxy. The chip uses BPC=2 (core probe, map engine, rehash slot):
+the BPC=4 step was 15.2 ns after place and route, and the extra restoring
+cycles fall on lookups the probe-start memo does not already skip.
 
 Average cycles per key below use two memory wait cycles per transaction,
 no random stalls, and table allocations cycling through 17, 127, 1021 and

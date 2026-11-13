@@ -3,8 +3,9 @@
 // mpy_core uses it for the dict/set probe start, pos = hash % alloc
 // (py/map.c). A combinational 32-bit modulo is about 230 gate levels
 // (~34 ns at ss_100C_1v60 in sky130); one restoring step here is a
-// 33-bit subtract and a select, so BPC = 4 keeps a cycle near 4-5 ns
-// and BPC = 2 halves that if a backend run needs it.
+// 33-bit subtract and a select. BPC = 4 runs two of those steps in one
+// cycle; after place-and-route that cone was 15.2 ns at ss_100C_1v60
+// (P2, u_hmod r_r). The chip instantiates BPC = 2, one step per cycle.
 //
 // The accept cycle skips the steps that cannot subtract. With
 // k = bits(a) - bits(d) + 1 bits to bring down, rounded up to a multiple

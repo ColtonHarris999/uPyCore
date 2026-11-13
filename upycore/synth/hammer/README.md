@@ -481,10 +481,15 @@ Innovus line (not through `DESIGN_ARGS`, which splits on spaces), and
 for more met4 routing room).
 
 Two options for closing timing after routing (any top, via DESIGN_ARGS):
-`--syn-margin 1.5` adds 1.5 ns of clock uncertainty in Genus only, so the
-netlist keeps slack for the wires (synthesis slack in `status` includes the
-margin). Innovus reads only the SDC Genus writes, margin included, so the
-option also restores the plain 0.1 ns through `cfg/par_settings.tcl`; runs
-before November 11, 2026 that used it were placed and routed with the margin
-still on, for setup and hold. And
-`--par-effort extreme` sets Hammer's `par.innovus.design_flow_effort`.
+`--syn-margin` (default 2.5) adds that many nanoseconds of uncertainty on
+`core_clk` in Genus only, so a ripple that still meets the global-wire
+model is not the netlist place-and-route has to close. The 12 ns synthesis
+of the clock-round RTL met by 73 ps and the same netlist's worst core path
+was 15.1 ns after routing. Synthesis slack in `status` includes the margin.
+Innovus reads only the SDC Genus writes, margin included, so the option
+also restores the plain 0.1 ns through `cfg/par_settings.tcl`; runs before
+November 11, 2026 that used it were placed and routed with the margin still
+on, for setup and hold. `io_clk` and `usb_clk` stay at the plain
+uncertainty. Pass `--syn-margin 0` to synthesize `core_clk` to the real
+period. And `--par-effort extreme` sets Hammer's
+`par.innovus.design_flow_effort`.
