@@ -4,6 +4,7 @@
 # flags() is the last cause; irq(None) disarms; a soft handler is
 # scheduled. Edges are counted by the I/O core; several edges before the
 # handler runs give one call. Hand-written golden.
+import machine
 from machine import Pin
 import time
 
@@ -42,9 +43,16 @@ hits.clear()
 drv.toggle()
 time.sleep_ms(2)
 print("disarmed", len(hits))
-# Several edges before a soft point: one call.
+# Several edges before a soft point: one call. Events are held off until
+# the I/O core has counted all four edges, so the handler's first chance
+# comes after the last one. Left free, the handler can run between two of
+# the toggles, and how many calls that gives depends on how many cycles
+# the hart takes for them against io_clk, which is not what is tested.
 n = []
 inp.irq(lambda p: n.append(1), Pin.IRQ_RISING | Pin.IRQ_FALLING)
+held = machine.disable_irq()
 drv.toggle(); drv.toggle(); drv.toggle(); drv.toggle()
+time.sleep_ms(2)
+machine.enable_irq(held)
 time.sleep_ms(2)
 print("coalesced", len(n))

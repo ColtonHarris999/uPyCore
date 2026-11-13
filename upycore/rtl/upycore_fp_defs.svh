@@ -307,7 +307,10 @@ function automatic logic [63:0] upycore_f64_floor(input logic [63:0] a);
             upycore_f64_floor = a;                       // already integral
         end else begin
             nfrac     = 6'(11'd1075 - e);               // 1..52
-            frac_mask = (52'd1 << nfrac) - 52'd1;
+            // The low nfrac bits, as a shift alone: (1 << nfrac) - 1 put a
+            // 52-bit decrement between the shift and the add below
+            // (t1_r -> fd_floor_r, 10.0 ns).
+            frac_mask = ~(52'hF_FFFF_FFFF_FFFF << nfrac);
             trunc     = {e, a[51:0] & ~frac_mask};
             if (a[63] && ((a[51:0] & frac_mask) != 52'd0)) begin
                 // Negative with a fraction: one unit at the integer position.

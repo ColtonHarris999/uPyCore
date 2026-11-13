@@ -48,6 +48,12 @@ module upycore_fp_add (
     // Both differences are ready when magnitude ordering picks the sign.
     assign diff_ab    = exp_a - exp_b;
     assign diff_ba    = exp_b - exp_a;
+    // diff > 55 as bit tests (a high bit, or 56..63 in the low six): the
+    // 11-bit compare sat behind the exponent subtract (-> s1_shift_r,
+    // 9.95 ns).
+    logic far_ab, far_ba;
+    assign far_ab = (|diff_ab[10:6]) || (&diff_ab[5:3]);
+    assign far_ba = (|diff_ba[10:6]) || (&diff_ba[5:3]);
     assign a_nan = upycore_f64_is_nan(op_a_i);
     assign b_nan = upycore_f64_is_nan(op_b_i);
     assign a_inf = upycore_f64_is_inf(op_a_i);
@@ -172,14 +178,14 @@ module upycore_fp_add (
                 s1_sign_big_r   <= op_a_i[63];
                 s1_sign_small_r <= b_sign_eff;
                 s1_exp_big_r    <= exp_a;
-                s1_shift_r      <= (diff_ab > 11'd55) ? 6'd56 : diff_ab[5:0];
+                s1_shift_r      <= far_ab ? 6'd56 : diff_ab[5:0];
                 s1_sig_big_r    <= upycore_f64_sig(op_a_i);
                 s1_sig_small_r  <= upycore_f64_sig(op_b_i);
             end else begin
                 s1_sign_big_r   <= b_sign_eff;
                 s1_sign_small_r <= op_a_i[63];
                 s1_exp_big_r    <= exp_b;
-                s1_shift_r      <= (diff_ba > 11'd55) ? 6'd56 : diff_ba[5:0];
+                s1_shift_r      <= far_ba ? 6'd56 : diff_ba[5:0];
                 s1_sig_big_r    <= upycore_f64_sig(op_b_i);
                 s1_sig_small_r  <= upycore_f64_sig(op_a_i);
             end

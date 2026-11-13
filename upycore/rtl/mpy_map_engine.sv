@@ -323,7 +323,11 @@ module mpy_map_engine #(parameter bit EXTERNAL_HASH=0, TYPE_CACHE=0) (
                     write_word(at(dst,pos),key_tag,key,is_set ? NEXT : WRITE_VALUE);
                 end
                 WRITE_VALUE: write_word(at(dst,pos)+4,value_tag,value,NEXT);
-                ERASE: read_word(at(dst, ((op == 2 || op == 3) ? idx : pos) + 1 == dn ? 32'd0 : ((op == 2 || op == 3) ? idx : pos) + 1), ERASE_WRITE);
+                // The slot after the erased one, slot 0 after the last. The
+                // wrap selects between the table base and the summed address:
+                // selecting the slot number first put the compare with dn in
+                // front of the address add (op -> addr_o, 10.0 ns).
+                ERASE: read_word(((op == 2 || op == 3) ? idx : pos) + 1 == dn ? dst : at(dst, ((op == 2 || op == 3) ? idx : pos) + 1), ERASE_WRITE);
                 ERASE_WRITE: begin
                     used_o <= used_o - 1;
                     write_word(at(dst,(op == 2 || op == 3) ? idx : pos),ABI_TAG_CONTROL,
