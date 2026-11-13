@@ -16,8 +16,9 @@ synthesis. It rewrites cfg/*cfg.yml: the toplevel width and height, and one
     17th row on top of the right column, and its data SRAM, .../u_data/
     macro.mem, opposite on top of the left column, both with their pins on
     the channel. The nine USB RAM macros (usb_ram_macro.py, when their
-    LEF is in the folder) go on the channel floor either side of the GC
-    table; as flops (make_hammer_design.py --usb-flops) they take
+    LEF is in the folder) are a grid of three per row in the channel
+    under those, spread over its width so every pin edge faces open
+    channel (--usb-top, --usb-gap-y); as flops (make_hammer_design.py --usb-flops) they take
     --usb-flop-area more room in the channel instead.
 
 Layout. fakeram puts every signal pin on one side edge, and a 4096 x 36
@@ -103,23 +104,26 @@ def find_lef(folder: Path, name: str, optional: bool = False) -> Path | None:
     return hits[0]
 
 
-def usb_slots(n, x0, x1, y0, gc_x, gc_w, gc_h, uw, uh, s):
-    """n (x, y) places for the USB RAM macros in the channel x0..x1 from
-    y0 up: the first row shares the floor with the GC table (gc_x, gc_w,
-    gc_h), s apart from it and from each other; later rows span the channel."""
-    slots, y, row = [], y0, 0
-    while len(slots) < n:
-        spans = [(x0 + s, gc_x - s), (gc_x + gc_w + s, x1 - s)] if row == 0 else [(x0 + s, x1 - s)]
-        got = len(slots)
-        for a, b in spans:
-            x = a
-            while x + uw <= b and len(slots) < n:
-                slots.append((x, y))
-                x += uw + s
-        if len(slots) == got and row > 0:
-            sys.exit("the channel is too narrow for one USB RAM macro")
-        y += (max(gc_h, uh) if row == 0 else uh) + s
-        row += 1
+def usb_slots(n, x0, x1, y_top, uw, uh, gap_y, min_gap=150.0, cols=3):
+    """n (x, y) places for the USB RAM macros in the channel x0..x1: a grid
+    of up to `cols` per row, the rows going down from y_top, gap_y apart.
+
+    Every macro has its pins on one side edge, so the macros of a row are
+    spread evenly over the channel width: each pin edge then faces open
+    channel (at least min_gap of it) and not the back of the next macro.
+    Packed 60 um apart on the channel floor beside the GC table, they made
+    the worst routing hotspots of the chip."""
+    while cols > 1 and (x1 - x0 - cols * uw) / (cols + 1) < min_gap:
+        cols -= 1
+    gap = (x1 - x0 - cols * uw) / (cols + 1)
+    if gap < min_gap:
+        sys.exit("the channel is too narrow for one USB RAM macro")
+    slots = []
+    for i in range(n):
+        r, c = divmod(i, cols)
+        slots.append((x0 + gap + c * (uw + gap), y_top - uh - r * (uh + gap_y)))
+    if slots[-1][1] < 0:
+        sys.exit("the channel is too short for the USB RAM macros")
     return slots
 
 
@@ -133,7 +137,10 @@ def layout(bank, gc, args, island=None, usb=None):
     m, s = args.margin, args.spacing
     logic = args.logic_area
     if island:
-        logic += args.island_area + (0.0 if usb else args.usb_flop_area)
+        # As macros the USB RAMs take channel room too: their own area and
+        # a 20 um ring the placer keeps clear around each.
+        usb_room = len(USB_PATHS) * (usb[0] + 40) * (usb[1] + 40) * args.util if usb else args.usb_flop_area
+        logic += args.island_area + usb_room
     logic /= args.util
     place, blocks = [], []
     # Orientation that puts the pin edge on the given side.
@@ -169,9 +176,13 @@ def layout(bank, gc, args, island=None, usb=None):
             if not island:
                 sys.exit("USB RAM macros without the island's SRAMs")
             uw, uh, _ = usb
-            gc_x = x_left + bw + (chan - gw) / 2
-            for path, (x, y) in zip(USB_PATHS, usb_slots(len(USB_PATHS), x_left + bw + halo, x_right - halo, m,
-                                                         gc_x, gw, gh, uw, uh, s)):
+            # Under the island's SRAMs, clear of the chip pins on the top
+            # edge and of the GC table on the floor.
+            slots = usb_slots(len(USB_PATHS), x_left + bw + halo, x_right - halo, die_h - m - args.usb_top,
+                              uw, uh, args.usb_gap_y)
+            if slots[-1][1] < m + gh + args.usb_gap_y:
+                sys.exit("the USB RAM macros reach down to the GC table")
+            for path, (x, y) in zip(USB_PATHS, slots):
                 place.append((path, x, y, "r0"))
         # No standard cells outside the channel: the die margins and the
         # gaps between stacked macros would otherwise take logic.
@@ -261,6 +272,9 @@ def main() -> int:
     ap.add_argument("--usb-flop-area", type=float, default=1.4e6,
                     help="more standard-cell area when the USB RAMs are flops (no USB RAM macro LEF "
                          "in the folder): 36,864 bits with their read muxes, an estimate")
+    ap.add_argument("--usb-top", type=float, default=300.0,
+                    help="from the top macro edge down to the first row of USB RAM macros, um")
+    ap.add_argument("--usb-gap-y", type=float, default=200.0, help="between rows of USB RAM macros, um")
     ap.add_argument("--util", type=float, default=0.45, help="target utilization of the logic area")
     ap.add_argument("--stack-gap", type=float, default=21.76, help="between stacked memory macros, um (whole rows)")
     ap.add_argument("--ports", type=Path, default=HERE / "converted" / (TOP + ".v"),

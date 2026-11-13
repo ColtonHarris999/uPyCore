@@ -16,7 +16,8 @@ DATA = (1881.40, 116.96, "left")     # fakeram_d1920_w32, its data SRAM
 
 
 def args(**kw):
-    base = dict(logic_area=2.0e6, island_area=0.3e6, usb_flop_area=1.4e6, util=0.45, stack_gap=21.76, margin=100.0, spacing=60.0)
+    base = dict(logic_area=2.0e6, island_area=0.3e6, usb_flop_area=1.4e6, util=0.45, stack_gap=21.76, margin=100.0, spacing=60.0,
+                usb_top=300.0, usb_gap_y=200.0)
     base.update(kw)
     return argparse.Namespace(**base)
 
@@ -152,9 +153,9 @@ class Island(unittest.TestCase):
 
 
 class UsbMacros(unittest.TestCase):
-    """The nine USB RAM macros on the channel floor."""
+    """The nine USB RAM macros, a spread grid near the top of the channel."""
 
-    USB = (120.52, 81.6, "left")     # a stand-in shape; the real one comes from the LEF
+    USB = (384.56, 95.2, "left")     # fakeram_d256_w16 as a 1r1w macro
 
     def setUp(self):
         self.flops = pm.layout(BANK, GC, args(util=0.25), (CODE, DATA))
@@ -187,12 +188,27 @@ class UsbMacros(unittest.TestCase):
                 if a[0] in pm.USB_PATHS or b[0] in pm.USB_PATHS:
                     gap_x = max(b[1] - a[3], a[1] - b[3])
                     gap_y = max(b[2] - a[4], a[2] - b[4])
-                    self.assertTrue(gap_x >= 59 or gap_y >= 59, (a, b))
+                    self.assertTrue(gap_x >= 149 or gap_y >= 149, (a, b))
 
-    def test_narrow_channel_wraps_rows(self):
-        slots = pm.usb_slots(9, 0, 1300, 100, 326, 648, 212, 120, 80, 60)
+    def test_pin_edges_face_open_channel(self):
+        """Left of every macro (its pin edge) is at least 150 um with no macro."""
+        x0 = self.blocks[0][0] + self.blocks[0][2]
+        for _, x, y, _ in self.usb:
+            left = [q[1] + self.USB[0] for q in self.usb if q[2] == y and q[1] < x] or [x0]
+            self.assertGreaterEqual(x - max(left), 150)
+
+    def test_clear_of_the_pins_and_the_gc_table(self):
+        gc = next(p for p in self.place if p[0] == pm.GC_PATH)
+        for _, x, y, _ in self.usb:
+            self.assertLessEqual(y + self.USB[1], self.die_h - 100 - 299)
+            self.assertGreaterEqual(y, gc[2] + GC[1] + 200)
+
+    def test_narrow_channel_takes_fewer_columns(self):
+        slots = pm.usb_slots(9, 0, 1300, 3000, 384.56, 95.2, 200)
         self.assertEqual(len(set(slots)), 9)
-        self.assertGreater(len({y for _, y in slots}), 1)
+        self.assertEqual(len({x for x, _ in slots}), 2)
+        with self.assertRaises(SystemExit):
+            pm.usb_slots(9, 0, 600, 3000, 384.56, 95.2, 200)
 
 
 if __name__ == "__main__":

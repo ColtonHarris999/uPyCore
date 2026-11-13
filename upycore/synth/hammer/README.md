@@ -416,8 +416,12 @@ opposite on the left column, pins on the channel.
   - `v/bsg_mem_1r1w_fakeram.v` is our own `bsg_mem_1r1w_sync_mask_write_bit`
     with the macro inside (BaseJump's 1r1w files are not read).
   - `hammer_run_upycore` passes `libs.json` as one more `-p`.
-  - `place_macros.py` puts the nine on the channel floor either side of the
-    GC table (385 x 95 um each).
+  - `place_macros.py` puts the nine (385 x 95 um each) in a grid of three
+    per row near the top of the channel, about 560 um apart so every pin
+    edge faces open channel, and widens the channel by their area. Packed
+    60 um apart on the channel floor beside the GC table they made the
+    worst routing hotspots (2.3 % horizontal overflow, 41,000 route
+    violations).
 
 no2usb's `usb.v` has an asynchronous-reset process inside a test of its IRQ
 parameter, which Genus refuses (CDFG-364). `mpy_dc_unit.py` (`UNIT_PATCH`)
