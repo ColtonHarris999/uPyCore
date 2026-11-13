@@ -1,5 +1,280 @@
 // Generated from the uPyCore RTL by mpy_dc_unit.py and sv2v v0.0.13
 // (see ../README.md). Do not edit; regenerate with convert_rtl.sh.
+(* syn_hier = "hard" *) module upycore_add (
+	a_i,
+	b_i,
+	cin_i,
+	sum_o,
+	cout_o
+);
+	parameter signed [31:0] W = 32;
+	input wire [W - 1:0] a_i;
+	input wire [W - 1:0] b_i;
+	input wire cin_i;
+	output wire [W - 1:0] sum_o;
+	output wire cout_o;
+	localparam signed [31:0] LV = (W <= 1 ? 1 : $clog2(W));
+	wire [W - 1:0] p;
+	wire [W - 1:0] g;
+	assign p = a_i ^ b_i;
+	assign g[0] = (a_i[0] & b_i[0]) | (cin_i & (a_i[0] | b_i[0]));
+	generate
+		if (W > 1) begin : gen_g
+			assign g[W - 1:1] = a_i[W - 1:1] & b_i[W - 1:1];
+		end
+	endgenerate
+	wire [(LV >= 0 ? ((LV + 1) * W) - 1 : ((1 - LV) * W) + ((LV * W) - 1)):(LV >= 0 ? 0 : LV * W)] pp;
+	wire [(LV >= 0 ? ((LV + 1) * W) - 1 : ((1 - LV) * W) + ((LV * W) - 1)):(LV >= 0 ? 0 : LV * W)] gg;
+	assign pp[(LV >= 0 ? 0 : LV) * W+:W] = p;
+	assign gg[(LV >= 0 ? 0 : LV) * W+:W] = g;
+	genvar _gv_s_1;
+	generate
+		for (_gv_s_1 = 0; _gv_s_1 < LV; _gv_s_1 = _gv_s_1 + 1) begin : lvl
+			localparam s = _gv_s_1;
+			localparam signed [31:0] D = 1 << s;
+			genvar _gv_i_1;
+			for (_gv_i_1 = 0; _gv_i_1 < W; _gv_i_1 = _gv_i_1 + 1) begin : gbit
+				localparam i = _gv_i_1;
+				if (i >= D) begin : merge
+					assign gg[((LV >= 0 ? s + 1 : LV - (s + 1)) * W) + i] = gg[((LV >= 0 ? s : LV - s) * W) + i] | (pp[((LV >= 0 ? s : LV - s) * W) + i] & gg[((LV >= 0 ? s : LV - s) * W) + (i - D)]);
+					assign pp[((LV >= 0 ? s + 1 : LV - (s + 1)) * W) + i] = pp[((LV >= 0 ? s : LV - s) * W) + i] & pp[((LV >= 0 ? s : LV - s) * W) + (i - D)];
+				end
+				else begin : keep
+					assign gg[((LV >= 0 ? s + 1 : LV - (s + 1)) * W) + i] = gg[((LV >= 0 ? s : LV - s) * W) + i];
+					assign pp[((LV >= 0 ? s + 1 : LV - (s + 1)) * W) + i] = pp[((LV >= 0 ? s : LV - s) * W) + i];
+				end
+			end
+		end
+	endgenerate
+	wire [W - 1:0] carry;
+	assign carry[0] = cin_i;
+	generate
+		if (W > 1) begin : gen_carry
+			assign carry[W - 1:1] = gg[((LV >= 0 ? LV : LV - LV) * W) + ((W - 2) >= 0 ? W - 2 : ((W - 2) + ((W - 2) >= 0 ? W - 1 : 3 - W)) - 1)-:((W - 2) >= 0 ? W - 1 : 3 - W)];
+		end
+	endgenerate
+	assign sum_o = p ^ carry;
+	assign cout_o = gg[((LV >= 0 ? LV : LV - LV) * W) + (W - 1)];
+endmodule
+(* syn_hier = "hard" *) module upycore_sum3 (
+	a_i,
+	b_i,
+	c_i,
+	cin_i,
+	sum_o
+);
+	parameter signed [31:0] W = 32;
+	input wire [W - 1:0] a_i;
+	input wire [W - 1:0] b_i;
+	input wire [W - 1:0] c_i;
+	input wire cin_i;
+	output wire [W - 1:0] sum_o;
+	wire [W - 1:0] s;
+	wire [W - 1:0] g;
+	wire [W - 1:0] gsh;
+	assign s = (a_i ^ b_i) ^ c_i;
+	assign g = ((a_i & b_i) | (a_i & c_i)) | (b_i & c_i);
+	generate
+		if (W == 1) begin : gen_gsh1
+			assign gsh = 1'sb0;
+		end
+		else begin : gen_gsh
+			assign gsh = {g[W - 2:0], 1'b0};
+		end
+	endgenerate
+	upycore_add #(.W(W)) u(
+		.a_i(s),
+		.b_i(gsh),
+		.cin_i(cin_i),
+		.sum_o(sum_o),
+		.cout_o()
+	);
+endmodule
+(* syn_hier = "hard" *) module upycore_smul (
+	a_i,
+	b_i,
+	p_o
+);
+	parameter signed [31:0] AW = 33;
+	parameter signed [31:0] BW = 17;
+	input wire [AW - 1:0] a_i;
+	input wire [BW - 1:0] b_i;
+	output wire [(AW + BW) - 1:0] p_o;
+	localparam signed [31:0] W = AW + BW;
+	localparam signed [31:0] C0 = BW + 4;
+	localparam signed [31:0] C1 = (C0 <= 2 ? C0 : ((C0 / 3) * 2) + (C0 % 3));
+	localparam signed [31:0] C2 = (C1 <= 2 ? C1 : ((C1 / 3) * 2) + (C1 % 3));
+	localparam signed [31:0] C3 = (C2 <= 2 ? C2 : ((C2 / 3) * 2) + (C2 % 3));
+	localparam signed [31:0] C4 = (C3 <= 2 ? C3 : ((C3 / 3) * 2) + (C3 % 3));
+	localparam signed [31:0] C5 = (C4 <= 2 ? C4 : ((C4 / 3) * 2) + (C4 % 3));
+	localparam signed [31:0] C6 = (C5 <= 2 ? C5 : ((C5 / 3) * 2) + (C5 % 3));
+	localparam signed [31:0] C7 = (C6 <= 2 ? C6 : ((C6 / 3) * 2) + (C6 % 3));
+	localparam signed [31:0] C8 = (C7 <= 2 ? C7 : ((C7 / 3) * 2) + (C7 % 3));
+	localparam signed [31:0] C9 = (C8 <= 2 ? C8 : ((C8 / 3) * 2) + (C8 % 3));
+	localparam signed [31:0] C10 = (C9 <= 2 ? C9 : ((C9 / 3) * 2) + (C9 % 3));
+	localparam signed [31:0] C11 = (C10 <= 2 ? C10 : ((C10 / 3) * 2) + (C10 % 3));
+	localparam signed [31:0] C12 = (C11 <= 2 ? C11 : ((C11 / 3) * 2) + (C11 % 3));
+	generate
+		if (C12 != 2) begin : gen_bad_tree
+			nonexistent_module_smul_tree_did_not_reduce bad_tree();
+		end
+	endgenerate
+	wire [(C0 * W) - 1:0] d0;
+	wire [(C1 * W) - 1:0] d1;
+	wire [(C2 * W) - 1:0] d2;
+	wire [(C3 * W) - 1:0] d3;
+	wire [(C4 * W) - 1:0] d4;
+	wire [(C5 * W) - 1:0] d5;
+	wire [(C6 * W) - 1:0] d6;
+	wire [(C7 * W) - 1:0] d7;
+	wire [(C8 * W) - 1:0] d8;
+	wire [(C9 * W) - 1:0] d9;
+	wire [(C10 * W) - 1:0] d10;
+	wire [(C11 * W) - 1:0] d11;
+	wire [(C12 * W) - 1:0] d12;
+	genvar _gv_i_2;
+	function automatic [W - 1:0] sv2v_cast_E16C3;
+		input reg [W - 1:0] inp;
+		sv2v_cast_E16C3 = inp;
+	endfunction
+	generate
+		for (_gv_i_2 = 0; _gv_i_2 < BW; _gv_i_2 = _gv_i_2 + 1) begin : pp
+			localparam i = _gv_i_2;
+			assign d0[i * W+:W] = (sv2v_cast_E16C3(a_i) << i) & {W {b_i[i]}};
+		end
+	endgenerate
+	assign d0[BW * W+:W] = (a_i[AW - 1] ? ~(sv2v_cast_E16C3(b_i) << AW) : {W * 1 {1'sb0}});
+	assign d0[(BW + 1) * W+:W] = (b_i[BW - 1] ? ~(sv2v_cast_E16C3(a_i) << BW) : {W * 1 {1'sb0}});
+	assign d0[(BW + 2) * W+:W] = sv2v_cast_E16C3(a_i[AW - 1]);
+	assign d0[(BW + 3) * W+:W] = sv2v_cast_E16C3(b_i[BW - 1]);
+	upycore_csa_step #(
+		.W(W),
+		.N(C0)
+	) s0(
+		.din(d0),
+		.dout(d1)
+	);
+	upycore_csa_step #(
+		.W(W),
+		.N(C1)
+	) s1(
+		.din(d1),
+		.dout(d2)
+	);
+	upycore_csa_step #(
+		.W(W),
+		.N(C2)
+	) s2(
+		.din(d2),
+		.dout(d3)
+	);
+	upycore_csa_step #(
+		.W(W),
+		.N(C3)
+	) s3(
+		.din(d3),
+		.dout(d4)
+	);
+	upycore_csa_step #(
+		.W(W),
+		.N(C4)
+	) s4(
+		.din(d4),
+		.dout(d5)
+	);
+	upycore_csa_step #(
+		.W(W),
+		.N(C5)
+	) s5(
+		.din(d5),
+		.dout(d6)
+	);
+	upycore_csa_step #(
+		.W(W),
+		.N(C6)
+	) s6(
+		.din(d6),
+		.dout(d7)
+	);
+	upycore_csa_step #(
+		.W(W),
+		.N(C7)
+	) s7(
+		.din(d7),
+		.dout(d8)
+	);
+	upycore_csa_step #(
+		.W(W),
+		.N(C8)
+	) s8(
+		.din(d8),
+		.dout(d9)
+	);
+	upycore_csa_step #(
+		.W(W),
+		.N(C9)
+	) s9(
+		.din(d9),
+		.dout(d10)
+	);
+	upycore_csa_step #(
+		.W(W),
+		.N(C10)
+	) s10(
+		.din(d10),
+		.dout(d11)
+	);
+	upycore_csa_step #(
+		.W(W),
+		.N(C11)
+	) s11(
+		.din(d11),
+		.dout(d12)
+	);
+	upycore_add #(.W(W)) u_sum(
+		.a_i(d12[W - 1:0]),
+		.b_i(d12[(2 * W) - 1:W]),
+		.cin_i(1'b0),
+		.sum_o(p_o),
+		.cout_o()
+	);
+endmodule
+(* syn_hier = "hard" *) module upycore_csa_step (
+	din,
+	dout
+);
+	parameter signed [31:0] W = 8;
+	parameter signed [31:0] N = 3;
+	input wire [(N * W) - 1:0] din;
+	output wire [((N <= 2 ? N : ((N / 3) * 2) + (N % 3)) * W) - 1:0] dout;
+	localparam signed [31:0] M = (N <= 2 ? N : ((N / 3) * 2) + (N % 3));
+	localparam signed [31:0] NG = (N <= 2 ? 0 : N / 3);
+	localparam signed [31:0] NR = (N <= 2 ? 0 : N % 3);
+	generate
+		if (N <= 2) begin : gen_copy
+			assign dout = din;
+		end
+		else begin : gen_fold
+			genvar _gv_g_1;
+			for (_gv_g_1 = 0; _gv_g_1 < NG; _gv_g_1 = _gv_g_1 + 1) begin : grp
+				localparam g = _gv_g_1;
+				wire [W - 1:0] a;
+				wire [W - 1:0] b;
+				wire [W - 1:0] c;
+				wire [W - 1:0] maj;
+				assign a = din[(3 * g) * W+:W];
+				assign b = din[((3 * g) + 1) * W+:W];
+				assign c = din[((3 * g) + 2) * W+:W];
+				assign maj = ((a & b) | (a & c)) | (b & c);
+				assign dout[(2 * g) * W+:W] = (a ^ b) ^ c;
+				assign dout[((2 * g) + 1) * W+:W] = {maj[W - 2:0], 1'b0};
+			end
+			if (NR != 0) begin : gen_rest
+				assign dout[(2 * NG) * W+:NR * W] = din[(3 * NG) * W+:NR * W];
+			end
+		end
+	endgenerate
+endmodule
 module upycore_umul_seq (
 	clk_i,
 	rst_n_i,
@@ -341,14 +616,38 @@ module upycore_int_alu (
 	wire signed [63:0] b_s;
 	wire signed [64:0] add_ext;
 	wire signed [64:0] sub_ext;
+	wire signed [63:0] neg_v;
 	wire signed [63:0] sra;
 	wire signed [63:0] sll;
 	wire signed [63:0] sll_back;
 	reg cmp_result;
+	wire lt;
+	wire eq;
 	assign a_s = op_a_i;
 	assign b_s = op_b_i;
-	assign add_ext = {a_s[63], a_s} + {b_s[63], b_s};
-	assign sub_ext = {a_s[63], a_s} - {b_s[63], b_s};
+	upycore_add #(.W(65)) u_add(
+		.a_i({a_s[63], a_s}),
+		.b_i({b_s[63], b_s}),
+		.cin_i(1'b0),
+		.sum_o(add_ext),
+		.cout_o()
+	);
+	upycore_add #(.W(65)) u_sub(
+		.a_i({a_s[63], a_s}),
+		.b_i(~{b_s[63], b_s}),
+		.cin_i(1'b1),
+		.sum_o(sub_ext),
+		.cout_o()
+	);
+	upycore_add #(.W(64)) u_neg(
+		.a_i(64'b0000000000000000000000000000000000000000000000000000000000000000),
+		.b_i(~op_a_i),
+		.cin_i(1'b1),
+		.sum_o(neg_v),
+		.cout_o()
+	);
+	assign lt = sub_ext[64];
+	assign eq = op_a_i == op_b_i;
 	assign sra = a_s >>> op_b_i[5:0];
 	assign sll = a_s <<< op_b_i[5:0];
 	assign sll_back = sll >>> op_b_i[5:0];
@@ -380,15 +679,15 @@ module upycore_int_alu (
 		(* full_case, parallel_case *)
 		case (op_i)
 			UPY_ALU_ADD: begin
-				result_o = op_a_i + op_b_i;
+				result_o = add_ext[63:0];
 				overflow_flag_o = add_ext[64] != add_ext[63];
 			end
 			UPY_ALU_SUB: begin
-				result_o = op_a_i - op_b_i;
+				result_o = sub_ext[63:0];
 				overflow_flag_o = sub_ext[64] != sub_ext[63];
 			end
 			UPY_ALU_NEG: begin
-				result_o = -op_a_i;
+				result_o = neg_v;
 				overflow_flag_o = op_a_i == 64'h8000000000000000;
 			end
 			UPY_ALU_POS, UPY_ALU_PASS: result_o = op_a_i;
@@ -421,19 +720,19 @@ module upycore_int_alu (
 				result_o = {63'b000000000000000000000000000000000000000000000000000000000000000, cmp_result};
 			end
 			UPY_ALU_LT: begin
-				cmp_result = a_s < b_s;
+				cmp_result = lt;
 				result_o = {63'b000000000000000000000000000000000000000000000000000000000000000, cmp_result};
 			end
 			UPY_ALU_LE: begin
-				cmp_result = a_s <= b_s;
+				cmp_result = lt || eq;
 				result_o = {63'b000000000000000000000000000000000000000000000000000000000000000, cmp_result};
 			end
 			UPY_ALU_GT: begin
-				cmp_result = a_s > b_s;
+				cmp_result = !lt && !eq;
 				result_o = {63'b000000000000000000000000000000000000000000000000000000000000000, cmp_result};
 			end
 			UPY_ALU_GE: begin
-				cmp_result = a_s >= b_s;
+				cmp_result = !lt;
 				result_o = {63'b000000000000000000000000000000000000000000000000000000000000000, cmp_result};
 			end
 			default: result_o = 64'b0000000000000000000000000000000000000000000000000000000000000000;
@@ -489,6 +788,8 @@ module upycore_mul (
 	wire signed [32:0] a_high;
 	reg signed [STEP + 33:0] pp_low_r;
 	reg signed [STEP + 33:0] pp_high_r;
+	wire [STEP + 33:0] pp_low_c;
+	wire [STEP + 33:0] pp_high_c;
 	wire [ACC_W - 1:0] x;
 	wire [ACC_W - 1:0] y;
 	wire [ACC_W - 1:0] z;
@@ -515,7 +816,31 @@ module upycore_mul (
 	assign z = acc_r >>> STEP;
 	assign csa_s = (x ^ y) ^ z;
 	assign csa_c = ((x & y) | (x & z)) | (y & z);
-	assign sum = csa_s + (csa_c << 1);
+	wire [ACC_W - 1:0] sum_u;
+	upycore_add #(.W(ACC_W)) u_acc(
+		.a_i(csa_s),
+		.b_i({csa_c[ACC_W - 2:0], 1'b0}),
+		.cin_i(1'b0),
+		.sum_o(sum_u),
+		.cout_o()
+	);
+	assign sum = $signed(sum_u);
+	upycore_smul #(
+		.AW(33),
+		.BW(STEP + 1)
+	) u_pp_low(
+		.a_i(a_low),
+		.b_i(chunk_s),
+		.p_o(pp_low_c)
+	);
+	upycore_smul #(
+		.AW(33),
+		.BW(STEP + 1)
+	) u_pp_high(
+		.a_i(a_high),
+		.b_i(chunk_s),
+		.p_o(pp_high_c)
+	);
 	function automatic [63:0] sv2v_cast_64;
 		input reg [63:0] inp;
 		sv2v_cast_64 = inp;
@@ -555,8 +880,8 @@ module upycore_mul (
 			end
 			else if (busy_r) begin
 				if (cnt_r < sv2v_cast_7B3D1_signed(NSTEP)) begin
-					pp_low_r <= a_low * chunk_s;
-					pp_high_r <= a_high * chunk_s;
+					pp_low_r <= pp_low_c;
+					pp_high_r <= pp_high_c;
 					b_r <= b_r >> STEP;
 					cnt_r <= cnt_r + 1'b1;
 					product_valid <= 1'b1;
@@ -2374,8 +2699,12 @@ module upycore_fp_pow (
 	wire d_neg;
 	wire signed [89:0] w_sh;
 	wire [FW:0] z_sh;
-	reg signed [89:0] w_next;
-	reg signed [90:0] acc_next;
+	wire signed [89:0] w_next;
+	wire signed [89:0] w_pos;
+	wire signed [89:0] w_neg;
+	wire signed [90:0] acc_next;
+	wire signed [90:0] acc_pos;
+	wire signed [90:0] acc_neg;
 	wire [87:0] exp_c;
 	wire exp_take;
 	assign d_pos = !r_r[89] && (r_r[88:87] != 2'b00);
@@ -2388,22 +2717,37 @@ module upycore_fp_pow (
 	endfunction
 	assign w_sh = (j_r >= sv2v_cast_8_signed(WW) ? $signed({WW {r_r[89]}}) : w_sh_full);
 	assign z_sh = z_r >> i_r;
-	always @(*) begin
-		if (_sv2v_0)
-			;
-		if (d_pos)
-			w_next = ((r_r - $signed({{(WW - FW) - 1 {1'b0}}, 1'b1, {FW {1'b0}}})) + w_sh) <<< 1;
-		else if (d_neg)
-			w_next = ((r_r + $signed({{(WW - FW) - 1 {1'b0}}, 1'b1, {FW {1'b0}}})) - w_sh) <<< 1;
-		else
-			w_next = r_r <<< 1;
-		if (d_pos)
-			acc_next = acc_r - $signed({1'b0, cpos_r});
-		else if (d_neg)
-			acc_next = acc_r + $signed({1'b0, cneg_r});
-		else
-			acc_next = acc_r;
-	end
+	localparam [89:0] POW_ONE = {{(WW - FW) - 1 {1'b0}}, 1'b1, {FW {1'b0}}};
+	upycore_sum3 #(.W(WW)) u_wpos(
+		.a_i(r_r),
+		.b_i(~POW_ONE),
+		.c_i(w_sh),
+		.cin_i(1'b1),
+		.sum_o(w_pos)
+	);
+	upycore_sum3 #(.W(WW)) u_wneg(
+		.a_i(r_r),
+		.b_i(POW_ONE),
+		.c_i(~w_sh),
+		.cin_i(1'b1),
+		.sum_o(w_neg)
+	);
+	assign w_next = (d_pos ? w_pos : (d_neg ? w_neg : r_r)) <<< 1;
+	upycore_add #(.W(AW)) u_apos(
+		.a_i(acc_r),
+		.b_i(~{1'b0, cpos_r}),
+		.cin_i(1'b1),
+		.sum_o(acc_pos),
+		.cout_o()
+	);
+	upycore_add #(.W(AW)) u_aneg(
+		.a_i(acc_r),
+		.b_i({1'b0, cneg_r}),
+		.cin_i(1'b0),
+		.sum_o(acc_neg),
+		.cout_o()
+	);
+	assign acc_next = (d_pos ? acc_pos : (d_neg ? acc_neg : acc_r));
 	assign exp_c = cpos_r[87:0];
 	assign exp_take = f_r >= exp_c;
 	reg [7:0] pf_k;
@@ -5695,33 +6039,79 @@ module mpy_fetch (
 	wire [29:0] pw;
 	wire [29:0] bw;
 	wire [29:0] dw;
+	wire pw_ge_bw;
 	assign pw = pc_i[31:2];
 	assign bw = qb[31:2];
-	assign dw = pw - bw;
-	wire redirect;
-	wire pop;
+	upycore_add #(.W(30)) u_dw(
+		.a_i(pw),
+		.b_i(~bw),
+		.cin_i(1'b1),
+		.sum_o(dw),
+		.cout_o(pw_ge_bw)
+	);
+	localparam signed [31:0] LW = $clog2(QD + 8);
+	wire [LW - 1:0] lim;
+	wire dw_gt;
+	function automatic [LW - 1:0] sv2v_cast_4587C;
+		input reg [LW - 1:0] inp;
+		sv2v_cast_4587C = inp;
+	endfunction
+	assign lim = sv2v_cast_4587C(qn) + sv2v_cast_4587C(nfl);
 	function automatic [29:0] sv2v_cast_30;
 		input reg [29:0] inp;
 		sv2v_cast_30 = inp;
 	endfunction
-	assign redirect = (flush_i || (pw < bw)) || (dw > (sv2v_cast_30(qn) + sv2v_cast_30(nfl)));
-	assign pop = (!redirect && (qn != {NW {1'sb0}})) && (dw != {30 {1'sb0}});
-	function automatic [31:0] sv2v_cast_32;
-		input reg [31:0] inp;
-		sv2v_cast_32 = inp;
-	endfunction
-	assign req_o = !stop && ((sv2v_cast_32(qn) + sv2v_cast_32(nfl)) < QD);
-	assign addr_o = qb + {sv2v_cast_30(qn) + sv2v_cast_30(nfl), 2'b00};
-	genvar _gv_i_1;
 	generate
-		for (_gv_i_1 = 0; _gv_i_1 < QD; _gv_i_1 = _gv_i_1 + 1) begin : g_win
-			localparam i = _gv_i_1;
+		if (LW >= 30) begin : gen_dw_wide
+			assign dw_gt = dw > sv2v_cast_30(lim);
+		end
+		else begin : gen_dw_narrow
+			assign dw_gt = |dw[29:LW] || (dw[LW - 1:0] > lim);
+		end
+	endgenerate
+	wire redirect;
+	wire pop;
+	assign redirect = (flush_i || !pw_ge_bw) || dw_gt;
+	assign pop = (!redirect && (qn != {NW {1'sb0}})) && (dw != {30 {1'sb0}});
+	wire [29:0] addr_w;
+	upycore_add #(.W(30)) u_addr(
+		.a_i(bw),
+		.b_i(sv2v_cast_30(lim)),
+		.cin_i(1'b0),
+		.sum_o(addr_w),
+		.cout_o()
+	);
+	function automatic signed [LW - 1:0] sv2v_cast_4587C_signed;
+		input reg signed [LW - 1:0] inp;
+		sv2v_cast_4587C_signed = inp;
+	endfunction
+	assign req_o = !stop && ((sv2v_cast_4587C(qn) + sv2v_cast_4587C(nfl)) < sv2v_cast_4587C_signed(QD));
+	assign addr_o = {addr_w, 2'b00};
+	genvar _gv_i_3;
+	generate
+		for (_gv_i_3 = 0; _gv_i_3 < QD; _gv_i_3 = _gv_i_3 + 1) begin : g_win
+			localparam i = _gv_i_3;
 			assign win_o[32 * i+:32] = q_w[i];
 		end
 	endgenerate
 	assign base_o = qb;
-	wire [31:0] off;
-	assign off = pc_i - qb;
+	wire [5:0] off6;
+	wire dw_lt;
+	upycore_add #(.W(6)) u_off(
+		.a_i(pc_i[5:0]),
+		.b_i(~qb[5:0]),
+		.cin_i(1'b1),
+		.sum_o(off6),
+		.cout_o()
+	);
+	generate
+		if (NW >= 30) begin : gen_lt_wide
+			assign dw_lt = dw < sv2v_cast_30(vn);
+		end
+		else begin : gen_lt_narrow
+			assign dw_lt = !(|dw[29:NW]) && (dw[NW - 1:0] < vn);
+		end
+	endgenerate
 	function automatic [5:0] sv2v_cast_6;
 		input reg [5:0] inp;
 		sv2v_cast_6 = inp;
@@ -5729,8 +6119,8 @@ module mpy_fetch (
 	always @(*) begin
 		if (_sv2v_0)
 			;
-		if (!redirect && (dw < sv2v_cast_30(vn)))
-			avail_o = sv2v_cast_6(sv2v_cast_32(4 * vn) - off);
+		if (!redirect && dw_lt)
+			avail_o = sv2v_cast_6(sv2v_cast_6(4 * vn) - off6);
 		else
 			avail_o = 1'sb0;
 	end
@@ -6787,7 +7177,7 @@ module mpy_core (
 		.rkind_o(alu_kind),
 		.err_o(alu_err)
 	);
-	upycore_umod_seq #(.BPC(4)) u_hmod(
+	upycore_umod_seq #(.BPC(2)) u_hmod(
 		.clk_i(clk_i),
 		.rst_n_i(rst_n_i),
 		.start_i(hm_start),
@@ -6910,6 +7300,10 @@ module mpy_core (
 	reg hp_neg_r;
 	reg hp_neg2_r;
 	reg hp_big_r;
+	wire fb_ge;
+	wire [31:0] hp_free_c;
+	wire hp_free_ge;
+	wire [31:0] spill_fb;
 	always @(posedge clk_i or negedge rst_n_i)
 		if (!rst_n_i) begin
 			hp_room_r <= 1'sb0;
@@ -6919,11 +7313,11 @@ module mpy_core (
 			hp_big_r <= 1'b0;
 		end
 		else begin
-			hp_room_r <= (spill_hp - fbase) >> 2;
-			hp_neg_r <= spill_hp < fbase;
-			hp_free_r <= hp_room_r - {23'd0, stack_prefix_words};
-			hp_neg2_r <= hp_neg_r || (hp_room_r < {23'd0, stack_prefix_words});
-			hp_big_r <= (hp_room_r - {23'd0, stack_prefix_words}) >= 32'd8192;
+			hp_room_r <= spill_fb >> 2;
+			hp_neg_r <= !fb_ge;
+			hp_free_r <= hp_free_c;
+			hp_neg2_r <= hp_neg_r || !hp_free_ge;
+			hp_big_r <= |hp_free_c[31:13];
 		end
 	reg bin_num_r;
 	reg bin_cx_r;
@@ -6946,15 +7340,67 @@ module mpy_core (
 		input reg [4:0] exceptions;
 		frame_prefix = (9'd17 + sv2v_cast_9(locals)) + (9'd3 * sv2v_cast_9(exceptions));
 	endfunction
-	assign ftop = fbase + {21'd0, stack_prefix_words, 2'b00};
+	wire [31:0] spill_diff;
+	wire [31:0] ftop_bc;
+	wire [31:0] stk_sum;
+	wire hp_ge_ftopbc;
+	upycore_add #(.W(32)) u_spill_sub(
+		.a_i(spill_hp),
+		.b_i(~spill_bc),
+		.cin_i(1'b1),
+		.sum_o(spill_diff),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_spill_fb(
+		.a_i(spill_hp),
+		.b_i(~fbase),
+		.cin_i(1'b1),
+		.sum_o(spill_fb),
+		.cout_o(fb_ge)
+	);
+	upycore_add #(.W(32)) u_hp_free(
+		.a_i(hp_room_r),
+		.b_i(~{23'd0, stack_prefix_words}),
+		.cin_i(1'b1),
+		.sum_o(hp_free_c),
+		.cout_o(hp_free_ge)
+	);
+	upycore_add #(.W(32)) u_ftop(
+		.a_i(fbase),
+		.b_i({21'd0, stack_prefix_words, 2'b00}),
+		.cin_i(1'b0),
+		.sum_o(ftop),
+		.cout_o()
+	);
+	upycore_sum3 #(.W(32)) u_ftop_bc(
+		.a_i(fbase),
+		.b_i({21'd0, stack_prefix_words, 2'b00}),
+		.c_i(spill_bc),
+		.cin_i(1'b0),
+		.sum_o(ftop_bc)
+	);
+	upycore_add #(.W(32)) u_hp_cmp(
+		.a_i(spill_hp),
+		.b_i(~ftop_bc),
+		.cin_i(1'b1),
+		.sum_o(),
+		.cout_o(hp_ge_ftopbc)
+	);
 	wire [9:0] stk_off;
+	upycore_add #(.W(32)) u_stk(
+		.a_i(fbase),
+		.b_i({20'd0, stk_off, 2'b00}),
+		.cin_i(1'b0),
+		.sum_o(stk_sum),
+		.cout_o()
+	);
 	wire [31:0] stk_top;
 	function automatic [9:0] sv2v_cast_10;
 		input reg [9:0] inp;
 		sv2v_cast_10 = inp;
 	endfunction
 	assign stk_off = sv2v_cast_10(stack_prefix_words) + sv2v_cast_10(sp);
-	assign stk_top = fbase + {20'd0, stk_off, 2'b00};
+	assign stk_top = stk_sum;
 	function automatic [12:0] sv2v_cast_13;
 		input reg [12:0] inp;
 		sv2v_cast_13 = inp;
@@ -15603,13 +16049,13 @@ module mpy_core (
 					10'd563:
 						if (spill_nc < sv2v_cast_6_signed(MPY_RF_CHUNK_MIN))
 							st <= rf_resume;
-						else if (spill_hp < (ftop + spill_bc))
+						else if (!hp_ge_ftopbc)
 							raise_msg(ABI_MSG_RECURSION);
 						else begin
 							spill_n <= spill_nc;
 							spill_ntag <= (spill_nc + 6'd7) >> 32'sd3;
 							spill_words <= (32'd1 + sv2v_cast_32((spill_nc + 6'd7) >> 3)) + sv2v_cast_32(spill_nc);
-							spill_addr <= spill_hp - spill_bc;
+							spill_addr <= spill_diff;
 							spill_had_link <= has_link;
 							spill_prev <= (has_link ? mpy_rf_link_addr(rf[rf_base[3:0] + 4'd0]) : 32'd0);
 							sw_i <= 32'd0;
@@ -17133,6 +17579,110 @@ module mpy_hash (
 	reg str_last;
 	assign ready_o = (state == 5'd0) || ((state == 5'd3) && ready_i);
 	assign valid_o = state == 5'd3;
+	wire [31:0] pay4;
+	wire [31:0] pay8;
+	wire [31:0] al4;
+	wire [31:0] al8;
+	wire [31:0] al12;
+	wire [31:0] q_in;
+	wire [31:0] q_out;
+	wire [31:0] q_addr;
+	wire [31:0] elem_addr;
+	wire q_ge;
+	wire [SP_W - 1:0] sp_prev;
+	function automatic [SP_W - 1:0] sv2v_cast_7CA8A;
+		input reg [SP_W - 1:0] inp;
+		sv2v_cast_7CA8A = inp;
+	endfunction
+	assign sp_prev = (sp == 0 ? {SP_W {1'sb0}} : sv2v_cast_7CA8A(sp - 1'b1));
+	upycore_add #(.W(32)) u_pay4(
+		.a_i(payload),
+		.b_i(32'd4),
+		.cin_i(1'b0),
+		.sum_o(pay4),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_pay8(
+		.a_i(payload),
+		.b_i(32'd8),
+		.cin_i(1'b0),
+		.sum_o(pay8),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_al4(
+		.a_i({payload[31:2], 2'b00}),
+		.b_i(32'd4),
+		.cin_i(1'b0),
+		.sum_o(al4),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_al8(
+		.a_i({payload[31:2], 2'b00}),
+		.b_i(32'd8),
+		.cin_i(1'b0),
+		.sum_o(al8),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_al12(
+		.a_i({payload[31:2], 2'b00}),
+		.b_i(32'd12),
+		.cin_i(1'b0),
+		.sum_o(al12),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_qsub(
+		.a_i(payload),
+		.b_i(~qstr_count_i),
+		.cin_i(1'b1),
+		.sum_o(),
+		.cout_o(q_ge)
+	);
+	upycore_add #(.W(32)) u_qin(
+		.a_i(qstr_base_i),
+		.b_i({payload[28:0], 3'b000}),
+		.cin_i(1'b0),
+		.sum_o(q_in),
+		.cout_o()
+	);
+	upycore_sum3 #(.W(32)) u_qout(
+		.a_i(qstr_ext_i),
+		.b_i({payload[28:0], 3'b000}),
+		.c_i(~{qstr_count_i[28:0], 3'b000}),
+		.cin_i(1'b1),
+		.sum_o(q_out)
+	);
+	assign q_addr = (q_ge ? q_out : q_in);
+	upycore_add #(.W(32)) u_elem(
+		.a_i(frame_ptr[sp_prev]),
+		.b_i({frame_idx[sp_prev][29:0], 2'b00}),
+		.cin_i(1'b0),
+		.sum_o(elem_addr),
+		.cout_o()
+	);
+	wire [31:0] frame_sum_plus;
+	wire [31:0] ptr_next;
+	wire [31:0] len_next;
+	upycore_add #(.W(32)) u_fsum(
+		.a_i(frame_sum[sp_prev]),
+		.b_i(result),
+		.cin_i(1'b0),
+		.sum_o(frame_sum_plus),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_ptr(
+		.a_i(ptr),
+		.b_i(count),
+		.cin_i(1'b0),
+		.sum_o(ptr_next),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_len(
+		.a_i(len),
+		.b_i(~count),
+		.cin_i(1'b1),
+		.sum_o(len_next),
+		.cout_o()
+	);
 	function automatic signed [2:0] sv2v_cast_3_signed;
 		input reg signed [2:0] inp;
 		sv2v_cast_3_signed = inp;
@@ -17144,14 +17694,14 @@ module mpy_hash (
 		mem_addr_o = payload;
 		case (state)
 			5'd4, 5'd5, 5'd13, 5'd17: mem_addr_o = payload;
-			5'd8, 5'd12: mem_addr_o = payload + 4;
-			5'd11: mem_addr_o = (payload < qstr_count_i ? qstr_base_i + (payload << 3) : qstr_ext_i + ((payload - qstr_count_i) << 3));
-			5'd14: mem_addr_o = payload + 8;
+			5'd8, 5'd12: mem_addr_o = pay4;
+			5'd11: mem_addr_o = q_addr;
+			5'd14: mem_addr_o = pay8;
 			5'd15: mem_addr_o = {ptr[31:2], 2'b00};
-			5'd18: mem_addr_o = frame_ptr[sp - 1] + (frame_idx[sp - 1] << 2);
-			5'd19: mem_addr_o = (payload & 32'hfffffffc) + 12;
-			5'd20: mem_addr_o = (payload & 32'hfffffffc) + 4;
-			5'd21: mem_addr_o = (payload & 32'hfffffffc) + 8;
+			5'd18: mem_addr_o = elem_addr;
+			5'd19: mem_addr_o = al12;
+			5'd20: mem_addr_o = al4;
+			5'd21: mem_addr_o = al8;
 			default: reading = 1'b0;
 		endcase
 		mem_req_o = reading;
@@ -17211,7 +17761,7 @@ module mpy_hash (
 		end
 	endtask
 	initial if ((DEPTH < 1) || ((BYTES_PER_CYCLE != 1) && (BYTES_PER_CYCLE != 4)))
-		$display("Error [%0t] /tmp/tmp.2RP7hnbHq8/mpy_soc.sv:21527:13 - mpy_hash.<unnamed_block>.<unnamed_block>\n msg: ", $time, "mpy_hash: invalid parameters");
+		$display("Error [%0t] /tmp/tmp.mf5C579eGl/mpy_soc.sv:21878:13 - mpy_hash.<unnamed_block>.<unnamed_block>\n msg: ", $time, "mpy_hash: invalid parameters");
 	always @(posedge clk_i or negedge rst_n_i)
 		if (!rst_n_i) begin
 			state <= 5'd0;
@@ -17280,9 +17830,9 @@ module mpy_hash (
 						state <= 5'd3;
 					end
 					else begin
-						frame_sum[sp - 1] <= frame_sum[sp - 1] + result;
+						frame_sum[sp - 1] <= frame_sum_plus;
 						if ((frame_idx[sp - 1] + 1) == frame_len[sp - 1]) begin
-							result <= hash_sx31(frame_sum[sp - 1] + result);
+							result <= hash_sx31(frame_sum_plus);
 							sp <= sp - 1;
 						end
 						else begin
@@ -17365,8 +17915,8 @@ module mpy_hash (
 				5'd15, 5'd16:
 					if ((state == 5'd16) || mem_ack_i) begin
 						acc <= word_hash;
-						ptr <= ptr + count;
-						len <= len - count;
+						ptr <= ptr_next;
+						len <= len_next;
 						byte_buffer <= shifted >> (8 * count);
 						if (str_last)
 							finish(hash_string_finish(word_hash));
@@ -17380,7 +17930,7 @@ module mpy_hash (
 						if (mem_data_i == 0)
 							finish(TUPLE_SEED);
 						else begin
-							frame_ptr[sp] <= payload + 4;
+							frame_ptr[sp] <= pay4;
 							frame_len[sp] <= mem_data_i;
 							frame_idx[sp] <= 0;
 							frame_sum[sp] <= TUPLE_SEED;
@@ -17490,6 +18040,63 @@ module mpy_key_equal (
 	reg [2:0] bcount;
 	wire [35:0] current;
 	wire [31:0] descriptor;
+	wire [31:0] q_in;
+	wire [31:0] q_out;
+	wire [31:0] qext_off_c;
+	wire [31:0] cur4;
+	wire [31:0] cur8;
+	wire [31:0] desc4;
+	wire q_ge;
+	upycore_add #(.W(32)) u_qcmp(
+		.a_i(current[31:0]),
+		.b_i(~qcount),
+		.cin_i(1'b1),
+		.sum_o(),
+		.cout_o(q_ge)
+	);
+	upycore_add #(.W(32)) u_qin(
+		.a_i(qbase),
+		.b_i({current[28:0], 3'b000}),
+		.cin_i(1'b0),
+		.sum_o(q_in),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_qout(
+		.a_i(qext_off),
+		.b_i({current[28:0], 3'b000}),
+		.cin_i(1'b0),
+		.sum_o(q_out),
+		.cout_o()
+	);
+	assign descriptor = (q_ge ? q_out : q_in);
+	upycore_add #(.W(32)) u_qext(
+		.a_i(qstr_ext_i),
+		.b_i(~{qstr_count_i[28:0], 3'b000}),
+		.cin_i(1'b1),
+		.sum_o(qext_off_c),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_cur4(
+		.a_i(current[31:0]),
+		.b_i(32'd4),
+		.cin_i(1'b0),
+		.sum_o(cur4),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_cur8(
+		.a_i(current[31:0]),
+		.b_i(32'd8),
+		.cin_i(1'b0),
+		.sum_o(cur8),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_desc4(
+		.a_i(desc_r),
+		.b_i(32'd4),
+		.cin_i(1'b0),
+		.sum_o(desc4),
+		.cout_o()
+	);
 	always @(posedge clk_i) desc_r <= descriptor;
 	reg [63:0] convert_input;
 	reg [63:0] magnitude;
@@ -17531,7 +18138,6 @@ module mpy_key_equal (
 		exponent_bits = (8'd127 + {2'b00, exponent_index}) + {7'd0, rounded[24]};
 	end
 	assign current = (side ? b : a);
-	assign descriptor = (current[31:0] < qcount ? qbase + (current[31:0] << 3) : qext_off + (current[31:0] << 3));
 	assign ready_o = (state == 5'd0) || ((state == 5'd19) && ready_i);
 	assign valid_o = state == 5'd19;
 	localparam [31:0] ABI_CTL_FALSE = 32'd4;
@@ -17573,7 +18179,7 @@ module mpy_key_equal (
 			qcount <= qstr_count_i;
 			qbase <= qstr_base_i;
 			qext <= qstr_ext_i;
-			qext_off <= qstr_ext_i - (qstr_count_i << 3);
+			qext_off <= qext_off_c;
 			state <= 5'd1;
 		end
 	endtask
@@ -17584,9 +18190,9 @@ module mpy_key_equal (
 		mem_addr_o = current[31:0];
 		case (state)
 			5'd3: mem_addr_o = current[31:0];
-			5'd4: mem_addr_o = current[31:0] + 4;
+			5'd4: mem_addr_o = cur4;
 			5'd12: mem_addr_o = (current[35:32] == ABI_TAG_QSTR ? descriptor : current[31:0]);
-			5'd13: mem_addr_o = (current[35:32] == ABI_TAG_QSTR ? desc_r + 4 : current[31:0] + 8);
+			5'd13: mem_addr_o = (current[35:32] == ABI_TAG_QSTR ? desc4 : cur8);
 			5'd16: mem_addr_o = {ptr[0][31:2], 2'b00};
 			5'd17: mem_addr_o = {ptr[1][31:2], 2'b00};
 			default: mem_req_o = 0;
@@ -18101,11 +18707,122 @@ module mpy_map_engine (
 		input reg [3:0] t;
 		extended = ((((t == ABI_TAG_INT64) || (t == ABI_TAG_FLOAT)) || (t == ABI_TAG_COMPLEX)) || (t == ABI_TAG_STR)) || (t == ABI_TAG_BYTES);
 	endfunction
-	function automatic [31:0] at;
-		input reg [31:0] base;
-		input reg [31:0] slot;
-		at = base + (slot << (is_set ? 2 : 3));
-	endfunction
+	wire [31:0] sh_idx;
+	wire [31:0] sh_pos;
+	wire [31:0] sh_sn;
+	wire [31:0] sh_dn;
+	assign sh_idx = (is_set ? {idx[29:0], 2'b00} : {idx[28:0], 3'b000});
+	assign sh_pos = (is_set ? {pos[29:0], 2'b00} : {pos[28:0], 3'b000});
+	assign sh_sn = (is_set ? {sn[29:0], 2'b00} : {sn[28:0], 3'b000});
+	assign sh_dn = (is_set ? {dn[29:0], 2'b00} : {dn[28:0], 3'b000});
+	wire [31:0] at_src_idx;
+	wire [31:0] at_dst_idx;
+	wire [31:0] at_act_idx;
+	wire [31:0] at_src_idx4;
+	wire [31:0] hash_idx;
+	wire [31:0] at_probe;
+	wire [31:0] at_dst_pos;
+	wire [31:0] at_dst_pos4;
+	wire [31:0] src_span;
+	wire [31:0] dst_span;
+	wire [31:0] er_slot;
+	wire [31:0] er_slot1;
+	wire [31:0] er_sh;
+	wire [31:0] er_addr;
+	wire [31:0] er_addr1;
+	assign er_slot = ((op == 2) || (op == 3) ? idx : pos);
+	assign er_sh = (is_set ? {er_slot[29:0], 2'b00} : {er_slot[28:0], 3'b000});
+	upycore_add #(.W(32)) u_src_idx(
+		.a_i(src),
+		.b_i(sh_idx),
+		.cin_i(1'b0),
+		.sum_o(at_src_idx),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_dst_idx(
+		.a_i(dst),
+		.b_i(sh_idx),
+		.cin_i(1'b0),
+		.sum_o(at_dst_idx),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_act_idx(
+		.a_i(active_base),
+		.b_i(sh_idx),
+		.cin_i(1'b0),
+		.sum_o(at_act_idx),
+		.cout_o()
+	);
+	upycore_sum3 #(.W(32)) u_src_idx4(
+		.a_i(src),
+		.b_i(sh_idx),
+		.c_i(32'd4),
+		.cin_i(1'b0),
+		.sum_o(at_src_idx4)
+	);
+	upycore_add #(.W(32)) u_hash_idx(
+		.a_i(hashes),
+		.b_i({idx[29:0], 2'b00}),
+		.cin_i(1'b0),
+		.sum_o(hash_idx),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_probe(
+		.a_i(probe_base),
+		.b_i(sh_pos),
+		.cin_i(1'b0),
+		.sum_o(at_probe),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_dst_pos(
+		.a_i(dst),
+		.b_i(sh_pos),
+		.cin_i(1'b0),
+		.sum_o(at_dst_pos),
+		.cout_o()
+	);
+	upycore_sum3 #(.W(32)) u_dst_pos4(
+		.a_i(dst),
+		.b_i(sh_pos),
+		.c_i(32'd4),
+		.cin_i(1'b0),
+		.sum_o(at_dst_pos4)
+	);
+	upycore_add #(.W(32)) u_src_span(
+		.a_i(src),
+		.b_i(sh_sn),
+		.cin_i(1'b0),
+		.sum_o(src_span),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_dst_span(
+		.a_i(dst),
+		.b_i(sh_dn),
+		.cin_i(1'b0),
+		.sum_o(dst_span),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_er_inc(
+		.a_i(er_slot),
+		.b_i(32'd1),
+		.cin_i(1'b0),
+		.sum_o(er_slot1),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_er_addr(
+		.a_i(dst),
+		.b_i(er_sh),
+		.cin_i(1'b0),
+		.sum_o(er_addr),
+		.cout_o()
+	);
+	upycore_sum3 #(.W(32)) u_er_addr1(
+		.a_i(dst),
+		.b_i(er_sh),
+		.c_i((is_set ? 32'd4 : 32'd8)),
+		.cin_i(1'b0),
+		.sum_o(er_addr1)
+	);
 	assign ready_o = state == 6'd0;
 	assign hash_valid_o = ((state == 6'd8) && (key_tag != ABI_TAG_INT)) && (key_tag != ABI_TAG_CONTROL);
 	assign hash_tag_o = key_tag;
@@ -18146,7 +18863,7 @@ module mpy_map_engine (
 		end
 	endgenerate
 	assign hmack = (state == 6'd25) && ack_i;
-	upycore_umod_seq modulo(
+	upycore_umod_seq #(.BPC(2)) modulo(
 		.clk_i(clk_i),
 		.rst_n_i(rst_n_i),
 		.start_i((state == 6'd10) && (hash_value >= probe_n)),
@@ -18374,7 +19091,7 @@ module mpy_map_engine (
 							cache_set[0] <= is_set;
 							cache_base[0] <= src;
 							cache_n[0] <= sn;
-							cache_end[0] <= src + (sn << (is_set ? 2 : 3));
+							cache_end[0] <= src_span;
 							cache_used[0] <= src_used;
 							cache_tags[0] <= scan_tags[0];
 						end
@@ -18383,7 +19100,7 @@ module mpy_map_engine (
 					end
 					else begin
 						check_dst <= 0;
-						read_word(at(src, idx), 6'd3);
+						read_word(at_src_idx, 6'd3);
 					end
 				6'd2:
 					if ((idx == dn) || ((idx == 0) && dst_hit)) begin
@@ -18392,7 +19109,7 @@ module mpy_map_engine (
 							cache_set[1] <= is_set;
 							cache_base[1] <= dst;
 							cache_n[1] <= dn;
-							cache_end[1] <= dst + (dn << (is_set ? 2 : 3));
+							cache_end[1] <= dst_span;
 							cache_used[1] <= dst_scan_used;
 							cache_tags[1] <= scan_tags[1];
 						end
@@ -18409,7 +19126,7 @@ module mpy_map_engine (
 					end
 					else begin
 						check_dst <= 1;
-						read_word(at(dst, idx), 6'd3);
+						read_word(at_dst_idx, 6'd3);
 					end
 				6'd3:
 					if (!empty(rtag_i, rdata_i) && !tomb(rtag_i, rdata_i)) begin
@@ -18438,7 +19155,7 @@ module mpy_map_engine (
 					if (idx == dn)
 						state <= 6'd19;
 					else
-						read_word(at(dst, idx), 6'd22);
+						read_word(at_dst_idx, 6'd22);
 				6'd22:
 					if (equal_key(rtag_i, rdata_i))
 						found_key;
@@ -18456,7 +19173,7 @@ module mpy_map_engine (
 					if (idx == active_n)
 						state <= 6'd19;
 					else
-						read_word(at(active_base, idx), 6'd5);
+						read_word(at_act_idx, 6'd5);
 				6'd5:
 					if (empty(rtag_i, rdata_i) || tomb(rtag_i, rdata_i))
 						state <= 6'd18;
@@ -18474,9 +19191,9 @@ module mpy_map_engine (
 								reject;
 						end
 						else if (!is_set)
-							read_word(at(src, idx) + 4, 6'd6);
+							read_word(at_src_idx4, 6'd6);
 						else if ((op == 0) && (hashes != 0))
-							read_word(hashes + (idx << 2), 6'd7);
+							read_word(hash_idx, 6'd7);
 						else if ((op == 0) && (((rtag_i == ABI_TAG_OBJECT) || (rtag_i == ABI_TAG_TUPLE)) || (rtag_i == ABI_TAG_MUT)))
 							reject;
 						else
@@ -18486,7 +19203,7 @@ module mpy_map_engine (
 					value <= rdata_i;
 					value_tag <= rtag_i;
 					if ((op == 0) && (hashes != 0))
-						read_word(hashes + (idx << 2), 6'd7);
+						read_word(hash_idx, 6'd7);
 					else if ((op == 0) && (((key_tag == ABI_TAG_OBJECT) || (key_tag == ABI_TAG_TUPLE)) || (key_tag == ABI_TAG_MUT)))
 						reject;
 					else
@@ -18555,7 +19272,7 @@ module mpy_map_engine (
 						state <= 6'd12;
 					end
 				6'd12:
-					read_word(at(probe_base, pos), 6'd13);
+					read_word(at_probe, 6'd13);
 				6'd13:
 					if (empty(rtag_i, rdata_i))
 						missing;
@@ -18600,15 +19317,15 @@ module mpy_map_engine (
 					end
 				6'd14: begin
 					used_o <= used_o + 1;
-					write_word(at(dst, pos), key_tag, key, (is_set ? 6'd18 : 6'd15));
+					write_word(at_dst_pos, key_tag, key, (is_set ? 6'd18 : 6'd15));
 				end
 				6'd15:
-					write_word(at(dst, pos) + 4, value_tag, value, 6'd18);
+					write_word(at_dst_pos4, value_tag, value, 6'd18);
 				6'd16:
-					read_word(((((op == 2) || (op == 3) ? idx : pos) + 1) == dn ? dst : at(dst, ((op == 2) || (op == 3) ? idx : pos) + 1)), 6'd17);
+					read_word((er_slot1 == dn ? dst : er_addr1), 6'd17);
 				6'd17: begin
 					used_o <= used_o - 1;
-					write_word(at(dst, ((op == 2) || (op == 3) ? idx : pos)), ABI_TAG_CONTROL, (empty(rtag_i, rdata_i) ? ABI_CTL_NULL : ABI_CTL_TOMB), 6'd18);
+					write_word(er_addr, ABI_TAG_CONTROL, (empty(rtag_i, rdata_i) ? ABI_CTL_NULL : ABI_CTL_TOMB), 6'd18);
 				end
 				6'd18: begin
 					idx <= idx + 1;
@@ -19308,6 +20025,7 @@ module mpy_rehash_stream (
 	localparam [3:0] ABI_TAG_INT = 4'd1;
 	mpy_hash_slot #(
 		.DEPTH(1),
+		.BPC(2),
 		.EXTERNAL_HASH(EXTERNAL_HASH)
 	) pipeline(
 		.hash_valid_o(hash_valid_o),
@@ -19669,21 +20387,131 @@ module mpy_bytecopy (
 	assign req_o = (((state == 4'd2) || (state == 4'd4)) || (state == 4'd6)) || (state == 4'd8);
 	assign we_o = (state == 4'd6) || (state == 4'd8);
 	assign addr_o = (((state == 4'd2) || (state == 4'd3)) || (reverse_words && ((state == 4'd6) || (state == 4'd7))) ? {sa[31:2], 2'b00} : {da[31:2], 2'b00});
-	function automatic [1:0] sv2v_cast_2;
-		input reg [1:0] inp;
-		sv2v_cast_2 = inp;
-	endfunction
 	always @(*) begin
 		if (_sv2v_0)
 			;
-		src_offset = (back ? sv2v_cast_2(source - 1) : source[1:0]);
-		dst_offset = (back ? sv2v_cast_2(dest - 1) : dest[1:0]);
+		src_offset = (back ? source[1:0] - 2'd1 : source[1:0]);
+		dst_offset = (back ? dest[1:0] - 2'd1 : dest[1:0]);
 		src_room = (back ? {1'b0, src_offset} + 3'd1 : 3'd4 - {1'b0, src_offset});
 		dst_room = (back ? {1'b0, dst_offset} + 3'd1 : 3'd4 - {1'b0, dst_offset});
 		next_n = (src_room < dst_room ? src_room : dst_room);
 		if ((remaining[31:3] == 29'd0) && (remaining[2:0] < next_n))
 			next_n = remaining[2:0];
 	end
+	wire dst_gt;
+	wire dst_ge;
+	wire [31:0] src_plus_n;
+	wire [31:0] dst_plus_n;
+	wire [31:0] dst_plus_n_m4;
+	wire [31:0] src_minus_n;
+	wire [31:0] dst_minus_n;
+	wire [31:0] src_plus_g;
+	wire [31:0] src_minus_g;
+	wire [31:0] dst_plus_g;
+	wire [31:0] dst_minus_g;
+	wire [31:0] src_plus_4;
+	wire [31:0] dst_minus_4;
+	wire [31:0] rem_minus_g;
+	wire [31:0] rem_minus_1;
+	upycore_add #(.W(32)) u_sn(
+		.a_i(src_i),
+		.b_i(n_i),
+		.cin_i(1'b0),
+		.sum_o(src_plus_n),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_dn(
+		.a_i(dst_i),
+		.b_i(n_i),
+		.cin_i(1'b0),
+		.sum_o(dst_plus_n),
+		.cout_o()
+	);
+	upycore_sum3 #(.W(32)) u_dm(
+		.a_i(dst_i),
+		.b_i(n_i),
+		.c_i(32'hfffffffc),
+		.cin_i(1'b0),
+		.sum_o(dst_plus_n_m4)
+	);
+	upycore_add #(.W(32)) u_gt(
+		.a_i(dst_i),
+		.b_i(~src_i),
+		.cin_i(1'b1),
+		.sum_o(),
+		.cout_o(dst_ge)
+	);
+	assign dst_gt = dst_ge && (dst_i != src_i);
+	upycore_add #(.W(32)) u_sm(
+		.a_i(source),
+		.b_i(~{29'b00000000000000000000000000000, next_n}),
+		.cin_i(1'b1),
+		.sum_o(src_minus_n),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_dmn(
+		.a_i(dest),
+		.b_i(~{29'b00000000000000000000000000000, next_n}),
+		.cin_i(1'b1),
+		.sum_o(dst_minus_n),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_sg(
+		.a_i(source),
+		.b_i({29'b00000000000000000000000000000, group_n}),
+		.cin_i(1'b0),
+		.sum_o(src_plus_g),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_sgm(
+		.a_i(source),
+		.b_i(~{29'b00000000000000000000000000000, group_n}),
+		.cin_i(1'b1),
+		.sum_o(src_minus_g),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_dg(
+		.a_i(dest),
+		.b_i({29'b00000000000000000000000000000, group_n}),
+		.cin_i(1'b0),
+		.sum_o(dst_plus_g),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_dgm(
+		.a_i(dest),
+		.b_i(~{29'b00000000000000000000000000000, group_n}),
+		.cin_i(1'b1),
+		.sum_o(dst_minus_g),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_s4(
+		.a_i(source),
+		.b_i(32'd4),
+		.cin_i(1'b0),
+		.sum_o(src_plus_4),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_d4(
+		.a_i(dest),
+		.b_i(32'hfffffffc),
+		.cin_i(1'b0),
+		.sum_o(dst_minus_4),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_rg(
+		.a_i(remaining),
+		.b_i(~{29'b00000000000000000000000000000, group_n}),
+		.cin_i(1'b1),
+		.sum_o(rem_minus_g),
+		.cout_o()
+	);
+	upycore_add #(.W(32)) u_r1(
+		.a_i(remaining),
+		.b_i(32'hffffffff),
+		.cin_i(1'b0),
+		.sum_o(rem_minus_1),
+		.cout_o()
+	);
 	function automatic [31:0] sv2v_cast_32;
 		input reg [31:0] inp;
 		sv2v_cast_32 = inp;
@@ -19718,9 +20546,9 @@ module mpy_bytecopy (
 				4'd0:
 					if (((valid_i && ready_o) && (n_i != 0)) && (!reverse_i || (n_i >= 8))) begin
 						reverse_words <= reverse_i;
-						back <= dst_i > src_i;
-						source <= (!reverse_i && (dst_i > src_i) ? src_i + n_i : src_i);
-						dest <= (reverse_i ? (dst_i + n_i) - 4 : (dst_i > src_i ? dst_i + n_i : dst_i));
+						back <= dst_gt;
+						source <= (!reverse_i && dst_gt ? src_plus_n : src_i);
+						dest <= (reverse_i ? dst_plus_n_m4 : (dst_gt ? dst_plus_n : dst_i));
 						remaining <= (reverse_i ? n_i >> 3 : n_i);
 						state <= 4'd1;
 					end
@@ -19732,8 +20560,8 @@ module mpy_bytecopy (
 					end
 					else begin
 						group_n <= next_n;
-						sa <= (back ? source - sv2v_cast_32(next_n) : source);
-						da <= (back ? dest - sv2v_cast_32(next_n) : dest);
+						sa <= (back ? src_minus_n : source);
+						da <= (back ? dst_minus_n : dest);
 						case (next_n)
 							1: mask <= 32'h000000ff;
 							2: mask <= 32'h0000ffff;
@@ -19771,9 +20599,9 @@ module mpy_bytecopy (
 						state <= 4'd8;
 					end
 					else if (ack_i) begin
-						remaining <= remaining - sv2v_cast_32(group_n);
-						source <= (back ? source - sv2v_cast_32(group_n) : source + sv2v_cast_32(group_n));
-						dest <= (back ? dest - sv2v_cast_32(group_n) : dest + sv2v_cast_32(group_n));
+						remaining <= rem_minus_g;
+						source <= (back ? src_minus_g : src_plus_g);
+						dest <= (back ? dst_minus_g : dst_plus_g);
 						state <= (remaining == sv2v_cast_32(group_n) ? 4'd0 : 4'd1);
 					end
 				4'd8:
@@ -19781,9 +20609,9 @@ module mpy_bytecopy (
 						state <= 4'd9;
 				4'd9:
 					if (ack_i) begin
-						remaining <= remaining - 1;
-						source <= source + 4;
-						dest <= dest - 4;
+						remaining <= rem_minus_1;
+						source <= src_plus_4;
+						dest <= dst_minus_4;
 						state <= (remaining == 1 ? 4'd0 : 4'd1);
 					end
 				default: state <= 4'd0;
@@ -22048,10 +22876,10 @@ module cve2_alu (
 	assign bfp_len = {~(|operand_b_i[27:24]), operand_b_i[27:24]};
 	assign bfp_off = operand_b_i[20:16];
 	assign bfp_mask = (RV32B != 32'sd0 ? ~(32'hffffffff << bfp_len) : {32 {1'sb0}});
-	genvar _gv_i_2;
+	genvar _gv_i_4;
 	generate
-		for (_gv_i_2 = 0; _gv_i_2 < 32; _gv_i_2 = _gv_i_2 + 1) begin : gen_rev_bfp_mask
-			localparam i = _gv_i_2;
+		for (_gv_i_4 = 0; _gv_i_4 < 32; _gv_i_4 = _gv_i_4 + 1) begin : gen_rev_bfp_mask
+			localparam i = _gv_i_4;
 			assign bfp_mask_rev[i] = bfp_mask[31 - i];
 		end
 	endgenerate
@@ -22295,9 +23123,9 @@ module cve2_alu (
 				localparam [127:0] FLIP_MASK_L = 128'h22001100004400004411000011000000;
 				localparam [127:0] FLIP_MASK_R = 128'h00880044000022000000882200000088;
 				wire [31:0] SHUFFLE_MASK_NOT [0:3];
-				genvar _gv_i_3;
-				for (_gv_i_3 = 0; _gv_i_3 < 4; _gv_i_3 = _gv_i_3 + 1) begin : gen_shuffle_mask_not
-					localparam i = _gv_i_3;
+				genvar _gv_i_5;
+				for (_gv_i_5 = 0; _gv_i_5 < 4; _gv_i_5 = _gv_i_5 + 1) begin : gen_shuffle_mask_not
+					localparam i = _gv_i_5;
 					assign SHUFFLE_MASK_NOT[i] = ~(SHUFFLE_MASK_L[(3 - i) * 32+:32] | SHUFFLE_MASK_R[(3 - i) * 32+:32]);
 				end
 				wire shuffle_flip;
@@ -22334,21 +23162,21 @@ module cve2_alu (
 				wire [3:0] vld_b;
 				wire [1:0] sel_h;
 				wire [1:0] vld_h;
-				genvar _gv_i_4;
-				for (_gv_i_4 = 0; _gv_i_4 < 8; _gv_i_4 = _gv_i_4 + 1) begin : gen_sel_vld_n
-					localparam i = _gv_i_4;
+				genvar _gv_i_6;
+				for (_gv_i_6 = 0; _gv_i_6 < 8; _gv_i_6 = _gv_i_6 + 1) begin : gen_sel_vld_n
+					localparam i = _gv_i_6;
 					assign sel_n[i * 3+:3] = operand_b_i[i * 4+:3];
 					assign vld_n[i] = ~|operand_b_i[(i * 4) + 3+:1];
 				end
-				genvar _gv_i_5;
-				for (_gv_i_5 = 0; _gv_i_5 < 4; _gv_i_5 = _gv_i_5 + 1) begin : gen_sel_vld_b
-					localparam i = _gv_i_5;
+				genvar _gv_i_7;
+				for (_gv_i_7 = 0; _gv_i_7 < 4; _gv_i_7 = _gv_i_7 + 1) begin : gen_sel_vld_b
+					localparam i = _gv_i_7;
 					assign sel_b[i * 2+:2] = operand_b_i[i * 8+:2];
 					assign vld_b[i] = ~|operand_b_i[(i * 8) + 2+:6];
 				end
-				genvar _gv_i_6;
-				for (_gv_i_6 = 0; _gv_i_6 < 2; _gv_i_6 = _gv_i_6 + 1) begin : gen_sel_vld_h
-					localparam i = _gv_i_6;
+				genvar _gv_i_8;
+				for (_gv_i_8 = 0; _gv_i_8 < 2; _gv_i_8 = _gv_i_8 + 1) begin : gen_sel_vld_h
+					localparam i = _gv_i_8;
 					assign sel_h[i+:1] = operand_b_i[i * 16+:1];
 					assign vld_h[i] = ~|operand_b_i[(i * 16) + 1+:15];
 				end
@@ -22392,9 +23220,9 @@ module cve2_alu (
 				wire [31:0] val_n;
 				wire [31:0] xperm_n;
 				assign val_n = operand_a_i;
-				genvar _gv_i_7;
-				for (_gv_i_7 = 0; _gv_i_7 < 8; _gv_i_7 = _gv_i_7 + 1) begin : gen_xperm_n
-					localparam i = _gv_i_7;
+				genvar _gv_i_9;
+				for (_gv_i_9 = 0; _gv_i_9 < 8; _gv_i_9 = _gv_i_9 + 1) begin : gen_xperm_n
+					localparam i = _gv_i_9;
 					assign xperm_n[i * 4+:4] = (vld[i] ? val_n[sel[i * 3+:3] * 4+:4] : {4 {1'sb0}});
 				end
 				assign xperm_result = xperm_n;
@@ -22409,9 +23237,9 @@ module cve2_alu (
 				wire [31:0] clmul_xor_stage3 [0:3];
 				wire [31:0] clmul_xor_stage4 [0:1];
 				wire [31:0] clmul_result_raw;
-				genvar _gv_i_8;
-				for (_gv_i_8 = 0; _gv_i_8 < 32; _gv_i_8 = _gv_i_8 + 1) begin : gen_rev_operand_b
-					localparam i = _gv_i_8;
+				genvar _gv_i_10;
+				for (_gv_i_10 = 0; _gv_i_10 < 32; _gv_i_10 = _gv_i_10 + 1) begin : gen_rev_operand_b
+					localparam i = _gv_i_10;
 					assign operand_b_rev[i] = operand_b_i[31 - i];
 				end
 				assign clmul_rmode = operator_i == 7'd57;
@@ -22453,35 +23281,35 @@ module cve2_alu (
 						clmul_op_b = (clmul_rmode | clmul_hmode ? operand_b_rev : operand_b_i);
 					end
 				end
-				genvar _gv_i_9;
-				for (_gv_i_9 = 0; _gv_i_9 < 32; _gv_i_9 = _gv_i_9 + 1) begin : gen_clmul_and_op
-					localparam i = _gv_i_9;
+				genvar _gv_i_11;
+				for (_gv_i_11 = 0; _gv_i_11 < 32; _gv_i_11 = _gv_i_11 + 1) begin : gen_clmul_and_op
+					localparam i = _gv_i_11;
 					assign clmul_and_stage[i] = (clmul_op_b[i] ? clmul_op_a << i : {32 {1'sb0}});
 				end
-				genvar _gv_i_10;
-				for (_gv_i_10 = 0; _gv_i_10 < 16; _gv_i_10 = _gv_i_10 + 1) begin : gen_clmul_xor_op_l1
-					localparam i = _gv_i_10;
+				genvar _gv_i_12;
+				for (_gv_i_12 = 0; _gv_i_12 < 16; _gv_i_12 = _gv_i_12 + 1) begin : gen_clmul_xor_op_l1
+					localparam i = _gv_i_12;
 					assign clmul_xor_stage1[i] = clmul_and_stage[2 * i] ^ clmul_and_stage[(2 * i) + 1];
 				end
-				genvar _gv_i_11;
-				for (_gv_i_11 = 0; _gv_i_11 < 8; _gv_i_11 = _gv_i_11 + 1) begin : gen_clmul_xor_op_l2
-					localparam i = _gv_i_11;
+				genvar _gv_i_13;
+				for (_gv_i_13 = 0; _gv_i_13 < 8; _gv_i_13 = _gv_i_13 + 1) begin : gen_clmul_xor_op_l2
+					localparam i = _gv_i_13;
 					assign clmul_xor_stage2[i] = clmul_xor_stage1[2 * i] ^ clmul_xor_stage1[(2 * i) + 1];
 				end
-				genvar _gv_i_12;
-				for (_gv_i_12 = 0; _gv_i_12 < 4; _gv_i_12 = _gv_i_12 + 1) begin : gen_clmul_xor_op_l3
-					localparam i = _gv_i_12;
+				genvar _gv_i_14;
+				for (_gv_i_14 = 0; _gv_i_14 < 4; _gv_i_14 = _gv_i_14 + 1) begin : gen_clmul_xor_op_l3
+					localparam i = _gv_i_14;
 					assign clmul_xor_stage3[i] = clmul_xor_stage2[2 * i] ^ clmul_xor_stage2[(2 * i) + 1];
 				end
-				genvar _gv_i_13;
-				for (_gv_i_13 = 0; _gv_i_13 < 2; _gv_i_13 = _gv_i_13 + 1) begin : gen_clmul_xor_op_l4
-					localparam i = _gv_i_13;
+				genvar _gv_i_15;
+				for (_gv_i_15 = 0; _gv_i_15 < 2; _gv_i_15 = _gv_i_15 + 1) begin : gen_clmul_xor_op_l4
+					localparam i = _gv_i_15;
 					assign clmul_xor_stage4[i] = clmul_xor_stage3[2 * i] ^ clmul_xor_stage3[(2 * i) + 1];
 				end
 				assign clmul_result_raw = clmul_xor_stage4[0] ^ clmul_xor_stage4[1];
-				genvar _gv_i_14;
-				for (_gv_i_14 = 0; _gv_i_14 < 32; _gv_i_14 = _gv_i_14 + 1) begin : gen_rev_clmul_result
-					localparam i = _gv_i_14;
+				genvar _gv_i_16;
+				for (_gv_i_16 = 0; _gv_i_16 < 32; _gv_i_16 = _gv_i_16 + 1) begin : gen_rev_clmul_result
+					localparam i = _gv_i_16;
 					assign clmul_result_rev[i] = clmul_result_raw[31 - i];
 				end
 				always @(*) begin
@@ -22508,29 +23336,29 @@ module cve2_alu (
 			end
 			if (RV32B == 32'sd3) begin : gen_alu_rvb_full
 				reg [191:0] bitcnt_partial_q;
-				genvar _gv_i_15;
-				for (_gv_i_15 = 0; _gv_i_15 < 32; _gv_i_15 = _gv_i_15 + 1) begin : gen_bitcnt_reg_in_lsb
-					localparam i = _gv_i_15;
+				genvar _gv_i_17;
+				for (_gv_i_17 = 0; _gv_i_17 < 32; _gv_i_17 = _gv_i_17 + 1) begin : gen_bitcnt_reg_in_lsb
+					localparam i = _gv_i_17;
 					assign bitcnt_partial_lsb_d[i] = bitcnt_partial[(31 - i) * 6];
 				end
-				genvar _gv_i_16;
-				for (_gv_i_16 = 0; _gv_i_16 < 16; _gv_i_16 = _gv_i_16 + 1) begin : gen_bitcnt_reg_in_b1
-					localparam i = _gv_i_16;
+				genvar _gv_i_18;
+				for (_gv_i_18 = 0; _gv_i_18 < 16; _gv_i_18 = _gv_i_18 + 1) begin : gen_bitcnt_reg_in_b1
+					localparam i = _gv_i_18;
 					assign bitcnt_partial_msb_d[i] = bitcnt_partial[((31 - ((2 * i) + 1)) * 6) + 1];
 				end
-				genvar _gv_i_17;
-				for (_gv_i_17 = 0; _gv_i_17 < 8; _gv_i_17 = _gv_i_17 + 1) begin : gen_bitcnt_reg_in_b2
-					localparam i = _gv_i_17;
+				genvar _gv_i_19;
+				for (_gv_i_19 = 0; _gv_i_19 < 8; _gv_i_19 = _gv_i_19 + 1) begin : gen_bitcnt_reg_in_b2
+					localparam i = _gv_i_19;
 					assign bitcnt_partial_msb_d[16 + i] = bitcnt_partial[((31 - ((4 * i) + 3)) * 6) + 2];
 				end
-				genvar _gv_i_18;
-				for (_gv_i_18 = 0; _gv_i_18 < 4; _gv_i_18 = _gv_i_18 + 1) begin : gen_bitcnt_reg_in_b3
-					localparam i = _gv_i_18;
+				genvar _gv_i_20;
+				for (_gv_i_20 = 0; _gv_i_20 < 4; _gv_i_20 = _gv_i_20 + 1) begin : gen_bitcnt_reg_in_b3
+					localparam i = _gv_i_20;
 					assign bitcnt_partial_msb_d[24 + i] = bitcnt_partial[((31 - ((8 * i) + 7)) * 6) + 3];
 				end
-				genvar _gv_i_19;
-				for (_gv_i_19 = 0; _gv_i_19 < 2; _gv_i_19 = _gv_i_19 + 1) begin : gen_bitcnt_reg_in_b4
-					localparam i = _gv_i_19;
+				genvar _gv_i_21;
+				for (_gv_i_21 = 0; _gv_i_21 < 2; _gv_i_21 = _gv_i_21 + 1) begin : gen_bitcnt_reg_in_b4
+					localparam i = _gv_i_21;
 					assign bitcnt_partial_msb_d[28 + i] = bitcnt_partial[((31 - ((16 * i) + 15)) * 6) + 4];
 				end
 				assign bitcnt_partial_msb_d[30] = bitcnt_partial[5];
@@ -24104,9 +24932,9 @@ module cve2_cs_registers (
 			wire [PMPNumRegions - 1:0] pmp_addr_we;
 			wire [PMPNumRegions - 1:0] pmp_addr_err;
 			wire any_pmp_entry_locked;
-			genvar _gv_i_20;
-			for (_gv_i_20 = 0; _gv_i_20 < cve2_pkg_PMP_MAX_REGIONS; _gv_i_20 = _gv_i_20 + 1) begin : g_exp_rd_data
-				localparam i = _gv_i_20;
+			genvar _gv_i_22;
+			for (_gv_i_22 = 0; _gv_i_22 < cve2_pkg_PMP_MAX_REGIONS; _gv_i_22 = _gv_i_22 + 1) begin : g_exp_rd_data
+				localparam i = _gv_i_22;
 				if (i < PMPNumRegions) begin : g_implemented_regions
 					assign pmp_cfg_rdata[i] = {pmp_cfg[i][5], 2'b00, pmp_cfg[i][4-:2], pmp_cfg[i][2], pmp_cfg[i][1], pmp_cfg[i][0]};
 					if (PMPGranularity == 0) begin : g_pmp_g0
@@ -24140,9 +24968,9 @@ module cve2_cs_registers (
 					always @(*) pmp_addr_rdata[i] = sv2v_tmp_D50E5;
 				end
 			end
-			genvar _gv_i_21;
-			for (_gv_i_21 = 0; _gv_i_21 < PMPNumRegions; _gv_i_21 = _gv_i_21 + 1) begin : g_pmp_csrs
-				localparam i = _gv_i_21;
+			genvar _gv_i_23;
+			for (_gv_i_23 = 0; _gv_i_23 < PMPNumRegions; _gv_i_23 = _gv_i_23 + 1) begin : g_pmp_csrs
+				localparam i = _gv_i_23;
 				assign pmp_cfg_we[i] = (csr_we_int & ~pmp_cfg_locked[i]) & (csr_addr == (cve2_pkg_CSR_OFF_PMP_CFG + (i[11:0] >> 2)));
 				wire [1:1] sv2v_tmp_46013;
 				assign sv2v_tmp_46013 = csr_wdata_int[((i % 4) * cve2_pkg_PMP_CFG_W) + 7];
@@ -24219,17 +25047,17 @@ module cve2_cs_registers (
 			assign pmp_mseccfg = pmp_mseccfg_q;
 		end
 		else begin : g_no_pmp_tieoffs
-			genvar _gv_i_22;
-			for (_gv_i_22 = 0; _gv_i_22 < cve2_pkg_PMP_MAX_REGIONS; _gv_i_22 = _gv_i_22 + 1) begin : g_rdata
-				localparam i = _gv_i_22;
+			genvar _gv_i_24;
+			for (_gv_i_24 = 0; _gv_i_24 < cve2_pkg_PMP_MAX_REGIONS; _gv_i_24 = _gv_i_24 + 1) begin : g_rdata
+				localparam i = _gv_i_24;
 				wire [32:1] sv2v_tmp_D50E5;
 				assign sv2v_tmp_D50E5 = 1'sb0;
 				always @(*) pmp_addr_rdata[i] = sv2v_tmp_D50E5;
 				assign pmp_cfg_rdata[i] = 1'sb0;
 			end
-			genvar _gv_i_23;
-			for (_gv_i_23 = 0; _gv_i_23 < PMPNumRegions; _gv_i_23 = _gv_i_23 + 1) begin : g_outputs
-				localparam i = _gv_i_23;
+			genvar _gv_i_25;
+			for (_gv_i_25 = 0; _gv_i_25 < PMPNumRegions; _gv_i_25 = _gv_i_25 + 1) begin : g_outputs
+				localparam i = _gv_i_25;
 				assign csr_pmp_cfg_o[((PMPNumRegions - 1) - i) * 6+:6] = 6'b000000;
 				assign csr_pmp_addr_o[((PMPNumRegions - 1) - i) * 34+:34] = 1'sb0;
 			end
@@ -24317,10 +25145,10 @@ module cve2_cs_registers (
 	assign unused_mhpmcounter_we_1 = mhpmcounter_we[1];
 	assign unused_mhpmcounterh_we_1 = mhpmcounterh_we[1];
 	assign unused_mhpmcounter_incr_1 = mhpmcounter_incr[1];
-	genvar _gv_i_24;
+	genvar _gv_i_26;
 	generate
-		for (_gv_i_24 = 0; _gv_i_24 < 29; _gv_i_24 = _gv_i_24 + 1) begin : gen_cntrs
-			localparam i = _gv_i_24;
+		for (_gv_i_26 = 0; _gv_i_26 < 29; _gv_i_26 = _gv_i_26 + 1) begin : gen_cntrs
+			localparam i = _gv_i_26;
 			localparam signed [31:0] Cnt = i + 3;
 			if (i < MHPMCounterNum) begin : gen_imp
 				wire [63:0] mhpmcounter_raw;
@@ -24386,9 +25214,9 @@ module cve2_cs_registers (
 			wire [DbgHwBreakNum - 1:0] tmatch_value_we;
 			wire [DbgHwBreakNum - 1:0] trigger_match;
 			assign tselect_we = (csr_we_int & debug_mode_i) & (csr_addr_i == 12'h7a0);
-			genvar _gv_i_25;
-			for (_gv_i_25 = 0; _gv_i_25 < DbgHwBreakNum; _gv_i_25 = _gv_i_25 + 1) begin : g_dbg_tmatch_we
-				localparam i = _gv_i_25;
+			genvar _gv_i_27;
+			for (_gv_i_27 = 0; _gv_i_27 < DbgHwBreakNum; _gv_i_27 = _gv_i_27 + 1) begin : g_dbg_tmatch_we
+				localparam i = _gv_i_27;
 				assign tmatch_control_we[i] = (((i[DbgHwNumLen - 1:0] == tselect_q) & csr_we_int) & debug_mode_i) & (csr_addr_i == 12'h7a1);
 				assign tmatch_value_we[i] = (((i[DbgHwNumLen - 1:0] == tselect_q) & csr_we_int) & debug_mode_i) & (csr_addr_i == 12'h7a2);
 			end
@@ -24407,9 +25235,9 @@ module cve2_cs_registers (
 				.rd_data_o(tselect_q),
 				.rd_error_o()
 			);
-			genvar _gv_i_26;
-			for (_gv_i_26 = 0; _gv_i_26 < DbgHwBreakNum; _gv_i_26 = _gv_i_26 + 1) begin : g_dbg_tmatch_reg
-				localparam i = _gv_i_26;
+			genvar _gv_i_28;
+			for (_gv_i_28 = 0; _gv_i_28 < DbgHwBreakNum; _gv_i_28 = _gv_i_28 + 1) begin : g_dbg_tmatch_reg
+				localparam i = _gv_i_28;
 				cve2_csr #(
 					.Width(1),
 					.ShadowCopy(1'b0),
@@ -24447,9 +25275,9 @@ module cve2_cs_registers (
 			end
 			assign tmatch_control_rdata = {28'h2800104, umode_control, selected_tmatch_control, 2'b00};
 			assign tmatch_value_rdata = selected_tmatch_value;
-			genvar _gv_i_27;
-			for (_gv_i_27 = 0; _gv_i_27 < DbgHwBreakNum; _gv_i_27 = _gv_i_27 + 1) begin : g_dbg_trigger_match
-				localparam i = _gv_i_27;
+			genvar _gv_i_29;
+			for (_gv_i_29 = 0; _gv_i_29 < DbgHwBreakNum; _gv_i_29 = _gv_i_29 + 1) begin : g_dbg_trigger_match
+				localparam i = _gv_i_29;
 				assign trigger_match[i] = tmatch_control_q[i] & (pc_if_i[31:0] == tmatch_value_q[i]);
 			end
 			assign trigger_match_o = |trigger_match;
@@ -25730,10 +26558,10 @@ module cve2_fetch_fifo (
 	assign unused_addr_in = in_addr_i[0];
 	assign busy_o = valid_q[DEPTH - 1:DEPTH - NUM_REQS];
 	assign pop_fifo = (out_ready_i & out_valid_o) & (~aligned_is_compressed | out_addr_o[1]);
-	genvar _gv_i_28;
+	genvar _gv_i_30;
 	generate
-		for (_gv_i_28 = 0; _gv_i_28 < (DEPTH - 1); _gv_i_28 = _gv_i_28 + 1) begin : g_fifo_next
-			localparam i = _gv_i_28;
+		for (_gv_i_30 = 0; _gv_i_30 < (DEPTH - 1); _gv_i_30 = _gv_i_30 + 1) begin : g_fifo_next
+			localparam i = _gv_i_30;
 			if (i == 0) begin : g_ent0
 				assign lowest_free_entry[i] = ~valid_q[i];
 			end
@@ -25760,10 +26588,10 @@ module cve2_fetch_fifo (
 			valid_q <= 1'sb0;
 		else
 			valid_q <= valid_d;
-	genvar _gv_i_29;
+	genvar _gv_i_31;
 	generate
-		for (_gv_i_29 = 0; _gv_i_29 < DEPTH; _gv_i_29 = _gv_i_29 + 1) begin : g_fifo_regs
-			localparam i = _gv_i_29;
+		for (_gv_i_31 = 0; _gv_i_31 < DEPTH; _gv_i_31 = _gv_i_31 + 1) begin : g_fifo_regs
+			localparam i = _gv_i_31;
 			always @(posedge clk_i or negedge rst_ni)
 				if (!rst_ni) begin
 					rdata_q[i * 32+:32] <= 1'sb0;
@@ -26206,10 +27034,10 @@ module cve2_id_stage (
 		endcase
 	end
 	assign alu_operand_b = (alu_op_b_mux_sel == 1'd1 ? imm_b : rf_rdata_b_fwd);
-	genvar _gv_i_30;
+	genvar _gv_i_32;
 	generate
-		for (_gv_i_30 = 0; _gv_i_30 < 2; _gv_i_30 = _gv_i_30 + 1) begin : gen_intermediate_val_reg
-			localparam i = _gv_i_30;
+		for (_gv_i_32 = 0; _gv_i_32 < 2; _gv_i_32 = _gv_i_32 + 1) begin : gen_intermediate_val_reg
+			localparam i = _gv_i_32;
 			always @(posedge clk_i or negedge rst_ni) begin : intermediate_val_reg
 				if (!rst_ni)
 					imd_val_q[(1 - i) * 34+:34] <= 1'sb0;
@@ -27821,10 +28649,10 @@ module cve2_prefetch_buffer (
 	wire valid_raw;
 	assign busy_o = |rdata_outstanding_q | instr_req_o;
 	assign fifo_clear = branch_i;
-	genvar _gv_i_31;
+	genvar _gv_i_33;
 	generate
-		for (_gv_i_31 = 0; _gv_i_31 < NUM_REQS; _gv_i_31 = _gv_i_31 + 1) begin : gen_rd_rev
-			localparam i = _gv_i_31;
+		for (_gv_i_33 = 0; _gv_i_33 < NUM_REQS; _gv_i_33 = _gv_i_33 + 1) begin : gen_rd_rev
+			localparam i = _gv_i_33;
 			assign rdata_outstanding_rev[i] = rdata_outstanding_q[1 - i];
 		end
 	endgenerate
@@ -27865,10 +28693,10 @@ module cve2_prefetch_buffer (
 			fetch_addr_q <= fetch_addr_d;
 	assign instr_addr = (valid_req_q ? stored_addr_q : (branch_i ? addr_i : fetch_addr_q));
 	assign instr_addr_w_aligned = {instr_addr[31:2], 2'b00};
-	genvar _gv_i_32;
+	genvar _gv_i_34;
 	generate
-		for (_gv_i_32 = 0; _gv_i_32 < NUM_REQS; _gv_i_32 = _gv_i_32 + 1) begin : g_outstanding_reqs
-			localparam i = _gv_i_32;
+		for (_gv_i_34 = 0; _gv_i_34 < NUM_REQS; _gv_i_34 = _gv_i_34 + 1) begin : g_outstanding_reqs
+			localparam i = _gv_i_34;
 			if (i == 0) begin : g_req0
 				assign rdata_outstanding_n[i] = (valid_req & instr_gnt_i) | rdata_outstanding_q[i];
 				assign branch_discard_n[i] = (((valid_req & instr_gnt_i) & discard_req_d) | (branch_i & rdata_outstanding_q[i])) | branch_discard_q[i];
@@ -27933,7 +28761,7 @@ module cve2_pmp (
 	wire [(PMPNumChan * PMPNumRegions) - 1:0] region_basic_perm_check;
 	reg [(PMPNumChan * PMPNumRegions) - 1:0] region_mml_perm_check;
 	reg [PMPNumChan - 1:0] access_fault;
-	initial $display("Warning [elaboration] /tmp/tmp.2RP7hnbHq8/mpy_soc.sv:42453:3 - cve2_pmp\n msg: ", "CVE2 does not officially support PMP, see rule PVL-40.");
+	initial $display("Warning [elaboration] /tmp/tmp.mf5C579eGl/mpy_soc.sv:42878:3 - cve2_pmp\n msg: ", "CVE2 does not officially support PMP, see rule PVL-40.");
 	genvar _gv_r_1;
 	generate
 		for (_gv_r_1 = 0; _gv_r_1 < PMPNumRegions; _gv_r_1 = _gv_r_1 + 1) begin : g_addr_exp
@@ -28076,10 +28904,10 @@ module cve2_register_file_ff (
 				we_a_dec[i] = (waddr_a_i == sv2v_cast_5(i) ? we_a_i : 1'b0);
 		end
 	end
-	genvar _gv_i_33;
+	genvar _gv_i_35;
 	generate
-		for (_gv_i_33 = 1; _gv_i_33 < NUM_WORDS; _gv_i_33 = _gv_i_33 + 1) begin : g_rf_flops
-			localparam i = _gv_i_33;
+		for (_gv_i_35 = 1; _gv_i_35 < NUM_WORDS; _gv_i_35 = _gv_i_35 + 1) begin : g_rf_flops
+			localparam i = _gv_i_35;
 			always @(posedge clk_i or negedge rst_ni)
 				if (!rst_ni)
 					rf_reg_q[((NUM_WORDS - 1) >= 1 ? i : 1 - (i - (NUM_WORDS - 1))) * DataWidth+:DataWidth] <= WordZeroVal;
@@ -29384,10 +30212,10 @@ module usb_crc (
 		if (in_valid)
 			state <= state_nxt;
 	assign crc_match = state == ~MATCH;
-	genvar _gv_i_34;
+	genvar _gv_i_36;
 	generate
-		for (_gv_i_34 = 0; _gv_i_34 < WIDTH; _gv_i_34 = _gv_i_34 + 1) begin : genblk1
-			localparam i = _gv_i_34;
+		for (_gv_i_36 = 0; _gv_i_36 < WIDTH; _gv_i_36 = _gv_i_36 + 1) begin : genblk1
+			localparam i = _gv_i_36;
 			assign crc[i] = state[(WIDTH - 1) - i];
 		end
 	endgenerate
@@ -29475,7 +30303,7 @@ module usb_ep_buf (
 	wire [10:0] ram_waddr;
 	wire [RWIDTH - 1:0] rd_data_1_ram;
 	wire [WWIDTH - 1:0] wr_data_0_ram;
-	genvar _gv_i_35;
+	genvar _gv_i_37;
 	assign ram_raddr[7:0] = rd_addr_0[ARW - 1:ARW - 8];
 	assign ram_waddr[7:0] = wr_addr_0[AWW - 1:AWW - 8];
 	generate
@@ -29527,8 +30355,8 @@ module usb_ep_buf (
 		else begin : genblk4
 			assign wr_data_0_ram = wr_data_0;
 		end
-		for (_gv_i_35 = 0; _gv_i_35 < 4; _gv_i_35 = _gv_i_35 + 1) begin : block
-			localparam i = _gv_i_35;
+		for (_gv_i_37 = 0; _gv_i_37 < 4; _gv_i_37 = _gv_i_37 + 1) begin : block
+			localparam i = _gv_i_37;
 			wire [15:0] ram_rdata;
 			wire [15:0] ram_wdata;
 			SB_RAM40_4K #(

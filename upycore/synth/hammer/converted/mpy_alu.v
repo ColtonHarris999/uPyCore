@@ -1,5 +1,280 @@
 // Generated from the uPyCore RTL by mpy_dc_unit.py and sv2v v0.0.13
 // (see ../README.md). Do not edit; regenerate with convert_rtl.sh.
+(* syn_hier = "hard" *) module upycore_add (
+	a_i,
+	b_i,
+	cin_i,
+	sum_o,
+	cout_o
+);
+	parameter signed [31:0] W = 32;
+	input wire [W - 1:0] a_i;
+	input wire [W - 1:0] b_i;
+	input wire cin_i;
+	output wire [W - 1:0] sum_o;
+	output wire cout_o;
+	localparam signed [31:0] LV = (W <= 1 ? 1 : $clog2(W));
+	wire [W - 1:0] p;
+	wire [W - 1:0] g;
+	assign p = a_i ^ b_i;
+	assign g[0] = (a_i[0] & b_i[0]) | (cin_i & (a_i[0] | b_i[0]));
+	generate
+		if (W > 1) begin : gen_g
+			assign g[W - 1:1] = a_i[W - 1:1] & b_i[W - 1:1];
+		end
+	endgenerate
+	wire [(LV >= 0 ? ((LV + 1) * W) - 1 : ((1 - LV) * W) + ((LV * W) - 1)):(LV >= 0 ? 0 : LV * W)] pp;
+	wire [(LV >= 0 ? ((LV + 1) * W) - 1 : ((1 - LV) * W) + ((LV * W) - 1)):(LV >= 0 ? 0 : LV * W)] gg;
+	assign pp[(LV >= 0 ? 0 : LV) * W+:W] = p;
+	assign gg[(LV >= 0 ? 0 : LV) * W+:W] = g;
+	genvar _gv_s_1;
+	generate
+		for (_gv_s_1 = 0; _gv_s_1 < LV; _gv_s_1 = _gv_s_1 + 1) begin : lvl
+			localparam s = _gv_s_1;
+			localparam signed [31:0] D = 1 << s;
+			genvar _gv_i_1;
+			for (_gv_i_1 = 0; _gv_i_1 < W; _gv_i_1 = _gv_i_1 + 1) begin : gbit
+				localparam i = _gv_i_1;
+				if (i >= D) begin : merge
+					assign gg[((LV >= 0 ? s + 1 : LV - (s + 1)) * W) + i] = gg[((LV >= 0 ? s : LV - s) * W) + i] | (pp[((LV >= 0 ? s : LV - s) * W) + i] & gg[((LV >= 0 ? s : LV - s) * W) + (i - D)]);
+					assign pp[((LV >= 0 ? s + 1 : LV - (s + 1)) * W) + i] = pp[((LV >= 0 ? s : LV - s) * W) + i] & pp[((LV >= 0 ? s : LV - s) * W) + (i - D)];
+				end
+				else begin : keep
+					assign gg[((LV >= 0 ? s + 1 : LV - (s + 1)) * W) + i] = gg[((LV >= 0 ? s : LV - s) * W) + i];
+					assign pp[((LV >= 0 ? s + 1 : LV - (s + 1)) * W) + i] = pp[((LV >= 0 ? s : LV - s) * W) + i];
+				end
+			end
+		end
+	endgenerate
+	wire [W - 1:0] carry;
+	assign carry[0] = cin_i;
+	generate
+		if (W > 1) begin : gen_carry
+			assign carry[W - 1:1] = gg[((LV >= 0 ? LV : LV - LV) * W) + ((W - 2) >= 0 ? W - 2 : ((W - 2) + ((W - 2) >= 0 ? W - 1 : 3 - W)) - 1)-:((W - 2) >= 0 ? W - 1 : 3 - W)];
+		end
+	endgenerate
+	assign sum_o = p ^ carry;
+	assign cout_o = gg[((LV >= 0 ? LV : LV - LV) * W) + (W - 1)];
+endmodule
+(* syn_hier = "hard" *) module upycore_sum3 (
+	a_i,
+	b_i,
+	c_i,
+	cin_i,
+	sum_o
+);
+	parameter signed [31:0] W = 32;
+	input wire [W - 1:0] a_i;
+	input wire [W - 1:0] b_i;
+	input wire [W - 1:0] c_i;
+	input wire cin_i;
+	output wire [W - 1:0] sum_o;
+	wire [W - 1:0] s;
+	wire [W - 1:0] g;
+	wire [W - 1:0] gsh;
+	assign s = (a_i ^ b_i) ^ c_i;
+	assign g = ((a_i & b_i) | (a_i & c_i)) | (b_i & c_i);
+	generate
+		if (W == 1) begin : gen_gsh1
+			assign gsh = 1'sb0;
+		end
+		else begin : gen_gsh
+			assign gsh = {g[W - 2:0], 1'b0};
+		end
+	endgenerate
+	upycore_add #(.W(W)) u(
+		.a_i(s),
+		.b_i(gsh),
+		.cin_i(cin_i),
+		.sum_o(sum_o),
+		.cout_o()
+	);
+endmodule
+(* syn_hier = "hard" *) module upycore_smul (
+	a_i,
+	b_i,
+	p_o
+);
+	parameter signed [31:0] AW = 33;
+	parameter signed [31:0] BW = 17;
+	input wire [AW - 1:0] a_i;
+	input wire [BW - 1:0] b_i;
+	output wire [(AW + BW) - 1:0] p_o;
+	localparam signed [31:0] W = AW + BW;
+	localparam signed [31:0] C0 = BW + 4;
+	localparam signed [31:0] C1 = (C0 <= 2 ? C0 : ((C0 / 3) * 2) + (C0 % 3));
+	localparam signed [31:0] C2 = (C1 <= 2 ? C1 : ((C1 / 3) * 2) + (C1 % 3));
+	localparam signed [31:0] C3 = (C2 <= 2 ? C2 : ((C2 / 3) * 2) + (C2 % 3));
+	localparam signed [31:0] C4 = (C3 <= 2 ? C3 : ((C3 / 3) * 2) + (C3 % 3));
+	localparam signed [31:0] C5 = (C4 <= 2 ? C4 : ((C4 / 3) * 2) + (C4 % 3));
+	localparam signed [31:0] C6 = (C5 <= 2 ? C5 : ((C5 / 3) * 2) + (C5 % 3));
+	localparam signed [31:0] C7 = (C6 <= 2 ? C6 : ((C6 / 3) * 2) + (C6 % 3));
+	localparam signed [31:0] C8 = (C7 <= 2 ? C7 : ((C7 / 3) * 2) + (C7 % 3));
+	localparam signed [31:0] C9 = (C8 <= 2 ? C8 : ((C8 / 3) * 2) + (C8 % 3));
+	localparam signed [31:0] C10 = (C9 <= 2 ? C9 : ((C9 / 3) * 2) + (C9 % 3));
+	localparam signed [31:0] C11 = (C10 <= 2 ? C10 : ((C10 / 3) * 2) + (C10 % 3));
+	localparam signed [31:0] C12 = (C11 <= 2 ? C11 : ((C11 / 3) * 2) + (C11 % 3));
+	generate
+		if (C12 != 2) begin : gen_bad_tree
+			nonexistent_module_smul_tree_did_not_reduce bad_tree();
+		end
+	endgenerate
+	wire [(C0 * W) - 1:0] d0;
+	wire [(C1 * W) - 1:0] d1;
+	wire [(C2 * W) - 1:0] d2;
+	wire [(C3 * W) - 1:0] d3;
+	wire [(C4 * W) - 1:0] d4;
+	wire [(C5 * W) - 1:0] d5;
+	wire [(C6 * W) - 1:0] d6;
+	wire [(C7 * W) - 1:0] d7;
+	wire [(C8 * W) - 1:0] d8;
+	wire [(C9 * W) - 1:0] d9;
+	wire [(C10 * W) - 1:0] d10;
+	wire [(C11 * W) - 1:0] d11;
+	wire [(C12 * W) - 1:0] d12;
+	genvar _gv_i_2;
+	function automatic [W - 1:0] sv2v_cast_E16C3;
+		input reg [W - 1:0] inp;
+		sv2v_cast_E16C3 = inp;
+	endfunction
+	generate
+		for (_gv_i_2 = 0; _gv_i_2 < BW; _gv_i_2 = _gv_i_2 + 1) begin : pp
+			localparam i = _gv_i_2;
+			assign d0[i * W+:W] = (sv2v_cast_E16C3(a_i) << i) & {W {b_i[i]}};
+		end
+	endgenerate
+	assign d0[BW * W+:W] = (a_i[AW - 1] ? ~(sv2v_cast_E16C3(b_i) << AW) : {W * 1 {1'sb0}});
+	assign d0[(BW + 1) * W+:W] = (b_i[BW - 1] ? ~(sv2v_cast_E16C3(a_i) << BW) : {W * 1 {1'sb0}});
+	assign d0[(BW + 2) * W+:W] = sv2v_cast_E16C3(a_i[AW - 1]);
+	assign d0[(BW + 3) * W+:W] = sv2v_cast_E16C3(b_i[BW - 1]);
+	upycore_csa_step #(
+		.W(W),
+		.N(C0)
+	) s0(
+		.din(d0),
+		.dout(d1)
+	);
+	upycore_csa_step #(
+		.W(W),
+		.N(C1)
+	) s1(
+		.din(d1),
+		.dout(d2)
+	);
+	upycore_csa_step #(
+		.W(W),
+		.N(C2)
+	) s2(
+		.din(d2),
+		.dout(d3)
+	);
+	upycore_csa_step #(
+		.W(W),
+		.N(C3)
+	) s3(
+		.din(d3),
+		.dout(d4)
+	);
+	upycore_csa_step #(
+		.W(W),
+		.N(C4)
+	) s4(
+		.din(d4),
+		.dout(d5)
+	);
+	upycore_csa_step #(
+		.W(W),
+		.N(C5)
+	) s5(
+		.din(d5),
+		.dout(d6)
+	);
+	upycore_csa_step #(
+		.W(W),
+		.N(C6)
+	) s6(
+		.din(d6),
+		.dout(d7)
+	);
+	upycore_csa_step #(
+		.W(W),
+		.N(C7)
+	) s7(
+		.din(d7),
+		.dout(d8)
+	);
+	upycore_csa_step #(
+		.W(W),
+		.N(C8)
+	) s8(
+		.din(d8),
+		.dout(d9)
+	);
+	upycore_csa_step #(
+		.W(W),
+		.N(C9)
+	) s9(
+		.din(d9),
+		.dout(d10)
+	);
+	upycore_csa_step #(
+		.W(W),
+		.N(C10)
+	) s10(
+		.din(d10),
+		.dout(d11)
+	);
+	upycore_csa_step #(
+		.W(W),
+		.N(C11)
+	) s11(
+		.din(d11),
+		.dout(d12)
+	);
+	upycore_add #(.W(W)) u_sum(
+		.a_i(d12[W - 1:0]),
+		.b_i(d12[(2 * W) - 1:W]),
+		.cin_i(1'b0),
+		.sum_o(p_o),
+		.cout_o()
+	);
+endmodule
+(* syn_hier = "hard" *) module upycore_csa_step (
+	din,
+	dout
+);
+	parameter signed [31:0] W = 8;
+	parameter signed [31:0] N = 3;
+	input wire [(N * W) - 1:0] din;
+	output wire [((N <= 2 ? N : ((N / 3) * 2) + (N % 3)) * W) - 1:0] dout;
+	localparam signed [31:0] M = (N <= 2 ? N : ((N / 3) * 2) + (N % 3));
+	localparam signed [31:0] NG = (N <= 2 ? 0 : N / 3);
+	localparam signed [31:0] NR = (N <= 2 ? 0 : N % 3);
+	generate
+		if (N <= 2) begin : gen_copy
+			assign dout = din;
+		end
+		else begin : gen_fold
+			genvar _gv_g_1;
+			for (_gv_g_1 = 0; _gv_g_1 < NG; _gv_g_1 = _gv_g_1 + 1) begin : grp
+				localparam g = _gv_g_1;
+				wire [W - 1:0] a;
+				wire [W - 1:0] b;
+				wire [W - 1:0] c;
+				wire [W - 1:0] maj;
+				assign a = din[(3 * g) * W+:W];
+				assign b = din[((3 * g) + 1) * W+:W];
+				assign c = din[((3 * g) + 2) * W+:W];
+				assign maj = ((a & b) | (a & c)) | (b & c);
+				assign dout[(2 * g) * W+:W] = (a ^ b) ^ c;
+				assign dout[((2 * g) + 1) * W+:W] = {maj[W - 2:0], 1'b0};
+			end
+			if (NR != 0) begin : gen_rest
+				assign dout[(2 * NG) * W+:NR * W] = din[(3 * NG) * W+:NR * W];
+			end
+		end
+	endgenerate
+endmodule
 module upycore_umul_seq (
 	clk_i,
 	rst_n_i,
@@ -341,14 +616,38 @@ module upycore_int_alu (
 	wire signed [63:0] b_s;
 	wire signed [64:0] add_ext;
 	wire signed [64:0] sub_ext;
+	wire signed [63:0] neg_v;
 	wire signed [63:0] sra;
 	wire signed [63:0] sll;
 	wire signed [63:0] sll_back;
 	reg cmp_result;
+	wire lt;
+	wire eq;
 	assign a_s = op_a_i;
 	assign b_s = op_b_i;
-	assign add_ext = {a_s[63], a_s} + {b_s[63], b_s};
-	assign sub_ext = {a_s[63], a_s} - {b_s[63], b_s};
+	upycore_add #(.W(65)) u_add(
+		.a_i({a_s[63], a_s}),
+		.b_i({b_s[63], b_s}),
+		.cin_i(1'b0),
+		.sum_o(add_ext),
+		.cout_o()
+	);
+	upycore_add #(.W(65)) u_sub(
+		.a_i({a_s[63], a_s}),
+		.b_i(~{b_s[63], b_s}),
+		.cin_i(1'b1),
+		.sum_o(sub_ext),
+		.cout_o()
+	);
+	upycore_add #(.W(64)) u_neg(
+		.a_i(64'b0000000000000000000000000000000000000000000000000000000000000000),
+		.b_i(~op_a_i),
+		.cin_i(1'b1),
+		.sum_o(neg_v),
+		.cout_o()
+	);
+	assign lt = sub_ext[64];
+	assign eq = op_a_i == op_b_i;
 	assign sra = a_s >>> op_b_i[5:0];
 	assign sll = a_s <<< op_b_i[5:0];
 	assign sll_back = sll >>> op_b_i[5:0];
@@ -380,15 +679,15 @@ module upycore_int_alu (
 		(* full_case, parallel_case *)
 		case (op_i)
 			UPY_ALU_ADD: begin
-				result_o = op_a_i + op_b_i;
+				result_o = add_ext[63:0];
 				overflow_flag_o = add_ext[64] != add_ext[63];
 			end
 			UPY_ALU_SUB: begin
-				result_o = op_a_i - op_b_i;
+				result_o = sub_ext[63:0];
 				overflow_flag_o = sub_ext[64] != sub_ext[63];
 			end
 			UPY_ALU_NEG: begin
-				result_o = -op_a_i;
+				result_o = neg_v;
 				overflow_flag_o = op_a_i == 64'h8000000000000000;
 			end
 			UPY_ALU_POS, UPY_ALU_PASS: result_o = op_a_i;
@@ -421,19 +720,19 @@ module upycore_int_alu (
 				result_o = {63'b000000000000000000000000000000000000000000000000000000000000000, cmp_result};
 			end
 			UPY_ALU_LT: begin
-				cmp_result = a_s < b_s;
+				cmp_result = lt;
 				result_o = {63'b000000000000000000000000000000000000000000000000000000000000000, cmp_result};
 			end
 			UPY_ALU_LE: begin
-				cmp_result = a_s <= b_s;
+				cmp_result = lt || eq;
 				result_o = {63'b000000000000000000000000000000000000000000000000000000000000000, cmp_result};
 			end
 			UPY_ALU_GT: begin
-				cmp_result = a_s > b_s;
+				cmp_result = !lt && !eq;
 				result_o = {63'b000000000000000000000000000000000000000000000000000000000000000, cmp_result};
 			end
 			UPY_ALU_GE: begin
-				cmp_result = a_s >= b_s;
+				cmp_result = !lt;
 				result_o = {63'b000000000000000000000000000000000000000000000000000000000000000, cmp_result};
 			end
 			default: result_o = 64'b0000000000000000000000000000000000000000000000000000000000000000;
@@ -489,6 +788,8 @@ module upycore_mul (
 	wire signed [32:0] a_high;
 	reg signed [STEP + 33:0] pp_low_r;
 	reg signed [STEP + 33:0] pp_high_r;
+	wire [STEP + 33:0] pp_low_c;
+	wire [STEP + 33:0] pp_high_c;
 	wire [ACC_W - 1:0] x;
 	wire [ACC_W - 1:0] y;
 	wire [ACC_W - 1:0] z;
@@ -515,7 +816,31 @@ module upycore_mul (
 	assign z = acc_r >>> STEP;
 	assign csa_s = (x ^ y) ^ z;
 	assign csa_c = ((x & y) | (x & z)) | (y & z);
-	assign sum = csa_s + (csa_c << 1);
+	wire [ACC_W - 1:0] sum_u;
+	upycore_add #(.W(ACC_W)) u_acc(
+		.a_i(csa_s),
+		.b_i({csa_c[ACC_W - 2:0], 1'b0}),
+		.cin_i(1'b0),
+		.sum_o(sum_u),
+		.cout_o()
+	);
+	assign sum = $signed(sum_u);
+	upycore_smul #(
+		.AW(33),
+		.BW(STEP + 1)
+	) u_pp_low(
+		.a_i(a_low),
+		.b_i(chunk_s),
+		.p_o(pp_low_c)
+	);
+	upycore_smul #(
+		.AW(33),
+		.BW(STEP + 1)
+	) u_pp_high(
+		.a_i(a_high),
+		.b_i(chunk_s),
+		.p_o(pp_high_c)
+	);
 	function automatic [63:0] sv2v_cast_64;
 		input reg [63:0] inp;
 		sv2v_cast_64 = inp;
@@ -555,8 +880,8 @@ module upycore_mul (
 			end
 			else if (busy_r) begin
 				if (cnt_r < sv2v_cast_7B3D1_signed(NSTEP)) begin
-					pp_low_r <= a_low * chunk_s;
-					pp_high_r <= a_high * chunk_s;
+					pp_low_r <= pp_low_c;
+					pp_high_r <= pp_high_c;
 					b_r <= b_r >> STEP;
 					cnt_r <= cnt_r + 1'b1;
 					product_valid <= 1'b1;
@@ -2374,8 +2699,12 @@ module upycore_fp_pow (
 	wire d_neg;
 	wire signed [89:0] w_sh;
 	wire [FW:0] z_sh;
-	reg signed [89:0] w_next;
-	reg signed [90:0] acc_next;
+	wire signed [89:0] w_next;
+	wire signed [89:0] w_pos;
+	wire signed [89:0] w_neg;
+	wire signed [90:0] acc_next;
+	wire signed [90:0] acc_pos;
+	wire signed [90:0] acc_neg;
 	wire [87:0] exp_c;
 	wire exp_take;
 	assign d_pos = !r_r[89] && (r_r[88:87] != 2'b00);
@@ -2388,22 +2717,37 @@ module upycore_fp_pow (
 	endfunction
 	assign w_sh = (j_r >= sv2v_cast_8_signed(WW) ? $signed({WW {r_r[89]}}) : w_sh_full);
 	assign z_sh = z_r >> i_r;
-	always @(*) begin
-		if (_sv2v_0)
-			;
-		if (d_pos)
-			w_next = ((r_r - $signed({{(WW - FW) - 1 {1'b0}}, 1'b1, {FW {1'b0}}})) + w_sh) <<< 1;
-		else if (d_neg)
-			w_next = ((r_r + $signed({{(WW - FW) - 1 {1'b0}}, 1'b1, {FW {1'b0}}})) - w_sh) <<< 1;
-		else
-			w_next = r_r <<< 1;
-		if (d_pos)
-			acc_next = acc_r - $signed({1'b0, cpos_r});
-		else if (d_neg)
-			acc_next = acc_r + $signed({1'b0, cneg_r});
-		else
-			acc_next = acc_r;
-	end
+	localparam [89:0] POW_ONE = {{(WW - FW) - 1 {1'b0}}, 1'b1, {FW {1'b0}}};
+	upycore_sum3 #(.W(WW)) u_wpos(
+		.a_i(r_r),
+		.b_i(~POW_ONE),
+		.c_i(w_sh),
+		.cin_i(1'b1),
+		.sum_o(w_pos)
+	);
+	upycore_sum3 #(.W(WW)) u_wneg(
+		.a_i(r_r),
+		.b_i(POW_ONE),
+		.c_i(~w_sh),
+		.cin_i(1'b1),
+		.sum_o(w_neg)
+	);
+	assign w_next = (d_pos ? w_pos : (d_neg ? w_neg : r_r)) <<< 1;
+	upycore_add #(.W(AW)) u_apos(
+		.a_i(acc_r),
+		.b_i(~{1'b0, cpos_r}),
+		.cin_i(1'b1),
+		.sum_o(acc_pos),
+		.cout_o()
+	);
+	upycore_add #(.W(AW)) u_aneg(
+		.a_i(acc_r),
+		.b_i({1'b0, cneg_r}),
+		.cin_i(1'b0),
+		.sum_o(acc_neg),
+		.cout_o()
+	);
+	assign acc_next = (d_pos ? acc_pos : (d_neg ? acc_neg : acc_r));
 	assign exp_c = cpos_r[87:0];
 	assign exp_take = f_r >= exp_c;
 	reg [7:0] pf_k;
