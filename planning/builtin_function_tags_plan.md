@@ -1,6 +1,10 @@
-# BUILTIN and FUNCTION tags
+# BUILTIN and FUNCTION tags, and the fixed string data offset
 
-Plan for an implementing agent. Baseline: `main` at `e12d6fe`. Record the
+Plan for an implementing agent. Part 1 adds the `BUILTIN` and `FUNCTION`
+tags. Part 2 ("Part 2: fixed string data offset") stops the core and the
+accelerator from reading a string's data-address word. The two parts are
+independent; each has its own switch, so their gains are measured
+separately. Baseline: `main` at `e12d6fe`. Record the
 SHA you branch from in the progress file; every "before" number below is
 measured on that commit.
 
@@ -29,8 +33,9 @@ Hard requirements:
   stays byte-identical (do not regenerate goldens), including `hash()`,
   `id()`, `repr()` and set/dict iteration order.
 - The clock-period estimate must not get worse (gate in "Timing").
-- Benchmarks must show the cycle change of each tag separately and both
-  together (protocol in "Benchmarks").
+- Benchmarks must show the cycle change of each tag and of the string
+  offset (Part 2) separately, and of all together (protocol in
+  "Benchmarks").
 
 ## Encoding
 
@@ -257,6 +262,98 @@ that commit is easy to drop.
 - When the work lands, move this plan to `planning/old/` per
   `planning/README.md`.
 
+## Part 2: fixed string data offset
+
+### Why
+
+A `STR` or `BYTES` header is `[0] len [1] hash [2] data address`, and the
+bytes follow at `+12`. Word 2 exists so that `str`, `bytes`, `bytearray`
+and `list` share one shape: length in word 0, data pointer in word 2. One
+path (`S_DADDR`, the copy engines, firmware `_bcopy`) then handles all four.
+`bytearray` and `list` need the pointer because their storage moves when
+they grow. `str` and `bytes` are immutable and never move, so for them word
+2 always holds `base + 12`. Both producers write exactly that: the linker's
+`emit_str` (`upycore/tools/mpy_link.py`, line ~356) and the core's
+`_strnew` (`mpy_core.sv`, `al_a + 32'd12`, line ~5740).
+
+Every read of that word for a `STR`/`BYTES` value is therefore wasted:
+
+| Site (`e12d6fe`) | Today | After |
+| --- | --- | --- |
+| `S_SINFO` (string info; 17 `gosub` callers, including string equality `S_STREQ` and hashing) | Three serial reads for a `STR`: `S_SI_S0` length, `S_SI_S1` hash, `S_SI_S2` data address | Two reads; the address is `adr(si_v) + 12` |
+| `S_DADDR` (data address of str/bytes/bytearray/list) | One read of word 2 (`S_DADDR_M`) | No read for `STR`/`BYTES` |
+| `mpy_hash.sv`, state `STR_PTR` (uncached string hash) | Reads `payload + 8` | Computes `payload + 12` |
+| `mpy_key_equal.sv`, state `STR_PTR` (string key compare) | Reads `current + 8` for `STR` | Computes `current + 12` (the `QSTR` path is unchanged) |
+
+### Fixed decisions
+
+- **The layout does not change.** Word 2 is still written, so the image
+  format, the ABI, the collector and any firmware that reads word 2 keep
+  working. Only the readers change. (Dropping word 2 and moving the data to
+  `+8` would also save 4 bytes per string. That is a separate, larger change
+  and is out of scope here.)
+- **`bytearray` and `list` keep reading word 2.** Their data moves.
+- **`QSTR` keeps its descriptor path** (`S_SI_Q0`/`S_SI_Q1`).
+
+### Invariant and how to prove it
+
+Invariant: for every `STR` or `BYTES` value at address `b`, word 2 holds
+`b + 12` and the bytes start there.
+
+1. Add a simulation-only check (`ifndef SYNTHESIS`, `$error`) at each site
+   in the table, **before** removing any read: when the tag is `STR` or
+   `BYTES`, the word read from `+8` must equal the header address plus 12.
+   Put the same check in `mpy_hash.sv` and `mpy_key_equal.sv`.
+2. Run the whole verification list (Part 1's "Verification", items 1–2)
+   with the checks on. It must run clean before step 3.
+3. Audit the firmware for anything that could break the invariant: a
+   `_st(s, 2, …)` on a string, or a `_mk(TAG_STR, …)` / `_mk(TAG_BYTES, …)`
+   that makes a header point at foreign data. `strs.py:144` contains
+   `_mk(TAG_BYTES, _pay(data)) if False else b`, a dead branch; confirm it
+   cannot run, or remove it. Record the audit in the progress file.
+4. Add a linker assert in `emit_str` that the data address is the header
+   address plus 12.
+5. Keep the checks after the reads are removed. The memory port still sees
+   word 2 whenever other code reads it, and the tests should keep proving
+   the invariant.
+
+### Changes
+
+Core (`upycore/rtl/mpy_core.sv`):
+
+- `S_SI_S1`: for `STR`/`BYTES` (and the switch on), set
+  `si_addr <= aoff(adr(si_v), 12)` and `ret()`, skipping `S_SI_S2`.
+- `S_DADDR`: for `STR`/`BYTES` (and the switch on), set
+  `si_addr <= aoff(adr(si_v), 12)` and `ret()` with no read. `INT`, `QSTR`
+  and `MUT_COLLEC` keep today's paths.
+- Audit every other read at `+8` of a value that can be a `STR` or `BYTES`
+  (search `aoff(adr(`, `adr(...) + 8`), and list each site and its outcome
+  in the progress file.
+
+Accelerator:
+
+- `mpy_hash.sv` `STR_PTR`: for a `STR`/`BYTES` key, form the data address
+  as `payload + 12` and go to the data-read state without issuing the
+  word-2 read. Update the "Memory reads" column for STR/BYTES in
+  `upycore/docs/mpy_hash.md`.
+- `mpy_key_equal.sv` `STR_PTR`: the same, for `STR` only.
+- Check `mpy_map_engine.sv` and `mpy_rehash_stream.sv` for their own
+  string-header reads. They currently delegate to the units above.
+
+Timing rules (in addition to Part 1's):
+
+- `si_v` is a register, so `aoff(adr(si_v), 12)` (the existing carry-select
+  incrementer) adds nothing after SRAM read data. Do not form the address
+  from `mv`/`md`.
+- In `mpy_hash.sv` and `mpy_key_equal.sv`, form `payload + 12` from the
+  registered key, and register it before it drives `mem_addr_o` if that
+  path shows up in the timing report.
+- Same gate as Part 1: no growth in the worst path of `mpy_core`,
+  `mpy_collection` or `mpy_hash`, and no new logic in the top 20 paths.
+
+Docs: `upycore/docs/mpy_memory_map.md` (state the invariant next to the
+`STR` header layout) and `upycore/docs/mpy_hash.md`.
+
 ## Switches (for measurement only)
 
 Follow the existing `CA`/`AALU` pattern in `mpy_core.sv` (parameters,
@@ -265,6 +362,10 @@ continuous assigns from the parameters in the `else` branch):
 
 - `parameter int BTAG = 1`, plusarg `+BTAG=`, register `cfg_btag`.
 - `parameter int FTAG = 1`, plusarg `+FTAG=`, register `cfg_ftag`.
+- `parameter int SOFF = 1`, plusarg `+SOFF=`, register `cfg_soff` (Part 2).
+  It also reaches `mpy_hash` and `mpy_key_equal`: add a parameter to
+  `mpy_soc`, pass it down, and read the same plusarg inside each unit's
+  `ifndef SYNTHESIS` block, as the core does.
 
 The switches gate only the consumer fast paths: call dispatch, method
 binding, and any tag-based reject from the audit. Producers (linker,
@@ -347,10 +448,11 @@ Builds:
 
 | Config | Plusargs |
 | --- | --- |
-| none | `+BTAG=0 +FTAG=0` |
-| BUILTIN | `+BTAG=1 +FTAG=0` |
-| FUNCTION | `+BTAG=0 +FTAG=1` |
-| both | `+BTAG=1 +FTAG=1` |
+| none | `+BTAG=0 +FTAG=0 +SOFF=0` |
+| BUILTIN | `+BTAG=1 +FTAG=0 +SOFF=0` |
+| FUNCTION | `+BTAG=0 +FTAG=1 +SOFF=0` |
+| STROFF | `+BTAG=0 +FTAG=0 +SOFF=1` |
+| all | `+BTAG=1 +FTAG=1 +SOFF=1` |
 
 Workloads:
 
@@ -366,12 +468,16 @@ Workloads:
    - `call_function.py`: a loop of calls to small Python functions and
      closures;
    - `call_method.py`: instance method calls plus `list.append` and
-     `dict.get` method calls.
+     `dict.get` method calls;
+   - `str_ops.py` (Part 2): equality of strings built at run time (not
+     interned), dict lookups with run-time string keys, `in`, slicing,
+     concatenation, and iteration over a `str` and a `bytes`.
 
 Event counters (simulation only, printed by the testbench at halt, for
 example behind `+STATS`): calls by callee kind (function, builtin, bound
-method, type, other), fast dispatches taken per tag, and method binds by
-kind. Report them per workload, so each speedup can be explained by an event
+method, type, other), fast dispatches taken per tag, method binds by kind,
+and, for Part 2, the string-header reads skipped in `S_SINFO`, `S_DADDR`,
+`mpy_hash` and `mpy_key_equal`. Report them per workload, so each speedup can be explained by an event
 count.
 
 Extend `upycore/tools/bench.py` (or add a sibling script) to run the four
@@ -380,9 +486,9 @@ JSON.
 
 Report in `planning/builtin_function_tags_progress.md`:
 
-1. Per-workload cycles for base and the four new configs; speedup of
-   BUILTIN alone, FUNCTION alone and both, relative to "none"; and both
-   relative to base. Geometric means over the 15 `perf_bench` workloads
+1. Per-workload cycles for base and the five new configs; speedup of
+   BUILTIN alone, FUNCTION alone, STROFF alone and all, relative to "none";
+   and all relative to base. Geometric means over the 15 `perf_bench` workloads
    with and without `core_qstr` (as `docs/paper/README.md` does), plus
    pystone separately.
 2. "none" vs base. It should be within noise. If it is not, the rename or
@@ -390,8 +496,8 @@ Report in `planning/builtin_function_tags_progress.md`:
 3. The timing comparison and the area change. If the period estimate
    moved, report execution time (cycles × period) as `clock_bench.py` does,
    not only cycles.
-4. The event counters, and one sentence per tag on where its gain comes
-   from.
+4. The event counters, and one sentence per optimization (each tag, and
+   the string offset) on where its gain comes from.
 
 ## Order of work and gates
 
@@ -404,8 +510,11 @@ Report in `planning/builtin_function_tags_progress.md`:
 | 4 | `FUNCTION` fast paths (call, method bind, safe rejects) | Verification passes; timing gate |
 | 5 | `BUILTIN` fast paths (call, method bind, fallback via `badr`) | Verification passes; timing gate |
 | 6 | Accelerator identity hashing for both tags | Verification passes; timing gate for `mpy_collection` |
-| 7 | Dead-code removal commit; docs | Tests pass |
-| 8 | Benchmarks, counters, report | Report complete |
+| 7 | Part 2: string invariant checks in the core, `mpy_hash`, `mpy_key_equal`; firmware audit; linker assert | Full suite runs with no invariant `$error` |
+| 8 | Part 2: `SOFF` switch; core fast paths (`S_SI_S1`, `S_DADDR`, other audited sites) | Verification passes; timing gate for `mpy_core` |
+| 9 | Part 2: `mpy_hash` and `mpy_key_equal` fast paths | Verification passes; hash and key-equality unit tests pass; timing gate for `mpy_collection`/`mpy_hash` |
+| 10 | Dead-code removal commit; docs | Tests pass |
+| 11 | Benchmarks, counters, report | Report complete |
 
 Commit at each step, so a regression can be bisected to one step.
 
@@ -423,3 +532,6 @@ Commit at each step, so a regression can be bisected to one step.
   Follow the timing rules; measure after steps 4–6, not only at the end.
 - **Fallback callables**: `S_NAT_FB` reads the builtin object. Test the
   fallback for every native that has a `_<name>_fb` in firmware.
+- **A string whose data is not at `+12`** (Part 2) would be read from the
+  wrong place, silently. That is why step 7 proves the invariant on the
+  full suite before step 8 removes a read, and why the checks stay on.
