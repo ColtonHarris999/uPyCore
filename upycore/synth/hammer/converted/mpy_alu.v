@@ -1044,6 +1044,10 @@ module upycore_fp_add (
 	assign exp_b = upycore_f64_exp_eff(op_b_i);
 	assign diff_ab = exp_a - exp_b;
 	assign diff_ba = exp_b - exp_a;
+	wire far_ab;
+	wire far_ba;
+	assign far_ab = |diff_ab[10:6] || &diff_ab[5:3];
+	assign far_ba = |diff_ba[10:6] || &diff_ba[5:3];
 	function automatic upycore_f64_is_nan;
 		input reg [63:0] v;
 		upycore_f64_is_nan = (v[62:52] == 11'h7ff) && (v[51:0] != 52'd0);
@@ -1271,7 +1275,7 @@ module upycore_fp_add (
 				s1_sign_big_r <= op_a_i[63];
 				s1_sign_small_r <= b_sign_eff;
 				s1_exp_big_r <= exp_a;
-				s1_shift_r <= (diff_ab > 11'd55 ? 6'd56 : diff_ab[5:0]);
+				s1_shift_r <= (far_ab ? 6'd56 : diff_ab[5:0]);
 				s1_sig_big_r <= upycore_f64_sig(op_a_i);
 				s1_sig_small_r <= upycore_f64_sig(op_b_i);
 			end
@@ -1279,7 +1283,7 @@ module upycore_fp_add (
 				s1_sign_big_r <= b_sign_eff;
 				s1_sign_small_r <= op_a_i[63];
 				s1_exp_big_r <= exp_b;
-				s1_shift_r <= (diff_ba > 11'd55 ? 6'd56 : diff_ba[5:0]);
+				s1_shift_r <= (far_ba ? 6'd56 : diff_ba[5:0]);
 				s1_sig_big_r <= upycore_f64_sig(op_b_i);
 				s1_sig_small_r <= upycore_f64_sig(op_a_i);
 			end
@@ -3615,7 +3619,7 @@ module upycore_fpu (
 				upycore_f64_floor = a;
 			else begin
 				nfrac = sv2v_cast_6(11'd1075 - e);
-				frac_mask = (52'd1 << nfrac) - 52'd1;
+				frac_mask = ~(52'hfffffffffffff << nfrac);
 				trunc = {e, a[51:0] & ~frac_mask};
 				if (a[63] && ((a[51:0] & frac_mask) != 52'd0))
 					upycore_f64_floor = {1'b1, trunc + (63'd1 << nfrac)};
@@ -4167,28 +4171,27 @@ module mpy_alu (
 	localparam [5:0] mpy_alu_pkg_ALU_RSHIFT = 6'd26;
 	localparam [5:0] mpy_alu_pkg_ALU_SUB = 6'd28;
 	localparam [5:0] mpy_alu_pkg_ALU_XOR = 6'd23;
-	always @(*) begin
-		if (_sv2v_0)
-			;
-		case (op)
-			mpy_alu_pkg_ALU_ADD: iop = UPY_ALU_ADD;
-			mpy_alu_pkg_ALU_SUB: iop = UPY_ALU_SUB;
-			mpy_alu_pkg_ALU_AND: iop = UPY_ALU_AND;
-			mpy_alu_pkg_ALU_OR: iop = UPY_ALU_OR;
-			mpy_alu_pkg_ALU_XOR: iop = UPY_ALU_XOR;
-			mpy_alu_pkg_ALU_LSHIFT: iop = UPY_ALU_LSHIFT;
-			mpy_alu_pkg_ALU_RSHIFT: iop = UPY_ALU_RSHIFT;
-			mpy_alu_pkg_ALU_LT: iop = UPY_ALU_LT;
-			mpy_alu_pkg_ALU_GT: iop = UPY_ALU_GT;
-			mpy_alu_pkg_ALU_EQ: iop = UPY_ALU_EQ;
-			mpy_alu_pkg_ALU_LE: iop = UPY_ALU_LE;
-			mpy_alu_pkg_ALU_GE: iop = UPY_ALU_GE;
-			mpy_alu_pkg_ALU_NE: iop = UPY_ALU_NE;
-			mpy_alu_pkg_ALU_NEG: iop = UPY_ALU_NEG;
-			mpy_alu_pkg_ALU_INVERT: iop = UPY_ALU_INVERT;
-			default: iop = UPY_ALU_PASS;
+	function automatic [4:0] iop_of;
+		input reg [5:0] o;
+		case (o)
+			mpy_alu_pkg_ALU_ADD: iop_of = UPY_ALU_ADD;
+			mpy_alu_pkg_ALU_SUB: iop_of = UPY_ALU_SUB;
+			mpy_alu_pkg_ALU_AND: iop_of = UPY_ALU_AND;
+			mpy_alu_pkg_ALU_OR: iop_of = UPY_ALU_OR;
+			mpy_alu_pkg_ALU_XOR: iop_of = UPY_ALU_XOR;
+			mpy_alu_pkg_ALU_LSHIFT: iop_of = UPY_ALU_LSHIFT;
+			mpy_alu_pkg_ALU_RSHIFT: iop_of = UPY_ALU_RSHIFT;
+			mpy_alu_pkg_ALU_LT: iop_of = UPY_ALU_LT;
+			mpy_alu_pkg_ALU_GT: iop_of = UPY_ALU_GT;
+			mpy_alu_pkg_ALU_EQ: iop_of = UPY_ALU_EQ;
+			mpy_alu_pkg_ALU_LE: iop_of = UPY_ALU_LE;
+			mpy_alu_pkg_ALU_GE: iop_of = UPY_ALU_GE;
+			mpy_alu_pkg_ALU_NE: iop_of = UPY_ALU_NE;
+			mpy_alu_pkg_ALU_NEG: iop_of = UPY_ALU_NEG;
+			mpy_alu_pkg_ALU_INVERT: iop_of = UPY_ALU_INVERT;
+			default: iop_of = UPY_ALU_PASS;
 		endcase
-	end
+	endfunction
 	upycore_int_alu u_int(
 		.op_a_i(a),
 		.op_b_i(b),
@@ -4546,6 +4549,7 @@ module mpy_alu (
 			aflt <= 1'b0;
 			bflt <= 1'b0;
 			op <= 1'sb0;
+			iop <= iop_of(6'd0);
 			small_r <= 1'b0;
 			a <= 1'sb0;
 			b <= 1'sb0;
@@ -4565,6 +4569,7 @@ module mpy_alu (
 						reg ok;
 						reg [63:0] v;
 						op <= op_i;
+						iop <= iop_of(op_i);
 						small_r <= small_i;
 						a <= a_i;
 						b <= b_i;
@@ -4604,10 +4609,14 @@ module mpy_alu (
 								st <= 4'd7;
 							end
 							else begin
-								if ((op_i == mpy_alu_pkg_ALU_ABS) && !a_i[63])
+								if ((op_i == mpy_alu_pkg_ALU_ABS) && !a_i[63]) begin
 									op <= mpy_alu_pkg_ALU_POS;
-								else if (op_i == mpy_alu_pkg_ALU_ABS)
+									iop <= iop_of(mpy_alu_pkg_ALU_POS);
+								end
+								else if (op_i == mpy_alu_pkg_ALU_ABS) begin
 									op <= mpy_alu_pkg_ALU_NEG;
+									iop <= iop_of(mpy_alu_pkg_ALU_NEG);
+								end
 								st <= 4'd7;
 							end
 						end
