@@ -318,10 +318,13 @@ def main() -> int:
     ap.add_argument("--die", nargs=2, type=float, metavar=("W", "H"),
                     help="die width and height in um (the TOP placement constraint); four "
                          "SRAM macros need far more than a logic-only example")
-    ap.add_argument("--syn-margin", type=float, default=0.0, metavar="NS",
-                    help="extra clock uncertainty in synthesis only: Genus targets a clock this "
-                         "much faster, leaving slack for routed wires (try 10-15%% of the period). "
-                         "Place and route then needs the upycore_hammer.py driver to undo it")
+    ap.add_argument("--syn-margin", type=float, default=2.5, metavar="NS",
+                    help="extra core_clk uncertainty in synthesis only, nanoseconds "
+                         "(default 2.5). Genus then will not keep a ripple that only meets "
+                         "the global-wire model: the 12 ns netlist had 73 ps of slack and "
+                         "routed at 15.1 ns. Innovus gets the plain uncertainty back from "
+                         "par_settings.tcl. io_clk and usb_clk are not margined. Pass 0 to "
+                         "synthesize core_clk to the real period")
     ap.add_argument("--par-effort", choices=["express", "standard", "extreme"],
                     help="Innovus design_flow_effort (Hammer default standard); extreme "
                          "optimizes timing harder and runs longer")
@@ -566,7 +569,8 @@ def main() -> int:
                     "# the netlist keeps slack for routed wires. Innovus gets the plain value\n"
                     "# back from cfg/par_settings.tcl.\n"
                     "if {[string match -nocase *genus* [file tail [info nameofexecutable]]]} {\n"
-                    f"    set_clock_uncertainty {float(args.uncertainty) + args.syn_margin:g} [all_clocks]\n"
+                    f"    set_clock_uncertainty {float(args.uncertainty) + args.syn_margin:g} "
+                    f"[get_clocks {{{' '.join(['core_clk', *args.also_clock])}}}]\n"
                     "}\n")
     if "constraints.tcl" not in cfg.read_text() and not any(
             "constraints.tcl" in f.read_text() for f in cfg_dir.glob("*.yml")):
