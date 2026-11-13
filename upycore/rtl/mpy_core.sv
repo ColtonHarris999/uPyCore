@@ -43,6 +43,16 @@
 `include "mpy_defs.svh"
 `include "mpy_abi.svh"
 
+`ifdef SYNTHESIS
+`define MPY_SPILL_AT  7'(RF_SPILL_AT)
+`define MPY_RELOAD_AT 7'(RF_RELOAD_AT)
+`define MPY_LEAVE_SP  7'(RF_LEAVE_SP)
+`else
+`define MPY_SPILL_AT  cfg_spill_at
+`define MPY_RELOAD_AT cfg_reload_at
+`define MPY_LEAVE_SP  cfg_leave_sp
+`endif
+
 /* verilator lint_off WIDTH */
 /* verilator lint_off UNUSEDSIGNAL */
 /* verilator lint_off UNUSEDPARAM */
@@ -1222,6 +1232,13 @@ module mpy_core
     logic [6:0]  sp_d;
     logic [5:0]  cfg_grow;
     logic        cfg_adapt;
+    // Fetch spills at cfg_spill_at and reloads a link at cfg_reload_at.
+    // A spill leaves at least cfg_leave_sp resident so it does not reload
+    // on the next fetch. Simulation plusargs SPILL=, RELOAD=, LEAVE=.
+    // Synthesis compares the literals so the fetch check stays a constant.
+`ifndef SYNTHESIS
+    logic [6:0]  cfg_spill_at, cfg_reload_at, cfg_leave_sp;
+`endif
     logic        spill_to_img;
     // Hot-local cache. Ages are 7 for the newest line. A dirty line is
     // ahead of its SRAM word until the frame is spilled.
@@ -1870,6 +1887,7 @@ module mpy_core
 `ifndef SYNTHESIS
     initial begin
         int grow_v, adapt_v, lc_n_v, lc_wb_v, lc_dm_v, ca_v, aalu_v, bulk_v, sl_v;
+        int spill_v, reload_v, leave_v;
         grow_v = GROW_CHUNK;
         adapt_v = GROW_ADAPT;
         lc_n_v = LC_N;
@@ -1877,6 +1895,9 @@ module mpy_core
         lc_dm_v = 0;
         if (!$value$plusargs("GROW=%d", grow_v)) grow_v = GROW_CHUNK;
         if (!$value$plusargs("ADAPT=%d", adapt_v)) adapt_v = GROW_ADAPT;
+        if (!$value$plusargs("SPILL=%d", spill_v)) spill_v = RF_SPILL_AT;
+        if (!$value$plusargs("RELOAD=%d", reload_v)) reload_v = RF_RELOAD_AT;
+        if (!$value$plusargs("LEAVE=%d", leave_v)) leave_v = RF_LEAVE_SP;
         if (!$value$plusargs("LC=%d", lc_n_v)) lc_n_v = LC_N;
         if (!$value$plusargs("LCWB=%d", lc_wb_v)) lc_wb_v = LC_WB;
         if (!$value$plusargs("LCDM=%d", lc_dm_v)) lc_dm_v = 0;
@@ -1884,10 +1905,24 @@ module mpy_core
         if (!$value$plusargs("AALU=%d", aalu_v)) aalu_v = AALU;
         if (grow_v < MPY_RF_CHUNK_MIN) grow_v = MPY_RF_CHUNK_MIN;
         if (grow_v > MPY_RF_CHUNK_MAX) grow_v = MPY_RF_CHUNK_MAX;
+        // An opcode runs with at most spill-1 resident slots. SHORT_STR
+        // needs four free registers, so the threshold stops at depth-3.
+        if (spill_v < 8) spill_v = 8;
+        if (spill_v > MPY_RF_DEPTH - 3) spill_v = MPY_RF_DEPTH - 3;
+        // Four resident values is the floor: below that an opcode can
+        // run with a link in the window and read a spilled slot. The
+        // plusarg still accepts 1 so a sweep can show the failure.
+        if (reload_v < 1) reload_v = 1;
+        if (reload_v > spill_v - 2) reload_v = spill_v - 2;
+        if (leave_v <= reload_v) leave_v = reload_v + 1;
+        if (leave_v >= spill_v) leave_v = spill_v - 1;
         if (lc_n_v < 0) lc_n_v = 0;
         if (lc_n_v > 8) lc_n_v = 8;
         cfg_grow = grow_v[5:0];
         cfg_adapt = (adapt_v != 0);
+        cfg_spill_at = spill_v[6:0];
+        cfg_reload_at = reload_v[6:0];
+        cfg_leave_sp = leave_v[6:0];
         cfg_lc_n = lc_n_v[3:0];
         cfg_lc_wb = (lc_wb_v != 0);
         cfg_lc_dm = (lc_dm_v != 0);
@@ -1911,6 +1946,26 @@ module mpy_core
     assign cfg_sl = 2'(SHORTLIST_MODE);
     assign cfg_ca = (CA_EN != 0);
     assign cfg_aalu = (AALU != 0);
+`endif
+
+`ifndef SYNTHESIS
+    // Entries into the spill and reload sequences. A return from the async
+    // ALU writeback is the same entry, not a second one.
+    int rf_spill_cnt, rf_reload_cnt;
+    state_e rf_stat_prev;
+    always_ff @(posedge clk_i or negedge rst_n_i) begin
+        if (!rst_n_i) begin
+            rf_spill_cnt <= 0;
+            rf_reload_cnt <= 0;
+            rf_stat_prev <= S_BOOT;
+        end else begin
+            if (st == S_RF_SPILL && rf_stat_prev != S_RF_SPILL && rf_stat_prev != S_AALU_WB)
+                rf_spill_cnt <= rf_spill_cnt + 1;
+            if (st == S_RF_RELOAD && rf_stat_prev != S_RF_RELOAD && rf_stat_prev != S_AALU_WB)
+                rf_reload_cnt <= rf_reload_cnt + 1;
+            rf_stat_prev <= st;
+        end
+    end
 `endif
 
     function automatic val_t hdr_word(input logic [31:0] i);
@@ -3153,7 +3208,7 @@ module mpy_core
             // arrives last, so it is tested first, with the or of the
             // branches that come before it: at the end of the chain it was
             // five selects from the state case (u_fetch.qn -> st, 9.6 ns).
-            S_FETCH: if (!(ca_fault_i || sp >= 7'(RF_SPILL_AT) || (has_link && sp <= 7'(RF_RELOAD_AT)) ||
+            S_FETCH: if (!(ca_fault_i || sp >= `MPY_SPILL_AT || (has_link && sp <= `MPY_RELOAD_AT) ||
                            (soft_pt && evt_q)) &&
                          fe_fault && fe_fault_addr[31:2] == pc[31:2]) fetch_fault();
                      else if (ca_fault_i) begin
@@ -3162,14 +3217,14 @@ module mpy_core
                              MPY_FAULT_FLASH_STORE: halt(ABI_HALT_FLASH_STORE, ca_fault_addr_i);
                              default: halt(ABI_HALT_BUS, ca_fault_addr_i);
                          endcase
-                     end else if (aalu_pend && (sp >= 7'(RF_SPILL_AT) || (has_link && sp <= 7'(RF_RELOAD_AT)) ||
+                     end else if (aalu_pend && (sp >= `MPY_SPILL_AT || (has_link && sp <= `MPY_RELOAD_AT) ||
                                                 (soft_pt && evt_q))) begin
                          // A spill or reload moves the ring under the busy slot
                          // (and the dispatcher's call spills the ring).
                          if (aalu_go) begin aalu_ret <= S_FETCH; st <= S_AALU_WB; end
-                     end else if (sp >= 7'(RF_SPILL_AT)) begin
+                     end else if (sp >= `MPY_SPILL_AT) begin
                          rf_resume <= S_FETCH; st <= S_RF_SPILL;
-                     end else if (has_link && sp <= 7'(RF_RELOAD_AT)) begin
+                     end else if (has_link && sp <= `MPY_RELOAD_AT) begin
                          rf_resume <= S_FETCH; st <= S_RF_RELOAD;
                      end else if (soft_pt && evt_q) begin
                          // A soft point with an event pending (S_IRQ calls
@@ -3188,7 +3243,7 @@ module mpy_core
             // to 8). A truncated instruction with fewer waits for the rest.
             // Entered from S_FETCH or straight from an instruction's end
             // (go_next); in the second case S_FETCH's checks happen here.
-            S_DEC: if (ca_fault_i || sp >= 7'(RF_SPILL_AT) || (has_link && sp <= 7'(RF_RELOAD_AT))) st <= S_FETCH;
+            S_DEC: if (ca_fault_i || sp >= `MPY_SPILL_AT || (has_link && sp <= `MPY_RELOAD_AT)) st <= S_FETCH;
                    else if (d_trunc) begin
                        if (dq_n == 4'd0) st <= S_FETCH;   // nothing queued: S_FETCH waits or faults
                        else if (dq_n == 4'd8) halt(ABI_HALT_BAD_OPCODE, pc);
@@ -4044,7 +4099,7 @@ module mpy_core
             end
 
             // ---- unwinding for return and jumps out of finally/with/for ----
-            S_UR: if (has_link && sp <= 7'(RF_RELOAD_AT)) begin
+            S_UR: if (has_link && sp <= `MPY_RELOAD_AT) begin
                       rf_resume <= S_UR; st <= S_RF_RELOAD;
                   end else if (xsp == 5'd0) begin
                       t[7] <= rf[`SX(sp - 7'd1)];
@@ -6851,11 +6906,11 @@ module mpy_core
                 v0 = (cfg_adapt && !rf_mono) ? 32'(MPY_RF_CHUNK_MIN) : 32'(cfg_grow);
                 if (v0 < 32'(MPY_RF_CHUNK_MIN)) v0 = 32'(MPY_RF_CHUNK_MIN);
                 if (v0 > 32'(MPY_RF_CHUNK_MAX)) v0 = 32'(MPY_RF_CHUNK_MAX);
-                // Leave sp >= RF_LEAVE_SP so the next fetch does not reload.
-                // No link: sp_new = sp - n + 1, so n <= sp - 4.
-                // Link in slot 0: sp_new = sp - n, so n <= sp - 5.
-                v1 = has_link ? ((sp > 7'(RF_LEAVE_SP)) ? 32'(sp - 7'(RF_LEAVE_SP)) : 32'd0)
-                              : ((sp > 7'(RF_LEAVE_SP - 1)) ? 32'(sp - 7'(RF_LEAVE_SP - 1)) : 32'd0);
+                // Leave sp >= cfg_leave_sp so the next fetch does not reload.
+                // No link: sp_new = sp - n + 1, so n <= sp - (leave - 1).
+                // Link in slot 0: sp_new = sp - n, so n <= sp - leave.
+                v1 = has_link ? ((sp > `MPY_LEAVE_SP) ? 32'(sp - `MPY_LEAVE_SP) : 32'd0)
+                              : ((sp > (`MPY_LEAVE_SP - 7'd1)) ? 32'(sp - (`MPY_LEAVE_SP - 7'd1)) : 32'd0);
                 if (v0 > v1) v0 = v1;
                 // The size takes this cycle; the checks against the frame
                 // and the commit take S_RF_SPILL2. Neither cycle writes the
@@ -7174,6 +7229,9 @@ endmodule
 `undef la_i
 `undef ke_w0
 `undef ke_w1
+`undef MPY_SPILL_AT
+`undef MPY_RELOAD_AT
+`undef MPY_LEAVE_SP
 /* verilator lint_on BLKSEQ */
 /* verilator lint_on CASEINCOMPLETE */
 /* verilator lint_on UNUSEDPARAM */

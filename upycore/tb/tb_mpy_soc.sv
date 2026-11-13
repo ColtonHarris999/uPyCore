@@ -488,6 +488,11 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
             $display("MPY_TIMEOUT cycles=%0d ops=%0d gc=%0d pc=%08x op=%02x st=%0d wret=%0d wpend=%0d m_req=%0d",
                      cycles, ops, gc_coll, trace_pc, trace_op, u_soc.u_core.st, u_soc.u_core.wret,
                      u_soc.u_core.wpend, u_soc.u_core.m_req);
+        if ($test$plusargs("RFSTAT"))
+            $display("MPY_RF spills=%0d reloads=%0d spill_at=%0d reload_at=%0d leave=%0d grow=%0d",
+                     u_soc.u_core.rf_spill_cnt, u_soc.u_core.rf_reload_cnt,
+                     u_soc.u_core.cfg_spill_at, u_soc.u_core.cfg_reload_at,
+                     u_soc.u_core.cfg_leave_sp, u_soc.u_core.cfg_grow);
         $finish;
     end
 endmodule
