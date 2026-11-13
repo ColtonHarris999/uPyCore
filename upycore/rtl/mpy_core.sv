@@ -3,7 +3,7 @@
 //
 // One frame is live. Locals sit in the frame record in SRAM (up to 255).
 // The operand stack is the 16-entry register file, used as a ring of the
-// newest values. When 12 slots are resident, the oldest values are copied
+// newest values. When 15 slots are resident, the oldest values are copied
 // to a packed SRAM block. A stack that has only been growing spills 8 so a
 // deep expression walks fewer links. A stack that has been popping spills
 // 4, which is cheap to pull back. The block header holds the previous
@@ -1905,10 +1905,12 @@ module mpy_core
         if (!$value$plusargs("AALU=%d", aalu_v)) aalu_v = AALU;
         if (grow_v < MPY_RF_CHUNK_MIN) grow_v = MPY_RF_CHUNK_MIN;
         if (grow_v > MPY_RF_CHUNK_MAX) grow_v = MPY_RF_CHUNK_MAX;
-        // An opcode runs with at most spill-1 resident slots. SHORT_STR
-        // needs four free registers, so the threshold stops at depth-3.
-        if (spill_v < 8) spill_v = 8;
-        if (spill_v > MPY_RF_DEPTH - 3) spill_v = MPY_RF_DEPTH - 3;
+        // An opcode runs with at most spill-1 resident slots. A value is
+        // one register. GET_ITER_STACK then writes three more, so 14 is
+        // the highest threshold that cannot wrap the 16-entry ring.
+        // 15 and 16 are accepted so a sweep can measure them.
+        if (spill_v < 4) spill_v = 4;
+        if (spill_v > MPY_RF_DEPTH) spill_v = MPY_RF_DEPTH;
         // Four resident values is the floor: below that an opcode can
         // run with a link in the window and read a spilled slot. The
         // plusarg still accepts 1 so a sweep can show the failure.
