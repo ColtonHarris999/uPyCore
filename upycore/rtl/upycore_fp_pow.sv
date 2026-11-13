@@ -157,8 +157,8 @@ module upycore_fp_pow #(
     logic                 d_pos, d_neg;   // log digit
     logic signed [WW-1:0] w_sh;           // w >>> j
     logic [FW:0]          z_sh;           // Z >> k
-    logic signed [WW-1:0] w_next;
-    logic signed [AW-1:0] acc_next;
+    logic signed [WW-1:0] w_next, w_pos, w_neg;
+    logic signed [AW-1:0] acc_next, acc_pos, acc_neg;
     logic [FW-1:0]        exp_c;          // log2(1 + 2^-k), FW fraction bits
     logic                 exp_take;
 
@@ -176,16 +176,25 @@ module upycore_fp_pow #(
     assign w_sh      = (j_r >= 8'(WW)) ? $signed({WW{r_r[WW-1]}}) : w_sh_full;
     assign z_sh      = z_r >> i_r;
 
-    always_comb begin
-        // w' = 2 (w - d + d (w >>> j))
-        if (d_pos)      w_next = (r_r - $signed({{(WW-FW-1){1'b0}}, 1'b1, {FW{1'b0}}}) + w_sh) <<< 1;
-        else if (d_neg) w_next = (r_r + $signed({{(WW-FW-1){1'b0}}, 1'b1, {FW{1'b0}}}) - w_sh) <<< 1;
-        else            w_next = r_r <<< 1;
-        // acc' = acc - CPOS[j] 2^-i  (d = +1)   or   acc + CNEG[j] 2^-i  (d = -1)
-        if (d_pos)      acc_next = acc_r - $signed({1'b0, cpos_r});
-        else if (d_neg) acc_next = acc_r + $signed({1'b0, cneg_r});
-        else            acc_next = acc_r;
-    end
+    // w' = 2 (w - d + d (w >>> j)). The shift is already a shallow barrel
+    // (about 3 ns post-route); the two 90-bit ripples after it were the
+    // rest of j_r -> r_r[89] at 15.1 ns. One carry-save plus one prefix
+    // add replaces both ripples. The digit select is the top bits of r_r,
+    // which are a flop, so it only muxes the finished sums.
+    localparam logic [WW-1:0] POW_ONE = {{(WW-FW-1){1'b0}}, 1'b1, {FW{1'b0}}};
+    upycore_sum3 #(.W(WW)) u_wpos (
+        .a_i(r_r), .b_i(~POW_ONE), .c_i(w_sh), .cin_i(1'b1), .sum_o(w_pos));
+    upycore_sum3 #(.W(WW)) u_wneg (
+        .a_i(r_r), .b_i(POW_ONE), .c_i(~w_sh), .cin_i(1'b1), .sum_o(w_neg));
+    assign w_next = (d_pos ? w_pos : d_neg ? w_neg : r_r) <<< 1;
+    upycore_add #(.W(AW)) u_apos (
+        .a_i(acc_r), .b_i(~{1'b0, cpos_r}), .cin_i(1'b1),
+        .sum_o(acc_pos), .cout_o());
+    upycore_add #(.W(AW)) u_aneg (
+        .a_i(acc_r), .b_i({1'b0, cneg_r}), .cin_i(1'b0),
+        .sum_o(acc_neg), .cout_o());
+    // acc' = acc - CPOS[j] 2^-i  (d = +1)   or   acc + CNEG[j] 2^-i  (d = -1)
+    assign acc_next = d_pos ? acc_pos : d_neg ? acc_neg : acc_r;
 
     assign exp_c    = cpos_r[FW-1:0];     // CPOS[k] >> k  (< 1 for k >= 1)
     assign exp_take = (f_r >= exp_c);

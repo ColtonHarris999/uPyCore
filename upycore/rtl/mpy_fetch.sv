@@ -71,27 +71,63 @@ module mpy_fetch #(
     end
 
     logic [29:0] pw, bw, dw;
+    logic        pw_ge_bw;
     assign pw = pc_i[31:2];
     assign bw = qb[31:2];
-    assign dw = pw - bw;
+    // pc[3] -> q_w was a 30-bit ripple merged into the queue mux (15.3 ns
+    // post-route). The prefix add stops at a net, and the distance compare
+    // only looks at the bits a queue offset can set.
+    upycore_add #(.W(30)) u_dw (
+        .a_i(pw), .b_i(~bw), .cin_i(1'b1), .sum_o(dw), .cout_o(pw_ge_bw)
+    );
+
+    // qn is at most QD and nfl is 3 bits, so the sum fits in clog2(QD+8).
+    localparam int LW = $clog2(QD + 8);
+    logic [LW-1:0] lim;
+    logic          dw_gt;
+    assign lim = LW'(qn) + LW'(nfl);
+    generate
+        if (LW >= 30) begin : gen_dw_wide
+            assign dw_gt = dw > 30'(lim);
+        end else begin : gen_dw_narrow
+            assign dw_gt = |dw[29:LW] || (dw[LW-1:0] > lim);
+        end
+    endgenerate
 
     logic redirect, pop;
-    assign redirect = flush_i || (pw < bw) || (dw > 30'(qn) + 30'(nfl));
+    assign redirect = flush_i || !pw_ge_bw || dw_gt;
     assign pop = !redirect && (qn != '0) && (dw != '0);
 
-    assign req_o  = !stop && (32'(qn) + 32'(nfl) < QD);
-    assign addr_o = qb + {30'(qn) + 30'(nfl), 2'b00};
+    logic [29:0] addr_w;
+    upycore_add #(.W(30)) u_addr (
+        .a_i(bw), .b_i(30'(lim)), .cin_i(1'b0), .sum_o(addr_w), .cout_o()
+    );
+    assign req_o  = !stop && (LW'(qn) + LW'(nfl) < LW'(QD));
+    assign addr_o = {addr_w, 2'b00};
 
     for (genvar i = 0; i < QD; i++) begin : g_win
         assign win_o[32*i +: 32] = q_w[i];
     end
     assign base_o = qb;
 
-    logic [31:0] off;
-    assign off = pc_i - qb;
+    // avail keeps six bits. The low bits of a subtract do not depend on
+    // the bits above them, so this is the low six bits of pc - qb and of
+    // 4*vn - off, not a second 32-bit carry chain.
+    logic [5:0] off6;
+    logic       dw_lt;
+    upycore_add #(.W(6)) u_off (
+        .a_i(pc_i[5:0]), .b_i(~qb[5:0]), .cin_i(1'b1), .sum_o(off6), .cout_o()
+    );
+    generate
+        if (NW >= 30) begin : gen_lt_wide
+            assign dw_lt = dw < 30'(vn);
+        end else begin : gen_lt_narrow
+            assign dw_lt = !(|dw[29:NW]) && (dw[NW-1:0] < vn);
+        end
+    endgenerate
     always_comb begin
-        if (!redirect && (dw < 30'(vn)))
-            avail_o = 6'(32'(4 * vn) - off);
+        if (!redirect && dw_lt)
+            avail_o = 6'(6'(4 * vn) - off6);
         else
             avail_o = '0;
     end

@@ -50,7 +50,7 @@ def main():
         'mixed': lines,
     }
     measurements = []
-    rtl = [str(unit.RTL / x) for x in ('mpy_hash.sv', 'upycore_umod_seq.sv', 'mpy_hash_slot.sv')]
+    rtl = [str(unit.RTL / x) for x in ('upycore_add.sv', 'mpy_hash.sv', 'upycore_umod_seq.sv', 'mpy_hash_slot.sv')]
     for bpc, width, serial in [(1,1,0), (2,1,0), (4,1,0), (4,4,0), (4,1,1), (4,4,1)]:
         obj = work / f'obj_{bpc}_{width}_{serial}'
         run([os.environ.get('VERILATOR','verilator'), *unit.FLAGS, f'-I{unit.RTL}',
@@ -72,7 +72,8 @@ def main():
     for width in (1, 4):
         obj = work / f'hash_{width}'
         run([os.environ.get('VERILATOR','verilator'), *unit.FLAGS, f'-I{unit.RTL}',
-             '--Mdir', str(obj), str(unit.RTL / 'mpy_hash.sv'),
+             '--Mdir', str(obj), str(unit.RTL / 'upycore_add.sv'),
+             str(unit.RTL / 'mpy_hash.sv'),
              str(unit.TB / 'tb_mpy_hash.sv'), '--top-module', 'tb_mpy_hash',
              f'-GBYTES_PER_CYCLE={width}'])
         for group in groups:

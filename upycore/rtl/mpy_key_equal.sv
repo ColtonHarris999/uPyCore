@@ -37,6 +37,22 @@ module mpy_key_equal (
     logic [2:0] acount,bcount;
     logic [35:0] current;
     logic [31:0] descriptor;
+    logic [31:0] q_in, q_out, qext_off_c, cur4, cur8, desc4;
+    logic        q_ge;
+    // current < qcount selects the base table. q_ge is current >= qcount.
+    upycore_add #(.W(32)) u_qcmp (
+        .a_i(current[31:0]), .b_i(~qcount), .cin_i(1'b1), .sum_o(), .cout_o(q_ge));
+    upycore_add #(.W(32)) u_qin (
+        .a_i(qbase), .b_i({current[28:0], 3'b000}), .cin_i(1'b0), .sum_o(q_in), .cout_o());
+    upycore_add #(.W(32)) u_qout (
+        .a_i(qext_off), .b_i({current[28:0], 3'b000}), .cin_i(1'b0), .sum_o(q_out), .cout_o());
+    assign descriptor = q_ge ? q_out : q_in;
+    upycore_add #(.W(32)) u_qext (
+        .a_i(qstr_ext_i), .b_i(~{qstr_count_i[28:0], 3'b000}), .cin_i(1'b1),
+        .sum_o(qext_off_c), .cout_o());
+    upycore_add #(.W(32)) u_cur4 (.a_i(current[31:0]), .b_i(32'd4), .cin_i(1'b0), .sum_o(cur4), .cout_o());
+    upycore_add #(.W(32)) u_cur8 (.a_i(current[31:0]), .b_i(32'd8), .cin_i(1'b0), .sum_o(cur8), .cout_o());
+    upycore_add #(.W(32)) u_desc4 (.a_i(desc_r), .b_i(32'd4), .cin_i(1'b0), .sum_o(desc4), .cout_o());
     always_ff @(posedge clk_i) desc_r<=descriptor;
     logic [63:0] convert_input,magnitude,normalized;
     logic convert_sign,convert_side;
@@ -57,7 +73,6 @@ module mpy_key_equal (
         exponent_bits=8'd127+{2'b0,exponent_index}+{7'd0,rounded[24]};
     end
     assign current=side ? b : a;
-    assign descriptor=current[31:0]<qcount ? qbase+(current[31:0]<<3) : qext_off+(current[31:0]<<3);
     assign ready_o=state==IDLE || (state==RESULT && ready_i);
     assign valid_o=state==RESULT;
     function automatic logic numeric(input logic [35:0] v);
@@ -77,16 +92,16 @@ module mpy_key_equal (
     task automatic accept;
         a<=a_i;b<=b_i;side<=0;error_o<=0;equal_o<=0;
         qcount<=qstr_count_i;qbase<=qstr_base_i;qext<=qstr_ext_i;
-        qext_off<=qstr_ext_i-(qstr_count_i<<3);
+        qext_off<=qext_off_c;
         state<=DISPATCH;
     endtask
     always_comb begin
         mem_req_o=1;mem_addr_o=current[31:0];
         case(state)
             NUM_LO:mem_addr_o=current[31:0];
-            NUM_HI:mem_addr_o=current[31:0]+4;
+            NUM_HI:mem_addr_o=cur4;
             STR_LEN:mem_addr_o=current[35:32]==ABI_TAG_QSTR ? descriptor : current[31:0];
-            STR_PTR:mem_addr_o=current[35:32]==ABI_TAG_QSTR ? desc_r+4 : current[31:0]+8;
+            STR_PTR:mem_addr_o=current[35:32]==ABI_TAG_QSTR ? desc4 : cur8;
             READ_A:mem_addr_o={ptr[0][31:2],2'b00};
             READ_B:mem_addr_o={ptr[1][31:2],2'b00};
             default:mem_req_o=0;

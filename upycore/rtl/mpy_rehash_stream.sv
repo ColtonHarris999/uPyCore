@@ -66,7 +66,8 @@ module mpy_rehash_stream #(parameter bit EXTERNAL_HASH=0) (
     assign hack=pending && owner==1 && ack_i;
     assign cack=pending && owner==2 && ack_i;
     // Reset the elastic pipeline between commands, after the shared port drains.
-    mpy_hash_slot #(.DEPTH(1),.EXTERNAL_HASH(EXTERNAL_HASH)) pipeline (
+    // BPC=2: the BPC=4 restoring step was 15.2 ns after routing.
+    mpy_hash_slot #(.DEPTH(1),.BPC(2),.EXTERNAL_HASH(EXTERNAL_HASH)) pipeline (
         .hash_valid_o,.hash_ready_i,.hash_tag_o,.hash_payload_o,
         .hash_result_valid_i,.hash_result_ready_o,.hash_value_i,.hash_error_i,
         .hash_mem_req_i,.hash_mem_addr_i,.hash_mem_ack_o,

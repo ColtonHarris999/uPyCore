@@ -1583,7 +1583,10 @@ module mpy_core
 
     // Probe start, pos = hh % alloc. Both callers divide by lkA[0]
     // (`lk_alloc / `rh_alloc), which holds until the probe's done.
-    upycore_umod_seq #(.BPC(4)) u_hmod (
+    // BPC=4's two radix-4 steps were 15.2 ns after routing (P2, r_r). BPC=2
+    // is one step per cycle. Probe-start and power-of-two memos still skip
+    // the hot lookups, so the extra steps land on the cold ones.
+    upycore_umod_seq #(.BPC(2)) u_hmod (
         .clk_i, .rst_n_i, .start_i(hm_start), .a_i(hh), .d_i(lkA[0]),
         .done_o(hm_done), .rem_o(hm_rem), .busy_o()
     );
@@ -1664,10 +1667,10 @@ module mpy_core
     always_ff @(posedge clk_i or negedge rst_n_i)
         if (!rst_n_i) begin hp_room_r <= '0; hp_neg_r <= 1'b0; hp_free_r <= '0; hp_neg2_r <= 1'b0; hp_big_r <= 1'b0; end
         else begin
-            hp_room_r <= (spill_hp - fbase) >> 2; hp_neg_r <= (spill_hp < fbase);
-            hp_free_r <= hp_room_r - {23'd0, stack_prefix_words};
-            hp_neg2_r <= hp_neg_r || (hp_room_r < {23'd0, stack_prefix_words});
-            hp_big_r  <= (hp_room_r - {23'd0, stack_prefix_words}) >= 32'd8192;
+            hp_room_r <= spill_fb >> 2; hp_neg_r <= !fb_ge;
+            hp_free_r <= hp_free_c;
+            hp_neg2_r <= hp_neg_r || !hp_free_ge;
+            hp_big_r  <= |hp_free_c[31:13];
         end
     // From S_DEC, for the instruction S_EXEC runs next: the local cache's
     // answer for the local it names, and whether a call's operands are all
@@ -1686,13 +1689,35 @@ module mpy_core
     function automatic logic [8:0] frame_prefix(input logic [7:0] locals, input logic [4:0] exceptions);
         frame_prefix = 9'd17 + 9'(locals) + 9'd3 * 9'(exceptions);
     endfunction
-    assign ftop = fbase + {21'd0, stack_prefix_words, 2'b00};
+    // Prefix adds: these were 32-bit ripples (spill_hp -> spill_addr was
+    // 15.0 ns post-route, and ftop sits in front of the same compare).
+    logic [31:0] spill_diff, spill_fb, hp_free_c, ftop_bc, stk_sum;
+    logic        fb_ge, hp_free_ge, hp_ge_ftopbc;
+    upycore_add #(.W(32)) u_spill_sub (
+        .a_i(spill_hp), .b_i(~spill_bc), .cin_i(1'b1), .sum_o(spill_diff), .cout_o());
+    upycore_add #(.W(32)) u_spill_fb (
+        .a_i(spill_hp), .b_i(~fbase), .cin_i(1'b1), .sum_o(spill_fb), .cout_o(fb_ge));
+    upycore_add #(.W(32)) u_hp_free (
+        .a_i(hp_room_r), .b_i(~{23'd0, stack_prefix_words}), .cin_i(1'b1),
+        .sum_o(hp_free_c), .cout_o(hp_free_ge));
+    upycore_add #(.W(32)) u_ftop (
+        .a_i(fbase), .b_i({21'd0, stack_prefix_words, 2'b00}), .cin_i(1'b0),
+        .sum_o(ftop), .cout_o());
+    // fbase + prefix + spill_bc in one sum. Chaining a second hard adder
+    // on ftop would put two prefix trees on the recursion compare.
+    upycore_sum3 #(.W(32)) u_ftop_bc (
+        .a_i(fbase), .b_i({21'd0, stack_prefix_words, 2'b00}), .c_i(spill_bc),
+        .cin_i(1'b0), .sum_o(ftop_bc));
+    upycore_add #(.W(32)) u_hp_cmp (
+        .a_i(spill_hp), .b_i(~ftop_bc), .cin_i(1'b1), .sum_o(), .cout_o(hp_ge_ftopbc));
+    upycore_add #(.W(32)) u_stk (
+        .a_i(fbase), .b_i({20'd0, stk_off, 2'b00}), .cin_i(1'b0), .sum_o(stk_sum), .cout_o());
     // Add the live stack depth to the registered prefix before adding the
     // frame address. The combined word offset is at most 492.
     logic [9:0]  stk_off;
     logic [31:0] stk_top;
     assign stk_off = 10'(stack_prefix_words) + 10'(sp);
-    assign stk_top = fbase + {20'd0, stk_off, 2'b00};
+    assign stk_top = stk_sum;
     function automatic logic over_hp(input logic [31:0] words);
         over_hp = hp_neg2_r || (!hp_big_r && (13'(sp) + 13'(words[11:0]) > hp_free_r[12:0]));
     endfunction
@@ -6866,12 +6891,12 @@ module mpy_core
             end
             S_RF_SPILL2:
                 if (spill_nc < 6'(MPY_RF_CHUNK_MIN)) st <= rf_resume;
-                else if (spill_hp < ftop + spill_bc) raise_msg(ABI_MSG_RECURSION);
+                else if (!hp_ge_ftopbc) raise_msg(ABI_MSG_RECURSION);
                 else begin
                     spill_n <= spill_nc;
                     spill_ntag <= 6'((spill_nc + 6'd7) >> 3);
                     spill_words <= 32'd1 + 32'((spill_nc + 6'd7) >> 3) + 32'(spill_nc);
-                    spill_addr <= spill_hp - spill_bc;
+                    spill_addr <= spill_diff;
                     spill_had_link <= has_link;
                     spill_prev <= has_link ? mpy_rf_link_addr(rf[`SX(7'd0)]) : 32'd0;
                     sw_i <= 32'd0;

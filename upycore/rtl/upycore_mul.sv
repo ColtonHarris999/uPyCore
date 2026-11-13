@@ -54,6 +54,7 @@ module upycore_mul #(
     logic signed [STEP:0]    chunk_s;
     logic signed [32:0]      a_low, a_high;
     logic signed [STEP+33:0] pp_low_r, pp_high_r;
+    logic [STEP+33:0]        pp_low_c, pp_high_c;
     logic [ACC_W-1:0]        x, y, z, csa_s, csa_c;
     logic signed [ACC_W-1:0] sum;
     logic [63:0]             lo_next;
@@ -69,7 +70,20 @@ module upycore_mul #(
     assign z         = acc_r >>> STEP;
     assign csa_s     = x ^ y ^ z;
     assign csa_c     = (x & y) | (x & z) | (y & z);
-    assign sum       = csa_s + (csa_c << 1);
+    // The final merge is a prefix add. `+` here is an 82-bit ripple, and
+    // the limb product above was already 15 ns after routing.
+    logic [ACC_W-1:0] sum_u;
+    upycore_add #(.W(ACC_W)) u_acc (
+        .a_i(csa_s), .b_i({csa_c[ACC_W-2:0], 1'b0}), .cin_i(1'b0),
+        .sum_o(sum_u), .cout_o()
+    );
+    assign sum = $signed(sum_u);
+    upycore_smul #(.AW(33), .BW(STEP+1)) u_pp_low (
+        .a_i(a_low), .b_i(chunk_s), .p_o(pp_low_c)
+    );
+    upycore_smul #(.AW(33), .BW(STEP+1)) u_pp_high (
+        .a_i(a_high), .b_i(chunk_s), .p_o(pp_high_c)
+    );
     assign lo_next   = 64'(lo_r >> STEP) | 64'(64'(sum[STEP-1:0]) << (64 - STEP));
 
     always_ff @(posedge clk_i or negedge rst_n_i) begin
@@ -100,8 +114,8 @@ module upycore_mul #(
             end else if (busy_r) begin
                 // Issue the next product while accumulating the previous one.
                 if (cnt_r < CNT_W'(NSTEP)) begin
-                    pp_low_r <= a_low * chunk_s;
-                    pp_high_r <= a_high * chunk_s;
+                    pp_low_r  <= pp_low_c;
+                    pp_high_r <= pp_high_c;
                     b_r <= b_r >> STEP;
                     cnt_r <= cnt_r + 1'b1;
                     product_valid <= 1'b1;
