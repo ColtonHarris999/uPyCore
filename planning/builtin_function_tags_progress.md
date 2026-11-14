@@ -233,3 +233,37 @@ selection. Its source is `rf[1]`. Generic core depth moved from 179 to 178 level
 | `dicts` views and mapping protocol, `iters` iterator protocol, `seqs` buffer conversion, `strs` bytes construction, `memview` buffer and slice checks | Retain checks for the existing object kinds. |
 | `boot`, `io/repl`, `io/irq` exception printers | Retain instance/exception checks. |
 | OBJECT allocations in `base`, `attrs`, `builtins`, `calls`, `dicts`, `iters`, `memview`, `modules` | Preserve their ordinary object layouts and tags. The only firmware FUNCTION constructor is in `load`. |
+
+## Step 4 FUNCTION fast paths
+
+With `FTAG=1`, FUNCTION dispatch enters `S_CF` immediately and method
+binding classifies a canonical function without its kind-word read.
+With `FTAG=0`, both reads remain. The builtin switch still has no fast
+consumer. All four microbenchmarks matched output across the two runs.
+
+| Microbenchmark | Switches off cycles | FUNCTION only cycles |
+| --- | ---: | ---: |
+| `call_function` | 104,991 | 103,104 |
+| `call_builtin` | 74,680 | 74,587 |
+| `call_method` | 121,411 | 120,088 |
+| `str_ops` | 2,371,412 | 2,351,648 |
+
+Regression checks with each switch value covered callable operations,
+collector roots, and a pin IRQ. The ABI and compiler state audits passed.
+All 37 RTL unit benches, all 551 hardware cases under each compiler, and
+all 502 oracle-backed golden checks passed. The hardware logs showed no
+canonical-tag assertion failures.
+
+| Core flow | Step 0 result | Step 4 result | Step 0 cells | Step 4 cells |
+| --- | ---: | ---: | ---: | ---: |
+| Mapped STA | 9.250 ns | 9.250 ns | 361,159 | 361,301 |
+| Unmapped STA | 9.532 ns | 9.559 ns | 495,250 | 495,729 |
+| Generic depth | 179 levels | 178 levels | 391,743 | 392,580 |
+
+The unmapped worst path retains the same 9.559 ns FOR_ITER request path
+as the combined milestone. The mapped worst path starts in the existing
+modulo unit. The mapped address endpoint moved within the top groups
+with a start at the registered `x3[3]`, away from the call and binding
+inputs. The set of endpoints at 100 generic levels or deeper is
+unchanged. The [Step 4 reports](builtin_function_tags_step4/) retain the
+full rankings.

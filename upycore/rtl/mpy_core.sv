@@ -2602,7 +2602,10 @@ module mpy_core
             S_CALL_Q: begin
                 ab_q <= mv;
                 case (tg(mv))
-                    ABI_TAG_OBJECT, ABI_TAG_FUNCTION: rd(adr(mv), S_CALL_K);
+                    ABI_TAG_OBJECT: rd(adr(mv), S_CALL_K);
+                    ABI_TAG_FUNCTION: if (cfg_ftag) begin
+                        c_ismod <= 1'b0; st <= S_CF;
+                    end else rd(adr(mv), S_CALL_K);
                     ABI_TAG_BUILTIN: rd({8'd0, mv[23:2], 2'b00}, S_CALL_K);
                     default: st <= S_HCALL;
                 endcase
@@ -6832,7 +6835,10 @@ module mpy_core
                          else begin `at_i <= `at_i + 32'd1; st <= S_AT_ML; end
                      end else begin
                          at_v <= lk_res;
-                         if (objectlike(lk_res)) rd(is_bi(lk_res) ? badr(lk_res) : adr(lk_res), S_AT_VK);
+                         if (cfg_ftag && is_fun(lk_res)) begin
+                             at_kind <= at_ty ? 2'd1 : 2'd2; ret();
+                         end else if (objectlike(lk_res))
+                             rd(is_bi(lk_res) ? badr(lk_res) : adr(lk_res), S_AT_VK);
                          else begin at_kind <= 2'd1; ret(); end
                      end
             S_AT_VK: begin
