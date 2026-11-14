@@ -9,6 +9,8 @@ or planning markdown.
 | Path | Topic |
 | --- | --- |
 | `systems/call_fsm.tex` | `S_CALL` FSM, shared argument binder, CPython call shapes |
+| `figures/iscafig.tex` | Shared TikZ style used by the progress gallery and by the temp render |
+| `figures/*.tex` | Progress placeholders. The paper is outside this repo; the `isca-figures` skill does not add to this directory |
 
 ## Build
 
@@ -16,10 +18,17 @@ or planning markdown.
 cd docs/paper/systems
 pdflatex call_fsm.tex
 pdflatex call_fsm.tex   # TOC
+
+cd docs/paper/figures
+pdflatex build.tex
 ```
 
-Needs a TeX distribution with `tikz`, `booktabs`, `hyperref`, `listings`,
-`geometry`, `microtype`.
+Needs a TeX distribution with `IEEEtran`, `tikz`, `booktabs`, `hyperref`,
+`listings`, `geometry`, `microtype`.
+
+`build.tex` compiles the progress gallery. It is not the paper. The
+`isca-figures` skill returns LaTeX in the reply and a rendered image, and
+does not write figures here.
 
 ## Conventions
 

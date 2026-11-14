@@ -1,0 +1,37 @@
+% Paste this environment into the IEEEtran source.
+% The preamble must already \input the sibling iscafig.tex.
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[iscafig]
+  \node[lbl, anchor=west] at (0,0.38) {\textbf{Tuple}};
+  \rec{0}{+0}{fldimm}{3.55cm}{length}
+  \rec{-0.52}{+4}{fldcore}{3.55cm}{element 0}
+  \node[lbl, anchor=north west] at (0.1,-0.82) {\scriptsize elements follow inline};
+
+  \begin{scope}[xshift=4.35cm]
+    \node[lbl, anchor=west] at (0,0.38) {\textbf{Range}};
+    \rec{0}{+0}{fldimm}{3.55cm}{start}
+    \rec{-0.52}{+4}{fldimm}{3.55cm}{stop}
+    \rec{-1.04}{+8}{fldimm}{3.55cm}{step}
+  \end{scope}
+
+  \begin{scope}[yshift=-2.55cm]
+    \node[lbl, anchor=west] at (0,0.38) {\textbf{\texttt{ITER}} object, four words};
+    \rec{0}{+0}{fldmem}{7.15cm}{sequence, or the current range value}
+    \rec{-0.52}{+4}{fldcore}{7.15cm}{index, or range stop}
+    \rec{-1.04}{+8}{fldcore}{7.15cm}{extra, or range step}
+    \rec{-1.56}{+12}{fldimm}{7.15cm}{kind: 0 seq, 1 range, 2 dict, 3 set, 5 str}
+    \node[lbl, anchor=west, align=left] at (0,-2.15)
+      {List and range \texttt{FOR\_ITER} keeps this same four-word record in the ring,\\
+       so the hot path does not reload the heap object on every step.};
+  \end{scope}
+\end{tikzpicture}
+\caption{Iterables.
+A tuple is a length word followed by its elements.
+A range is three integers.
+An \texttt{ITER} value points at a four-word record.
+For a list the first word is the list and the second is the index.
+For a range the first three words are the current value, the stop, and the step.
+The kind in the last word selects the step.}
+\label{fig:iter}
+\end{figure}
