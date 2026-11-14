@@ -1,8 +1,7 @@
-# The resident ring spills at 12 slots, before the opcode runs. This
-# window is the callable, 13 positionals, and the star bitmap (15 words),
-# so the call is wide. The star is the last positional and is still in a
-# resident register: a value that is not a tuple or list is turned into
-# a tuple with ABI_CONT_REPLACE, then the opcode runs again.
+# The call is the callable, 13 positionals, and the star bitmap (15 words).
+# That is wider than the resident window, and the star is still in a
+# register: a value that is not a tuple or list is turned into a tuple
+# with ABI_CONT_REPLACE, then the opcode runs again.
 
 
 def f(*a):

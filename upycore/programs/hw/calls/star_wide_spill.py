@@ -1,7 +1,6 @@
-# RF_SPILL_AT is 12, so an opcode runs with at most 11 resident reals.
-# f(*seq, six keywords) is the callable, the star, 12 keyword words, and
-# the bitmap: 15 words. The star has 13 words above it, so it is below
-# that window and the conversion has to write the spill chunk.
+# An opcode runs with at most RF_SPILL_AT-1 resident slots. f(*seq, six
+# keywords) is the callable, the star, 12 keyword words, and the bitmap:
+# 15 words, one past that window, so the conversion writes a spill chunk.
 
 
 def f(*a, **k):

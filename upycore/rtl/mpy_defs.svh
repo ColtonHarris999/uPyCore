@@ -24,10 +24,11 @@ localparam int MPY_RF_ADDR_W = 4; // $clog2(MPY_RF_DEPTH)
 localparam int MPY_RF_CHUNK_MIN = 4;
 localparam int MPY_RF_CHUNK_MAX = 8;
 localparam int MPY_RF_BLOCK_MAX = 48;
-// Fetch spills at 12 resident slots (4 free, a SHORT_STR) and reloads a
-// linked chunk at 4. A spill leaves at least 5 so the next fetch does
-// not pull the chunk straight back.
-localparam int RF_SPILL_AT  = 12;
+// Fetch spills at 15 resident slots and reloads a linked chunk at 4.
+// A spill leaves at least 5 so the next fetch does not pull the chunk
+// straight back. A value is one register, so the old line of 12 left
+// four slots empty.
+localparam int RF_SPILL_AT  = 15;
 localparam int RF_RELOAD_AT = 4;
 localparam int RF_LEAVE_SP  = 5;
 
