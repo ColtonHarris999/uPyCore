@@ -1,0 +1,4 @@
+== depth mpy_gc ==
+mpy_gc: 80718 endpoint bits, 1693 register groups, deepest 46
+groups at >= 100 levels: 0
+log: build/synth/mpy_gc.log

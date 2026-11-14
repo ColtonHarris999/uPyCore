@@ -700,8 +700,10 @@ def _hashv(x):
                 h += _hashv(k)
             return _sx31(h)
         _unsupported_un('__hash__', x)
-    if t == TAG_OBJECT:
+    if t == TAG_OBJECT or t == TAG_FUNCTION or t == TAG_BUILTIN:
         k = _ld(x, 0)
+        if t == TAG_BUILTIN:
+            return (_pay(x) & BUILTIN_ADDR_MASK) >> 1
         if k == OB_INSTANCE or k == OB_EXCEPTION:
             tt = _ld(x, 1)
             if _ld(tt, 7) & TF_USER:

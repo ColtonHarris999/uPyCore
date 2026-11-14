@@ -71,6 +71,8 @@ def _hexaddr(a):
 
 def _addr(x):
     a = _pay(x)
+    if _tag(x) == TAG_BUILTIN:
+        return a & BUILTIN_ADDR_MASK
     if a < 0:
         a += 4294967296
     return a
@@ -428,7 +430,7 @@ def _repr(x):
         return _s('range(', _istr(_ld(x, 0)), ', ', _istr(_ld(x, 1)), ', ', _istr(step), ')')
     if t == TAG_ITER:
         return '<iterator>'
-    if t == TAG_OBJECT:
+    if t == TAG_OBJECT or t == TAG_FUNCTION or t == TAG_BUILTIN:
         return _obj_repr(x, False)
     return '<?>'
 
@@ -437,7 +439,7 @@ def _str(x):
     t = _tag(x)
     if t == TAG_QSTR or t == TAG_STR:
         return x
-    if t == TAG_OBJECT:
+    if t == TAG_OBJECT or t == TAG_FUNCTION or t == TAG_BUILTIN:
         return _obj_repr(x, True)
     return _repr(x)
 

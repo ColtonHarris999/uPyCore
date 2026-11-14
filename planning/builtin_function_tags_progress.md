@@ -132,5 +132,97 @@ worst-path gate is 0.5%.
 - Step 0 includes all four listed new microbenchmarks, despite the plan's
   introductory count of three. Their measured sources are staged under
   planning for reuse when the benchmark harness is implemented.
-- Steps 1–11 and the implementation audit tables are pending. The draft
-  pull request is due after Step 1 passes.
+- The combined implementation milestone is tracked below.
+
+## Steps 1–3 recovery and verification
+
+The workspace reset removed the previous uncommitted implementation and
+its running jobs. The code was reconstructed from the recorded diffs
+and rebuilt with Verilator 5.048 and the pinned i386 oracle under QEMU.
+The baseline evidence remains at the published Step 0 revision.
+
+This milestone combines the `CONTINUE` rename, ABI v3, and canonical
+callable producers and consumers. The `BTAG` and `FTAG` switches are
+present. Call and binding dispatch still issue their existing reads.
+The author approved a tolerance per workload. The working threshold is
+an absolute 1% cycle difference from Step 0 per workload. The timing
+gate is separate.
+
+The image version check runs at the SoC loader write because this
+checkout's `mpy_boot` decodes the stream envelope. A version mismatch
+raises `boot_err_o` and keeps the core in reset. The legacy value bench
+still tests its original numeric encodings pending the separate
+dead-code removal. Firmware and microcode continuations retain their
+independent encodings.
+
+| Surface | Audited behavior |
+| --- | --- |
+| Linker | Function constants and native builtin objects emit their canonical tags. The image scan rejects a callable referenced as OBJECT. |
+| Core | MAKE_FUNCTION and MAKE_CLOSURE emit FUNCTION. Call, method, attribute, hash, equality, truth, type and native address paths handle the callable payload forms. |
+| Core invariants | Simulated memory completions check OBJECT kind reads through the registered return state. |
+| Collector | Both ordinary memory and packed frame scans follow FUNCTION. BUILTIN remains static. |
+| Firmware | The dynamic code loader emits FUNCTION. Kind, callable, attribute, descriptor and formatting paths recognize callable tags. Buffered IRQ values retain their full tag. |
+| Existing goldens | Existing golden files are unchanged. Two new fixtures use pinned oracle output. |
+
+The recovered [cycle comparison](builtin_function_tags_milestone/cycles.md)
+passes the 1% per-workload threshold. The largest change is `bm_float`
+at +0.614%. The 15-workload cycle geomean increased by 0.112% including
+`core_qstr` and 0.119% excluding it. All 11 in-tree benchmarks also
+passed the per-workload threshold under all four CA/AALU combinations.
+
+The ABI check, 502 oracle-backed golden checks, and targeted callable,
+collector-root and pin-IRQ cases passed. The baseline v2 image was
+rejected before execution. Full hardware verification is still pending.
+
+| Top and flow | Step 0 delay (ns) | Recovered delay (ns) | Step 0 cells | Recovered cells |
+| --- | ---: | ---: | ---: | ---: |
+| Core, mapped | 9.250 | 9.051 | 361,159 | 361,190 |
+| Core, unmapped | 9.532 | 9.559 | 495,250 | 495,681 |
+| GC, mapped | 7.291 | 7.291 | 9,923 | 9,924 |
+| GC, unmapped | 9.116 | 9.116 | 12,727 | 12,731 |
+
+The unmapped worst path is 0.283% longer. The traced path into `m_req`
+passes through the existing FOR_ITER path and register-window address
+selection. Its source is `rf[1]`. Generic core depth moved from 179 to 178 levels. The set of endpoints at
+100 levels or deeper is unchanged. GC depth remains 46 levels.
+
+### Core OBJECT and callable kind sites
+
+| Site | Handling |
+| --- | --- |
+| `vobj` and `S_LIMB_NEW_TYPE` | Retain ordinary OBJECT and bigint production. |
+| `bi_scalar`, `S_BIN_TYPES`, `S_BI_TRY`, `S_BI_L_COUNT` | Bigint-only fast paths. Callable operands take numeric fallback. |
+| `S_CALL_Q`, `S_CALL_K`, `S_CALL_NI` | Accept all three callable/object tags and preserve the old read count. Mask the builtin address. |
+| `S_CALL_BS`, `S_CALL_TF` | Pass the tagged callable back through dispatch. |
+| `S_EXEC_W`, `S_EXEC` yield-from check, `S_YF_GE` | Generator and exception specializations retain their OBJECT restrictions. |
+| `S_LA_R`, `S_SA` | Native instance attribute default and attribute stores keep their ordinary OBJECT checks. |
+| `S_LSUB`, `S_SSUB` | Only ordinary OBJECT may be a slice. |
+| `S_ROBJ`, `S_EXM`, `S_EXM_T`, `S_NAT_A` BaseException case | Exception matching and construction keep their ordinary OBJECT checks. |
+| `S_GI`, `S_GH`, `S_FI_PRE`, `S_FI_R` | Iterator, generator and dict-view specializations exclude callables. |
+| `S_MF_A` | Produces the canonical FUNCTION tag. |
+| `S_EQ`, `S_KEYEQ`, `S_KE_OBJ` | Preserve general object equality and the tuple fallback. |
+| `S_NAT_ISI` | Only an ordinary OBJECT can be the type argument. |
+| `S_TYPEOF`, `S_HASH`, `S_TR` | Read the type or kind from the appropriate object address. |
+| `S_AT`, `S_AT_K`, `S_AT_MR`, `S_AT_VK` | Preserve attribute lookup and callable binding reads. |
+| `S_NAT_FB0`, `S_NAT_FB1` | Recover the image address from the callee reread from ARGBUF. |
+| `S_NAT_LD`, `S_NAT_ST2`, native `id` | Mask builtin addresses locally. A store to flash takes the existing fault. |
+
+### Firmware OBJECT and callable tag sites
+
+| Site | Handling |
+| --- | --- |
+| `base._kind` | Reads FUNCTION kind and returns the known BUILTIN kind. |
+| `attrs._special_attr` | Callable name lookup accepts the new tags. |
+| `builtins.callable`, `builtins._load_attr`, `builtins.dir` | Preserve callable recognition and type-member lookup. |
+| `calls._make_type` | Preserve descriptor scan and ordinary function exclusion. |
+| `fmt._addr`, `fmt._repr`, `fmt._str` | Mask builtin address and reuse object formatting. |
+| `ops._hashv` | Keep function identity hash and use the masked builtin address. |
+| `load._load_body`, `load._is_fun` | Produce and recognize canonical FUNCTION. |
+| `base._istype`, `base._isinst`, `bigint._iswide` | Type, instance, and bigint checks require ordinary OBJECT. |
+| `attrs._getattr`, `attrs._setattr`, `attrs._as_index`, `attrs._subscr`, `attrs._setsubscr` | Remaining OBJECT branches handle mutable instance/module/type properties, index protocol, or slices. Callable names take the earlier special-attribute branch. |
+| `builtins._int_value`, `builtins.round`, `builtins._inst_attr` | Numeric conversions and instance-only lookup retain their ordinary OBJECT checks. |
+| `calls._call`, `calls.__build_class__` | User-instance/super fallback and cell-specific handling retain OBJECT. |
+| `ops._type_binop`, `ops._unop`, `ops._truth`, `floatfmt` conversion | Existing user or numeric object specializations retain OBJECT. Callable truth uses the normal true result. |
+| `dicts` views and mapping protocol, `iters` iterator protocol, `seqs` buffer conversion, `strs` bytes construction, `memview` buffer and slice checks | Retain checks for the existing object kinds. |
+| `boot`, `io/repl`, `io/irq` exception printers | Retain instance/exception checks. |
+| OBJECT allocations in `base`, `attrs`, `builtins`, `calls`, `dicts`, `iters`, `memview`, `modules` | Preserve their ordinary object layouts and tags. The only firmware FUNCTION constructor is in `load`. |

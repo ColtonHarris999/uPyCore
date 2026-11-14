@@ -31,15 +31,15 @@ localparam int RF_SPILL_AT  = 12;
 localparam int RF_RELOAD_AT = 4;
 localparam int RF_LEAVE_SP  = 5;
 
-// Locked tag table. 0101 stays unassigned.
+// Tag encodings shared with the generated image ABI.
 localparam logic [3:0] MPY_TAG_CONTROL    = 4'b0000;
 localparam logic [3:0] MPY_TAG_INT        = 4'b0001;
 localparam logic [3:0] MPY_TAG_INT64      = 4'b0010;
 localparam logic [3:0] MPY_TAG_FLOAT      = 4'b0011;
 localparam logic [3:0] MPY_TAG_COMPLEX    = 4'b0100;
-localparam logic [3:0] MPY_TAG_RESERVED   = 4'b0101;
+localparam logic [3:0] MPY_TAG_BUILTIN   = 4'b0101;
 localparam logic [3:0] MPY_TAG_QSTR       = 4'b0110;
-localparam logic [3:0] MPY_TAG_SHORT_STR  = 4'b0111;
+localparam logic [3:0] MPY_TAG_FUNCTION  = 4'b0111;
 localparam logic [3:0] MPY_TAG_STR        = 4'b1000;
 localparam logic [3:0] MPY_TAG_TUPLE      = 4'b1001;
 localparam logic [3:0] MPY_TAG_MUT_COLLEC = 4'b1010;
@@ -47,7 +47,7 @@ localparam logic [3:0] MPY_TAG_RANGE      = 4'b1011;
 localparam logic [3:0] MPY_TAG_ITER       = 4'b1100;
 localparam logic [3:0] MPY_TAG_BYTES      = 4'b1101;
 localparam logic [3:0] MPY_TAG_OBJECT     = 4'b1110;
-localparam logic [3:0] MPY_TAG_CONT       = 4'b1111;
+localparam logic [3:0] MPY_TAG_CONTINUE       = 4'b1111;
 
 localparam int MPY_TAG_SPACE = 16;
 
@@ -294,8 +294,8 @@ function automatic logic [2:0] mpy_tag_span(
 );
     case (tag)
         MPY_TAG_INT64, MPY_TAG_COMPLEX: mpy_tag_span = 3'(MPY_SPAN_INT64);
-        MPY_TAG_SHORT_STR:              mpy_tag_span = 3'(MPY_SPAN_SHORT_STR);
-        MPY_TAG_RESERVED:               mpy_tag_span = 3'd0;
+        MPY_TAG_FUNCTION:              mpy_tag_span = 3'(MPY_SPAN_SHORT_STR);
+        MPY_TAG_BUILTIN:               mpy_tag_span = 3'd0;
         default:                        mpy_tag_span = 3'(MPY_SPAN_SCALAR);
     endcase
 endfunction

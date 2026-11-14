@@ -70,7 +70,9 @@ module mpy_core
     parameter int SHORTLIST_MODE = 2,
     // Retire a binary op that cannot fail at issue and let loads run while
     // the ALU finishes it (upycore/docs/mpy_ca.md). +AALU= overrides in sim.
-    parameter int AALU = 1
+    parameter int AALU = 1,
+    parameter int BTAG = 1,
+    parameter int FTAG = 1
 ) (
     input  logic        clk_i,
     input  logic        rst_n_i,
@@ -195,6 +197,15 @@ module mpy_core
         for (int i = 0; i < 26; i++) run[i] = &(b[31:6] | ~((26'd1 << i) - 26'd1));
         aoff = {lo[6] ? (b[31:6] ^ run) : b[31:6], lo[5:0]};
     endfunction
+    function automatic logic [31:0] badr(input val_t v);
+        badr = {8'd0, v[23:2], 2'b00};
+    endfunction
+    function automatic logic is_fun(input val_t v); is_fun = tg(v) == ABI_TAG_FUNCTION; endfunction
+    function automatic logic is_bi(input val_t v); is_bi = tg(v) == ABI_TAG_BUILTIN; endfunction
+    function automatic logic objectlike(input val_t v);
+        objectlike = tg(v) == ABI_TAG_OBJECT || is_fun(v) || is_bi(v);
+    endfunction
+    function automatic val_t vfun(input logic [31:0] a); vfun = {ABI_TAG_FUNCTION, a}; endfunction
     function automatic val_t vint(input logic [31:0] x); vint = {ABI_TAG_INT, x}; endfunction
     function automatic val_t vobj(input logic [31:0] x); vobj = {ABI_TAG_OBJECT, x}; endfunction
     function automatic val_t vbool(input logic b); vbool = b ? VTRUE : VFALSE; endfunction
@@ -1233,7 +1244,7 @@ module mpy_core
     val_t        lc_d [0:7];
     logic [3:0]  cfg_lc_n;
     logic        cfg_lc_wb, cfg_lc_dm;
-    logic        cfg_ca, cfg_aalu;
+    logic        cfg_ca, cfg_aalu, cfg_btag, cfg_ftag;
     // Declared with the other config bits: the config block assigns it
     // below, and strict frontends (slang, Design Compiler) reject a use
     // before the declaration.
@@ -1868,8 +1879,37 @@ module mpy_core
         end
     endtask
 `ifndef SYNTHESIS
+    task automatic check_callable_word(input val_t ref_v, input logic [31:0] kind);
+        if (tg(ref_v) == ABI_TAG_OBJECT && (kind == ABI_OB_FUNCTION || kind == ABI_OB_BUILTIN))
+            $error("non-canonical callable at %08x: kind %0d in %s", ref_v[31:0], kind, wret.name());
+    endtask
+
+    always @(posedge clk_i) if (rst_n_i && st == S_MWAIT && m_ack_i && wpend == 0 && !m_fault_i) begin
+        case (wret)
+            S_CALL_K: check_callable_word(ab_q, m_rdata_i);
+            S_SA_K: check_callable_word(t[0], m_rdata_i);
+            S_SL_N: check_callable_word(t[1], m_rdata_i);
+            S_ROBJ_K: check_callable_word(t[0], m_rdata_i);
+            S_GI_K: check_callable_word(t[0], m_rdata_i);
+            S_GH_K: check_callable_word(t[0], m_rdata_i);
+            S_FI_GK: check_callable_word(t[0], m_rdata_i);
+            S_BI_L_KIND: check_callable_word(t[0], m_rdata_i);
+            S_BI_R_KIND: check_callable_word(t[1], m_rdata_i);
+            S_GA_K: check_callable_word(t[0], m_rdata_i);
+            S_N_ISI: check_callable_word(ab_s[0], m_rdata_i);
+            S_YF_K: check_callable_word(rf[`SX(6'(sp - 7'd2))], m_rdata_i);
+            S_YF_GK: check_callable_word(aux, m_rdata_i);
+            S_HASH_OBJ: check_callable_word(hk, m_rdata_i);
+            S_KE_OBJ: check_callable_word(ke_a, m_rdata_i);
+            S_AT_K: check_callable_word(t[0], m_rdata_i);
+            S_AT_VK: check_callable_word(at_v, m_rdata_i);
+            default: ;
+        endcase
+    end
+
     initial begin
         int grow_v, adapt_v, lc_n_v, lc_wb_v, lc_dm_v, ca_v, aalu_v, bulk_v, sl_v;
+        int btag_v, ftag_v;
         grow_v = GROW_CHUNK;
         adapt_v = GROW_ADAPT;
         lc_n_v = LC_N;
@@ -1898,6 +1938,10 @@ module mpy_core
         cfg_sl=2'(sl_v);
         cfg_ca = (ca_v != 0);
         cfg_aalu = (aalu_v != 0);
+        if (!$value$plusargs("BTAG=%d", btag_v)) btag_v = BTAG;
+        if (!$value$plusargs("FTAG=%d", ftag_v)) ftag_v = FTAG;
+        cfg_btag = btag_v != 0;
+        cfg_ftag = ftag_v != 0;
     end
 `else
     // Continuous assigns, not an initial block: Design Compiler ignores
@@ -1911,6 +1955,8 @@ module mpy_core
     assign cfg_sl = 2'(SHORTLIST_MODE);
     assign cfg_ca = (CA_EN != 0);
     assign cfg_aalu = (AALU != 0);
+    assign cfg_btag = BTAG != 0;
+    assign cfg_ftag = FTAG != 0;
 `endif
 
     function automatic val_t hdr_word(input logic [31:0] i);
@@ -2555,14 +2601,17 @@ module mpy_core
             S_CALL: rd(ab_ptr(8'd0), S_CALL_Q);
             S_CALL_Q: begin
                 ab_q <= mv;
-                if (tg(mv) != ABI_TAG_OBJECT) st <= S_HCALL;
-                else rd(adr(mv), S_CALL_K);
+                case (tg(mv))
+                    ABI_TAG_OBJECT, ABI_TAG_FUNCTION: rd(adr(mv), S_CALL_K);
+                    ABI_TAG_BUILTIN: rd({8'd0, mv[23:2], 2'b00}, S_CALL_K);
+                    default: st <= S_HCALL;
+                endcase
             end
             S_CALL_K: begin
                 case (md)
                     ABI_OB_FUNCTION: begin c_ismod <= 1'b0; st <= S_CF; end
                     ABI_OB_BOUND_METHOD: rd(aoff(adr(ab_q), 12), S_CALL_BS);
-                    ABI_OB_BUILTIN: rd(aoff(adr(ab_q), 8), S_CALL_NI);
+                    ABI_OB_BUILTIN: rd(aoff(badr(ab_q), 8), S_CALL_NI);
                     ABI_OB_TYPE: rd(aoff(adr(ab_q), 28), S_CALL_TF);
                     default: st <= S_HCALL;
                 endcase
@@ -3120,7 +3169,7 @@ module mpy_core
                       else begin t[2] <= mv; st <= S_RX_TBA; end
             S_RX_TBN: if (!al_ok) begin al_soft <= 1'b0; st <= S_RX_H; end
                       else begin
-                          wb_v[0] <= vint(32'd0); wb_v[1] <= vint(32'd4); wb_v[2] <= {ABI_TAG_CONT, al_a + 32'd12};
+                          wb_v[0] <= vint(32'd0); wb_v[1] <= vint(32'd4); wb_v[2] <= {ABI_TAG_CONTINUE, al_a + 32'd12};
                           t[2] <= vmut(al_a, ABI_MUT_LIST);
                           wblock(al_a, 4'd3, S_RX_TBL);
                       end
@@ -3791,7 +3840,7 @@ module mpy_core
             S_SL_SRC: begin
                 t[2]<=vmut(al_a,ABI_MUT_LIST);ss_dst<=al_a+32'd12;
                 wb_v[0]<=vint(ss_count);wb_v[1]<=vint(ss_count<4?32'd4:ss_count);
-                wb_v[2]<={ABI_TAG_CONT,al_a+32'd12};
+                wb_v[2]<={ABI_TAG_CONTINUE,al_a+32'd12};
                 wblock(al_a,4'd3,S_SL_RHS_PTR);
             end
             S_SL_RHS_PTR: if(!ss_store) rd(aoff(adr(t[0]), 8),S_SL_STORE_DST);
@@ -4266,7 +4315,7 @@ module mpy_core
             S_BL_A: begin
                 bl_base <= stk_depth - arg[15:0];
                 v0 = (arg < 32'd4) ? 32'd4 : arg;
-                wb_v[0] <= vint(arg); wb_v[1] <= vint(v0); wb_v[2] <= {ABI_TAG_CONT, al_a + 32'd12};
+                wb_v[0] <= vint(arg); wb_v[1] <= vint(v0); wb_v[2] <= {ABI_TAG_CONTINUE, al_a + 32'd12};
                 t[0] <= vmut(al_a, ABI_MUT_LIST);
                 // gi, not the 8-bit i0: a list display can hold more than 255 items.
                 gi <= 32'd0;
@@ -4299,7 +4348,7 @@ module mpy_core
             S_BL_W: begin wr(adr(t[0]) + 12 + 4 * gi, srd_v, S_BL_L); gi <= gi + 32'd1; end
             S_BM_A: begin
                 wb_v[0] <= vint(32'd0); wb_v[1] <= vint(arg);
-                wb_v[2] <= (arg == 32'd0) ? VNULL : {ABI_TAG_CONT, al_a + 32'd16};
+                wb_v[2] <= (arg == 32'd0) ? VNULL : {ABI_TAG_CONTINUE, al_a + 32'd16};
                 wb_v[3] <= vint(32'd0);
                 rf[`SX(sp)] <= vmut(al_a, ABI_MUT_DICT); sp <= sp + 7'd1;
                 wblock(al_a, 4'd4, S_FETCH);
@@ -4372,7 +4421,7 @@ module mpy_core
                     wb_v[4] <= rf[`SX(6'(sp - 7'(v0) - 7'd2))]; wb_v[5] <= rf[`SX(6'(sp - 7'(v0) - 7'd1))];
                     v0 = v0 + 32'd2;
                 end else begin wb_v[4] <= VNULL; wb_v[5] <= VNULL; end
-                rf[`SX(6'(sp - 7'(v0)))] <= vobj(al_a); sp <= sp - 7'(v0) + 7'd1;
+                rf[`SX(6'(sp - 7'(v0)))] <= vfun(al_a); sp <= sp - 7'(v0) + 7'd1;
                 wblock(al_a, 4'd8, S_FETCH);
             end
 
@@ -4777,7 +4826,7 @@ module mpy_core
                 t[2] <= vmut(al_a, ABI_MUT_LIST);
                 wb_v[0] <= vint(x4);
                 wb_v[1] <= vint((x4 < 32'd4) ? 32'd4 : x4);
-                wb_v[2] <= {ABI_TAG_CONT, al_a + 32'd12};
+                wb_v[2] <= {ABI_TAG_CONTINUE, al_a + 32'd12};
                 x3 <= al_a + 32'd12; b0 <= 1'b0;
                 wblock(al_a, 4'd3, S_LCAT_AP);
             end
@@ -4963,13 +5012,13 @@ module mpy_core
 
             S_EQ: begin
                 vb = (32'(n_o) == ABI_BINOP_NOT_EQUAL);
-                if (t[0] == t[1] && tg(t[0]) != ABI_TAG_OBJECT && tg(t[0]) != ABI_TAG_COMPLEX) begin
+                if (t[0] == t[1] && !objectlike(t[0]) && tg(t[0]) != ABI_TAG_COMPLEX) begin
                     rf[`SX(6'(sp - 7'd2))] <= vbool(!vb); sp <= sp - 7'd1; st <= S_FETCH;
                 end else if (strlike(t[0]) && strlike(t[1])) begin
                     se_a <= t[0]; se_b <= t[1]; gosub_scr(SCR_SE, S_STREQ, S_EQ_S);
                 end else if (strlike(t[0]) || strlike(t[1]) ||
-                             (tg(t[0]) == ABI_TAG_CONTROL && tg(t[1]) != ABI_TAG_OBJECT) ||
-                             (tg(t[1]) == ABI_TAG_CONTROL && tg(t[0]) != ABI_TAG_OBJECT)) begin
+                             (tg(t[0]) == ABI_TAG_CONTROL && !objectlike(t[1])) ||
+                             (tg(t[1]) == ABI_TAG_CONTROL && !objectlike(t[0]))) begin
                     rf[`SX(6'(sp - 7'd2))] <= vbool(vb); sp <= sp - 7'd1; st <= S_FETCH;
                 end else st <= S_BIN_FB;
             end
@@ -5201,7 +5250,7 @@ module mpy_core
                         else st <= S_NAT_FB;
                     ABI_N_ISINSTANCE: if (v0 != 32'd2) st <= S_NAT_FB;
                         else rd(ab_ptr(ab_lo + 8'd1), S_NAT_ISI);
-                    ABI_N_ID: deliver(vint(v1), crk);
+                    ABI_N_ID: deliver(vint(is_bi(mv) ? {8'd0, mv[23:0]} : v1), crk);
                     // _wfe(cycles): wait for an event or the timeout; True if
                     // an event ended it. _hlock / _hunlock: the heap lock.
                     ABI_N_WFE: begin wfe_n <= v1; st <= S_WFE; end
@@ -5407,9 +5456,9 @@ module mpy_core
             S_NAT_ISI: if (tg(mv) != ABI_TAG_OBJECT) st <= S_NAT_FB;
                        else begin ab_s[0] <= mv; rd(adr(mv), S_N_ISI); end
             S_NAT_MK: deliver({ab_q[3:0], mv[31:0]}, crk);
-            S_NAT_LD: rd(padr(ab_q) + (mv[31:0] << 2), S_N_RV);
+            S_NAT_LD: rd((is_bi(ab_q) ? badr(ab_q) : padr(ab_q)) + (mv[31:0] << 2), S_N_RV);
             S_NAT_ST1: begin x0 <= mv[31:0]; rd(ab_ptr(ab_lo + 8'd2), S_NAT_ST2); end
-            S_NAT_ST2: wr(padr(ab_q) + (x0 << 2), mv, S_N_NONE);
+            S_NAT_ST2: wr((is_bi(ab_q) ? badr(ab_q) : padr(ab_q)) + (x0 << 2), mv, S_N_NONE);
             S_NAT_PEEK: begin
                 v2 = padr(ab_q) + mv[31:0];
                 x3 <= v2; rd({v2[31:2], 2'b00}, S_N_PEEK8);
@@ -5679,8 +5728,8 @@ module mpy_core
                        else begin at_q <= mv[31:0]; rd(ab_ptr(ab_lo + 8'd2), S_NAT_SA2); end
             S_NAT_SA2: begin at_nat <= 1'b1; t[0] <= ab_q; t[6] <= mv; st <= S_SA; end
             S_NAT_FB: rd(ab_ptr(8'd0), S_NAT_FB0);
-            S_NAT_FB0: begin ab_q <= mv; rd(aoff(adr(mv), 12), S_NAT_FB1); end
-            S_NAT_FB1: if (mv == VNULL) rd(aoff(adr(ab_q), 16), S_NAT_FB2);
+            S_NAT_FB0: begin ab_q <= mv; rd(aoff({8'd0, mv[23:2], 2'b00}, 12), S_NAT_FB1); end
+            S_NAT_FB1: if (mv == VNULL) rd(aoff(badr(ab_q), 16), S_NAT_FB2);
                        else wr(ab_ptr(8'd0), mv, S_CALL);
             S_NAT_FB2: raise_err(ABI_ERR_BUILTIN_ARGS, mv, vint(32'(ab_pe - ab_lo)));
             S_N_NONE: deliver(VNONE, crk);
@@ -5737,7 +5786,7 @@ module mpy_core
             end
             S_N_STRNEW: rd(ab_ptr(ab_lo), S_N_STRNEW_A);
             S_N_STRNEW_A: begin
-                wb_v[0] <= vint(mv[31:0]); wb_v[1] <= vint(32'd0); wb_v[2] <= {ABI_TAG_CONT, al_a + 32'd12};
+                wb_v[0] <= vint(mv[31:0]); wb_v[1] <= vint(32'd0); wb_v[2] <= {ABI_TAG_CONTINUE, al_a + 32'd12};
                 rd(ab_ptr(ab_lo + 8'd1), S_N_STRNEW_B);
             end
             S_N_STRNEW_B: begin
@@ -5935,7 +5984,7 @@ module mpy_core
                 wb_v[2] <= fun;
                 wb_v[3] <= vint(32'd0);
                 wb_v[4] <= VNONE;
-                wb_v[5] <= {ABI_TAG_CONT, al_a};
+                wb_v[5] <= {ABI_TAG_CONTINUE, al_a};
                 gen <= t[0];
                 wblock(adr(t[0]), 4'd6, S_GN_AL5);
             end
@@ -6251,7 +6300,8 @@ module mpy_core
                     ABI_TAG_TUPLE: rd(TT + 4 * ABI_T_TUPLE, S_TYPEOF_TT);
                     ABI_TAG_RANGE: rd(TT + 4 * ABI_T_RANGE, S_TYPEOF_TT);
                     ABI_TAG_ITER: rd(TT + 4 * ABI_T_ITERATOR, S_TYPEOF_TT);
-                    ABI_TAG_OBJECT: rd(aoff(adr(ty_v), 4), S_TYPEOF_TT);
+                    ABI_TAG_OBJECT, ABI_TAG_FUNCTION: rd(aoff(adr(ty_v), 4), S_TYPEOF_TT);
+                    ABI_TAG_BUILTIN: rd(aoff(badr(ty_v), 4), S_TYPEOF_TT);
                     ABI_TAG_MUT: case (ty_v[1:0])
                         ABI_MUT_LIST: rd(TT + 4 * ABI_T_LIST, S_TYPEOF_TT);
                         ABI_MUT_DICT: rd(TT + 4 * ABI_T_DICT, S_TYPEOF_TT);
@@ -6280,7 +6330,8 @@ module mpy_core
                     ABI_TAG_STR, ABI_TAG_BYTES: rd(aoff(adr(hk), 4), S_HASH_W16);
                     ABI_TAG_INT64: rd(adr(hk), S_HASH_I64);
                     ABI_TAG_TUPLE: rd(adr(hk), S_HASH_TUPLE_N);
-                    ABI_TAG_OBJECT: rd(adr(hk), S_HASH_OBJ);
+                    ABI_TAG_OBJECT, ABI_TAG_FUNCTION: rd(adr(hk), S_HASH_OBJ);
+                    ABI_TAG_BUILTIN: rd(badr(hk), S_HASH_OBJ);
                     default: begin hok <= 1'b0; ret(); end
                 endcase
             end
@@ -6318,7 +6369,7 @@ module mpy_core
                               end
             S_HASH_OBJ: begin
                 if (md == ABI_OB_INSTANCE || md == ABI_OB_EXCEPTION || md == ABI_OB_BIGINT) hok <= 1'b0;
-                else hh <= {1'b0, hk[31:1]};
+                else hh <= is_bi(hk) ? {9'd0, hk[23:1]} : {1'b0, hk[31:1]};
                 ret();
             end
 
@@ -6389,9 +6440,9 @@ module mpy_core
                     ke_eq <= 1'b0; ke_cx <= numlike(ke_b); ret();
                 end else if (tg(ke_a) == ABI_TAG_TUPLE && tg(ke_b) == ABI_TAG_TUPLE)
                     rd(adr(ke_a), S_KE_TUPLE_AN);
-                else if (tg(ke_a) == ABI_TAG_TUPLE && tg(ke_b) == ABI_TAG_OBJECT) begin
+                else if (tg(ke_a) == ABI_TAG_TUPLE && objectlike(ke_b)) begin
                     ke_eq <= 1'b0; ke_cx <= 1'b1; ret();
-                end else if (tg(ke_a) == ABI_TAG_OBJECT) rd(adr(ke_a), S_KE_OBJ);
+                end else if (objectlike(ke_a)) rd(is_bi(ke_a) ? badr(ke_a) : adr(ke_a), S_KE_OBJ);
                 else begin ke_eq <= 1'b0; ret(); end
             end
             S_KE_S: begin ke_eq <= se_eq; ret(); end
@@ -6645,7 +6696,7 @@ module mpy_core
             S_RH_V: rd(sA[6] + (`rh_i << 3) + 4, S_RH_V2);
             S_RH_V2: wr(`rh_tab + (`rh_p << 3) + 4, mv, S_RH_NX);
             S_RH_NX: begin `rh_used <= `rh_used + 32'd1; `rh_i <= `rh_i + 32'd1; st <= S_RH_L; end
-            S_RH_F1: wr(aoff(adr(t[4]), 8), {ABI_TAG_CONT, `rh_tab}, S_RH_F2);
+            S_RH_F1: wr(aoff(adr(t[4]), 8), {ABI_TAG_CONTINUE, `rh_tab}, S_RH_F2);
             S_RH_F2: wr(adr(t[4]), vint(`rh_used), S_LK_RET);
 
             // list append: t2 list, t3 value
@@ -6673,7 +6724,7 @@ module mpy_core
             S_LA_CP: if (`la_i == `la_len) wr(aoff(adr(t[2]), 4), vint((`la_alloc == 32'd0) ? 32'd4 : (`la_alloc << 1)), S_LA_G3);
                      else rd(`la_items + (`la_i << 2), S_LA_CP2);
             S_LA_CP2: begin wr(`la_new + (`la_i << 2), mv, S_LA_CP); `la_i <= `la_i + 32'd1; end
-            S_LA_G3: wr(aoff(adr(t[2]), 8), {ABI_TAG_CONT, `la_new}, S_LA_G4);
+            S_LA_G3: wr(aoff(adr(t[2]), 8), {ABI_TAG_CONTINUE, `la_new}, S_LA_G4);
             // An inline item array shares its allocation with the live
             // header. Clear its obsolete tagged references after relocation;
             // unlike a separate old array it cannot be swept independently.
@@ -6732,7 +6783,8 @@ module mpy_core
                     ABI_TAG_INT64, ABI_TAG_ITER: begin tr_r <= 1'b1; ret(); end
                     ABI_TAG_QSTR: begin tr_r <= (tr_v[31:0] != ABI_Q_EMPTY); ret(); end
                     ABI_TAG_STR, ABI_TAG_BYTES, ABI_TAG_TUPLE, ABI_TAG_MUT: rd(adr(tr_v), S_TR_LEN);
-                    ABI_TAG_OBJECT: rd(aoff(adr(tr_v), 4), S_TR_T);
+                    ABI_TAG_OBJECT, ABI_TAG_FUNCTION: rd(aoff(adr(tr_v), 4), S_TR_T);
+                    ABI_TAG_BUILTIN: rd(aoff(badr(tr_v), 4), S_TR_T);
                     default: begin tr_x <= 1'b1; ret(); end
                 endcase
             end
@@ -6748,14 +6800,14 @@ module mpy_core
             S_AT: if (scr_id != SCR_AT) scr_adopt(SCR_AT, S_AT);
                   else begin
                 at_ty <= 1'b0; at_objd <= 1'b0;
-                if (tg(t[0]) == ABI_TAG_OBJECT) rd(adr(t[0]), S_AT_K);
+                if (objectlike(t[0])) rd(is_bi(t[0]) ? badr(t[0]) : adr(t[0]), S_AT_K);
                 else begin ty_v <= t[0]; gosub(S_TYPEOF, S_AT_NT); end
             end
             S_AT_K: if (md == ABI_OB_INSTANCE) rd(aoff(adr(t[0]), 8), S_AT_ID);
                     else if (md == ABI_OB_EXCEPTION) rd(aoff(adr(t[0]), 16), S_AT_ID);
                     else if (md == ABI_OB_TYPE) begin `at_t <= t[0]; at_ty <= 1'b1; st <= S_AT_MRO; end
                     else if (md == ABI_OB_MODULE) rd(aoff(adr(t[0]), 8), S_AT_MOD);
-                    else rd(aoff(adr(t[0]), 4), S_AT_T1);
+                    else rd(aoff(is_bi(t[0]) ? badr(t[0]) : adr(t[0]), 4), S_AT_T1);
             S_AT_ID: if (mv == VNULL) rd(aoff(adr(t[0]), 4), S_AT_T1);
                      else lookup(mv, {ABI_TAG_QSTR, at_q}, VNULL, LK_FIND, 1'b0, S_AT_IDR);
             S_AT_IDR: if (lk_found) begin at_kind <= 2'd1; at_v <= lk_res; ret(); end
@@ -6780,7 +6832,7 @@ module mpy_core
                          else begin `at_i <= `at_i + 32'd1; st <= S_AT_ML; end
                      end else begin
                          at_v <= lk_res;
-                         if (tg(lk_res) == ABI_TAG_OBJECT) rd(adr(lk_res), S_AT_VK);
+                         if (objectlike(lk_res)) rd(is_bi(lk_res) ? badr(lk_res) : adr(lk_res), S_AT_VK);
                          else begin at_kind <= 2'd1; ret(); end
                      end
             S_AT_VK: begin

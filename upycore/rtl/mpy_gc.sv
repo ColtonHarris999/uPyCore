@@ -159,7 +159,7 @@ module mpy_gc #(
         unique case (mem_rtag_i)
             MPY_TAG_INT64, MPY_TAG_COMPLEX, MPY_TAG_STR, MPY_TAG_TUPLE,
             MPY_TAG_MUT_COLLEC, MPY_TAG_RANGE, MPY_TAG_ITER, MPY_TAG_BYTES,
-            MPY_TAG_OBJECT, MPY_TAG_CONT: cand_ptr = 1'b1;
+            MPY_TAG_OBJECT, MPY_TAG_CONTINUE, MPY_TAG_FUNCTION: cand_ptr = 1'b1;
             default: cand_ptr = 1'b0;
         endcase
         cand_addr = {mem_rdata_i[31:2], 2'b00};
@@ -563,7 +563,7 @@ module mpy_gc #(
                 end
                 G_LNK_P0: st <= G_ROOT;
                 G_LNK_DEC: if (mem_ack_i) begin
-                    if (mpy_tag_is_pointer(lnk_tags[lnk_i])) begin
+                    if (mpy_tag_is_pointer(lnk_tags[lnk_i]) || lnk_tags[lnk_i] == MPY_TAG_FUNCTION) begin
                         if (lnk_tags[lnk_i] == MPY_TAG_MUT_COLLEC) begin
                             if ({mem_rdata_i[31:2], 2'b00} >= POOL_BASE &&
                                 ({mem_rdata_i[31:2], 2'b00} - POOL_BASE) < active_bytes)

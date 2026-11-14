@@ -22,7 +22,7 @@ def _newdict(n):
     d = _alloc(4, TAG_MUT, MUT_DICT)
     _st(d, 0, 0)
     _st(d, 1, n)
-    _st(d, 2, _alloc(n * 2, TAG_CONT, 0) if n else NULL)
+    _st(d, 2, _alloc(n * 2, TAG_CONTINUE, 0) if n else NULL)
     _st(d, 3, 0)
     return d
 
@@ -31,7 +31,7 @@ def _newset(n):
     s = _alloc(4, TAG_MUT, MUT_SET)
     _st(s, 0, 0)
     _st(s, 1, n)
-    _st(s, 2, _alloc(n, TAG_CONT, 0) if n else NULL)
+    _st(s, 2, _alloc(n, TAG_CONTINUE, 0) if n else NULL)
     _st(s, 3, 0)
     return s
 
@@ -117,7 +117,7 @@ def _map_grow(c, is_set):
     old_n = _ld(c, 1)
     old = _ld(c, 2)
     n = _next_alloc(old_n + 1)
-    tab = _alloc(n if is_set else n * 2, TAG_CONT, 0)
+    tab = _alloc(n if is_set else n * 2, TAG_CONTINUE, 0)
     _st(c, 1, n)
     _st(c, 2, tab)
     _st(c, 0, 0)

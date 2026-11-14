@@ -108,9 +108,9 @@ module tb_mpy_value;
             MPY_TAG_INT64:      tag_name = "INT64";
             MPY_TAG_FLOAT:      tag_name = "FLOAT";
             MPY_TAG_COMPLEX:    tag_name = "COMPLEX";
-            MPY_TAG_RESERVED:   tag_name = "reserved";
+            MPY_TAG_BUILTIN:   tag_name = "reserved";
             MPY_TAG_QSTR:       tag_name = "QSTR";
-            MPY_TAG_SHORT_STR:  tag_name = "SHORT_STR";
+            MPY_TAG_FUNCTION:  tag_name = "SHORT_STR";
             MPY_TAG_STR:        tag_name = "STR";
             MPY_TAG_TUPLE:      tag_name = "TUPLE";
             MPY_TAG_MUT_COLLEC: tag_name = "MUT_COLLEC";
@@ -118,7 +118,7 @@ module tb_mpy_value;
             MPY_TAG_ITER:       tag_name = "ITER";
             MPY_TAG_BYTES:      tag_name = "BYTES";
             MPY_TAG_OBJECT:     tag_name = "OBJECT";
-            MPY_TAG_CONT:       tag_name = "CONT";
+            MPY_TAG_CONTINUE:       tag_name = "CONT";
             default:            tag_name = "?";
         endcase
     endfunction
@@ -312,10 +312,10 @@ module tb_mpy_value;
         check(!mpy_flash_addr_reserved(32'h8), "flash byte 8 is past the reservation");
         check(mpy_tag_span(MPY_TAG_INT64) == 3'(MPY_SPAN_INT64), "INT64 occupies two");
         check(mpy_tag_span(MPY_TAG_COMPLEX) == 3'(MPY_SPAN_COMPLEX), "COMPLEX occupies two");
-        check(mpy_tag_span(MPY_TAG_SHORT_STR) == 3'(MPY_SPAN_SHORT_STR),
+        check(mpy_tag_span(MPY_TAG_FUNCTION) == 3'(MPY_SPAN_SHORT_STR),
               "SHORT_STR occupies four");
-        check(mpy_tag_span(MPY_TAG_CONT) == 3'd1, "CONT is one extra entry");
-        check(mpy_tag_span(MPY_TAG_RESERVED) == 3'd0, "tag 0101 is reserved");
+        check(mpy_tag_span(MPY_TAG_CONTINUE) == 3'd1, "CONT is one extra entry");
+        check(mpy_tag_span(MPY_TAG_BUILTIN) == 3'd0, "tag 0101 is reserved");
 
         tick();
         tick();
@@ -372,7 +372,7 @@ module tb_mpy_value;
         wide_we = 1'b0;
         check(rs1_tag == MPY_TAG_INT64, "INT64 head tag");
         check(rs1_pay == 32'h0000_0002, "INT64 low half");
-        check(rs2_tag == MPY_TAG_CONT, "INT64 high half is CONT");
+        check(rs2_tag == MPY_TAG_CONTINUE, "INT64 high half is CONT");
         check(rs2_pay == 32'h0000_0001, "INT64 high half");
         check(rs2 == {rs2_tag, rs2_pay}, "CONT read is one 36-bit entry");
 
@@ -387,7 +387,7 @@ module tb_mpy_value;
         tick();
         wide_we = 1'b0;
         check(rs1_tag == MPY_TAG_COMPLEX && rs1_pay == 32'h3F80_0000, "COMPLEX real");
-        check(rs2_tag == MPY_TAG_CONT && rs2_pay == 32'hBF80_0000, "COMPLEX imag is CONT");
+        check(rs2_tag == MPY_TAG_CONTINUE && rs2_pay == 32'hBF80_0000, "COMPLEX imag is CONT");
 
         begin
             logic [119:0] bytes;
@@ -398,7 +398,7 @@ module tb_mpy_value;
             word0 = mpy_short_str_word(8'd2, bytes, 2'd0);
             wide_we = 1'b1;
             wide_addr = MPY_RF_ADDR_W'(4);
-            wide_tag = MPY_TAG_SHORT_STR;
+            wide_tag = MPY_TAG_FUNCTION;
             wide_pay = {mpy_short_str_word(8'd2, bytes, 2'd3),
                         mpy_short_str_word(8'd2, bytes, 2'd2),
                         mpy_short_str_word(8'd2, bytes, 2'd1),
@@ -409,23 +409,23 @@ module tb_mpy_value;
             rs2_addr = MPY_RF_ADDR_W'(7);
             tick();
             wide_we = 1'b0;
-            check(rs1_tag == MPY_TAG_SHORT_STR, "SHORT_STR head");
+            check(rs1_tag == MPY_TAG_FUNCTION, "SHORT_STR head");
             check(rs1_pay == 32'h0069_4802, "SHORT_STR length and first bytes");
             rs2_addr = MPY_RF_ADDR_W'(5);
             settle();
-            check(rs2_tag == MPY_TAG_CONT && rs2_pay == 32'h0, "SHORT_STR CONT 1");
+            check(rs2_tag == MPY_TAG_CONTINUE && rs2_pay == 32'h0, "SHORT_STR CONT 1");
             rs2_addr = MPY_RF_ADDR_W'(6);
             settle();
-            check(rs2_tag == MPY_TAG_CONT, "SHORT_STR CONT 2");
+            check(rs2_tag == MPY_TAG_CONTINUE, "SHORT_STR CONT 2");
             rs2_addr = MPY_RF_ADDR_W'(7);
             settle();
-            check(rs2_tag == MPY_TAG_CONT, "SHORT_STR CONT 3");
+            check(rs2_tag == MPY_TAG_CONTINUE, "SHORT_STR CONT 3");
         end
 
         write_rf(MPY_RF_ADDR_W'(8), mpy_make_entry(MPY_TAG_INT, 32'h1111_1111));
         wide_we = 1'b1;
         wide_addr = MPY_RF_ADDR_W'(8);
-        wide_tag = MPY_TAG_SHORT_STR;
+        wide_tag = MPY_TAG_FUNCTION;
         wide_pay = 128'd16;
         settle();
         check(wide_fault, "SHORT_STR longer than 15 faults");
@@ -438,7 +438,7 @@ module tb_mpy_value;
 
         wide_we = 1'b1;
         wide_addr = MPY_RF_ADDR_W'(13);
-        wide_tag = MPY_TAG_SHORT_STR;
+        wide_tag = MPY_TAG_FUNCTION;
         wide_pay = 128'd1;
         settle();
         check(wide_fault, "SHORT_STR does not cross the file");
@@ -448,21 +448,21 @@ module tb_mpy_value;
         settle();
         check(wide_fault, "INT64 does not cross the file");
         wide_addr = MPY_RF_ADDR_W'(0);
-        wide_tag = MPY_TAG_RESERVED;
+        wide_tag = MPY_TAG_BUILTIN;
         settle();
         check(wide_fault, "reserved tag is not a wide value");
         wide_we = 1'b0;
 
         wide_we = 1'b1;
         wide_addr = MPY_RF_ADDR_W'(12);
-        wide_tag = MPY_TAG_SHORT_STR;
+        wide_tag = MPY_TAG_FUNCTION;
         wide_pay = {96'b0, 32'd4};
         settle();
         check(!wide_fault, "SHORT_STR at the last four entries fits");
         rs1_addr = MPY_RF_ADDR_W'(15);
         tick();
         wide_we = 1'b0;
-        check(rs1_tag == MPY_TAG_CONT, "last SHORT_STR entry is CONT");
+        check(rs1_tag == MPY_TAG_CONTINUE, "last SHORT_STR entry is CONT");
 
         $display("MUT_COLLEC address clears the low 2 bits");
         begin

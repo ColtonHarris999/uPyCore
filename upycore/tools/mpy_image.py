@@ -142,7 +142,7 @@ def _int_slots(value: int, catalog: Catalog, tags: dict[str, int]) -> list[tuple
         return [(tags["INT"], value & 0xFFFFFFFF)]
     return [
         (tags["INT64"], value & 0xFFFFFFFF),
-        (tags["CONT"], (value >> 32) & 0xFFFFFFFF),
+        (tags["CONTINUE"], (value >> 32) & 0xFFFFFFFF),
     ]
 
 
@@ -575,7 +575,7 @@ def _expect_value(view: ImageView, image: bytes, slot: int, obj: object, tags: d
         value = payload | (hi << 32)
         if value >= (1 << 63):
             value -= 1 << 64
-        if tag != tags["INT64"] or hi_tag != tags["CONT"] or value != obj:
+        if tag != tags["INT64"] or hi_tag != tags["CONTINUE"] or value != obj:
             raise MpyError(f"int const {obj} was not stored as INT64")
         return
     if isinstance(obj, str):

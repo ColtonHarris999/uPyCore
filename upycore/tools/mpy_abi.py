@@ -11,6 +11,7 @@ hard-codes are listed here. upycore/docs/mpy_memory_map.md explains each table.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -19,7 +20,9 @@ SV_PATH = REPO_ROOT / "upycore" / "rtl" / "mpy_abi.svh"
 PY_PATH = REPO_ROOT / "upycore" / "firmware" / "_abi.py"
 
 IMAGE_MAGIC = 0x324D5055  # "UPM2" little-endian
-IMAGE_VERSION = 2
+IMAGE_VERSION = 3
+BUILTIN_NID_SHIFT = 24
+BUILTIN_ADDR_MASK = (1 << BUILTIN_NID_SHIFT) - 1
 
 # ---------------------------------------------------------------------------
 # Flash header: word i sits at byte 4*i. The first 8 bytes are the magic and
@@ -94,9 +97,9 @@ MD_FLAG_PACKAGE = 2
 # INT64 and COMPLEX are pointers to two-word boxes).
 TAG = {
     "CONTROL": 0, "INT": 1, "INT64": 2, "FLOAT": 3, "COMPLEX": 4,
-    "RESERVED": 5, "QSTR": 6, "SHORT_STR": 7, "STR": 8, "TUPLE": 9,
+    "BUILTIN": 5, "QSTR": 6, "FUNCTION": 7, "STR": 8, "TUPLE": 9,
     "MUT": 10, "RANGE": 11, "ITER": 12, "BYTES": 13, "OBJECT": 14,
-    "CONT": 15,
+    "CONTINUE": 15,
 }
 CTL = {"NULL": 0, "NONE": 1, "STOP": 2, "TOMB": 3, "FALSE": 4, "TRUE": 5, "RF_LINK": 6}
 MUT = {"LIST": 0, "DICT": 1, "SET": 2, "BYTEARRAY": 3}
@@ -350,6 +353,7 @@ NATIVES = [
     "_hunlock",  # _hunlock() -> the new depth
 ]
 IO_NATIVES = {"_wfe", "_hlock", "_hunlock"}
+assert len(NATIVES) <= 256
 NATIVE_ID = {name: i for i, name in enumerate(NATIVES)}
 
 # Firmware hook table: the core calls these firmware functions by index.
@@ -649,6 +653,7 @@ def _sv_lines() -> list[str]:
         out.append("")
 
     block("ABI_TAG_", TAG, 4)
+    block("ABI_BUILTIN_", {"NID_SHIFT": BUILTIN_NID_SHIFT, "ADDR_MASK": BUILTIN_ADDR_MASK})
     block("ABI_CTL_", CTL)
     block("ABI_MUT_", MUT, 2)
     block("ABI_OVR_", OVR, 2)
@@ -721,6 +726,7 @@ def _py_lines() -> list[str]:
 
     out.append("from micropython import const")
     block("TAG_", TAG)
+    block("BUILTIN_", {"NID_SHIFT": BUILTIN_NID_SHIFT, "ADDR_MASK": BUILTIN_ADDR_MASK})
     block("CTL_", CTL)
     block("MUT_", MUT)
     block("OB_", OB)
@@ -835,6 +841,13 @@ def main(argv: list[str] | None = None) -> int:
         if stale:
             names = ", ".join(str(p.relative_to(REPO_ROOT)) for p in stale)
             print(f"{names} stale: run python3 upycore/tools/mpy_abi.py --sv", file=sys.stderr)
+            return 1
+        defs = SV_PATH.with_name("mpy_defs.svh").read_text()
+        matches = re.findall(r"\[3:0\]\s+MPY_TAG_(\w+)\s*=\s*4'b([01]{4})\s*;", defs)
+        actual = {name: int(bits, 2) for name, bits in matches}
+        expected = {("MUT_COLLEC" if name == "MUT" else name): value for name, value in TAG.items()}
+        if len(matches) != len(expected) or actual != expected:
+            print("mpy_defs.svh tag table differs from mpy_abi.py", file=sys.stderr)
             return 1
         print("mpy-abi: ok")
         return 0

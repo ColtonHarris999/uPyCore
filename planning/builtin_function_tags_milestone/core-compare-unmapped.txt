@@ -1,0 +1,19 @@
+worst: base 9.532  new 9.559
+register group                                     base      new
+  m_req                                             9.369    9.559
+  x0                                                9.532    9.532
+  st                                                9.474    9.474
+  m_addr                                            9.469    9.451
+  cv_fun_g                                          9.390    9.390
+  u_hmod.r_r                                        9.366    9.366
+  hm_rem                                            9.366    9.366
+  pc                                                9.207    9.207
+  $auto$proc_rom.cc:154:do_switch$1                 9.185    9.185
+  u_fetch.q_r                                       9.116    9.116
+  u_fetch.q_f                                       9.116    9.116
+  fe_win                                            9.116    9.116
+  u_hmod.q_r                                        9.050    9.050
+  u_hmod.$37.t4                                     9.050    9.050
+  u_hmod.$37.e2                                     9.050    9.050
+slower than base by more than 0.1:
+  m_req                                             9.369    9.559

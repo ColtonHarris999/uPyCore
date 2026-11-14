@@ -8,7 +8,7 @@ def _barr_from(b):
     _st(o, 0, n)
     _st(o, 1, n)
     if n:
-        _st(o, 2, _alloc((n + 3) >> 2, TAG_CONT, 0))
+        _st(o, 2, _alloc((n + 3) >> 2, TAG_CONTINUE, 0))
         _bcopy(o, 0, b, 0, n)
     else:
         _st(o, 2, NULL)
@@ -138,7 +138,7 @@ def _barr_grow(b, n):
         cap = 4
     while cap < n:
         cap *= 2
-    data = _alloc((cap + 3) >> 2, TAG_CONT, 0)
+    data = _alloc((cap + 3) >> 2, TAG_CONTINUE, 0)
     old = _ld(b, 0)
     if old and _ld(b, 2) is not NULL:
         _bcopy(_mk(TAG_BYTES, _pay(data)) if False else b, 0, b, 0, 0)

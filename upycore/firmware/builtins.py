@@ -443,7 +443,8 @@ def hash(obj):
 
 
 def callable(obj):
-    if _tag(obj) != TAG_OBJECT:
+    tag = _tag(obj)
+    if tag != TAG_OBJECT and tag != TAG_FUNCTION and tag != TAG_BUILTIN:
         return False
     k = _ld(obj, 0)
     if k == OB_FUNCTION or k == OB_BUILTIN or k == OB_BOUND_METHOD or k == OB_TYPE or k == OB_CLASSMETHOD:
@@ -473,7 +474,7 @@ def _load_attr(obj, name):
     if spec is not NULL:
         return spec
     t = _tag(obj)
-    if t == TAG_OBJECT:
+    if t == TAG_OBJECT or t == TAG_FUNCTION or t == TAG_BUILTIN:
         k = _ld(obj, 0)
         if k == OB_INSTANCE or k == OB_EXCEPTION:
             d = _ld(obj, 2 if k == OB_INSTANCE else 4)
@@ -601,7 +602,8 @@ def dir(*args):
     obj = args[0]
     names = []
     seen = {}
-    if _tag(obj) == TAG_OBJECT:
+    tag = _tag(obj)
+    if tag == TAG_OBJECT or tag == TAG_FUNCTION or tag == TAG_BUILTIN:
         k = _ld(obj, 0)
         if k == OB_INSTANCE or k == OB_EXCEPTION:
             d = _ld(obj, 2 if k == OB_INSTANCE else 4)

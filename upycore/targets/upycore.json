@@ -143,8 +143,8 @@
     },
     {
       "tag": 5,
-      "name": "reserved",
-      "registers": 0
+      "name": "BUILTIN",
+      "registers": 1
     },
     {
       "tag": 6,
@@ -153,8 +153,8 @@
     },
     {
       "tag": 7,
-      "name": "SHORT_STR",
-      "registers": 4
+      "name": "FUNCTION",
+      "registers": 1
     },
     {
       "tag": 8,
@@ -193,7 +193,7 @@
     },
     {
       "tag": 15,
-      "name": "CONT",
+      "name": "CONTINUE",
       "registers": 1
     }
   ],

@@ -66,7 +66,7 @@ module mpy_regfile (
                 wide_fault_o = 1'b1;
             else if ((wide_base_c + {4'b0, span_c}) > 7'(MPY_RF_DEPTH))
                 wide_fault_o = 1'b1;
-            else if ((wide_tag_i == MPY_TAG_SHORT_STR) &&
+            else if ((wide_tag_i == MPY_TAG_FUNCTION) &&
                      (wide_pay_i[7:0] > 8'(MPY_SHORT_STR_MAX_BYTES)))
                 wide_fault_o = 1'b1;
         end
@@ -79,10 +79,10 @@ module mpy_regfile (
         end else if (wide_we_i && !wide_fault_o) begin
             rf[wide_slot0] <= mpy_make_entry(wide_tag_i, wide_pay_i[31:0]);
             if (span_c >= 3'd2)
-                rf[wide_slot1] <= mpy_make_entry(MPY_TAG_CONT, wide_pay_i[63:32]);
+                rf[wide_slot1] <= mpy_make_entry(MPY_TAG_CONTINUE, wide_pay_i[63:32]);
             if (span_c == 3'(MPY_SPAN_SHORT_STR)) begin
-                rf[wide_slot2] <= mpy_make_entry(MPY_TAG_CONT, wide_pay_i[95:64]);
-                rf[wide_slot3] <= mpy_make_entry(MPY_TAG_CONT, wide_pay_i[127:96]);
+                rf[wide_slot2] <= mpy_make_entry(MPY_TAG_CONTINUE, wide_pay_i[95:64]);
+                rf[wide_slot3] <= mpy_make_entry(MPY_TAG_CONTINUE, wide_pay_i[127:96]);
             end
         end else if (idx_we_i) begin
             rf[idx_addr_i] <= idx_wdata_i;

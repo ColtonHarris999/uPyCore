@@ -103,6 +103,7 @@ for_call_toplevel = { file = "hw/control/for_call_toplevel.py" }
 
 [calls]
 call_funcs = { file = "hw/calls/funcs.py" }
+callable_tags = { file = "hw/calls/callable_tags.py" }
 varargs = { file = "hw/calls/varargs.py" }
 closure = { file = "hw/calls/closure.py" }
 recursion = { file = "hw/calls/recursion.py", cycles = 40_000_000, timeout = 240 }
@@ -532,6 +533,7 @@ gc_memoryerror_recover = { file = "hw/gc/gc_memoryerror_recover.py", cycles = 40
 gc_alias_identity_key = { file = "hw/gc/gc_alias_identity_key.py", cycles = 40_000_000, timeout = 240 }
 gc_overwrite_bindings = { file = "hw/gc/gc_overwrite_bindings.py", cycles = 40_000_000, timeout = 240 }
 gc_mutant_43 = { file = "hw/gc/gc_mutant_43.py", cycles = 40_000_000, timeout = 240 }
+gc_callable_tags = { file = "hw/gc/gc_callable_tags.py" }
 gc_mutant_36 = { file = "hw/gc/gc_mutant_36.py", cycles = 40_000_000, timeout = 240 }
 gc_wide_live_list = { file = "hw/gc/gc_wide_live_list.py", cycles = 40_000_000, timeout = 240 }
 gc_verify_closures = { file = "hw/gc/gc_verify_closures.py", cycles = 40_000_000, timeout = 240 }

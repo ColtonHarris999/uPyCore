@@ -338,7 +338,8 @@ def _make_type(name, bases, ns):
     if '__eq__' in ns:
         flags |= TF_EQ
     for val in ns.values():
-        if _tag(val) == TAG_OBJECT:
+        tag = _tag(val)
+        if tag == TAG_OBJECT or tag == TAG_FUNCTION or tag == TAG_BUILTIN:
             vk = _ld(val, 0)
             # Plain bytecode functions bind as methods and have no __set__.
             # Avoid scanning their type for every method in a class body.

@@ -162,13 +162,19 @@ module mpy_soc #(
     // boot_err_o is a chip output with half the period as output delay,
     // and the pool arithmetic in front of it missed 10 ns by 178 ps.
     logic layout_chk;
-    logic boot_error;
-    assign boot_err_o = boot_error || layout_error;
+    logic boot_error, image_version_error;
+    assign boot_err_o = boot_error || layout_error || image_version_error;
     logic        sys_rst_n;
     logic        ld_we;
     logic [MPY_FLASH_IDX_W-1:0] ld_idx;
     logic [31:0] ld_wdata;
     logic [3:0]  ld_wtag;
+
+    always_ff @(posedge clk_i or negedge por_n) begin
+        if (!por_n) image_version_error <= 1'b0;
+        else if (ld_we && ld_idx == MPY_FLASH_IDX_W'(ABI_HDR_VERSION))
+            image_version_error <= ld_wdata != ABI_IMAGE_VERSION;
+    end
 
     // Reset. rst_n_i asserts asynchronously and is released through two
     // flops (por_n), so no flop sees the external edge's release. Every

@@ -274,7 +274,7 @@ def _load_obj(data, cur):
 def _words(n, roots):
     if n <= 0:
         return 0
-    w = _alloc(n, TAG_CONT, 0)
+    w = _alloc(n, TAG_CONTINUE, 0)
     roots.append(w)
     return w
 
@@ -382,7 +382,7 @@ def _finish_rc(bc, pre, children, qids, roots, src_q, md_addr):
             i += 1
     flags = _RC_FLAG_GENERATOR if (pre[2] & SCOPE_GENERATOR) else 0
     nloc = _local_count(bc, pre)
-    rc = _alloc(12, TAG_CONT, 0)
+    rc = _alloc(12, TAG_CONTINUE, 0)
     roots.append(rc)
     _st(rc, RC_OP_START, base + pre[11])
     _st(rc, RC_SIG, nloc | (pre[1] << 8) | (pre[2] << 16) | (flags << 24))
@@ -451,7 +451,7 @@ def _load_body(data, filename, roots):
         _fill_ids(qw, qids)
     cbase = _const_base(objs, roots)
     src_q = _q_intern(filename)
-    md = _alloc(7, TAG_CONT, 0)
+    md = _alloc(7, TAG_CONTINUE, 0)
     roots.append(md)
     _st(md, MD_QSTRS, _pay(qw) if qw != 0 else 0)
     _st(md, MD_CONSTS, cbase)
@@ -463,7 +463,7 @@ def _load_body(data, filename, roots):
     _st(md, MD_RAW, rc)
     if cur[0] != len(data):
         raise ValueError('trailing mpy')
-    fun = _alloc(8, TAG_OBJECT, 0)
+    fun = _alloc(8, TAG_FUNCTION, 0)
     _st(fun, 0, OB_FUNCTION)
     _st(fun, 1, _ntype(T_FUNCTION))
     _st(fun, 2, rc)
@@ -559,7 +559,7 @@ def compile(*args, **kw):
 
 
 def _is_fun(x):
-    return _tag(x) == TAG_OBJECT and _ld(x, 0) == OB_FUNCTION
+    return _tag(x) == TAG_FUNCTION and _ld(x, 0) == OB_FUNCTION
 
 
 def _as_code(code, mode):

@@ -24,8 +24,11 @@ _MISSING = (0,)
 
 
 def _kind(x):
-    if _tag(x) == TAG_OBJECT:
+    tag = _tag(x)
+    if tag == TAG_OBJECT or tag == TAG_FUNCTION:
         return _ld(x, 0)
+    if tag == TAG_BUILTIN:
+        return OB_BUILTIN
     return 0
 
 
@@ -261,7 +264,7 @@ def _newlist(n):
     # A list of n None-free NULL slots, len n.
     alloc = n if n > 4 else 4
     lst = _alloc(3, TAG_MUT, MUT_LIST)
-    items = _alloc(alloc, TAG_CONT, 0)
+    items = _alloc(alloc, TAG_CONTINUE, 0)
     _st(lst, 0, n)
     _st(lst, 1, alloc)
     _st(lst, 2, items)
@@ -277,7 +280,7 @@ def _list_reserve(lst, n):
         alloc = 4
     while alloc < n:
         alloc = alloc * 2
-    items = _alloc(alloc, TAG_CONT, 0)
+    items = _alloc(alloc, TAG_CONTINUE, 0)
     old = _ld(lst, 2)
     count = _ld(lst, 0)
     _wcopy(items, 0, old, 0, count)
