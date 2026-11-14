@@ -172,7 +172,14 @@ passed the per-workload threshold under all four CA/AALU combinations.
 
 The ABI check, 502 oracle-backed golden checks, and targeted callable,
 collector-root and pin-IRQ cases passed. The baseline v2 image was
-rejected before execution. Full hardware verification is still pending.
+rejected before execution. A deliberately mistagged boot hook triggered
+the canonical check in `S_CALL_K`.
+
+`make test` passed all 37 RTL unit benches and all 551 hardware cases
+under each compiler, including both friendly REPL sessions. The compiler
+suite ran 554 programs with 549 byte-exact comparisons and five allowed
+float spellings. The `--nstate` audit passed. Steps 1–3 pass their
+combined verification and cycle gates.
 
 | Top and flow | Step 0 delay (ns) | Recovered delay (ns) | Step 0 cells | Recovered cells |
 | --- | ---: | ---: | ---: | ---: |
