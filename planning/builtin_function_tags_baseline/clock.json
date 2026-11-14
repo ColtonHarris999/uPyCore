@@ -1,0 +1,169 @@
+{
+  "before": "build/mpy_soc/obj/Vtb_mpy_soc",
+  "after": "build/mpy_soc/obj/Vtb_mpy_soc",
+  "before_ns": null,
+  "after_ns": null,
+  "rows": [
+    {
+      "name": "misc_aes",
+      "kind": "kernel",
+      "before_cycles": 1146970,
+      "after_cycles": 1146970,
+      "cycle_ratio": 1.0
+    },
+    {
+      "name": "bm_fannkuch",
+      "kind": "kernel",
+      "before_cycles": 1001333,
+      "after_cycles": 1001333,
+      "cycle_ratio": 1.0
+    },
+    {
+      "name": "int_add",
+      "kind": "kernel",
+      "before_cycles": 48675,
+      "after_cycles": 48675,
+      "cycle_ratio": 1.0
+    },
+    {
+      "name": "int_mul",
+      "kind": "kernel",
+      "before_cycles": 54673,
+      "after_cycles": 54673,
+      "cycle_ratio": 1.0
+    },
+    {
+      "name": "int64_mul",
+      "kind": "kernel",
+      "before_cycles": 79739,
+      "after_cycles": 79739,
+      "cycle_ratio": 1.0
+    },
+    {
+      "name": "int_pow",
+      "kind": "kernel",
+      "before_cycles": 91673,
+      "after_cycles": 91673,
+      "cycle_ratio": 1.0
+    },
+    {
+      "name": "int_to_float",
+      "kind": "kernel",
+      "before_cycles": 123691,
+      "after_cycles": 123691,
+      "cycle_ratio": 1.0
+    },
+    {
+      "name": "mixed_add",
+      "kind": "kernel",
+      "before_cycles": 56677,
+      "after_cycles": 56677,
+      "cycle_ratio": 1.0
+    },
+    {
+      "name": "float_add",
+      "kind": "kernel",
+      "before_cycles": 53681,
+      "after_cycles": 53681,
+      "cycle_ratio": 1.0
+    },
+    {
+      "name": "float_mul",
+      "kind": "kernel",
+      "before_cycles": 56681,
+      "after_cycles": 56681,
+      "cycle_ratio": 1.0
+    },
+    {
+      "name": "int_true_div",
+      "kind": "kernel",
+      "before_cycles": 85673,
+      "after_cycles": 85673,
+      "cycle_ratio": 1.0
+    },
+    {
+      "name": "pystone",
+      "kind": "kernel",
+      "before_cycles": 2070059,
+      "after_cycles": 2070059,
+      "cycle_ratio": 1.0
+    },
+    {
+      "name": "bulk_extended_keys",
+      "kind": "program",
+      "before_cycles": 3322654,
+      "after_cycles": 3322654,
+      "cycle_ratio": 1.0
+    },
+    {
+      "name": "bulk_maps",
+      "kind": "program",
+      "before_cycles": 190916,
+      "after_cycles": 190916,
+      "cycle_ratio": 1.0
+    },
+    {
+      "name": "byte_moves",
+      "kind": "program",
+      "before_cycles": 3388910,
+      "after_cycles": 3388910,
+      "cycle_ratio": 1.0
+    },
+    {
+      "name": "dict",
+      "kind": "program",
+      "before_cycles": 172587,
+      "after_cycles": 172587,
+      "cycle_ratio": 1.0
+    },
+    {
+      "name": "float",
+      "kind": "program",
+      "before_cycles": 460582,
+      "after_cycles": 460582,
+      "cycle_ratio": 1.0
+    },
+    {
+      "name": "intmath",
+      "kind": "program",
+      "before_cycles": 427138,
+      "after_cycles": 427138,
+      "cycle_ratio": 1.0
+    },
+    {
+      "name": "listbuild",
+      "kind": "program",
+      "before_cycles": 480751,
+      "after_cycles": 480751,
+      "cycle_ratio": 1.0
+    },
+    {
+      "name": "listops",
+      "kind": "program",
+      "before_cycles": 437400,
+      "after_cycles": 437400,
+      "cycle_ratio": 1.0
+    },
+    {
+      "name": "sequence_ops",
+      "kind": "program",
+      "before_cycles": 2009834,
+      "after_cycles": 2009834,
+      "cycle_ratio": 1.0
+    },
+    {
+      "name": "set_relations",
+      "kind": "program",
+      "before_cycles": 1152386,
+      "after_cycles": 1152386,
+      "cycle_ratio": 1.0
+    },
+    {
+      "name": "strings",
+      "kind": "program",
+      "before_cycles": 805905,
+      "after_cycles": 805905,
+      "cycle_ratio": 1.0
+    }
+  ]
+}

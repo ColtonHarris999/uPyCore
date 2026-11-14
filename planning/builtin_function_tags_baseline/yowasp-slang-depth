@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+"""Run mpy_synth.py's flow with YoWASP's statically linked slang."""
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+
+yosys = os.environ["UPYCORE_WASM_YOSYS"]
+args = sys.argv[1:]
+script = Path(args[args.index("-s") + 1])
+directive, _, commands = script.read_text().partition("\n")
+if directive != "plugin -i slang":
+    sys.exit(f"Expected a slang loader directive at the start of {script}")
+with tempfile.NamedTemporaryFile(mode="w", suffix=".ys", dir=script.parent) as adjusted:
+    adjusted.write(commands.replace("read_slang ", "read_slang -j 1 ", 1))
+    adjusted.flush()
+    args[args.index("-s") + 1] = adjusted.name
+    sys.exit(subprocess.call([yosys, *args]))

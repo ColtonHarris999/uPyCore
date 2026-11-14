@@ -1,0 +1,20 @@
+step0-mpy_collection-mapped
+worst: base 9.191  new 9.191
+step0-mpy_collection-unmapped
+worst: base 9.366  new 9.366
+step0-mpy_core-mapped
+worst: base 9.250  new 9.250
+step0-mpy_core-unmapped
+worst: base 9.532  new 9.532
+step0-mpy_gc-mapped
+worst: base 7.291  new 7.291
+step0-mpy_gc-unmapped
+worst: base 9.116  new 9.116
+step0-mpy_hash-mapped
+worst: base 7.168  new 7.168
+step0-mpy_hash-unmapped
+worst: base 7.813  new 7.813
+step0-mpy_key_equal-mapped
+worst: base 6.554  new 6.554
+step0-mpy_key_equal-unmapped
+worst: base 6.586  new 6.586

@@ -1,0 +1,5 @@
+program              off          CA        AALU        both   both vs off
+call_builtin      76,141      76,084      74,685      74,628   -2.0%
+call_function     105,796     105,793     104,944     104,941   -0.8%
+call_method      123,736     122,739     122,237     121,240   -2.0%
+str_ops        2,415,952   2,396,497   2,389,893   2,370,438   -1.9%
