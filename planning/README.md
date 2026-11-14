@@ -11,6 +11,7 @@ progress. The machine as built is documented in `upycore/docs/`, and
 | [`perf_bench_coverage_plan.md`](perf_bench_coverage_plan.md), [`perf_bench_coverage_progress.md`](perf_bench_coverage_progress.md) | Which MicroPython `perf_bench` programs run on the device. Steps 0–4 done; step 5 (VFS import) deferred |
 | [`rv_io_core_plan.md`](rv_io_core_plan.md), [`rv_io_core_progress.md`](rv_io_core_progress.md) | Board I/O through an RV32 I/O core behind a bridge, with gates that keep the hart's cycles and timing unchanged. Being implemented phase by phase; the progress file has each phase's gate results |
 | [`shortlist_engine_status.md`](shortlist_engine_status.md) | The short-list engine's validation and synthesis handoff |
+| [`fable_clock_round_prompt.md`](fable_clock_round_prompt.md) | Paste-ready assignment for the next clock-and-cycles round. Image tools are in `.cursor/Dockerfile` and `.cursor/install.sh` |
 | [`old/`](old/) | Archived and completed plans, including the CPython-to-MicroPython pivot plan, the GC, generator and uPy2-compiler plans, and the cleanup report. Code comments cite some of them by section, so they stay in the repo |
 
 ## Rules
