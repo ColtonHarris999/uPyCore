@@ -19,16 +19,18 @@ The paper lives outside this repo. Answer with the figure as plain text and a re
 
 Read both files next to this skill before drawing:
 
-- `style.md` — column widths, TikZ styles, caption, and what the reply contains
-- `architecture.md` — the machine the figure must match
+- `style.md` — column widths, TikZ styles, caption, and what the reply contains. A core or SoC drawing follows the Block diagrams section. Memory-map rows and the register ring are for layout figures.
+- `architecture.md` — the machine the figure must match. The core and SoC block lists there are the only blocks those two figures may contain.
 
 Do not invent a block, a bit field, or a color. If the request disagrees with `architecture.md`, draw the machine in that file and add one sentence after the image naming the disagreement.
+
+`docs/paper/figures/iscafig.tex` is the shared preamble, not a figure. Add a line style there when a block diagram needs one the file does not define (`bus`, `ctrl`, `clkdom`). Do not put a figure environment in that file, and do not restyle one figure on its own.
 
 ## Do not write the figure into the repo
 
 `docs/paper/figures/` is a progress gallery. Those files are placeholders. They are not the paper, and they are not the reply.
 
-- Do not add, edit, or delete files under `docs/paper/figures/`.
+- Do not add, edit, or delete files under `docs/paper/figures/`, except a shared line style in `iscafig.tex`.
 - Do not update `build.tex`.
 - Do not commit a `.tex`, `.pdf`, or `.png` of the figure.
 - Do not tell the user to `\input` a path in this repo. Their paper cannot see it.

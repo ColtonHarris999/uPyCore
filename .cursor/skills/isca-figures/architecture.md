@@ -1,6 +1,6 @@
 # uPyCore machine, for figures
 
-Draw from this file. When it conflicts with a draft sentence, a comment in `mpy_container.sv`, or `mpy_defs.svh` object-kind numbers, this file wins. Sources are `upycore/rtl/mpy_core.sv`, `upycore/rtl/mpy_defs.svh`, `upycore/rtl/mpy_abi.svh`, `upycore/firmware/`, and `upycore/rtl/mpy_container.sv` only where this file says so.
+Draw from this file. When it conflicts with a draft sentence, a comment in `mpy_container.sv`, or `mpy_defs.svh` object-kind numbers, this file wins. Sources are `upycore/rtl/mpy_core.sv`, `upycore/rtl/mpy_defs.svh`, `upycore/rtl/mpy_abi.svh`, `upycore/firmware/`, and `upycore/rtl/mpy_container.sv` only where this file says so. A core or SoC block diagram also follows `mpy_soc.sv`, `mpy_mem.sv`, `mpy_fetch.sv`, `mpy_decode.sv`, `mpy_alu.sv`, `mpy_gc.sv`, `mpy_collection.sv`, `mpy_ca.sv`, `mpy_boot.sv`, and `mpy_iobr.sv`.
 
 The draft name RFSF is a spill chunk. The draft name $sb$ is RTL `rf_base`. Figures use $sp$, $sb$, and `RF_LINK`.
 
@@ -11,7 +11,8 @@ The draft name RFSF is a spill chunk. The draft name $sb$ is RTL `rf_base`. Figu
 - A list header of two words, or a capacity word at `pointer-4`. The live list header is three words.
 - `tp_hash` at byte offset 20. Live type word 5 (offset 20) is the MRO tuple. `mpy_container.sv` still loads offset 20 under that stale name.
 - Object-kind numbers from `MPY_OB_*` in `mpy_defs.svh`. Those disagree with `ABI_OB_*`. Use the ABI numbers below.
-- A scoreboard, rename, or a second memory master inside `mpy_soc`. The core, the collector, and (in the design) the container accelerator take turns on one port. String walks are core microcode, not a separate module.
+- A rename map, a reorder buffer, or a second operand register file. The collection accelerator's range scoreboard is real, and it belongs on that accelerator: it stalls the core's data port on a word a queued command still owns. It is not a core rename scoreboard. String and hash walks are sequencer microcode, not a module.
+- A separate flash ROM. The image is a window onto the same SRAM as the heap. Boot loads it from SPI NAND before the masters run. Boot is not a fifth runtime memory port.
 - A fixed 190-frame stack. The frame reserve is 32 KB. Frames grow up from `0x2000_0000`. Chunks grow down from `0x2000_7E00`. Meeting in the middle raises recursion.
 - `False` and `True` as their own tags. They are `CONTROL` kinds 4 and 5.
 
@@ -101,16 +102,18 @@ Frame reserve: `0x2000_0000` for 32 KB, ending at `0x2000_8000`. Scratch occupie
 
 ## Memory windows
 
+Physical storage is four interleaved banks, each 32768 words by 36 bits: a 32-bit payload and a 4-bit tag in the same word. That is 512 KB. The bank is physical word[1:0]. A bank does one access per cycle. `mpy_mem` has four ports. Index 0 is the collector, 1 is core data, 2 is instruction fetch, 3 is the collection accelerator. The lower index wins when two ports select the same bank. Ports on different banks proceed in the same cycle. There is no DRAM, no L1, and no L2. The image window adds no wait state.
+
 | Window | Base | Size |
 | --- | --- | --- |
-| Flash | `0x0000_0000` | 512 KB. Stores fault. Bytes 0 and 4 read as zero |
-| SRAM | `0x2000_0000` | 256 KB |
-| MMIO | `0x4000_0000` | 4 KB. UART, GPIO, timer, IRQ |
-| Sim control | `0xE000_0000` | 256 B. Simulation only |
+| Image | `0x0000_0000` | The linked image, rounded up to 32 bytes, inside the shared SRAM. Stores fault. Bytes 0 and 4 read as zero |
+| Data | `0x2000_0000` | The rest of the 512 KB. Not a second SRAM |
+| MMIO | `0x4000_0000` | 4 KB. The I/O bridge, answered in `mpy_soc` |
+| Sim control | `0xE000_0000` | 256 B. Halt, cycles, and the console byte. Simulation only. Answered in `mpy_soc`, not in `mpy_mem` |
 
-SRAM after the frame reserve: schedule ring `0x2000_8000` (64 B), handler table `0x2000_8040` (64 B), system roots `0x2000_8080`, argument buffer `0x2000_8100`, GC pool `0x2000_8500` through `0x2004_0000` (228096 B).
+SRAM after the frame reserve: schedule ring `0x2000_8000` (64 B), handler table `0x2000_8040` (64 B), system roots `0x2000_8080`, argument buffer `0x2000_8100`, GC pool `0x2000_8500`. The pool is the remaining data SRAM, at most the collector's table (307200 B).
 
-SRAM and flash data words are 32 bits. The tag is a side nibble, eight nibbles per word, lane 0 in [3:0]. One SRAM cycle. Flash adds one wait state. No DRAM, no L1, no L2.
+The core's data port has a one-entry skid in `mpy_soc`. A data access the scoreboard marks busy waits there. A fetch whose address is in the data window waits until the accelerator is idle. A fetch from the image does not. An MMIO access does not go to the banks.
 
 ## Collections
 
@@ -143,7 +146,7 @@ Bit 31 is the container accelerator's object indicator (`mpy_container.sv`, and 
 
 ## Accelerator resize
 
-This is `mpy_container.sv`, not the path `mpy_soc` runs today. `mpy_soc` does not instantiate the module. The core grows lists in `S_LA` and rehashes dicts and sets in `S_RH`.
+This section is the earlier `mpy_container.sv` contract. The SoC instantiates `mpy_collection`, described in the SoC block diagram, not this module. The core still grows lists in `S_LA` and can rehash dicts and sets in `S_RH`.
 
 Accelerator contract, matching the design section:
 
@@ -196,13 +199,30 @@ Range: start, stop, step, three integers.
 
 Kinds: 0 sequence (tuple, list, bytes, bytearray), 1 range, 2 dict, 3 set, 5 string. The core's `FOR_ITER` fast path keeps this same four-word record in the ring.
 
-## What the overview is allowed to show
+## Core block diagram
 
-- Flash, a 12-byte fetch window, decode, control.
-- The 16-by-36 ring with $sp$ and $sb$, the 8-entry local cache, the ALU (`INT`, `INT64`, binary32).
-- String walks as a band inside the core.
-- One memory port.
-- The container accelerator as the growth engine, with the caption stating that the core waits while the accelerator owns the port.
-- The collector, SRAM (frames up, chunks down, GC pool), and MMIO.
+Draw these blocks, and no others.
 
-Do not draw an L1, an L2, DRAM, or a scoreboard.
+- Fetch queue: `mpy_fetch`, three words, its own memory port. A jump or a frame change flushes it.
+- Decode: `mpy_decode`, one instruction from that queue.
+- Sequencer: the bytecode state machine. Microcode calls use a return stack of 16. String equality and hashing are a band inside this sequencer, not a module beside it.
+- Operand ring: 16 entries by 36 bits, with $sp$ and $sb$.
+- Local cache: eight write-back entries beside the ring. Flushed before a call or a collection.
+- ALU: `mpy_alu`, int64 and binary32. At most one result in flight. The destination register stays busy until that result writes back. Loads, constants, and jumps may run past it. Do not draw a rename map.
+- Pins: the fetch port, the data port (word and tag), collector requests, collection-accelerator commands, and an incoming I/O event.
+
+The core issues one bytecode instruction at a time. Do not draw a five-stage pipeline.
+
+## SoC block diagram
+
+Draw `mpy_soc` inside one chip boundary.
+
+- The core, with separate fetch and data stubs onto the bus. The data stub carries the one-entry skid.
+- The collector, `mpy_gc`: mark-sweep and next-fit allocation. Its table SRAM is inside the collector, not a fifth bank.
+- The collection accelerator, `mpy_collection`: a two-deep command queue, one copy engine for words and bytes, one dict and set engine, one short-list engine of at most 16 elements, and the range scoreboard. One memory port.
+- The bus and the four-bank SRAM. Label port indices 0 collector, 1 core data, 2 fetch, 3 accelerator.
+- Boot, `mpy_boot`, from an off-chip SPI NAND into the image window. The NAND sits outside the chip. The arrow does not join the bus.
+- The simulator page, on the core's data path, not on the bus.
+- The I/O bridge, `mpy_iobr`, and the I/O island, `iocore_top`, as a dashed `io_clk` domain: the I/O core, its own SRAMs, UART, GPIO, ADC, and USB. USB has its own clock. The crossing is the bridge's dual-clock FIFOs.
+
+The core waits on allocation and collection, and it waits for the accelerator to drain before a collection. Do not draw those waits as a second data bus. The scoreboard stall is a `ctrl` arrow from the scoreboard to the data stub.
