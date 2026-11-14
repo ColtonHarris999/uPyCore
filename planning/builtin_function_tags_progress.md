@@ -267,3 +267,42 @@ with a start at the registered `x3[3]`, away from the call and binding
 inputs. The set of endpoints at 100 generic levels or deeper is
 unchanged. The [Step 4 reports](builtin_function_tags_step4/) retain the
 full rankings.
+
+## Step 5 BUILTIN fast paths
+
+With `BTAG=1`, the dispatch state selects the native ID from the
+canonical payload and skips the kind and ID word reads. The method
+binding path classifies a canonical builtin without its kind-word
+read. With `BTAG=0`, both consumers take the header-read paths.
+Native fallback rereads ARGBUF slot 0 after the dispatch scratch
+register has been reused for argument 0. It masks off the native ID
+when addressing the fallback function and builtin name.
+
+| Core flow | Step 0 result | Step 5 result | Step 0 cells | Step 5 cells |
+| --- | ---: | ---: | ---: | ---: |
+| Mapped STA | 9.250 ns | 9.250 ns | 361,159 | 361,103 |
+| Unmapped STA | 9.532 ns | 9.559 ns | 495,250 | 495,664 |
+| Generic depth | 179 levels | 178 levels | 391,743 | 392,565 |
+
+Both worst delays match Step 4. The mapped and unmapped paths start in
+the existing modulo and FOR_ITER logic respectively. The mapped address
+path starts at `fbase[4]` and the state path at `sp[0]`. The native ID
+and method-kind endpoints are below the top 20 in both flows. The
+set of endpoints at 100 generic levels or deeper is unchanged.
+The [Step 5 timing reports](builtin_function_tags_step5/) retain the
+full rankings.
+
+The same image returned identical output across all four switch
+configurations for each microbenchmark. These are whole-program cycles.
+
+| Microbenchmark | Off | BUILTIN only | FUNCTION only | Both |
+| --- | ---: | ---: | ---: | ---: |
+| `call_function` | 104,991 | 104,649 | 103,104 | 102,762 |
+| `call_builtin` | 74,680 | 70,540 | 74,587 | 70,447 |
+| `call_method` | 121,411 | 117,127 | 120,088 | 115,804 |
+| `str_ops` | 2,371,412 | 2,276,504 | 2,351,648 | 2,256,740 |
+
+The ABI check, compiler state audit, all 37 RTL unit benches, and
+502 oracle-backed golden checks passed. The callable, collector-root,
+and pin IRQ tests passed with `BTAG` off and on. Both full hardware
+passes returned 551/551. No canonical-tag assertion fired.

@@ -2606,7 +2606,9 @@ module mpy_core
                     ABI_TAG_FUNCTION: if (cfg_ftag) begin
                         c_ismod <= 1'b0; st <= S_CF;
                     end else rd(adr(mv), S_CALL_K);
-                    ABI_TAG_BUILTIN: rd({8'd0, mv[23:2], 2'b00}, S_CALL_K);
+                    ABI_TAG_BUILTIN: if (cfg_btag) begin
+                        nid <= mv[31:24]; st <= S_NAT;
+                    end else rd({8'd0, mv[23:2], 2'b00}, S_CALL_K);
                     default: st <= S_HCALL;
                 endcase
             end
@@ -5731,6 +5733,8 @@ module mpy_core
                        else begin at_q <= mv[31:0]; rd(ab_ptr(ab_lo + 8'd2), S_NAT_SA2); end
             S_NAT_SA2: begin at_nat <= 1'b1; t[0] <= ab_q; t[6] <= mv; st <= S_SA; end
             S_NAT_FB: rd(ab_ptr(8'd0), S_NAT_FB0);
+            // S_NAT_A reuses ab_q for arg 0. The registered slot-0 response
+            // supplies the masked image address, and ab_q keeps it for FB1.
             S_NAT_FB0: begin ab_q <= mv; rd(aoff({8'd0, mv[23:2], 2'b00}, 12), S_NAT_FB1); end
             S_NAT_FB1: if (mv == VNULL) rd(aoff(badr(ab_q), 16), S_NAT_FB2);
                        else wr(ab_ptr(8'd0), mv, S_CALL);
@@ -6835,7 +6839,7 @@ module mpy_core
                          else begin `at_i <= `at_i + 32'd1; st <= S_AT_ML; end
                      end else begin
                          at_v <= lk_res;
-                         if (cfg_ftag && is_fun(lk_res)) begin
+                         if ((cfg_ftag && is_fun(lk_res)) || (cfg_btag && is_bi(lk_res))) begin
                              at_kind <= at_ty ? 2'd1 : 2'd2; ret();
                          end else if (objectlike(lk_res))
                              rd(is_bi(lk_res) ? badr(lk_res) : adr(lk_res), S_AT_VK);
