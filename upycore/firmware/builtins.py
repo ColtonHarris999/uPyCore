@@ -361,7 +361,9 @@ def divmod(a, b):
 
 def pow(x, y, z=_MISSING):
     # pow(x, y, None) is the two-argument power. A real modulus stays here.
-    if z is None or z is _MISSING:
+    # An omitted argument arrives as the linker's own copy of the _MISSING
+    # tuple, so identity does not hold.
+    if z is None or z == _MISSING:
         return x ** y
     if _BIGINT_ENABLED:
         if (x is True or x is False or y is True or y is False or z is True or z is False
