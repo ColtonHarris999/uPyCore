@@ -148,3 +148,21 @@ calibrated sign-off estimate has no failing `mpy_core` endpoint at the
 `converted/` was not regenerated here (no sv2v); run
 `upycore/synth/hammer/convert_rtl.sh` and commit `converted/` and
 `RTL_STAMP` before `sweep.sh`, which refuses stale files.
+
+## After main's MicroPython fixes (d33485f)
+
+`main` at `d33485f` passed `make test` (566/566 under mpy-cross and
+uPy2). Two more paths, the worst in the calibrated estimate, were cut:
+
+| Group (lab-ns equivalent before) | Change |
+| --- | --- |
+| `cv_fun_g`, `cv_pos_g`, `x0`, `x2`, `stk_from`, `bl_base`, `drop_left` ← `rf` (11.9) | every `stk_depth - k` is `sd_sub(k)` = `spilled_reals + sp + ~k + !has_link`: the late `has_link` enters as a carry instead of selecting between two depth sums ahead of the subtract (low 16 bits identical for all inputs; checked on 2M random cases) |
+| `al_n` ← `x4` (11.4) | list concatenation allocates `max(x4 + 3, 7)` through `alloc_nz`, without the zero test after the sum |
+
+Calibrated sign-off estimate, merged RTL before → after
+([report](sta_core_signoff_step12b.txt)): worst 18.86 → 18.40 ns (about
+11.7 → 11.45 lab ns); failing endpoints at the 12 / 11 / 10 ns
+equivalents 0 / 17 / 452 → 0 / 9 / 420. No cycle change.
+
+`+STPROF` (simulation only) prints the cycles spent in each core state at
+the end of a run.

@@ -1775,6 +1775,22 @@ module mpy_core
     assign tos2 = (TOS_OH != 0) ? rf_oh(oh2_r) : rf[`SX(6'(sp - 7'd2))];
     assign tos3 = (TOS_OH != 0) ? rf_oh(oh3_r) : rf[`SX(6'(sp - 7'd3))];
 `ifndef SYNTHESIS
+    // +STPROF: cycles spent in each state, printed at the end of simulation.
+    longint unsigned st_cyc [0:1023];
+    bit st_prof;
+    initial st_prof = $test$plusargs("STPROF");
+    always_ff @(posedge clk_i) if (st_prof && rst_n_i) st_cyc[st] <= st_cyc[st] + 1;
+    final if (st_prof) begin
+        longint unsigned tot; tot = 0;
+        for (int i = 0; i < 1024; i++) tot += st_cyc[i];
+        for (int i = 0; i < 1024; i++)
+            if (st_cyc[i] * 1000 >= tot) begin
+                state_e e; e = state_e'(i);
+                $display("STPROF %0d %s %0d", i, e.name(), st_cyc[i]);
+            end
+    end
+`endif
+`ifndef SYNTHESIS
     always_ff @(posedge clk_i)
         if (rst_n_i && st == S_EXEC && !(wfault_p || (m_req && m_we && m_busy_i) || rf_icpt) &&
             (tos1 != rf[`SX(6'(sp - 7'd1))] || tos2 != rf[`SX(6'(sp - 7'd2))] || tos3 != rf[`SX(6'(sp - 7'd3))]))
@@ -2127,6 +2143,18 @@ module mpy_core
     // at 11.0 ns).
     assign sd_l  = spilled_reals + {9'd0, 7'(sp - 7'd1)};
     assign stk_depth = has_link ? sd_l : sd_nl;
+    // stk_depth - k as one sum: spilled_reals + sp + ~k + !has_link (a - b
+    // is a + ~b + 1, and a link takes that 1 back). has_link arrives late
+    // (it reads the ring through rf_base), so it enters as a carry instead
+    // of selecting between two depth sums ahead of the subtract (rf ->
+    // cv_fun_g / x0 / x2 / stk_from / bl_base / drop_left, the core's worst
+    // group in the calibrated sign-off estimate). Its low 16 bits equal
+    // stk_depth - k for every input (has_link implies sp != 0); all 32
+    // equal 32'(stk_depth) - k while spilled_reals + sp fits 16 bits, as
+    // stk_hit already assumes.
+    function automatic logic [31:0] sd_sub(input logic [31:0] k);
+        sd_sub = 32'(spilled_reals) + 32'(sp) + ~k + {31'd0, !has_link};
+    endfunction
 
     // g is resident when g - spilled_reals is below the resident count: a
     // subtract and a 7-bit compare, beside the count's decrement, instead
@@ -2404,6 +2432,10 @@ module mpy_core
     endtask
     task automatic alloc(input logic [31:0] n, input state_e back);
         al_n <= (n == 32'd0) ? 32'd1 : n; gosub(S_AL, back);
+    endtask
+    // A size the caller knows is not zero: no zero test after its sum.
+    task automatic alloc_nz(input logic [31:0] n, input state_e back);
+        al_n <= n; gosub(S_AL, back);
     endtask
     // Copy n words from src to dst on the accelerator. The caller checked ca_ok.
     task automatic ca_ship(input logic [31:0] dst, input logic [31:0] src, input logic [31:0] n);
@@ -3567,14 +3599,14 @@ module mpy_core
                 8'h4b: st <= S_FI_PRE;
                 8'h2a: begin
                     tb_src <= 1'b1; tb_nz <= 1'b0; tb_from <= 8'(sp - 7'(arg));
-                    stk_from <= stk_depth - 16'(arg); tb_n <= arg[15:0];
+                    stk_from <= 16'(sd_sub(32'(arg[15:0]))); tb_n <= arg[15:0];
                     gosub(S_TUP, S_BT_R);
                 end
                 8'h2b: alloc(32'd3 + ((arg < 32'd4) ? 32'd4 : arg), S_BL_A);
                 8'h2c: alloc(32'd4 + 2 * arg, S_BM_A);
                 8'h2d: begin
                     tb_src <= 1'b1; tb_nz <= 1'b0; tb_from <= 8'(sp - 7'(arg));
-                    stk_from <= stk_depth - 16'(arg); tb_n <= arg[15:0];
+                    stk_from <= 16'(sd_sub(32'(arg[15:0]))); tb_n <= arg[15:0];
                     gosub(S_TUP, S_BSET_R);
                 end
                 8'h2e: alloc(32'd5, S_SLICE_A);
@@ -3642,11 +3674,11 @@ module mpy_core
                         x4 <= v0;
                         x1 <= v0 + (v1 << 1);
                         ab_nkw <= v1[7:0];
-                        x0 <= 32'(stk_depth) - v2;
+                        x0 <= sd_sub(v2);
                         // stk_depth - v2 + (1 or 2): v2 is v0 + 2 * v1 plus that
                         // same 1 or 2, so one subtract behind stk_depth, not two
                         // adds in series (rf -> x2, 10.0 ns).
-                        x2 <= 32'(stk_depth) - (v0 + (v1 << 1));
+                        x2 <= sd_sub(v0 + (v1 << 1));
                         x3 <= v2;
                         gi <= 32'd0;
                         st <= S_CC_FUN;
@@ -3659,9 +3691,8 @@ module mpy_core
                     v2 = v0 + (v1 << 1) + 32'd2 + ((op == 8'h37) ? 32'd1 : 32'd0);
                     ab_chunked <= 1'b0;
                     cv_wide <= v2 > 32'(resident_reals);
-                    cv_pos_g <= stk_depth - 16'd1 - v0[15:0] - {v1[14:0], 1'b0};
-                    cv_fun_g <= stk_depth - 16'd1 - v0[15:0] - {v1[14:0], 1'b0}
-                                - ((op == 8'h37) ? 16'd2 : 16'd1);
+                    cv_pos_g <= 16'(sd_sub(32'd1 + v0 + (v1 << 1)));
+                    cv_fun_g <= 16'(sd_sub(32'd1 + v0 + (v1 << 1) + ((op == 8'h37) ? 32'd2 : 32'd1)));
                     cv_base <= 7'(sp - 7'd1 - 7'(v0) - 7'(2 * v1));
                     cv_fidx <= 7'(sp - 7'd1 - 7'(v0) - 7'(2 * v1) - ((op == 8'h37) ? 7'd2 : 7'd1));
                     cv_bm <= tos1[31:0];
@@ -4456,7 +4487,7 @@ module mpy_core
                 st <= S_DROP;
             end
             S_BL_A: begin
-                bl_base <= stk_depth - arg[15:0];
+                bl_base <= 16'(sd_sub(32'(arg[15:0])));
                 v0 = (arg < 32'd4) ? 32'd4 : arg;
                 wb_v[0] <= vint(arg); wb_v[1] <= vint(v0); wb_v[2] <= {ABI_TAG_CONTINUE, al_a + 32'd12};
                 t[0] <= vmut(al_a, ABI_MUT_LIST);
@@ -4546,7 +4577,7 @@ module mpy_core
                 c_rc <= md;
                 if (op == 8'h20 || op == 8'h21) begin
                     tb_src <= 1'b1; tb_nz <= 1'b0; tb_from <= 8'(sp - 7'(ext));
-                    stk_from <= stk_depth - 16'(ext); tb_n <= {8'd0, ext};
+                    stk_from <= 16'(sd_sub(32'(ext))); tb_n <= {8'd0, ext};
                     gosub(S_TUP, S_MF_CL);
                 end else begin t[0] <= VNULL; st <= S_MF_RT; end
             end
@@ -4710,7 +4741,7 @@ module mpy_core
                     cv_kw <= 1'b1; st <= S_CVK_CH;
                 end else if (gi == {23'd0, cv_j, 1'b0}) begin
                     if (cv_wide) begin
-                        drop_left <= stk_depth - cv_fun_g;
+                        drop_left <= 16'(sd_sub(32'(cv_fun_g)));
                         drop_push_en <= 1'b0;
                         drop_then <= ab_chunked ? S_CVK_PACK : S_CALL;
                         st <= S_DROP;
@@ -4964,7 +4995,10 @@ module mpy_core
             // and use the normal tagged copy port and scoreboard.
             S_LCAT_AN: begin x0 <= md; rd(adr(t[1]), S_LCAT_BN); end
             S_LCAT_BN: begin x1 <= md; x4 <= x0 + md; st <= S_LCAT_ALLOC; end
-            S_LCAT_ALLOC: alloc(32'd3 + ((x4 < 32'd4) ? 32'd4 : x4), S_LCAT_HDR);
+            // 3 + max(x4, 4) as max(x4 + 3, 7): the add beside the compare
+            // and at least 7 words, so no zero test (x4 -> al_n was the
+            // core's second-worst group in the calibrated estimate).
+            S_LCAT_ALLOC: alloc_nz((x4 < 32'd4) ? 32'd7 : x4 + 32'd3, S_LCAT_HDR);
             S_LCAT_HDR: begin
                 t[2] <= vmut(al_a, ABI_MUT_LIST);
                 wb_v[0] <= vint(x4);
