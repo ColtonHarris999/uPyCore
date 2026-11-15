@@ -12,11 +12,19 @@ gates ($_AND_ ...) are timed as the matching sky130 cells. Endpoints are
 grouped by RTL register name; each line names the start of its worst path.
 TRACE=<regex> prints the named nets on the worst path into that group;
 INPUTS_ONLY=1 times only paths from module inputs.
+
+Sign-off-style settings (run.py --signoff sets them):
+STA_CLKQ / STA_SETUP override the flop clock-to-Q and setup (ns);
+STA_UNC adds clock uncertainty to every flop endpoint; STA_WLM=1 adds
+the liberty's default wire-load model to every net by its fanout;
+STA_PERIODS="12,11,10" prints how many endpoints fail at each period.
 """
 import json, re, sys, bisect, os
 from collections import defaultdict
 
 CLKQ, SETUP, IN_SLEW, FF_DCAP = 0.33, 0.12, 0.05, 0.0017
+CLKQ = float(os.environ.get('STA_CLKQ', CLKQ))
+SETUP = float(os.environ.get('STA_SETUP', SETUP)) + float(os.environ.get('STA_UNC', 0.0))
 # Yosys internal gates -> a sky130 cell and pin map (unmapped netlists).
 GATES = {
     '$_AND_': ('sky130_fd_sc_hd__and2_1', {'A': 'A', 'B': 'B', 'Y': 'X'}),
@@ -104,6 +112,27 @@ def interp(t, x, y):
     v00, v01, v10, v11 = v[a0][b0], v[a0][b1], v[a1][b0], v[a1][b1]
     return (v00 * (1 - fx) * (1 - fy) + v01 * (1 - fx) * fy + v10 * fx * (1 - fy) + v11 * fx * fy)
 
+def parse_wlm(path):
+    """The default_wire_load model: (cap per length, slope, {fanout: length})."""
+    txt = open(path).read()
+    name = re.search(r'default_wire_load\s*:\s*"([^"]+)"', txt).group(1)
+    body = re.search(r'wire_load\s*\(\s*"%s"\s*\)\s*\{(.*?)\}' % re.escape(name), txt, re.S).group(1)
+    cap = float(re.search(r'capacitance\s*:\s*([\d.eE+-]+)', body).group(1))
+    slope = float(re.search(r'slope\s*:\s*([\d.eE+-]+)', body).group(1))
+    fl = {int(a): float(b) for a, b in re.findall(r'fanout_length\(\s*(\d+)\s*,\s*([\d.eE+-]+)\s*\)', body)}
+    return cap, slope, fl
+
+
+def wlm_cap(model, n):
+    cap, slope, fl = model
+    if n <= 0:
+        return 0.0
+    if n in fl:
+        return cap * fl[n]
+    top = max(fl)
+    return cap * (fl[top] + slope * (n - top))
+
+
 def main():
     netlist, lib = sys.argv[1], sys.argv[2]
     top_n = int(sys.argv[3]) if len(sys.argv) > 3 else 25
@@ -131,7 +160,7 @@ def main():
         for i, b in enumerate(d['bits']):
             if isinstance(b, int) and (b not in netname or (not hide and netname[b][1])):
                 netname[b] = (f"{n}[{i}]" if len(d['bits']) > 1 else n, hide)
-    drivers = {}; loads = defaultdict(float); fanin = {}
+    drivers = {}; loads = defaultdict(float); fanin = {}; nfo = defaultdict(int)
     for cn, c in cells.items():
         t = c['type']
         for p, bits in c['connections'].items():
@@ -143,9 +172,13 @@ def main():
                     drivers[b] = (cn, p)
                 elif t == 'FFBOX':
                     if p == 'D':
-                        loads[b] += FF_DCAP
+                        loads[b] += FF_DCAP; nfo[b] += 1
                 elif t in L:
-                    loads[b] += L[t].get(p, (0.0, []))[0]
+                    loads[b] += L[t].get(p, (0.0, []))[0]; nfo[b] += 1
+    if os.environ.get('STA_WLM') == '1':
+        model = parse_wlm(lib)
+        for b, n in nfo.items():
+            loads[b] += wlm_cap(model, n)
     # A flop's Q often has only a $auto name (async2sync puts the RTL name on
     # the reset mux after it): name it after a public net one cell downstream.
     consumers = defaultdict(list)
@@ -253,6 +286,12 @@ def main():
         if g not in grp:
             grp[g] = (d, b)
     print(f"worst endpoint {ends[0][0]:.3f} ns  ({ends[0][1]})  endpoints {len(ends)}")
+    if os.environ.get('STA_PERIODS'):
+        regs = [e for e in ends if not e[1].startswith('OUT ')]
+        for per in (float(x) for x in os.environ['STA_PERIODS'].split(',')):
+            bad = [e for e in regs if e[0] > per]
+            groups = {re.sub(r'\[\d+\]$', '', e[1]) for e in bad}
+            print(f"period {per:g} ns: {len(bad)} failing flop endpoints in {len(groups)} registers")
 
     tr = os.environ.get('TRACE')
     if tr:

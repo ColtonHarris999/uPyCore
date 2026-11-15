@@ -491,3 +491,15 @@ exercise that path and show its read reduction in Step 9.
 
 A newly linked v2 smoke image was rejected at boot. The v3 smoke
 image produced the same output and 8,918 cycles with counters on and off.
+
+## Step 12 resident-call forwarding and P8 timing fixes
+
+`CFWD` forwards the callable and first argument of a resident call from
+the store data register, so with the tags a call to a function or native
+reaches `S_CF` or `S_NAT` with no ARGBUF read-back: paper-suite geomean
+1.0213× on top of all three switches (1.0519× against Step 0), Pystone
+1.0105×. The three P8 12 ns failing families in `u_core` were
+restructured (copy pointers, registered fault sums; the stack-top
+one-hot select is built but off as `TOS_OH`). Details, the per-workload
+table and the open-flow timing are in
+[Step 12](builtin_function_tags_step12/README.md).

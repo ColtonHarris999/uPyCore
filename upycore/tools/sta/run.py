@@ -79,6 +79,11 @@ def main() -> int:
     ap.add_argument("--rtl", nargs="+", help="files (from the repository root) instead of mpy_synth.TOPS[top]")
     ap.add_argument("--inc", action="append", default=[], help="extra include directory")
     ap.add_argument("--param", action="append", default=[], help="top parameter NAME=VALUE (slang -G)")
+    ap.add_argument("--signoff", action="store_true",
+                    help="closer to the lab's Genus/Innovus setup: pass the ss_100C_1v60 liberty as --lib; "
+                         "shares mutually exclusive operators as Genus does (no -noshare), adds the liberty "
+                         "wire-load model, the P8 report's clock-to-Q and setup, 0.1 ns uncertainty, and "
+                         "counts failing endpoints at 12, 11 and 10 ns")
     ap.add_argument("--module", help="the top module when it differs from the top name")
     ap.add_argument("--no-fsm", action="store_true",
                     help="keep state machines as the RTL writes them (synth -nofsm): Yosys's FSM "
@@ -124,7 +129,7 @@ def main() -> int:
         f"read_verilog -lib {rel}/ffbox.v",
         f"hierarchy -check -top {module}",
         *(["delete t:$print", "opt_clean"] if args.techmap_async else []),
-        f"synth -flatten -noshare -noabc{' -nofsm' if args.no_fsm else ''} -top {module}",
+        f"synth -flatten{'' if args.signoff else ' -noshare'} -noabc{' -nofsm' if args.no_fsm else ''} -top {module}",
         # Flatten's scope annotations carry no logic; one survives for a
         # module with unconnected inout ports (the island stub's USB pads).
         "delete t:$scopeinfo",
@@ -150,9 +155,16 @@ def main() -> int:
     if r.returncode:
         print(f"yosys failed; see {rel}/yosys.log")
         return 1
+    env = dict(os.environ)
+    if args.signoff:
+        # P8 (upycore_main32l_p12) at ss_100C_1v60: sky130_fd_sc_hd__dfrtp_1
+        # clock-to-Q 0.88 ns and setup 0.22 ns as Innovus reported them, and
+        # the run's set_clock_uncertainty -setup 0.1.
+        env.update(STA_CLKQ="0.88", STA_SETUP="0.22", STA_UNC="0.1", STA_WLM="1",
+                   STA_PERIODS="12,11,10")
     with open(out / "sta.txt", "w") as f:
         r = subprocess.run([sys.executable, str(HERE / "sta_lite.py"), str(out / "netlist.json"),
-                            str(out / "tt.lib"), str(args.groups)], stdout=f)
+                            str(out / "tt.lib"), str(args.groups)], stdout=f, env=env)
     print((out / "sta.txt").read_text().split("\n", 1)[0])
     print(f"report: {rel}/sta.txt")
     return r.returncode
