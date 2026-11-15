@@ -7310,6 +7310,10 @@ module mpy_core (
 	assign sd_nl = spilled_reals + sv2v_cast_16(sp);
 	assign sd_l = spilled_reals + {9'd0, sp - 7'd1};
 	assign stk_depth = (has_link ? sd_l : sd_nl);
+	function automatic [31:0] sd_sub;
+		input reg [31:0] k;
+		sd_sub = ((sv2v_cast_32(spilled_reals) + sv2v_cast_32(sp)) + ~k) + {31'd0, !has_link};
+	endfunction
 	function automatic stk_hit;
 		input reg [15:0] g;
 		reg [16:0] d;
@@ -7785,6 +7789,14 @@ module mpy_core (
 		input reg [9:0] back;
 		begin
 			al_n <= (n == 32'd0 ? 32'd1 : n);
+			gosub(10'd7, back);
+		end
+	endtask
+	task automatic alloc_nz;
+		input reg [31:0] n;
+		input reg [9:0] back;
+		begin
+			al_n <= n;
 			gosub(10'd7, back);
 		end
 	endtask
@@ -9906,7 +9918,7 @@ module mpy_core (
 											tb_src <= 1'b1;
 											tb_nz <= 1'b0;
 											tb_from <= sv2v_cast_8(sp - sv2v_cast_7(arg));
-											stk_from <= stk_depth - sv2v_cast_16(arg);
+											stk_from <= sv2v_cast_16(sd_sub(sv2v_cast_32(arg[15:0])));
 											tb_n <= arg[15:0];
 											gosub(10'd531, 10'd98);
 										end
@@ -9918,7 +9930,7 @@ module mpy_core (
 											tb_src <= 1'b1;
 											tb_nz <= 1'b0;
 											tb_from <= sv2v_cast_8(sp - sv2v_cast_7(arg));
-											stk_from <= stk_depth - sv2v_cast_16(arg);
+											stk_from <= sv2v_cast_16(sd_sub(sv2v_cast_32(arg[15:0])));
 											tb_n <= arg[15:0];
 											gosub(10'd531, 10'd96);
 										end
@@ -9996,8 +10008,8 @@ module mpy_core (
 												x4 <= v0;
 												x1 <= v0 + (v1 << 1);
 												ab_nkw <= v1[7:0];
-												x0 <= sv2v_cast_32(stk_depth) - v2;
-												x2 <= sv2v_cast_32(stk_depth) - (v0 + (v1 << 1));
+												x0 <= sd_sub(v2);
+												x2 <= sd_sub(v0 + (v1 << 1));
 												x3 <= v2;
 												gi <= 32'd0;
 												st <= 10'd576;
@@ -10009,8 +10021,8 @@ module mpy_core (
 											v2 = ((v0 + (v1 << 1)) + 32'd2) + (op == 8'h37 ? 32'd1 : 32'd0);
 											ab_chunked <= 1'b0;
 											cv_wide <= v2 > sv2v_cast_32(resident_reals);
-											cv_pos_g <= ((stk_depth - 16'd1) - v0[15:0]) - {v1[14:0], 1'b0};
-											cv_fun_g <= (((stk_depth - 16'd1) - v0[15:0]) - {v1[14:0], 1'b0}) - (op == 8'h37 ? 16'd2 : 16'd1);
+											cv_pos_g <= sv2v_cast_16(sd_sub((32'd1 + v0) + (v1 << 1)));
+											cv_fun_g <= sv2v_cast_16(sd_sub(((32'd1 + v0) + (v1 << 1)) + (op == 8'h37 ? 32'd2 : 32'd1)));
 											cv_base <= sv2v_cast_7(((sp - 7'd1) - sv2v_cast_7(v0)) - sv2v_cast_7(2 * v1));
 											cv_fidx <= sv2v_cast_7((((sp - 7'd1) - sv2v_cast_7(v0)) - sv2v_cast_7(2 * v1)) - (op == 8'h37 ? 7'd2 : 7'd1));
 											cv_bm <= tos1[31:0];
@@ -11264,7 +11276,7 @@ module mpy_core (
 						st <= 10'd583;
 					end
 					10'd71: begin
-						bl_base <= stk_depth - arg[15:0];
+						bl_base <= sv2v_cast_16(sd_sub(sv2v_cast_32(arg[15:0])));
 						v0 = (arg < 32'd4 ? 32'd4 : arg);
 						wb_v[252+:36] <= vint(arg);
 						wb_v[216+:36] <= vint(v0);
@@ -11404,7 +11416,7 @@ module mpy_core (
 							tb_src <= 1'b1;
 							tb_nz <= 1'b0;
 							tb_from <= sv2v_cast_8(sp - sv2v_cast_7(ext));
-							stk_from <= stk_depth - sv2v_cast_16(ext);
+							stk_from <= sv2v_cast_16(sd_sub(sv2v_cast_32(ext)));
 							tb_n <= {8'd0, ext};
 							gosub(10'd531, 10'd339);
 						end
@@ -11682,7 +11694,7 @@ module mpy_core (
 						end
 						else if (gi == {23'd0, cv_j, 1'b0}) begin
 							if (cv_wide) begin
-								drop_left <= stk_depth - cv_fun_g;
+								drop_left <= sv2v_cast_16(sd_sub(sv2v_cast_32(cv_fun_g)));
 								drop_push_en <= 1'b0;
 								drop_then <= (ab_chunked ? 10'd646 : 10'd99);
 								st <= 10'd583;
@@ -12039,7 +12051,7 @@ module mpy_core (
 						st <= 10'd40;
 					end
 					10'd40:
-						alloc(32'd3 + (x4 < 32'd4 ? 32'd4 : x4), 10'd41);
+						alloc_nz((x4 < 32'd4 ? 32'd7 : x4 + 32'd3), 10'd41);
 					10'd41: begin
 						t[2] <= vmut(al_a, ABI_MUT_LIST);
 						wb_v[252+:36] <= vint(x4);
