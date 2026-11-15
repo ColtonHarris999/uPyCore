@@ -23,12 +23,17 @@ from shortlist_bench import CASES as PAPER_CASES
 import timing_bench
 
 BASE = build.ROOT / "planning/builtin_function_tags_baseline"
+SWITCHES = ("BTAG", "FTAG", "SOFF", "CFWD")
+# "all" keeps its Step 11 meaning (the three tag/offset switches). CFWD,
+# the resident-call forwarding, is measured on its own and on top of all.
 CONFIGS = {
-    "none": (0, 0, 0),
-    "BUILTIN": (1, 0, 0),
-    "FUNCTION": (0, 1, 0),
-    "STROFF": (0, 0, 1),
-    "all": (1, 1, 1),
+    "none": (0, 0, 0, 0),
+    "BUILTIN": (1, 0, 0, 0),
+    "FUNCTION": (0, 1, 0, 0),
+    "STROFF": (0, 0, 1, 0),
+    "all": (1, 1, 1, 0),
+    "CFWD": (0, 0, 0, 1),
+    "all+CFWD": (1, 1, 1, 1),
 }
 
 
@@ -124,7 +129,7 @@ def measure(workload: Workload, max_cycles: int) -> dict:
     runs = {}
     reference = None
     for name, config in CONFIGS.items():
-        flags = [f"+{switch}={value}" for switch, value in zip(("BTAG", "FTAG", "SOFF"), config)]
+        flags = [f"+{switch}={value}" for switch, value in zip(SWITCHES, config)]
         sim = build.run_image(workload.image, max_cycles=max_cycles, timeout=3600,
                               sim_args=["+CA=1", "+AALU=1", "+STATS", *flags])
         if sim.exit_code != 0:
@@ -176,7 +181,7 @@ def main() -> int:
         "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=build.ROOT, text=True).strip(),
         "simulator_sha256": sha(simulator), "compiler_sha256": sha(build.MPY_CROSS),
         "testbench_sha256": sha(build.ROOT / "upycore/tb/tb_mpy_soc.sv"),
-        "switches": ["BTAG", "FTAG", "SOFF"], "configurations": CONFIGS, "rows": [],
+        "switches": list(SWITCHES), "configurations": CONFIGS, "rows": [],
     }
     with ThreadPoolExecutor(max_workers=args.workers) as executor:
         for row in executor.map(lambda w: measure(w, args.max_cycles), workloads):
