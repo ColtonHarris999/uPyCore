@@ -374,3 +374,32 @@ The existing golden files are untouched. All 37 RTL unit benches passed.
 A standalone hash vector with a corrupted word 2 triggered the new
 assertion. Both hardware passes returned 551/551 and the oracle
 confirmed 502 golden cases. No invariant fired in the full suite.
+
+## Step 8 core string pointer reads
+
+`SOFF=1` uses the registered STR or BYTES header address plus 12 in
+`S_SI_S1`, `S_DADDR`, and both scratch paths of `_strfin`. The latter
+still enters `S_N_SF1` to initialize the hash loop. `SOFF=0` follows
+the original reads and retains the simulation checks. QSTR uses its
+descriptor, and mutable buffers and lists still load their backing
+pointers. Step 8 only changes the core consumers.
+
+The `str_ops` microbenchmark takes 2,256,740 cycles with `SOFF=0`
+and 2,241,022 with `SOFF=1`, a 0.70% cycle reduction with identical
+output. All six targeted string and bytearray tests passed with each
+switch value. The RTL unit benches passed 37/37 and both hardware
+passes returned 551/551. No invariant fired. All 502 oracle-backed
+golden checks passed.
+
+| Core flow | Step 0 result | Step 8 result | Step 0 cells | Step 8 cells |
+| --- | ---: | ---: | ---: | ---: |
+| Mapped STA | 9.250 ns | 9.250 ns | 361,159 | 361,307 |
+| Unmapped STA | 9.532 ns | 9.559 ns | 495,250 | 496,177 |
+| Generic depth | 179 levels | 179 levels | 391,743 | 392,700 |
+
+The worst timing paths remain the mapped modulo path and unmapped
+FOR_ITER request path. The mapped 8.450 ns request address path
+starts at the existing `t[223]` register. The string address and
+scratch endpoints are outside the top 20 paths. No generic endpoint
+entered the set at 100 levels or deeper. See the
+[Step 8 timing reports](builtin_function_tags_step8/).

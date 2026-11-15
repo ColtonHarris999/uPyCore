@@ -72,7 +72,8 @@ module mpy_core
     // the ALU finishes it (upycore/docs/mpy_ca.md). +AALU= overrides in sim.
     parameter int AALU = 1,
     parameter int BTAG = 1,
-    parameter int FTAG = 1
+    parameter int FTAG = 1,
+    parameter int SOFF = 1
 ) (
     input  logic        clk_i,
     input  logic        rst_n_i,
@@ -223,6 +224,9 @@ module mpy_core
     endfunction
     function automatic logic strlike(input val_t v);
         strlike = (tg(v) == ABI_TAG_QSTR) || (tg(v) == ABI_TAG_STR);
+    endfunction
+    function automatic logic inline_string(input val_t v);
+        return tg(v) == ABI_TAG_STR || tg(v) == ABI_TAG_BYTES;
     endfunction
     function automatic logic is_mut(input val_t v, input logic [1:0] k);
         is_mut = (tg(v) == ABI_TAG_MUT) && (v[1:0] == k);
@@ -1244,7 +1248,7 @@ module mpy_core
     val_t        lc_d [0:7];
     logic [3:0]  cfg_lc_n;
     logic        cfg_lc_wb, cfg_lc_dm;
-    logic        cfg_ca, cfg_aalu, cfg_btag, cfg_ftag;
+    logic        cfg_ca, cfg_aalu, cfg_btag, cfg_ftag, cfg_soff;
     // Declared with the other config bits: the config block assigns it
     // below, and strict frontends (slang, Design Compiler) reject a use
     // before the declaration.
@@ -1885,8 +1889,7 @@ module mpy_core
     endtask
 
     task automatic check_string_data(input val_t ref_v, input logic [31:0] ptr);
-        if ((tg(ref_v) == ABI_TAG_STR || tg(ref_v) == ABI_TAG_BYTES) &&
-            ptr != aoff(adr(ref_v), 12))
+        if (inline_string(ref_v) && ptr != aoff(adr(ref_v), 12))
             $error("non-canonical string data address at %08x: got %08x in %s",
                    adr(ref_v), ptr, wret.name());
     endtask
@@ -1921,7 +1924,7 @@ module mpy_core
 
     initial begin
         int grow_v, adapt_v, lc_n_v, lc_wb_v, lc_dm_v, ca_v, aalu_v, bulk_v, sl_v;
-        int btag_v, ftag_v;
+        int btag_v, ftag_v, soff_v;
         grow_v = GROW_CHUNK;
         adapt_v = GROW_ADAPT;
         lc_n_v = LC_N;
@@ -1952,8 +1955,10 @@ module mpy_core
         cfg_aalu = (aalu_v != 0);
         if (!$value$plusargs("BTAG=%d", btag_v)) btag_v = BTAG;
         if (!$value$plusargs("FTAG=%d", ftag_v)) ftag_v = FTAG;
+        if (!$value$plusargs("SOFF=%d", soff_v)) soff_v = SOFF;
         cfg_btag = btag_v != 0;
         cfg_ftag = ftag_v != 0;
+        cfg_soff = soff_v != 0;
     end
 `else
     // Continuous assigns, not an initial block: Design Compiler ignores
@@ -1969,6 +1974,7 @@ module mpy_core
     assign cfg_aalu = (AALU != 0);
     assign cfg_btag = BTAG != 0;
     assign cfg_ftag = FTAG != 0;
+    assign cfg_soff = SOFF != 0;
 `endif
 
     function automatic val_t hdr_word(input logic [31:0] i);
@@ -5815,11 +5821,17 @@ module mpy_core
             S_N_STRNEW2: deliver(t[0], crk);
             // _strfin(s): hash and ASCII flag over the bytes
             S_N_SF0: if (scr_id == SCR_NONE || scr_id == SCR_LA) begin
-                         scr_id <= SCR_LA; `la_len <= md; rd(aoff(adr(ab_q), 8), S_N_SF1);
+                         scr_id <= SCR_LA; `la_len <= md;
+                         if (cfg_soff && inline_string(ab_q)) st <= S_N_SF1;
+                         else rd(aoff(adr(ab_q), 8), S_N_SF1);
                      end else wr(scr_addr(SCR_LA, 4'd0), {4'd0, md}, S_N_SF0B);
             S_N_SF0B: if (scr_id != SCR_LA) scr_ensure(SCR_LA, S_N_SF0B);
+                      else if (cfg_soff && inline_string(ab_q)) st <= S_N_SF1;
                       else rd(aoff(adr(ab_q), 8), S_N_SF1);
-            S_N_SF1: begin `la_items <= md; `la_i <= 32'd0; x2 <= 32'd5381; b1 <= 1'b0; st <= S_N_SFL; end
+            S_N_SF1: begin
+                `la_items <= cfg_soff && inline_string(ab_q) ? aoff(adr(ab_q), 12) : md;
+                `la_i <= 32'd0; x2 <= 32'd5381; b1 <= 1'b0; st <= S_N_SFL;
+            end
             S_N_SFL: if (`la_i == `la_len) begin
                          v3 = {16'd0, x2[15:0]};
                          if (v3 == 32'd0) v3 = 32'd1;
@@ -6401,12 +6413,17 @@ module mpy_core
             S_SI_Q0: begin si_hash <= {16'd0, md[15:0]}; si_len <= {16'd0, md[31:16]}; rd(ha_m4, S_SI_Q1); end
             S_SI_Q1: begin si_addr <= {1'b0, md[30:0]}; si_na <= md[31]; ret(); end
             S_SI_S0: begin si_len <= md; rd(aoff(adr(si_v), 4), S_SI_S1); end
-            S_SI_S1: begin si_hash <= {16'd0, md[15:0]}; si_na <= md[30]; rd(aoff(adr(si_v), 8), S_SI_S2); end
+            S_SI_S1: begin
+                si_hash <= {16'd0, md[15:0]}; si_na <= md[30];
+                if (cfg_soff && inline_string(si_v)) begin si_addr <= aoff(adr(si_v), 12); ret(); end
+                else rd(aoff(adr(si_v), 8), S_SI_S2);
+            end
             S_SI_S2: begin si_addr <= md; ret(); end
 
             // data address of a str/bytes/bytearray/list: si_v -> si_addr
             S_DADDR: if (tg(si_v) == ABI_TAG_QSTR) begin gosub(S_SINFO, S_DADDR_R); end
                      else if (tg(si_v) == ABI_TAG_INT) begin si_addr <= si_v[31:0]; ret(); end
+                     else if (cfg_soff && inline_string(si_v)) begin si_addr <= aoff(adr(si_v), 12); ret(); end
                      else rd(aoff(adr(si_v), 8), S_DADDR_M);
             S_DADDR_M: begin si_addr <= md; ret(); end
             S_DADDR_R: ret();
