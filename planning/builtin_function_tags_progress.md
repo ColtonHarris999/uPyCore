@@ -306,3 +306,39 @@ The ABI check, compiler state audit, all 37 RTL unit benches, and
 502 oracle-backed golden checks passed. The callable, collector-root,
 and pin IRQ tests passed with `BTAG` off and on. Both full hardware
 passes returned 551/551. No canonical-tag assertion fired.
+
+## Step 6 accelerator callable keys
+
+The shared hash engine handles FUNCTION and BUILTIN with the same
+address-based identity rule used by the core. A builtin's high payload
+byte encodes its native ID and is masked before hashing. The existing
+exact-word equality path compares callable keys; the map admission scan
+now accepts both tags, and streamed rehash uses the hardware hash.
+Object and aggregate keys retain their callback handling.
+
+The direct admission change exposed a 9.911 ns mapped path from
+destination capacity to the map request address. The free-slot
+subtraction now registers during the existing admission scans. The
+worst paths in both flows again end in the existing modulo units.
+The standalone hash combines both identity cases with a shared shift
+and masks the high payload bits for BUILTIN.
+
+| Top and flow | Step 0 delay (ns) | Step 6 delay (ns) | Step 0 cells | Step 6 cells |
+| --- | ---: | ---: | ---: | ---: |
+| Collection mapped | 9.191 | 9.191 | 53,076 | 53,153 |
+| Collection unmapped | 9.366 | 9.366 | 59,509 | 59,579 |
+| Hash mapped | 7.168 | 7.156 | 7,719 | 7,737 |
+| Hash unmapped | 7.813 | 7.813 | 8,878 | 8,909 |
+
+The collection depth is 136 levels and hash depth is 68 levels,
+both unchanged. Generic cell counts move from 48,118 to 48,247 for
+collection and from 6,836 to 6,877 for hash. The new capacity and
+callable hash logic stays outside the top 20 paths. See the
+[Step 6 timing reports](builtin_function_tags_step6/).
+
+The ABI and compiler state checks passed. The hash benches pass
+5,201 vectors, including nested callable hashes. Map and rehash benches
+cover a function and builtin with the same address hash and distinguish
+the tagged values. All 37 RTL unit benches and all 551 hardware tests
+under each compiler passed. The oracle confirmed all 502 golden cases.
+No canonical-tag assertion fired.

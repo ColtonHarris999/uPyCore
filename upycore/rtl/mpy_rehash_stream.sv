@@ -82,6 +82,7 @@ module mpy_rehash_stream #(parameter bit EXTERNAL_HASH=0) (
         return t==ABI_TAG_CONTROL && (d==ABI_CTL_NULL || d==ABI_CTL_TOMB);
     endfunction
     function automatic logic callback_key(input logic [3:0] t);
+        // FUNCTION and BUILTIN use mpy_hash's callback-free identity rules.
         return t==ABI_TAG_OBJECT || t==ABI_TAG_TUPLE || t==ABI_TAG_MUT;
     endfunction
     task automatic next_source;

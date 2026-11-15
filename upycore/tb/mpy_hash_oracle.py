@@ -61,7 +61,7 @@ float f; memcpy(&f, &b, 4); printf("%08x\\n", (uint32_t)hash(f)); } }
 
     for p, h in [(1, 6), (4, 0), (5, 1)]: vector(0, p, h)
     for p in [0, 2, 3, 6, 17]: vector(0, p, error=1)
-    for t in [5, 7, 15]: vector(t, 0, error=1)
+    vector(15, 0, error=1)
     for p in [0, 1, 0xffffffff, 0x80000000, 0x7fffffff, 0x40000000] + [rng.getrandbits(32) for _ in range(300)]:
         vector(1, p, sx(p))
         vector(2, alloc([p, rng.getrandbits(32)]), sx(p))
@@ -69,8 +69,11 @@ float f; memcpy(&f, &b, 4); printf("%08x\\n", (uint32_t)hash(f)); } }
     for _ in range(300):
         re, im = rng.sample(bits, 2)
         vector(4, alloc([re, im]), floats[re] ^ floats[im])
-    for t in [11, 12, 14]:
+    for t in [7, 11, 12, 14]:
         for p in [0, 0x20000100, 0xf0000000]: vector(t, p, sx(p >> 1))
+    for nid in (0, 1, 0xff):
+        for p in (0, 0x1080, 0xfffffc):
+            vector(5, (nid << 24) | p, p >> 1)
     mem[0x100 >> 2] = 5381; mem[0x108 >> 2] = 4444; mem[0x200 >> 2] = 1234
     for i, h in enumerate([5381, 4444, 1234]): vector(6, i, h)
     datasets = [bytes(rng.randrange(256) for _ in range(n))
@@ -88,6 +91,8 @@ float f; memcpy(&f, &b, 4); printf("%08x\\n", (uint32_t)hash(f)); } }
                 for cached in [0, h | 0x40000000]:
                     vector(t, alloc([n, cached, ptr]), h)
     empty = alloc([0]); vector(9, empty, 12345)
+    callable_tuple = alloc([2, (5, 0xff001080), (7, 0x20000100)])
+    vector(9, callable_tuple, sx(12345 + (0x1080 >> 1) + (0x20000100 >> 1)))
     nested = alloc([3, (1, -1), (3, 0x3fc00000), (9, empty)])
     vector(9, nested, 24690)
     for i in range(8):

@@ -1,0 +1,23 @@
+worst: base 9.191  new 9.191
+register group                                     base      new
+  bulk_engine.engine.modulo.rem_o                   9.191    9.191
+  bulk_engine.engine.modulo.r_r                     9.191    9.191
+  bulk_engine.rehash.pipeline.modulo.r_r            9.166    9.166
+  bulk_engine.rehash.pipeline.modulo.rem_o          9.131    9.131
+  short_engine.fault_o                              8.367    8.367
+  short_engine.fault_addr_o                         8.273    8.273
+  bulk_engine.engine.addr_o                         8.874    8.198
+  short_engine.fault_reason_o                       8.165    8.165
+  short_engine.st                                   7.437    7.437
+  byte_engine.dest                                  6.955    7.122
+  bulk_engine.engine.equality.desc_r                6.694    6.691
+  byte_engine.sa                                    6.682    6.682
+  bulk_engine.rehash.pipeline.modulo.q_r            6.667    6.667
+  bulk_engine.engine.modulo.q_r                     6.667    6.667
+  bulk_engine.raddr                                 6.593    6.593
+slower than base by more than 0.1:
+  byte_engine.dest                                  6.955    7.122
+  bulk_engine.engine.avail                          5.881    6.072
+  bulk_engine.engine.hash_value_i                   4.888    5.487
+  copy_engine.shi                                   5.163    5.483
+  bulk_engine.rehash.wtag_o                         4.593    4.759

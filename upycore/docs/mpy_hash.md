@@ -30,7 +30,8 @@ configuration. In particular, there is no `-1` to `-2` substitution.
 | STR / BYTES, uncached | DJB2: start 5381, update `(h * 33) ^ byte`, keep 16 bits, replace zero with 1 | 3 header reads plus the aligned data words |
 | TUPLE | Seed plus the hashes of its elements, reduced to 31 bits | Length, tagged elements, recursive reads |
 | Frozen SET subtype | Seed plus hashes of occupied table entries; skip empty/tombstone entries | Flags, alloc, table pointer, all table slots, recursive reads |
-| RANGE / ITER / OBJECT | Payload address shifted right by one, then reduced to 31 bits | 0 |
+| RANGE / ITER / OBJECT / FUNCTION | Payload address shifted right by one, then reduced to 31 bits | 0 |
+| BUILTIN | Payload address bits 23:0 shifted right by one | 0 |
 
 The pinned i686 interpreter returns INT_MIN for invalid/out-of-range float
 casts; 31-bit wrapping makes the hash zero. This includes NaN, infinities,
@@ -48,8 +49,8 @@ addresses. Exact cross-image pointer-seeded hash equality is not promised.
 OBJECT always means identity hashing here, including objects reached inside
 tuples or frozensets. The unit does not inspect types or execute `__hash__`.
 The future caller must resolve custom hashing separately before using this
-path. Mutable containers, internal sentinels, reserved tags, and SHORT_STR
-(not emitted by the current image ABI) return an error. `DEPTH` bounds
+path. FUNCTION and BUILTIN use identity hashing and need no callback.
+Mutable containers and internal sentinels return an error. `DEPTH` bounds
 aggregate nesting (default 8); overflow also returns an error so the caller
 can fall back to software. Scalars do not consume stack frames.
 

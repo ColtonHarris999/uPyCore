@@ -3,7 +3,8 @@
 // Callback-free key equality. Exact integers, binary32/complex numeric
 // promotion (including the pinned MicroPython int->float rounding), and
 // qstr/str/bytes content comparison. OBJECT/aggregate keys remain on the core.
-// A complete tagged-value identity match has the core's identity semantics.
+// A complete tagged-value identity match has the core's identity semantics,
+// including FUNCTION and BUILTIN keys.
 // Memory requests hold until ack; callers adapt grant/ack ports exactly once.
 module mpy_key_equal (
     input logic clk_i,rst_n_i,valid_i,

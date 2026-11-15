@@ -1,0 +1,17 @@
+worst: base 7.168  new 7.156
+register group                                     base      new
+  result                                            7.168    7.156
+  frame_idx[0]                                      6.912    6.912
+  frame_idx[7]                                      6.902    6.902
+  frame_idx[6]                                      6.902    6.902
+  frame_idx[5]                                      6.902    6.902
+  frame_idx[4]                                      6.902    6.902
+  frame_idx[3]                                      6.902    6.902
+  frame_idx[2]                                      6.902    6.902
+  frame_idx[1]                                      6.902    6.902
+  frame_sum[6]                                      6.618    6.618
+  frame_sum[5]                                      6.618    6.618
+  frame_sum[4]                                      6.618    6.618
+  frame_sum[3]                                      6.618    6.618
+  frame_sum[2]                                      6.618    6.618
+  frame_sum[1]                                      6.618    6.618

@@ -1,6 +1,6 @@
 // Read-only hash engine for the linked-image ABI (mpy_abi.py), not the
 // expanded RF format in mpy_memory_map.md. INT64/COMPLEX payloads are boxes.
-// Objects use payload >> 1; callers resolve Python __hash__ separately.
+// Objects and callables use the object address >> 1.
 // Tuples/frozensets use configurable seeds: upstream seeds are addresses.
 // Unsupported/unhashable values, depth overflow, and bus faults return error.
 // One outstanding request. Response holds under backpressure. Reads hold
@@ -10,6 +10,8 @@
 // mem_fault_i must flag invalid reads. Depth overflow requires fallback.
 // Object tags always use identity, even inside aggregates: callers must
 // route keys needing Python __hash__ through separate logic/software.
+`include "mpy_abi.svh"
+
 module mpy_hash #(
     parameter integer DEPTH = 8,
     parameter integer BYTES_PER_CYCLE = 1,
@@ -94,6 +96,11 @@ module mpy_hash #(
         result <= hash_sx31(h); state <= RESULT;
     endtask
 
+    function automatic logic [31:0] identity_shift(input logic [3:0] t, input logic [31:0] p);
+        // Only BUILTIN stores a native ID above the image address.
+        return {1'b0, p[31:24] & {8{t != ABI_TAG_BUILTIN}}, p[23:1]};
+    endfunction
+
     // Scalar hashes can retire at acceptance. A consumed response can be
     // replaced in the same cycle, sustaining one immediate key per clock.
     task automatic accept();
@@ -112,7 +119,8 @@ module mpy_hash #(
             // (two cycles more; in one step the shift and the negate were
             // op -> hash_value_i at 11.8 ns).
             3: begin part_r <= payload_i; state <= FLT_MAG; end
-            11, 12, 14: hash_o <= hash_sx31(payload_i >> 1);
+            ABI_TAG_FUNCTION, ABI_TAG_RANGE, ABI_TAG_ITER, ABI_TAG_OBJECT, ABI_TAG_BUILTIN:
+                hash_o <= hash_sx31(identity_shift(tag_i, payload_i));
             default: state <= DISPATCH;
         endcase
     endtask
@@ -144,8 +152,9 @@ module mpy_hash #(
                 8, 13: state <= STR_HASH;
                 9: if (sp == DEPTH) fail(); else state <= TUPLE_LEN;
                 10: if (payload[1:0] != 2 || sp == DEPTH) fail(); else state <= SET_FLAGS;
-                11, 12, 14: finish(payload >> 1);
-                default: fail(); // reserved, CONT, and non-ABI SHORT_STR
+                ABI_TAG_FUNCTION, ABI_TAG_RANGE, ABI_TAG_ITER, ABI_TAG_OBJECT, ABI_TAG_BUILTIN:
+                    finish(identity_shift(tag, payload));
+                default: fail(); // CONTINUE is not a Python value
             endcase
             RESULT: if (sp == 0) begin hash_o <= result; state <= RESP; end
                 else begin

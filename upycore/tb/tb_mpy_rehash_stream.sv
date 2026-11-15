@@ -80,6 +80,11 @@ module tb_mpy_rehash_stream;
         end
         clear_mem();is_set=1;sn=1;mem[src>>2]={4'd14,32'd3000};hashes=2048;mem[512]={4'd1,32'hffffffff};
         run();if(mem[(dst>>2)+(32'hffffffff%dn)]!={4'd14,32'd3000})$fatal(1,"override");
+        clear_mem();is_set=1;sn=2;dn=5;
+        mem[src>>2]={4'd5,32'ha5000040};mem[(src>>2)+1]={4'd7,32'h00000040};
+        run();
+        if(used[stream]!=2 || mem[(dst>>2)+2]!={4'd5,32'ha5000040} ||
+           mem[(dst>>2)+3]!={4'd7,32'h00000040})$fatal(1,"callable rehash");
         clear_mem();sn=2;mem[src>>2]={4'd1,32'd3};mem[(src>>2)+1]={4'd14,32'd3000};
         run(1);
         clear_mem();sn=1;mem[src>>2]={4'd1,32'd3};run();

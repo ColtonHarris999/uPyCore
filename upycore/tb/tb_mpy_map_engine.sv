@@ -90,6 +90,15 @@ module tb_mpy_map_engine #(parameter bit TYPE_CACHE=0);
         insert(src,sn,1,99,0);insert(src,sn,75,30,0);
         run(1);
         if(result!=3 || mem[(dst>>2)+find_key(1)*2+1]!={4'd1,32'd99}) $fatal(1,"dict overwrite");
+        // Exact callable identity matches, even with colliding address hashes.
+        clear_mem(); is_set=0; sn=2; dn=5; used=1;
+        mem[src>>2]={4'd5,32'ha5000040};mem[(src>>2)+1]={4'd1,32'd99};
+        mem[(src>>2)+2]={4'd7,32'h00000040};mem[(src>>2)+3]={4'd1,32'd30};
+        mem[(dst>>2)+4]={4'd5,32'ha5000040};mem[(dst>>2)+5]={4'd1,32'd10};
+        run(1);
+        if(result!=2 || mem[(dst>>2)+5]!={4'd1,32'd99} ||
+           mem[(dst>>2)+6]!={4'd7,32'h00000040} || mem[(dst>>2)+7]!={4'd1,32'd30})
+            $fatal(1,"callable dict identity");
         // Unsupported equality rejects before writing, even after valid keys.
         clear_mem(); mem[src>>2]={4'd1,32'd5};mem[(src>>2)+16]={4'd14,32'd700};
         before_writes=writes;run(1,1);
