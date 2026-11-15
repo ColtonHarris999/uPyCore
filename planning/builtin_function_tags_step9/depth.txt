@@ -1,0 +1,16 @@
+== depth mpy_collection ==
+mpy_collection: 13381 endpoint bits, 692 register groups, deepest 136
+groups at >= 100 levels: 4
+  136  bulk_engine.rehash.pipeline.modulo.r_r <-D       from bulk_engine.rehash.pipeline.modulo.d3_r via bulk_engine.rehash.pipeline.modulo.r_nx
+  136  bulk_engine.engine.modulo.r_r <-D                from bulk_engine.engine.modulo.d3_r via bulk_engine.engine.modulo.r_nx
+  135  bulk_engine.rehash.pipeline.modulo.rem_o <-D     from bulk_engine.rehash.pipeline.modulo.d3_r via bulk_engine.rehash.pipeline.modulo.r_nx
+  135  bulk_engine.engine.modulo.rem_o <-D              from bulk_engine.engine.modulo.d3_r via bulk_engine.engine.modulo.r_nx
+log: build/step9-depth/mpy_collection.log
+== depth mpy_hash ==
+mpy_hash: 2760 endpoint bits, 105 register groups, deepest 68
+groups at >= 100 levels: 0
+log: build/step9-depth/mpy_hash.log
+== depth mpy_key_equal ==
+mpy_key_equal: 1807 endpoint bits, 89 register groups, deepest 85
+groups at >= 100 levels: 0
+log: build/step9-depth/mpy_key_equal.log

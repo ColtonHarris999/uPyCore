@@ -1,0 +1,20 @@
+worst: base 7.168  new 5.876
+register group                                     base      new
+  frame_sum                                           new    5.876
+  frame_ptr                                           new    5.876
+  frame_len                                           new    5.876
+  frame_idx                                           new    5.791
+  frame_set                                         4.282    5.749
+  result                                            7.168    5.583
+  ptr                                               5.091    5.078
+  sp                                                6.589    5.028
+  len                                               4.925    4.893
+  state                                             6.353    4.699
+  mag_r                                             4.698    4.594
+  byte_buffer                                       3.611    3.581
+  hash_o                                            3.513    3.252
+  acc                                               3.247    3.218
+  error_o                                           2.913    3.037
+slower than base by more than 0.1:
+  frame_set                                         4.282    5.749
+  error_o                                           2.913    3.037

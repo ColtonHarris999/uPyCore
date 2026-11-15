@@ -16,7 +16,8 @@ module mpy_hash #(
     parameter integer DEPTH = 8,
     parameter integer BYTES_PER_CYCLE = 1,
     parameter logic [31:0] TUPLE_SEED = 32'd12345,
-    parameter logic [31:0] FROZEN_SEED = 32'd54321
+    parameter logic [31:0] FROZEN_SEED = 32'd54321,
+    parameter int SOFF = 1
 ) (
     input logic clk_i, rst_n_i,
     input logic valid_i,
@@ -48,6 +49,8 @@ module mpy_hash #(
     logic [31:0] part_r;
     logic [31:0] mag_r;                 // hash_float_mag(part_r)
     logic [SP_W-1:0] sp;
+    // Frame zero is the active aggregate. Push/pop shift the saved parents
+    // so the active hash sum and index do not need a depth-dependent mux.
     logic [31:0] frame_ptr [DEPTH], frame_len [DEPTH];
     logic [31:0] frame_idx [DEPTH], frame_sum [DEPTH];
     logic frame_set [DEPTH];
@@ -55,6 +58,17 @@ module mpy_hash #(
     logic [31:0] word_hash, shifted;
     integer count;
     logic str_last;
+    logic cfg_soff;
+
+`ifndef SYNTHESIS
+    initial begin
+        int soff_v;
+        if (!$value$plusargs("SOFF=%d", soff_v)) soff_v = SOFF;
+        cfg_soff = soff_v != 0;
+    end
+`else
+    assign cfg_soff = SOFF != 0;
+`endif
 
     assign ready_o = state == IDLE || (state == RESP && ready_i);
     assign valid_o = state == RESP;
@@ -66,9 +80,9 @@ module mpy_hash #(
             IMAG_PART, STR_HASH: mem_addr_o = payload + 4;
             QSTR: mem_addr_o = payload < qstr_count_i ?
                 qstr_base_i + (payload << 3) : qstr_ext_i + ((payload - qstr_count_i) << 3);
-            STR_PTR: mem_addr_o = payload + 8;
+            STR_PTR: if (cfg_soff) reading = 1'b0; else mem_addr_o = payload + 8;
             STR_DATA: mem_addr_o = {ptr[31:2], 2'b00};
-            ELEM: mem_addr_o = frame_ptr[sp-1] + (frame_idx[sp-1] << 2);
+            ELEM: mem_addr_o = frame_ptr[0] + (frame_idx[0] << 2);
             SET_FLAGS: mem_addr_o = (payload & 32'hfffffffc) + 12;
             SET_LEN: mem_addr_o = (payload & 32'hfffffffc) + 4;
             SET_PTR: mem_addr_o = (payload & 32'hfffffffc) + 8;
@@ -94,6 +108,17 @@ module mpy_hash #(
     endtask
     task automatic finish(input logic [31:0] h);
         result <= hash_sx31(h); state <= RESULT;
+    endtask
+
+    task automatic push_frame(input logic [31:0] base, size, seed, input logic set_frame);
+        for (int i = DEPTH - 1; i > 0; i--) begin
+            frame_ptr[i] <= frame_ptr[i-1]; frame_len[i] <= frame_len[i-1];
+            frame_idx[i] <= frame_idx[i-1]; frame_sum[i] <= frame_sum[i-1];
+            frame_set[i] <= frame_set[i-1];
+        end
+        frame_ptr[0] <= base; frame_len[0] <= size;
+        frame_idx[0] <= 0; frame_sum[0] <= seed; frame_set[0] <= set_frame;
+        sp <= sp + 1; state <= ELEM;
     endtask
 
     function automatic logic [31:0] identity_shift(input logic [3:0] t, input logic [31:0] p);
@@ -158,10 +183,17 @@ module mpy_hash #(
             endcase
             RESULT: if (sp == 0) begin hash_o <= result; state <= RESP; end
                 else begin
-                    frame_sum[sp-1] <= frame_sum[sp-1] + result;
-                    if (frame_idx[sp-1] + 1 == frame_len[sp-1]) begin
-                        result <= hash_sx31(frame_sum[sp-1] + result); sp <= sp - 1;
-                    end else begin frame_idx[sp-1] <= frame_idx[sp-1] + 1; state <= ELEM; end
+                    if (frame_idx[0] + 1 == frame_len[0]) begin
+                        result <= hash_sx31(frame_sum[0] + result); sp <= sp - 1;
+                        for (int i = 0; i < DEPTH - 1; i++) begin
+                            frame_ptr[i] <= frame_ptr[i+1]; frame_len[i] <= frame_len[i+1];
+                            frame_idx[i] <= frame_idx[i+1]; frame_sum[i] <= frame_sum[i+1];
+                            frame_set[i] <= frame_set[i+1];
+                        end
+                    end else begin
+                        frame_sum[0] <= frame_sum[0] + result;
+                        frame_idx[0] <= frame_idx[0] + 1; state <= ELEM;
+                    end
                 end
             RESP: if (ready_i) begin
                 if (valid_i) accept(); else state <= IDLE;
@@ -184,12 +216,13 @@ module mpy_hash #(
                 else state <= STR_LEN;
             end
             STR_LEN: if (mem_ack_i) begin len <= mem_data_i; state <= STR_PTR; end
-            STR_PTR: if (mem_ack_i) begin
+            STR_PTR: if (cfg_soff || mem_ack_i) begin
 `ifndef SYNTHESIS
-                if (mem_data_i != payload + 32'd12)
+                if (!cfg_soff && mem_data_i != payload + 32'd12)
                     $error("mpy_hash: non-canonical string data address at %08x: got %08x", payload, mem_data_i);
 `endif
-                ptr <= mem_data_i; acc <= 5381;
+                ptr <= cfg_soff ? payload + 32'd12 : mem_data_i;
+                acc <= 5381;
                 if (len == 0) finish(5381); else state <= STR_DATA;
             end
             STR_DATA, STR_STEP: if (state == STR_STEP || mem_ack_i) begin
@@ -201,11 +234,7 @@ module mpy_hash #(
             end
             TUPLE_LEN: if (mem_ack_i) begin
                 if (mem_data_i == 0) finish(TUPLE_SEED);
-                else begin
-                    frame_ptr[sp] <= payload + 4; frame_len[sp] <= mem_data_i;
-                    frame_idx[sp] <= 0; frame_sum[sp] <= TUPLE_SEED;
-                    frame_set[sp] <= 0; sp <= sp + 1; state <= ELEM;
-                end
+                else push_frame(payload + 4, mem_data_i, TUPLE_SEED, 1'b0);
             end
             SET_FLAGS: if (mem_ack_i) begin
                 if ((mem_data_i & 2) == 0) fail(); else state <= SET_LEN;
@@ -213,14 +242,10 @@ module mpy_hash #(
             SET_LEN: if (mem_ack_i) begin len <= mem_data_i; state <= SET_PTR; end
             SET_PTR: if (mem_ack_i) begin
                 if (len == 0) finish(FROZEN_SEED);
-                else begin
-                    frame_ptr[sp] <= mem_data_i; frame_len[sp] <= len;
-                    frame_idx[sp] <= 0; frame_sum[sp] <= FROZEN_SEED;
-                    frame_set[sp] <= 1; sp <= sp + 1; state <= ELEM;
-                end
+                else push_frame(mem_data_i, len, FROZEN_SEED, 1'b1);
             end
             ELEM: if (mem_ack_i) begin
-                if (frame_set[sp-1] && mem_tag_i == 0 && (mem_data_i == 0 || mem_data_i == 3))
+                if (frame_set[0] && mem_tag_i == 0 && (mem_data_i == 0 || mem_data_i == 3))
                     finish(0); // empty/tombstone contributes nothing
                 else begin tag <= mem_tag_i; payload <= mem_data_i; state <= DISPATCH; end
             end

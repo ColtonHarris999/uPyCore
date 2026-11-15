@@ -27,7 +27,7 @@ configuration. In particular, there is no `-1` to `-2` substitution.
 | None / False / True | 6 / 0 / 1 | 0 |
 | QSTR | Low 16 bits of the qstr descriptor, including the extension table | 1 |
 | STR / BYTES, cached | Low 16 bits at object offset 4 | 1 |
-| STR / BYTES, uncached | DJB2: start 5381, update `(h * 33) ^ byte`, keep 16 bits, replace zero with 1 | 3 header reads plus the aligned data words |
+| STR / BYTES, uncached | DJB2: start 5381, update `(h * 33) ^ byte`, keep 16 bits, replace zero with 1 | 2 header reads plus the aligned data words |
 | TUPLE | Seed plus the hashes of its elements, reduced to 31 bits | Length, tagged elements, recursive reads |
 | Frozen SET subtype | Seed plus hashes of occupied table entries; skip empty/tombstone entries | Flags, alloc, table pointer, all table slots, recursive reads |
 | RANGE / ITER / OBJECT / FUNCTION | Payload address shifted right by one, then reduced to 31 bits | 0 |
@@ -66,6 +66,9 @@ with the next scalar response at the same edge.
 There is one outstanding memory transaction. `mem_req_o` and byte address
 hold until `mem_ack_i`; an acknowledgement can be immediate or delayed.
 Only an acknowledged `mem_fault_i` terminates the request with an error.
+STR and BYTES data starts 12 bytes after the header. The hash and key
+equality engines form that address from the registered key. Simulation
+`+SOFF=0` restores the word-2 read and checks the stored address.
 Reset cancels requests and responses. The memory supplies a 32-bit payload
 and 4-bit tag; tags matter for aggregate elements. Unaligned string pointers
 are handled with aligned word reads and a byte buffer. Reading four bytes

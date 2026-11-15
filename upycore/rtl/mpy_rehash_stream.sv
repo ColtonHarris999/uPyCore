@@ -6,7 +6,7 @@
 // source-slot order so colliding keys never probe stale destination contents.
 // The caller owns disjoint source/new tables and keeps the new table unpublished
 // until success. Unsupported keys may abandon a partially populated new table.
-module mpy_rehash_stream #(parameter bit EXTERNAL_HASH=0) (
+module mpy_rehash_stream #(parameter bit EXTERNAL_HASH=0, parameter int SOFF=1) (
     output logic hash_valid_o,
     input logic hash_ready_i,
     output logic [3:0] hash_tag_o,
@@ -66,7 +66,7 @@ module mpy_rehash_stream #(parameter bit EXTERNAL_HASH=0) (
     assign hack=pending && owner==1 && ack_i;
     assign cack=pending && owner==2 && ack_i;
     // Reset the elastic pipeline between commands, after the shared port drains.
-    mpy_hash_slot #(.DEPTH(1),.EXTERNAL_HASH(EXTERNAL_HASH)) pipeline (
+    mpy_hash_slot #(.DEPTH(1),.EXTERNAL_HASH(EXTERNAL_HASH),.SOFF(SOFF)) pipeline (
         .hash_valid_o,.hash_ready_i,.hash_tag_o,.hash_payload_o,
         .hash_result_valid_i,.hash_result_ready_o,.hash_value_i,.hash_error_i,
         .hash_mem_req_i,.hash_mem_addr_i,.hash_mem_ack_o,

@@ -39,7 +39,8 @@ module mpy_soc #(
     parameter bit CA_TYPE_CACHE = 0,
     parameter int SHORTLIST_MAX = 16,
     parameter int SHORTLIST_MODE = 2,
-    parameter int FLASH_WAIT_STATES = MPY_FLASH_WAIT_STATES
+    parameter int FLASH_WAIT_STATES = MPY_FLASH_WAIT_STATES,
+    parameter int SOFF = 1
 ) (
     input  logic        clk_i,
     input  logic        rst_n_i,
@@ -247,7 +248,7 @@ module mpy_soc #(
         .done_o(boot_done), .err_o(boot_error)
     );
 
-    mpy_core #(.SHORTLIST_MAX(SHORTLIST_MAX), .SHORTLIST_MODE(SHORTLIST_MODE)) u_core (
+    mpy_core #(.SHORTLIST_MAX(SHORTLIST_MAX), .SHORTLIST_MODE(SHORTLIST_MODE), .SOFF(SOFF)) u_core (
         .clk_i, .rst_n_i(sys_rst_n),
         .m_req_o(c_req), .m_we_o(c_we), .m_tag_we_o(c_tag_we), .m_be_o(c_be),
         .m_addr_o(c_addr), .m_wdata_o(c_wdata), .m_wtag_o(c_wtag),
@@ -313,7 +314,7 @@ module mpy_soc #(
         .mem_gnt_i(m_gnt[P_GC]), .mem_ack_i(gm_ack), .mem_rdata_i(gm_rdata), .mem_rtag_i(gm_rtag)
     );
 
-    mpy_collection #(.TYPE_CACHE(CA_TYPE_CACHE), .SHORTLIST_MAX(SHORTLIST_MAX)) u_ca (
+    mpy_collection #(.TYPE_CACHE(CA_TYPE_CACHE), .SHORTLIST_MAX(SHORTLIST_MAX), .SOFF(SOFF)) u_ca (
         .cache_clear_i(g_collect_req || g_collect_done),.cache_write_i(m_gnt[P_CORE] && p_we),.cache_addr_i(p_addr),
         .clk_i,.rst_n_i(sys_rst_n),
         .copy_reverse_i(ca_reverse),.copy_byte_i(ca_byte),.copy_valid_i(ca_valid),.copy_ready_o(ca_ready),

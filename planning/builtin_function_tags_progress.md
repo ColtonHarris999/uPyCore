@@ -403,3 +403,42 @@ starts at the existing `t[223]` register. The string address and
 scratch endpoints are outside the top 20 paths. No generic endpoint
 entered the set at 100 levels or deeper. See the
 [Step 8 timing reports](builtin_function_tags_step8/).
+
+## Step 9 accelerator string pointer reads
+
+The SoC `SOFF` setting reaches the shared hash engine, the map equality
+unit, and standalone hash instances in the map and rehash paths. With
+the switch on, each engine forms the inline address from the registered
+key and registers it before reading data. With the switch off, word 2
+is read and checked as before. QSTR keeps its descriptor read.
+
+The pointer bypass alone raised the standalone hash's mapped delay to
+7.521 ns. The slow path crossed the aggregate stack's variable frame
+select. Keeping the active frame in slot zero and shifting saved
+parents on push/pop removed that select without adding cycles.
+The standalone mapped delay is now 5.876 ns. The new inline-address
+adder does not appear on the top-ranked hash or collection paths.
+
+| Top and flow | Step 0 delay (ns) | Step 9 delay (ns) | Step 0 cells | Step 9 cells |
+| --- | ---: | ---: | ---: | ---: |
+| Collection mapped | 9.191 | 9.191 | 53,076 | 53,463 |
+| Collection unmapped | 9.366 | 9.366 | 59,509 | 59,729 |
+| Hash mapped | 7.168 | 5.876 | 7,719 | 9,028 |
+| Hash unmapped | 7.813 | 7.813 | 8,878 | 10,630 |
+| Key equality mapped | 7.007 | 6.884 | 6,864 | 7,006 |
+| Key equality unmapped | 7.730 | 7.743 | 7,455 | 7,680 |
+
+Generic depth is 136 levels for collection and 68 for hash, unchanged
+from Step 0. Key equality moves from 84 to 85 levels. No new endpoint
+enters the set at 100 levels or deeper. The
+[Step 9 timing reports](builtin_function_tags_step9/) retain the rankings.
+
+Each hash and hash-slot bench passed all 5,202 vectors with both
+settings, including nested frames that resume the parent after
+retiring nonempty tuple and set children. Key equality passed 1,415
+cases with each setting, reducing acknowledged reads from 7,253 to
+6,021. The 1-byte hash bench reduced acknowledged reads from 1,180
+to 1,026. All 37 RTL unit benches passed, along with the three
+targeted hardware cases for each setting. Both full hardware passes
+returned 551/551, with no invariant failures. The oracle confirmed all
+502 golden cases.

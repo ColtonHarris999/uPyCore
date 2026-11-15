@@ -13,7 +13,7 @@
 // Operations 5/6 are read-only subset/disjoint predicates; operation 7 scans
 // a word sequence for count/first index, with used_i selecting the mode.
 // Requests are registered and issued once; acknowledgements may be delayed.
-module mpy_map_engine #(parameter bit EXTERNAL_HASH=0, TYPE_CACHE=0) (
+module mpy_map_engine #(parameter bit EXTERNAL_HASH=0, TYPE_CACHE=0, parameter int SOFF=1) (
     input logic cache_clear_i,cache_write_i,cache_write2_i,
     input logic [31:0] cache_addr_i,cache_addr2_i,
     output logic hash_valid_o,
@@ -58,7 +58,7 @@ module mpy_map_engine #(parameter bit EXTERNAL_HASH=0, TYPE_CACHE=0) (
     logic [31:0] qcount, qbase, qext;
     logic eq_ready,eq_valid,eq_result,eq_error,eq_req;
     logic [31:0] eq_addr;
-    mpy_key_equal equality (
+    mpy_key_equal #(.SOFF(SOFF)) equality (
         .clk_i,.rst_n_i,.valid_i(state==EQ_GO),.ready_o(eq_ready),
         .a_i(probe_key),.b_i({key_tag,key}),
         .qstr_count_i(qcount),.qstr_base_i(qbase),.qstr_ext_i(qext),
@@ -133,7 +133,7 @@ module mpy_map_engine #(parameter bit EXTERNAL_HASH=0, TYPE_CACHE=0) (
         assign hmreq=hash_mem_req_i;
         assign hmaddr=hash_mem_addr_i;
     end else begin : private_hash
-    mpy_hash #(.DEPTH(1)) hash_unit (
+    mpy_hash #(.DEPTH(1),.SOFF(SOFF)) hash_unit (
         .clk_i, .rst_n_i, .valid_i(state == HASH_GO && key_tag != ABI_TAG_INT && key_tag != ABI_TAG_CONTROL), .ready_o(hr),
         .tag_i(key_tag), .payload_i(key), .qstr_count_i(qcount), .qstr_base_i(qbase), .qstr_ext_i(qext),
         .valid_o(hv), .ready_i(state == HASH_WAIT), .hash_o(hout), .error_o(he),

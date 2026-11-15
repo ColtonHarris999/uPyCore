@@ -5,7 +5,7 @@
 // acceptance, before either engine starts. Only the head owns the memory port;
 // ownership changes after every response, including the final write, retires.
 // There is one core producer: it never asserts both command valids together.
-module mpy_collection #(parameter bit TYPE_CACHE=0, parameter int SHORTLIST_MAX=16) (
+module mpy_collection #(parameter bit TYPE_CACHE=0, parameter int SHORTLIST_MAX=16, SOFF=1) (
     input logic cache_clear_i,cache_write_i,
     input logic [31:0] cache_addr_i,
     input logic clk_i, rst_n_i,
@@ -180,7 +180,7 @@ module mpy_collection #(parameter bit TYPE_CACHE=0, parameter int SHORTLIST_MAX=
         .gnt_i(gnt_i && owner_byte && !owner_bulk && sl_idle),.ack_i(ack_i && owner_byte && !owner_bulk && sl_idle),
         .fault_i,.rdata_i,.rtag_i,.fault_o(by_fault),.fault_addr_o(by_fault_addr)
     );
-    mpy_bulk #(.TYPE_CACHE(TYPE_CACHE)) bulk_engine (
+    mpy_bulk #(.TYPE_CACHE(TYPE_CACHE), .SOFF(SOFF)) bulk_engine (
         .cache_clear_i,.cache_write_i,.cache_addr_i,
         .cache_write2_i(req_o && gnt_i && we_o),.cache_addr2_i(addr_o),
         .clk_i,.rst_n_i,.valid_i(bm_launch),.ready_o(bm_ready),

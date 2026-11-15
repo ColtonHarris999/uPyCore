@@ -101,7 +101,12 @@ float f; memcpy(&f, &b, 4); printf("%08x\\n", (uint32_t)hash(f)); } }
         vector(9, nested, sx(24690 + (i + 1) * 12345) if i < 6 else 0, int(i >= 6))
     vector(9, alloc([1, (10, 0)]), error=1)
     slots = alloc([(0, 0), (1, -1), (0, 3), (3, 0x40200000)])
-    vector(10, alloc([2, 4, slots, 2]) | 2, 54322)
+    frozen = alloc([2, 4, slots, 2]) | 2
+    vector(10, frozen, 54322)
+    # Resume the parent after each non-empty child, including distinct
+    # aggregate kinds, before finishing with a scalar element.
+    children = alloc([3, (9, callable_tuple), (10, frozen), (1, 17)])
+    vector(9, children, sx(12345 + 12345 + (0x1080 >> 1) + (0x20000100 >> 1) + 54322 + 17))
     vector(10, alloc([0, 0, 0, 2]) | 2, 54321)
     vector(10, alloc([0, 0, 0, 0]) | 2, error=1)
     assert addr < 0x40000
