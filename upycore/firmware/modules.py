@@ -423,7 +423,44 @@ def _import_from(mod, name):
     return _import(_cat(_cat(mname, '.'), name), True, 0, NULL)
 
 
+def _import_star_obj(mod, loc):
+    # mp_import_all for a class or instance standing in for a module.
+    # An object with no __dict__ (an int) is AttributeError, which the
+    # import-star test also accepts as ImportError.
+    k = _kind(mod)
+    if k == OB_EXCEPTION:
+        g = _ld(mod, 4)
+    elif k == OB_TYPE or k == OB_INSTANCE:
+        g = _ld(mod, 2)
+    else:
+        raise AttributeError(_s("'", _tname(mod), "' object has no attribute '__dict__'"))
+    if g is NULL:
+        g = {}
+    all_ = _dget(g, '__all__')
+    if all_ is NULL and (k == OB_INSTANCE or k == OB_EXCEPTION):
+        all_ = _dget(_ld(_ld(mod, 1), 2), '__all__')
+    if all_ is not NULL:
+        if not (_islist(all_) or _tag(all_) == TAG_TUPLE):
+            raise TypeError(_s("object '", _tname(all_), "' isn't a tuple or list"))
+        for name in all_:
+            if not _isstr(name):
+                raise TypeError(_s("can't convert '", _tname(name), "' object to str implicitly"))
+            hit = _dget(g, name)
+            if hit is NULL and (k == OB_INSTANCE or k == OB_EXCEPTION):
+                hit = _dget(_ld(_ld(mod, 1), 2), name)
+            if hit is NULL:
+                raise AttributeError(_s("'", _tname(mod), "' object has no attribute '", name, "'"))
+            loc[name] = hit
+        return None
+    for name in g:
+        if _slen(name) and _byte(name, 0) != 95:
+            loc[name] = g[name]
+    return None
+
+
 def _import_star(mod, loc):
+    if _kind(mod) != OB_MODULE:
+        return _import_star_obj(mod, loc)
     try:
         all_ = _module_attr(mod, '__all__')
     except AttributeError:

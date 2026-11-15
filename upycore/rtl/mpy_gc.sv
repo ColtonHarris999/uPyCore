@@ -212,6 +212,10 @@ module mpy_gc #(
     logic [1:0]    cur;
     assign cur_hit = wb_v && wb_w == word_of(idx);
     assign cur     = ent_of(wb, idx);
+    // A function call as the index of an NBA part-select makes the 5.032
+    // simulator abort in V3Delayed. The shift matches slot_of(idx).
+    logic [5:0] sweep_at;
+    assign sweep_at = {slot_of(idx), 1'b0};
 
     // Object scan: is the block after oblk a TAIL? Read while its words are.
     logic          tl_have, tl_tail, tl_rd;
@@ -684,20 +688,20 @@ module mpy_gc #(
                     end else begin
                         unique case (cur)
                             A_HEAD: begin
-                                wb[{slot_of(idx), 1'b0} +: 2] <= A_FREE;
+                                wb[sweep_at +: 2] <= A_FREE;
                                 wb_dirty <= 1'b1;
                                 freeing  <= 1'b1;
                                 free_cnt <= free_cnt + 32'd1;
                             end
                             A_TAIL: begin
                                 if (freeing) begin
-                                    wb[{slot_of(idx), 1'b0} +: 2] <= A_FREE;
+                                    wb[sweep_at +: 2] <= A_FREE;
                                     wb_dirty <= 1'b1;
                                     free_cnt <= free_cnt + 32'd1;
                                 end
                             end
                             A_MARK: begin
-                                wb[{slot_of(idx), 1'b0} +: 2] <= A_HEAD;
+                                wb[sweep_at +: 2] <= A_HEAD;
                                 wb_dirty <= 1'b1;
                                 freeing  <= 1'b0;
                             end

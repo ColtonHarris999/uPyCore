@@ -1,0 +1,12 @@
+%
+=str=
+='str'=
+123
+foo
+bar
+TypeError
+TypeError
+ValueError
+TypeError
+ValueError
+ValueError

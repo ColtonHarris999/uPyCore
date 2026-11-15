@@ -38,6 +38,7 @@ arith = { file = "hw/alu/arith.py" }
 bitwise = { file = "hw/alu/bitwise.py" }
 compare = { file = "hw/alu/compare.py" }
 truth = { file = "hw/alu/truth.py" }
+truth_subclass = { file = "hw/alu/truth_subclass.py" }
 divzero = { file = "hw/alu/divzero.py" }
 overflow = { file = "hw/alu/overflow.py" }
 floats = { file = "hw/alu/floats.py", cycles = 30_000_000 }
@@ -78,6 +79,7 @@ for_iter_rebind = { file = "hw/control/for_iter_rebind.py" }
 for_iter_delete = { file = "hw/control/for_iter_delete.py" }
 for_iter_clear = { file = "hw/control/for_iter_clear.py" }
 for_iter_subscr = { file = "hw/control/for_iter_subscr.py" }
+iter_dunder_next = { file = "hw/control/iter_dunder_next.py" }
 for_iter_build_tuple = { file = "hw/control/for_iter_build_tuple.py" }
 for_iter_range_type_trap = { file = "hw/control/for_iter_range_type_trap.py" }
 for_iter_range_bool = { file = "hw/control/for_iter_range_bool.py" }
@@ -152,6 +154,7 @@ varkw_many = { file = "hw/calls/varkw_many.py" }
 varkw_kwonly = { file = "hw/calls/varkw_kwonly.py" }
 varkw_combo = { file = "hw/calls/varkw_combo.py" }
 varkw_dup_trap = { file = "hw/calls/varkw_dup_trap.py" }
+kw_dup_star = { file = "hw/calls/kw_dup_star.py" }
 varkw_kwonly_missing_trap = { file = "hw/calls/varkw_kwonly_missing_trap.py" }
 
 [containers]
@@ -162,6 +165,8 @@ lists = { file = "hw/containers/lists.py" }
 tuples = { file = "hw/containers/tuples.py" }
 dicts = { file = "hw/containers/dicts.py" }
 sets = { file = "hw/containers/sets.py" }
+set_iand = { file = "hw/containers/set_iand.py" }
+dict_pair_len = { file = "hw/containers/dict_pair_len.py" }
 set_order = { file = "hw/containers/set_order.py" }
 unpack = { file = "hw/containers/unpack.py" }
 memoryview_ops = { file = "hw/containers/memoryview_ops.py" }
@@ -234,6 +239,8 @@ bytesobj = { file = "hw/strings/bytesobj.py" }
 bytearray_index = { file = "hw/strings/bytearray_index.py" }
 bytearray_repr = { file = "hw/strings/bytearray_repr.py" }
 format = { file = "hw/strings/format.py" }
+format_modulo = { file = "hw/strings/format_modulo.py" }
+find_none = { file = "hw/strings/find_none.py" }
 
 slice_str_clamp = { file = "hw/strings/slice_str_clamp.py" }
 slice_str_long = { file = "hw/strings/slice_str_long.py" }
@@ -294,6 +301,7 @@ fw_next_exhausted = { file = "hw/exceptions/fw_next_exhausted.py" }
 exc_args = { file = "hw/exceptions/exc_args.py" }
 raise_varargs = { file = "hw/exceptions/raise_varargs.py" }
 raise_after_call_loop = { file = "hw/exceptions/raise_after_call_loop.py" }
+exc_user_new = { file = "hw/exceptions/exc_user_new.py" }
 
 [objects]
 classes = { file = "hw/objects/classes.py" }
@@ -327,6 +335,10 @@ method_default = { file = "hw/objects/method_default.py" }
 varkw_method = { file = "hw/objects/varkw_method.py" }
 method_call_kw = { file = "hw/objects/method_call_kw.py" }
 bound_method_obj = { file = "hw/objects/bound_method_obj.py" }
+super_data_attr = { file = "hw/objects/super_data_attr.py" }
+super_check = { file = "hw/objects/super_check.py" }
+rich_ne = { file = "hw/objects/rich_ne.py" }
+bound_meth_eq = { file = "hw/objects/bound_meth_eq.py" }
 class_const = { file = "hw/objects/class_const.py" }
 class_two_instances = { file = "hw/objects/class_two_instances.py" }
 
@@ -346,6 +358,7 @@ helper_containers = { file = "hw/builtins/helper_containers.py" }
 fw_range_zero_step = { file = "hw/builtins/fw_range_zero_step.py" }
 fw_pow_neg_mod = { file = "hw/builtins/fw_pow_neg_mod.py" }
 fw_pow_mulmod = { file = "hw/builtins/fw_pow_mulmod.py" }
+easy_checks = { file = "hw/builtins/easy_checks.py" }
 fw_round_half_even = { file = "hw/builtins/fw_round_half_even.py" }
 fw_float_str = { file = "hw/builtins/fw_float_str.py" }
 builtin_len_long_str = { file = "hw/builtins/builtin_len_long_str.py" }
@@ -391,6 +404,7 @@ import_rel_pkg = { file = "hw/modules/import_rel_pkg.py", modules = ["pkg=hw/mod
 import_rel_main = { file = "hw/modules/import_rel_main.py", oracle = false }
 import_fail_body = { file = "hw/modules/import_fail_body.py", modules = ["badmod=hw/modules/badmod.py"], oracle = false }
 import_star_all = { file = "hw/modules/import_star_all.py", modules = ["starred=hw/modules/starred.py", "plainstar=hw/modules/plainstar.py"], oracle = false }
+import_star_nonmodule = { file = "hw/modules/import_star_nonmodule.py" }
 import_getattr = { file = "hw/modules/import_getattr.py", modules = ["getattrmod=hw/modules/getattrmod.py"], oracle = false }
 import_usys = { file = "hw/modules/import_usys.py" }
 builtins_override_import = { file = "hw/modules/builtins_override_import.py" }
@@ -568,6 +582,7 @@ gen_repr = { file = "hw/generators/gen_repr.py" }
 gen_gc = { file = "hw/generators/gen_gc.py", cycles = 40_000_000, timeout = 240 }
 gen_resumed_local_gc = { file = "hw/generators/gen_resumed_local_gc.py" }
 gen_yield_from = { file = "hw/generators/gen_yield_from.py" }
+yield_from_empty = { file = "hw/generators/yield_from_empty.py" }
 gen_yield_from_iter = { file = "hw/generators/gen_yield_from_iter.py" }
 gen_yield_from_throw = { file = "hw/generators/gen_yield_from_throw.py" }
 gen_yield_from_stop_type = { file = "hw/generators/gen_yield_from_stop_type.py" }

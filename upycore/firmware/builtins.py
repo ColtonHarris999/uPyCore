@@ -6,6 +6,40 @@ def _object____init___fb(self, *args, **kw):
     return None
 
 
+def _BaseException____init___fb(self, *args, **kw):
+    # The native stores positional args and rejects every keyword block,
+    # including one left behind by **{} after the dict expanded to nothing.
+    if kw:
+        _no_kw()
+    if _tag(self) != TAG_OBJECT or _ld(self, 0) != OB_EXCEPTION:
+        raise TypeError("__init__() takes the wrong number of arguments")
+    _st(self, 2, args)
+    return None
+
+
+def object____new__(cls):
+    # CPython-compat object.__new__ (objobject.c): one user-type argument,
+    # a blank instance, and no __init__.
+    if not _istype(cls) or (_ld(cls, 7) & TF_USER) == 0:
+        raise TypeError('arg must be user-type')
+    flags = _ld(cls, 7)
+    if flags & TF_EXC:
+        o = _alloc(5, TAG_OBJECT, 0)
+        _st(o, 0, OB_EXCEPTION)
+        _st(o, 1, cls)
+        _st(o, 2, ())
+        _st(o, 3, NULL)
+        _st(o, 4, NULL)
+        return o
+    if flags & TF_NATIVE_SUB:
+        return _native_sub_new(cls, None)
+    o = _alloc(3, TAG_OBJECT, 0)
+    _st(o, 0, OB_INSTANCE)
+    _st(o, 1, cls)
+    _st(o, 2, NULL)
+    return o
+
+
 def _new__object_fb(cls, *args, **kw):
     if kw:
         _no_kw()
@@ -162,7 +196,11 @@ def _int_value(args):
         if f is NULL:
             f = _tlookup(_ld(x, 1), '__index__')
         if f is not NULL:
-            return _call_member(f, x, ())
+            r = _call_member(f, x, ())
+            # objtype.c: __int__/__index__ must return an int. None is TypeError.
+            if _isint(r) or (_BIGINT_ENABLED and _iswide(r)):
+                return r
+            raise TypeError(_s("can't convert ", _tname(r), " to int"))
     raise TypeError(_s("can't convert ", _tname(x), ' to int'))
 
 
@@ -322,17 +360,15 @@ def divmod(a, b):
 
 
 def pow(x, y, z=_MISSING):
-    if _BIGINT_ENABLED and z is None:
+    # pow(x, y, None) is the two-argument power. A real modulus stays here.
+    if z is None or z is _MISSING:
         return x ** y
-    if _BIGINT_ENABLED and z is not _MISSING:
+    if _BIGINT_ENABLED:
         if (x is True or x is False or y is True or y is False or z is True or z is False
                 or not (_isint(x) or _iswide(x)) or not (_isint(y) or _iswide(y)) or not (_isint(z) or _iswide(z))):
             raise TypeError('pow() with 3 arguments requires integers')
         return _wide_pow(x, y, z)
-    v = x ** y
-    if z == _MISSING:
-        return v
-    return v % z
+    return (x ** y) % z
 
 
 def _nearbyint(x):
@@ -559,10 +595,11 @@ def _name_type_error(name):
 
 
 def hasattr(obj, name):
-    if _isstr(name):
-        v = _inst_attr(obj, name)
-        if v is not STOP:
-            return v is not NULL
+    if not _isstr(name):
+        _name_type_error(name)
+    v = _inst_attr(obj, name)
+    if v is not STOP:
+        return v is not NULL
     try:
         _load_attr(obj, name)
         return True

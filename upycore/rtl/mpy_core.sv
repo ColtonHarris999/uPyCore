@@ -3198,7 +3198,10 @@ module mpy_core
                 end
                 ABI_CONT_WITH_EXC: begin tr_v <= t[7]; gosub(S_TR, S_WC_TR); end
                 ABI_CONT_UNPACK: rd(adr(t[7]), S_UPK_N);
-                ABI_CONT_RAISE: raise_val(t[7]);
+                // The call that built an exception has returned. A
+                // non-exception (BadException.__new__ returning 1) must
+                // raise TypeError, not be stored as a traceback object.
+                ABI_CONT_RAISE: begin t[0] <= t[7]; st <= S_ROBJ; end
                 ABI_CONT_TRUTH: begin
                     ovr <= (t[7] == VTRUE) ? ABI_OVR_TRUE : ABI_OVR_FALSE;
                     pc <= op_pc; st <= S_FETCH;
@@ -5156,9 +5159,11 @@ module mpy_core
                     rf[`SX(6'(sp - 7'd2))] <= vbool(!vb); sp <= sp - 7'd1; st <= S_FETCH;
                 end else if (strlike(t[0]) && strlike(t[1])) begin
                     se_a <= t[0]; se_b <= t[1]; gosub_scr(SCR_SE, S_STREQ, S_EQ_S);
-                end else if (strlike(t[0]) || strlike(t[1]) ||
-                             (tg(t[0]) == ABI_TAG_CONTROL && !objectlike(t[1])) ||
-                             (tg(t[1]) == ABI_TAG_CONTROL && !objectlike(t[0]))) begin
+                // A str or None compared with a user object must run __eq__.
+                // Two non-objects that are not both strings are unequal here.
+                end else if (!objectlike(t[0]) && !objectlike(t[1]) &&
+                             (strlike(t[0]) || strlike(t[1]) ||
+                              tg(t[0]) == ABI_TAG_CONTROL || tg(t[1]) == ABI_TAG_CONTROL)) begin
                     rf[`SX(6'(sp - 7'd2))] <= vbool(vb); sp <= sp - 7'd1; st <= S_FETCH;
                 end else st <= S_BIN_FB;
             end
@@ -6542,7 +6547,12 @@ module mpy_core
                                   rd(ha_m4, S_HASH_TUPLE_ITEM);
                               end
             S_HASH_OBJ: begin
-                if (md == ABI_OB_INSTANCE || md == ABI_OB_EXCEPTION || md == ABI_OB_BIGINT) hok <= 1'b0;
+                // Bound methods hash as meth pointer xor self pointer.
+                // Identity of the wrapper would not match equality.
+                // Dict keys and items views are unhashable. Values views hash
+                // by identity in firmware. Both need the view kind.
+                if (md == ABI_OB_INSTANCE || md == ABI_OB_EXCEPTION || md == ABI_OB_BIGINT
+                    || md == ABI_OB_BOUND_METHOD || md == ABI_OB_DICT_VIEW) hok <= 1'b0;
                 else hh <= is_bi(hk) ? {9'd0, hk[23:1]} : {1'b0, hk[31:1]};
                 ret();
             end

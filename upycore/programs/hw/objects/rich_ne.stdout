@@ -1,0 +1,26 @@
+ne
+5
+eq
+True
+Y ne
+True
+Y ne
+True
+E eq None
+123
+E eq None
+123
+E eq 0
+False
+E eq 0
+False
+E eq a
+123
+E eq <E object at f7b5d4b0>
+123
+E eq <F object at f7b5d560>
+False
+F ne <E object at f7b5d580>
+-456
+False
+False

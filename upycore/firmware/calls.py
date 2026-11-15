@@ -132,6 +132,10 @@ def _bind(fun, args, kw):
         d = _newdict(len(extra) // 2)
         i = 0
         while i < len(extra):
+            # bc.c: a repeated name in the **kwargs dict is TypeError,
+            # including f(a=1, **{'a': 2}) and f(**{'a': 1}, **{'a': 2}).
+            if _dget(d, extra[i]) is not NULL:
+                raise TypeError(_s("function got multiple values for argument '", extra[i], "'"))
             d[extra[i]] = extra[i + 1]
             i += 2
         loc[npos + nkwo + (1 if varargs else 0)] = d
@@ -279,6 +283,25 @@ def _first_native(bases):
     return object
 
 
+def _invoke_new(cls, *args, **kw):
+    # mp_obj_instance_make_new. The core has already prepended cls.
+    raw = _tlookup(cls, '__new__')
+    if raw is not NULL and _kind(raw) == OB_STATICMETHOD:
+        raw = _ld(raw, 2)
+    if raw is NULL or raw is _invoke_new:
+        raise TypeError('__new__() is not defined')
+    obj = raw(cls, *args, **kw)
+    if _tag(obj) == TAG_OBJECT and _ld(obj, 1) == cls:
+        init = _tlookup(cls, '__init__')
+        if init is not NULL:
+            r = init(obj, *args, **kw)
+            if r is not None:
+                raise TypeError(_s("__init__() should return None, not '", _tname(r), "'"))
+    if (_ld(cls, 7) & TF_EXC) and not (_tag(obj) == TAG_OBJECT and _ld(obj, 0) == OB_EXCEPTION):
+        raise TypeError("exceptions must derive from BaseException")
+    return obj
+
+
 def _make_type(name, bases, ns):
     base_l = []
     if not bases:
@@ -316,7 +339,10 @@ def _make_type(name, bases, ns):
     if exc:
         flags |= TF_EXC
     if nb is not object and not (_ld(nb, 7) & TF_EXC):
-        flags |= TF_NATIVE_SUB
+        # A subclass of int/list/... is false when the native value is.
+        # The base types themselves have no TF_TRUTH flag; _truth uses
+        # the wrapped value once the core asks.
+        flags |= TF_NATIVE_SUB | TF_TRUTH
     if '__bool__' in ns or '__len__' in ns or (_ld(nb, 7) & TF_TRUTH):
         flags |= TF_TRUTH
     for b in base_l:
@@ -348,9 +374,21 @@ def _make_type(name, bases, ns):
     custom_new = _lookup(ns, '__new__')
     if custom_new is STOP:
         custom_new = NULL
+    if custom_new is not NULL and _kind(custom_new) != OB_STATICMETHOD:
+        # objtype.c wraps a function __new__ in staticmethod.
+        ns['__new__'] = staticmethod(custom_new)
+    elif custom_new is NULL:
+        for b in base_l:
+            if _ld(b, 7) & TF_USER:
+                hit = _lookup(_ld(b, 2), '__new__')
+                if hit is not NULL and hit is not STOP:
+                    custom_new = hit
+                    break
     make_new = NULL
     if custom_new is not NULL:
-        make_new = custom_new
+        # The core calls word 8 and returns the result. _invoke_new runs
+        # __init__ only when __new__ returns an instance of this class.
+        make_new = _invoke_new
     elif flags & TF_NATIVE_SUB:
         make_new = _nsub_new
     else:
@@ -387,9 +425,14 @@ def _super_attr(typ, obj, name):
         b = _ld(mro, 1 + i)
         hit = _lookup(_ld(b, 2), name)
         if hit is not NULL and hit is not STOP:
+            # mp_convert_member_lookup: a plain value (the int 123 on a
+            # base class) is not a descriptor. _desc_get would read it as
+            # a heap object.
             k = _kind(hit)
             if k == OB_FUNCTION or k == OB_BUILTIN:
                 return _bind_method(hit, obj)
+            if _tag(hit) != TAG_OBJECT:
+                return hit
             return _desc_get(hit, obj)
         i += 1
     _attr_error(obj, name)
@@ -402,6 +445,15 @@ def _super_method(typ, obj, name):
 def super____new__(cls, *args):
     if len(args) != 2:
         raise TypeError('super() takes 2 arguments')
+    # objtype.c super_make_new: the second argument is an instance of the
+    # first, or a subclass of it.
+    typ = args[0]
+    obj = args[1]
+    if not _istype(typ):
+        raise TypeError('super() argument 1 must be a type')
+    second = obj if _istype(obj) else _typeof(obj)
+    if not _issub(second, typ):
+        raise TypeError('super(type, obj): obj must be an instance or subtype of type')
     o = _alloc(4, TAG_OBJECT, 0)
     _st(o, 0, OB_SUPER)
     _st(o, 1, cls)

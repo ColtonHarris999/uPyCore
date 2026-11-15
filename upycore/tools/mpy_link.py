@@ -713,6 +713,20 @@ def link(main: Path, modules: list[tuple[str, Path, bool]], fw: Path, out: Path,
     for tname in abi.TYPES:
         addr = img.symbols[f"type:{tname}"]
         methods = type_methods[tname]
+        if tname == "object" and "__new__" in methods:
+            # object.__new__ is a staticmethod on the CPython-compat oracle.
+            fn = methods["__new__"]
+            sm = img.emit_words([
+                (T["INT"], abi.OB["STATICMETHOD"]),
+                type_val(img, "staticmethod"),
+                fn,
+            ])
+            methods["__new__"] = (T["OBJECT"], sm)
+        # super.__new__ is the constructor (word 8). Leaving it in the type
+        # dict makes super(cls, A).__new__ bind that constructor instead of
+        # the proxied object.__new__.
+        if tname == "super":
+            methods.pop("__new__", None)
         dict_val = emit_dict(img, [(img.qval(k), v) for k, v in methods.items()])
         base = abi.EXC_BASES.get(tname) or abi.NATIVE_BASES.get(tname)
         if tname == "object":
@@ -723,6 +737,9 @@ def link(main: Path, modules: list[tuple[str, Path, bool]], fw: Path, out: Path,
         flags = 0
         if tname in abi.EXC_BASES:
             flags |= abi.TF["INST"] | abi.TF["EXC"]
+        # Truth is the length. The core only calls _truth when this flag is set.
+        if tname in ("dict_view", "memoryview"):
+            flags |= abi.TF["TRUTH"]
         make_new = NULL
         if f"new.{tname}" in natives:
             make_new = natives[f"new.{tname}"]

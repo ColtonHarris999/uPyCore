@@ -382,7 +382,8 @@ def _obj_repr(x, as_str):
         name = 'dict_keys' if vk == 0 else ('dict_values' if vk == 1 else 'dict_items')
         return _s(name, '(', _seq_repr(list(x), '[', ']', False), ')')
     if k == OB_SUPER:
-        return '<super>'
+        # objtype.c super_print. Word 2 is the class, word 3 is the object.
+        return _s('<super: ', _str(_ld(x, 2)), ', ', _str(_ld(x, 3)), '>')
     t = _ld(x, 1)
     return _s('<', _ld(t, 4), '>')
 
