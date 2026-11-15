@@ -136,3 +136,15 @@ window from `rf`), `al_n` 11.4 (`x4`), FPU pow `r_r` 11.2, `x0` 11.1,
 ([report](sta_core_signoff_step12.txt), [base](sta_core_signoff_base.txt)).
 The calibration is one point: it does not model Genus sizing the
 critical paths harder than the rest, so the 10 ns count is likely high.
+
+## Defaults for the 12 ns run
+
+No flags are needed: `BTAG`, `FTAG`, `SOFF` and `CFWD` default to 1 and
+`TOS_OH` to 0. On the merged RTL (with `main`'s spill at 15) the
+calibrated sign-off estimate has no failing `mpy_core` endpoint at the
+12 ns equivalent (worst 18.86 ns there, about 11.7 lab ns);
+`TOS_OH=1` measured 19.30 ns, so it stays off. `make test` passed
+(unit benches, host tests, 551/551 under mpy-cross and uPy2).
+`converted/` was not regenerated here (no sv2v); run
+`upycore/synth/hammer/convert_rtl.sh` and commit `converted/` and
+`RTL_STAMP` before `sweep.sh`, which refuses stale files.
