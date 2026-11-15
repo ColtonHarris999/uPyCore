@@ -360,6 +360,7 @@ def emit_str(img: Image, text: str | bytes, tag: str = "STR") -> tuple[int, int]
         return img.rom_cache[key]
     addr = img.alloc(abi.STR_HDR_WORDS)
     baddr = img.emit_bytes(data)
+    assert baddr == addr + 12, "immutable string data must immediately follow its header"
     img.set(addr, (T["INT"], len(data)))
     ascii_flag = 0 if all(b < 0x80 for b in data) else abi.STR_NONASCII
     img.set(addr + 4, (T["INT"], abi.qstr_hash(data) | ascii_flag))

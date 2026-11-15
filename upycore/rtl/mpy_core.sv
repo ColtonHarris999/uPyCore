@@ -1884,6 +1884,13 @@ module mpy_core
             $error("non-canonical callable at %08x: kind %0d in %s", ref_v[31:0], kind, wret.name());
     endtask
 
+    task automatic check_string_data(input val_t ref_v, input logic [31:0] ptr);
+        if ((tg(ref_v) == ABI_TAG_STR || tg(ref_v) == ABI_TAG_BYTES) &&
+            ptr != aoff(adr(ref_v), 12))
+            $error("non-canonical string data address at %08x: got %08x in %s",
+                   adr(ref_v), ptr, wret.name());
+    endtask
+
     always @(posedge clk_i) if (rst_n_i && st == S_MWAIT && m_ack_i && wpend == 0 && !m_fault_i) begin
         case (wret)
             S_CALL_K: check_callable_word(ab_q, m_rdata_i);
@@ -1903,6 +1910,11 @@ module mpy_core
             S_KE_OBJ: check_callable_word(ke_a, m_rdata_i);
             S_AT_K: check_callable_word(t[0], m_rdata_i);
             S_AT_VK: check_callable_word(at_v, m_rdata_i);
+            S_SI_S2, S_DADDR_M: check_string_data(si_v, m_rdata_i);
+            S_N_SF1: check_string_data(ab_q, m_rdata_i);
+            // Firmware can still read word 2 through the generic _ld native.
+            S_N_RV: if (nid == ABI_N_LD && m_addr == aoff(adr(ab_q), 8))
+                check_string_data(ab_q, m_rdata_i);
             default: ;
         endcase
     end

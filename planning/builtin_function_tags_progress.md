@@ -342,3 +342,35 @@ cover a function and builtin with the same address hash and distinguish
 the tagged values. All 37 RTL unit benches and all 551 hardware tests
 under each compiler passed. The oracle confirmed all 502 golden cases.
 No canonical-tag assertion fired.
+
+## Step 7 string data address invariant
+
+An STR or BYTES header stores its inline data address, header + 12,
+in word 2. The linker checks the offset in `emit_str`. The runtime
+`_strnew` path writes the same value. Simulation checks compare the
+stored address before any read bypass is enabled.
+
+| Word-2 read | Scope |
+| --- | --- |
+| `S_SI_S2` and `S_DADDR_M` | Check immutable STR and BYTES. Mutable buffers and lists can point to separate storage. |
+| `S_N_SF1` | Checks immutable STR and BYTES in `_strfin`, including the scratch-adoption path through `S_N_SF0B`. |
+| `S_NAT_LD` to `S_N_RV` | Checks generic firmware word-2 reads when the base has an immutable string tag. |
+| Hash and key equality `STR_PTR` | Check both immutable tags. The QSTR equality descriptor retains its own pointer and encoding. |
+| `S_LS_IT`, `S_SS_IT`, `S_SL_RHS_PTR`, `S_SL_STORE_DST`, `S_UPS_P`, `S_CVK_I`, `S_LCAT_BP`, `S_INS_P`, `S_NP_P`, `S_NI_P`, `S_LA_I`, `S_LA_G2`, `S_IT_LI` | List or bytearray backing storage. Tuple paths use their existing inline word layout. STR and BYTES indexing, iteration, equality, and hashing reach `S_SINFO`. |
+| Other core accesses at +8 | Callable, closure, cell, slice, instance, module, generator, iterator, bigint, or table fields. Map and rehash engines delegate string reads to hash and equality. |
+
+Firmware slicing, bytearray conversion, concatenation, formatting,
+encoding, and I/O buffers allocate immutable data through `_strnew`.
+They write the inline bytes through `_data` or `_bcopy`. The `_fin`
+helper updates length, and `_strfin` updates hash and ASCII metadata.
+The word-2 stores in `strs.py` initialize or replace mutable bytearray
+backing storage. The only direct `_mk(TAG_BYTES, ...)` is under a
+literal false condition in `_barr_grow`. No live firmware path retags
+external data as STR or BYTES or replaces an immutable data pointer.
+
+The hash and key-equality vectors use inline data at varied header
+addresses. Equality still covers unaligned QSTR descriptor pointers.
+The existing golden files are untouched. All 37 RTL unit benches passed.
+A standalone hash vector with a corrupted word 2 triggered the new
+assertion. Both hardware passes returned 551/551 and the oracle
+confirmed 502 golden cases. No invariant fired in the full suite.

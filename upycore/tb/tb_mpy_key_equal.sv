@@ -78,15 +78,19 @@ module tb_mpy_key_equal;
             check({4'd3,below|32'h80000000},vint(-(power-1),512),1);
         end
         for(int len=0;len<13;len++)for(int offa=0;offa<4;offa++)for(int offb=0;offb<4;offb++)begin
-            mem[256]=len;mem[257]=123;mem[258]=2048+offa;
-            mem[272]=len;mem[273]=123;mem[274]=2304+offb;
-            for(int i=0;i<len;i++)begin byte_at(2048+offa+i,8'(65+i));byte_at(2304+offb+i,8'(65+i));end
-            check({4'd8,32'd1024},{4'd8,32'd1088},1);
-            check({4'd13,32'd1024},{4'd13,32'd1088},1);
-            check({4'd13,32'd1024},{4'd8,32'd1088},0);
-            mem[22]=(len<<16)|123;mem[23]=(2304+offb)|32'h80000000;
-            check({4'd8,32'd1024},{4'd6,32'd3},1);
-            if(len>0)begin byte_at(2304+offb+len-1,8'hff);check({4'd8,32'd1024},{4'd6,32'd3},0);end
+            int a_base,b_base,q_data;
+            a_base=1024+4*offa;b_base=1088+4*offb;q_data=2304+offb;
+            mem[a_base>>2]=len;mem[(a_base>>2)+1]=123;mem[(a_base>>2)+2]=a_base+12;
+            mem[b_base>>2]=len;mem[(b_base>>2)+1]=123;mem[(b_base>>2)+2]=b_base+12;
+            for(int i=0;i<len;i++)begin
+                byte_at(a_base+12+i,8'(65+i));byte_at(b_base+12+i,8'(65+i));byte_at(q_data+i,8'(65+i));
+            end
+            check({4'd8,32'(a_base)},{4'd8,32'(b_base)},1);
+            check({4'd13,32'(a_base)},{4'd13,32'(b_base)},1);
+            check({4'd13,32'(a_base)},{4'd8,32'(b_base)},0);
+            mem[22]=(len<<16)|123;mem[23]=q_data|32'h80000000;
+            check({4'd8,32'(a_base)},{4'd6,32'd3},1);
+            if(len>0)begin byte_at(q_data+len-1,8'hff);check({4'd8,32'(a_base)},{4'd6,32'd3},0);end
         end
         fault=1;check(vint(64'd1,512),{4'd1,32'd1},0,1);fault=0;
         check(vint(64'd1,512),{4'd1,32'd1},1);

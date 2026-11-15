@@ -185,6 +185,10 @@ module mpy_hash #(
             end
             STR_LEN: if (mem_ack_i) begin len <= mem_data_i; state <= STR_PTR; end
             STR_PTR: if (mem_ack_i) begin
+`ifndef SYNTHESIS
+                if (mem_data_i != payload + 32'd12)
+                    $error("mpy_hash: non-canonical string data address at %08x: got %08x", payload, mem_data_i);
+`endif
                 ptr <= mem_data_i; acc <= 5381;
                 if (len == 0) finish(5381); else state <= STR_DATA;
             end

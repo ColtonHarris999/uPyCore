@@ -148,7 +148,14 @@ module mpy_key_equal (
             end
             NUM_COMPARE:finish(float_equal(real_value[0],real_value[1]) && float_equal(imag_value[0],imag_value[1]));
             STR_LEN:if(mem_ack_i)begin length[side]<=current[35:32]==ABI_TAG_QSTR ? {16'd0,mem_data_i[31:16]} : mem_data_i;state<=STR_PTR;end
-            STR_PTR:if(mem_ack_i)begin ptr[side]<=current[35:32]==ABI_TAG_QSTR ? {1'b0,mem_data_i[30:0]} : mem_data_i;state<=STR_NEXT;end
+            STR_PTR:if(mem_ack_i)begin
+`ifndef SYNTHESIS
+                if (current[35:32]!=ABI_TAG_QSTR && mem_data_i!=current[31:0]+32'd12)
+                    $error("mpy_key_equal: non-canonical string data address at %08x: got %08x", current[31:0], mem_data_i);
+`endif
+                ptr[side]<=current[35:32]==ABI_TAG_QSTR ? {1'b0,mem_data_i[30:0]} : mem_data_i;
+                state<=STR_NEXT;
+            end
             STR_NEXT:if(!side)begin side<=1;state<=STR_LEN;end else state<=STR_CHECK;
             STR_CHECK:if(length[0]!=length[1])finish(0);
                 else if(length[0]==0)finish(1);

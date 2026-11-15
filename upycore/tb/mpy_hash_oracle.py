@@ -84,12 +84,13 @@ float f; memcpy(&f, &b, 4); printf("%08x\\n", (uint32_t)hash(f)); } }
         h = 5381
         for b in data: h = ((h * 33) ^ b) & 0xffffffff
         h = h & 65535 or 1
-        for offset in range(4):
-            raw = b'\xee' * offset + data + b'\xff' * 4
-            ptr = alloc([int.from_bytes(raw[i:i+4], 'little') for i in range(0, len(raw), 4)]) + offset
+        words = [int.from_bytes(data[i:i+4], 'little') for i in range(0, n, 4)] or [0]
+        for word_offset in range(4):
+            # Vary the header placement while keeping the data inline.
+            alloc([0] * word_offset)
             for t in [8, 13]:
                 for cached in [0, h | 0x40000000]:
-                    vector(t, alloc([n, cached, ptr]), h)
+                    vector(t, alloc([n, cached, addr + 12, *words]), h)
     empty = alloc([0]); vector(9, empty, 12345)
     callable_tuple = alloc([2, (5, 0xff001080), (7, 0x20000100)])
     vector(9, callable_tuple, sx(12345 + (0x1080 >> 1) + (0x20000100 >> 1)))
