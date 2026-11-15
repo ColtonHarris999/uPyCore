@@ -76,7 +76,12 @@ module mpy_core
     parameter int SOFF = 1,
     // Forward the callee and first argument of a resident call from the
     // register file instead of reading them back from ARGBUF. +CFWD= in sim.
-    parameter int CFWD = 1
+    parameter int CFWD = 1,
+    // S_EXEC reads the top three stack slots through registered one-hot
+    // selects (see oh1_r). Off by default: the open estimate flow showed
+    // the extra rf loading costing more than the index decode it removes;
+    // the P8 rf_base family needs a Genus run to decide.
+    parameter int TOS_OH = 0
 ) (
     input  logic        clk_i,
     input  logic        rst_n_i,
@@ -308,6 +313,7 @@ module mpy_core
         S_BOOT,
         S_HALT,
         S_HALT_SUM,
+        S_EXEC_RS,
         S_N_WC0,
         S_N_BC0,
         S_MWAIT,
@@ -1729,33 +1735,31 @@ module mpy_core
     // A function call in an NBA index trips a Verilator bug, so this is a macro.
     // Logical stack slot -> physical register. Wraps at 16. rf_base[5:4] stay 0.
     `define SX(L) (4'(rf_base[3:0] + 4'(L)))
-    // The top three slots for S_EXEC, selected by one-hot flops instead of
+    // TOS_OH: the top three slots for S_EXEC, selected by one-hot flops instead of
     // rf_base + sp - k and its decode (rf_base -> m_addr / x0 / x2 / x3 /
     // st and the clock-gate enables were the second failing family at
-    // 12 ns, P8). The selects are a cycle old: ix_fresh says sp and
-    // rf_base have not moved since, and S_EXEC waits a cycle when not.
+    // 12 ns, P8). The selects follow sp and rf_base a cycle late, so no
+    // state may move either in the cycle it enters S_EXEC: S_DEC,
+    // S_EXEC_W, S_CONT and S_AALU_WB do not, and a spill, reload or
+    // landed push that would resume S_EXEC goes through S_EXEC_RS. The
+    // simulation check below covers every S_EXEC cycle.
     logic [15:0] oh1_r, oh2_r, oh3_r;
-    logic [6:0]  sp_q;
-    logic [3:0]  rfb_q;
     always_ff @(posedge clk_i) begin
         oh1_r <= 16'd1 << `SX(6'(sp - 7'd1));
         oh2_r <= 16'd1 << `SX(6'(sp - 7'd2));
         oh3_r <= 16'd1 << `SX(6'(sp - 7'd3));
-        sp_q <= sp; rfb_q <= rf_base[3:0];
     end
-    logic ix_fresh;
-    assign ix_fresh = sp_q == sp && rfb_q == rf_base[3:0];
     function automatic val_t rf_oh(input logic [15:0] oh);
         rf_oh = '0;
         for (int k = 0; k < 16; k++) rf_oh = rf_oh | ({36{oh[k]}} & rf[k]);
     endfunction
     val_t tos1, tos2, tos3;
-    assign tos1 = rf_oh(oh1_r);
-    assign tos2 = rf_oh(oh2_r);
-    assign tos3 = rf_oh(oh3_r);
+    assign tos1 = (TOS_OH != 0) ? rf_oh(oh1_r) : rf[`SX(6'(sp - 7'd1))];
+    assign tos2 = (TOS_OH != 0) ? rf_oh(oh2_r) : rf[`SX(6'(sp - 7'd2))];
+    assign tos3 = (TOS_OH != 0) ? rf_oh(oh3_r) : rf[`SX(6'(sp - 7'd3))];
 `ifndef SYNTHESIS
     always_ff @(posedge clk_i)
-        if (rst_n_i && st == S_EXEC && ix_fresh &&
+        if (rst_n_i && st == S_EXEC && !(wfault_p || (m_req && m_we && m_busy_i) || rf_icpt) &&
             (tos1 != rf[`SX(6'(sp - 7'd1))] || tos2 != rf[`SX(6'(sp - 7'd2))] || tos3 != rf[`SX(6'(sp - 7'd3))]))
             $error("tos select stale");
 `endif
@@ -2572,12 +2576,13 @@ module mpy_core
                 end else if (m_req && m_we && m_busy_i) begin
                     // hold
                 end else if (sp >= 7'(MPY_RF_DEPTH)) begin
-                    rf_resume <= st;
+                    rf_resume <= (TOS_OH != 0 && st == S_EXEC) ? S_EXEC_RS : st;
                     st <= S_RF_SPILL;
                 end else begin
                     rf[`SX(sp)] <= rf_pend_v;
                     sp <= sp + 7'd1;
                     rf_pend <= 1'b0;
+                    if (TOS_OH != 0 && st == S_EXEC) st <= S_EXEC_RS;
                 end
             end else case (st)
             S_HALT: ;
@@ -3359,13 +3364,11 @@ module mpy_core
             end
 
             // ---------------- execute ----------------
+            // One cycle for oh1_r..oh3_r to follow a moved sp / rf_base.
+            S_EXEC_RS: st <= S_EXEC;
             S_EXEC: begin
             jt <= jt_c;
-            // tos1..tos3 select with flops that follow sp and rf_base a
-            // cycle late; a state that moved either into S_EXEC costs one
-            // wait cycle here.
-            if (!ix_fresh) ;
-            else if (aalu_pend && !aalu_pass(op)) begin
+            if (aalu_pend && !aalu_pass(op)) begin
                 if (aalu_go) begin aalu_ret <= S_EXEC; st <= S_AALU_WB; end
             end else begin
                 case (xcls)
