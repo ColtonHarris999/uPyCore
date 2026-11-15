@@ -17423,7 +17423,7 @@ module mpy_hash (
 		end
 	endtask
 	initial if ((DEPTH < 1) || ((BYTES_PER_CYCLE != 1) && (BYTES_PER_CYCLE != 4)))
-		$display("Error [%0t] /tmp/tmp.GagR6bvO3b/mpy_soc.sv:22417:13 - mpy_hash.<unnamed_block>.<unnamed_block>\n msg: ", $time, "mpy_hash: invalid parameters");
+		$display("Error [%0t] /tmp/tmp.XMbtvZTo7j/mpy_soc.sv:22417:13 - mpy_hash.<unnamed_block>.<unnamed_block>\n msg: ", $time, "mpy_hash: invalid parameters");
 	always @(posedge clk_i or negedge rst_n_i)
 		if (!rst_n_i) begin
 			state <= 5'd0;
@@ -28176,7 +28176,7 @@ module cve2_pmp (
 	wire [(PMPNumChan * PMPNumRegions) - 1:0] region_basic_perm_check;
 	reg [(PMPNumChan * PMPNumRegions) - 1:0] region_mml_perm_check;
 	reg [PMPNumChan - 1:0] access_fault;
-	initial $display("Warning [elaboration] /tmp/tmp.GagR6bvO3b/mpy_soc.sv:43392:3 - cve2_pmp\n msg: ", "CVE2 does not officially support PMP, see rule PVL-40.");
+	initial $display("Warning [elaboration] /tmp/tmp.XMbtvZTo7j/mpy_soc.sv:43392:3 - cve2_pmp\n msg: ", "CVE2 does not officially support PMP, see rule PVL-40.");
 	genvar _gv_r_1;
 	generate
 		for (_gv_r_1 = 0; _gv_r_1 < PMPNumRegions; _gv_r_1 = _gv_r_1 + 1) begin : g_addr_exp
@@ -34523,13 +34523,13 @@ module mpy_soc (
 	reg image_version_error;
 	assign boot_err_o = (boot_error || layout_error) || image_version_error;
 	reg sys_rst_n;
+	reg por_n;
 	wire ld_we;
 	localparam signed [31:0] MPY_MEM_WORD_AW = $clog2(MPY_MEM_WORDS);
 	localparam signed [31:0] MPY_FLASH_IDX_W = MPY_MEM_WORD_AW;
 	wire [MPY_FLASH_IDX_W - 1:0] ld_idx;
 	wire [31:0] ld_wdata;
 	wire [3:0] ld_wtag;
-	reg por_n;
 	localparam [31:0] ABI_HDR_VERSION = 32'd1;
 	localparam [31:0] ABI_IMAGE_VERSION = 32'd3;
 	function automatic [MPY_FLASH_IDX_W - 1:0] sv2v_cast_6DF93;

@@ -166,6 +166,9 @@ module mpy_soc #(
     logic boot_error, image_version_error;
     assign boot_err_o = boot_error || layout_error || image_version_error;
     logic        sys_rst_n;
+    // Declared before its first use below: Genus rejects a reference
+    // ahead of the declaration (VLOGPT-20).
+    logic        por_n;
     logic        ld_we;
     logic [MPY_FLASH_IDX_W-1:0] ld_idx;
     logic [31:0] ld_wdata;
@@ -191,7 +194,7 @@ module mpy_soc #(
     // the reset cause and the keep word are on pwr_n and carry on, as a
     // separate I/O chip would.
     logic [1:0]  por_q;
-    logic        pwr_n, por_n, boot_rst_n, gc_rst_n;
+    logic        pwr_n, boot_rst_n, gc_rst_n;
     logic        sys_req;
     logic [4:0]  sys_hold;
     always_ff @(posedge clk_i or negedge rst_n_i) begin
