@@ -1,0 +1,28 @@
+== depth mpy_core ==
+mpy_core: 41039 endpoint bits, 2697 register groups, deepest 178
+groups at >= 100 levels: 24
+  178  u_alu.u_fpu.u_pow.r_r <-D                        from u_alu.u_fpu.u_pow.r_r via u_alu.u_fpu.u_pow.w_sh_full
+  177  u_alu.u_fpu.u_pow.pk_ext <-D                     from u_alu.u_fpu.u_pow.z_r via u_alu.u_fpu.u_pow.z_sh
+  172  u_alu.u_fpu.u_pow.acc_r <-D                      from u_alu.u_fpu.u_pow.r_r
+  168  u_alu.u_fpu.u_pow.f_r <-D                        from u_alu.u_fpu.u_pow.cpos_r
+  168  u_alu.u_fpu.u_pow.f_r <-E                        from u_alu.u_fpu.u_pow.cpos_r
+  168  u_alu.u_fpu.u_pow.z_r <-E                        from u_alu.u_fpu.u_pow.cpos_r
+  168  u_alu.u_fpu.u_pow.pk_ext <-E                     from u_alu.u_fpu.u_pow.cpos_r
+  153  u_alu.u_fpu.u_sig_mul.acc_r <-D                  from u_alu.u_fpu.u_sig_mul.a_r
+  147  u_alu.u_fpu.sm_product <-D                       from u_alu.u_fpu.u_sig_mul.a_r
+  132  u_alu.u_mul.acc_r <-D                            from u_alu.u_mul.pp_low_r via u_alu.u_mul.csa_c
+  131  u_alu.rem <-D                                    from u_alu.u_div.r_mag
+  128  u_alu.mul_hi <-D                                 from u_alu.u_mul.pp_low_r via u_alu.u_mul.csa_c
+  127  u_alu.u_div.u_core.rem_r <-D                     from u_alu.u_div.u_core.d1_r
+  125  u_alu.u_div.u_core.q_r <-D                       from u_alu.u_div.u_core.d1_r
+  120  u_alu.u_fpu.u_div.u_div.gen_q3p1.q3p1_c1 <-D     from u_alu.u_fpu.u_div.u_div.bits_r via u_alu.u_fpu.u_div.u_div.gen_radix4.s2
+  120  u_alu.u_fpu.u_div.u_div.rem_r <-D                from u_alu.u_fpu.u_div.u_div.bits_r via u_alu.u_fpu.u_div.u_div.gen_radix4.s2
+  117  u_alu.u_fpu.u_div.u_div.q_r <-D                  from u_alu.u_fpu.u_div.u_div.bits_r via u_alu.u_fpu.u_div.u_div.gen_radix4.s2
+  112  u_hmod.r_r <-D                                   from u_hmod.d3_r
+  112  hm_rem <-D                                       from u_hmod.d3_r
+  112  u_alu.u_fpu.u_add.s2_sum_r <-D                   from u_alu.u_fpu.u_add.s1_shift_r via u_alu.u_fpu.u_add.aligned
+  107  alu_res <-D                                      from u_alu.iop
+  103  bi_prefix <-D                                    from alu_res
+  101  m_addr <-D                                       from ab_q
+  101  u_alu.u_fpu.u_pow.lmag_r <-D                     from u_alu.u_fpu.u_pow.v_r
+log: build/step4-depth/mpy_core.log

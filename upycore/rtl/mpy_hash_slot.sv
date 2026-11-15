@@ -7,7 +7,8 @@ module mpy_hash_slot #(
     parameter integer DEPTH = 8,
     parameter integer BYTES_PER_CYCLE = 1,
     parameter logic [31:0] TUPLE_SEED = 32'd12345,
-    parameter logic [31:0] FROZEN_SEED = 32'd54321
+    parameter logic [31:0] FROZEN_SEED = 32'd54321,
+    parameter int SOFF = 1
 ) (
     output logic hash_valid_o,
     input logic hash_ready_i,
@@ -50,7 +51,7 @@ module mpy_hash_slot #(
         assign mem_req_o=hash_mem_req_i;
         assign mem_addr_o=hash_mem_addr_i;
     end else begin : private_hash
-    mpy_hash #(.DEPTH(DEPTH), .BYTES_PER_CYCLE(BYTES_PER_CYCLE),
+    mpy_hash #(.DEPTH(DEPTH), .BYTES_PER_CYCLE(BYTES_PER_CYCLE), .SOFF(SOFF),
                .TUPLE_SEED(TUPLE_SEED), .FROZEN_SEED(FROZEN_SEED)) hash (
         .clk_i, .rst_n_i, .valid_i, .ready_o, .tag_i, .payload_i,
         .qstr_count_i, .qstr_base_i, .qstr_ext_i,

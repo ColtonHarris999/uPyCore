@@ -3,6 +3,7 @@
 # equality (mp_obj_equal_not_equal), hashing, and truth.
 from ._abi import *
 
+
 # mp_binary_op_method_name, indexed by op. The oracle only names __iadd__
 # and __isub__ among the in-place ops. 36..48 are the reflected ops.
 _OPNAMES = (
@@ -78,13 +79,52 @@ def _isnum(x):
     return t == TAG_INT or t == TAG_INT64 or t == TAG_FLOAT or t == TAG_COMPLEX or x is True or x is False
 
 
+def _user_cmp(a, name, b):
+    # User __eq__/__ne__. NotImplemented and a missing method are NULL,
+    # so the other operand gets a turn. A real result is returned as-is.
+    f = _tlookup(_ld(a, 1), name)
+    if f is NULL:
+        return NULL
+    r = _call_member(f, a, (b,))
+    if r is NotImplemented:
+        return NULL
+    return r
+
+
+def _rich_eq(op, a, b):
+    # mp_obj_equal_not_equal. User types have EQ_HAS_NEQ_TEST, so != calls
+    # __ne__ and returns that result unchanged. With no __ne__, != is the
+    # negated truth of __eq__. == returns the __eq__ result unchanged.
+    neg = op == BINOP_NOT_EQUAL
+    if a is b and _tag(a) != TAG_FLOAT and _tag(a) != TAG_COMPLEX and not _isuser(a):
+        return False if neg else True
+    i = 0
+    aa = a
+    bb = b
+    while i < 2:
+        if _isuser(aa):
+            if neg:
+                r = _user_cmp(aa, '__ne__', bb)
+                if r is not NULL:
+                    return r
+            r = _user_cmp(aa, '__eq__', bb)
+            if r is not NULL:
+                if neg:
+                    return not _truth(r)
+                return r
+        aa, bb = bb, aa
+        i += 1
+    r = _equal(a, b)
+    if neg:
+        return not r
+    return r
+
+
 def _binop(op, a, b):
     if op == BINOP_IS:
         return a is b
-    if op == BINOP_EQUAL:
-        return _equal(a, b)
-    if op == BINOP_NOT_EQUAL:
-        return not _equal(a, b)
+    if op == BINOP_EQUAL or op == BINOP_NOT_EQUAL:
+        return _rich_eq(op, a, b)
     if op == BINOP_EXCEPTION_MATCH:
         return _exc_match(a, b)
     if _BIGINT_ENABLED and (_iswide(a) or _iswide(b)):
@@ -204,6 +244,14 @@ def _type_binop(op, a, b):
             if _ld(_ld(a, 1), 7) & TF_USER:
                 return _inst_binop(op, a, b)
             return NULL
+        if k == OB_BOUND_METHOD:
+            # objboundmeth.c, pointer equality of the function and self.
+            # The type does not check the other operand's type.
+            if op != BINOP_EQUAL:
+                return NULL
+            if _tag(b) != TAG_OBJECT or _ld(b, 0) != OB_BOUND_METHOD:
+                return False
+            return _ld(a, 2) is _ld(b, 2) and _ld(a, 3) is _ld(b, 3)
         if k == OB_MEMVIEW:
             return _mv_binop(op, a, b)
         if k == OB_DICT_VIEW:
@@ -700,8 +748,17 @@ def _hashv(x):
                 h += _hashv(k)
             return _sx31(h)
         _unsupported_un('__hash__', x)
-    if t == TAG_OBJECT:
+    if t == TAG_OBJECT or t == TAG_FUNCTION or t == TAG_BUILTIN:
         k = _ld(x, 0)
+        if t == TAG_BUILTIN:
+            return (_pay(x) & BUILTIN_ADDR_MASK) >> 1
+        if k == OB_BOUND_METHOD:
+            return _sx31(_id_bits(_ld(x, 2)) ^ _id_bits(_ld(x, 3)))
+        if k == OB_DICT_VIEW:
+            # objdict.c: only a values view is hashable, and it hashes by identity.
+            if _ld(x, 3) == 1:
+                return _sx31(_pay(x) >> 1)
+            _unsupported_un('__hash__', x)
         if k == OB_INSTANCE or k == OB_EXCEPTION:
             tt = _ld(x, 1)
             if _ld(tt, 7) & TF_USER:
@@ -716,6 +773,14 @@ def _hashv(x):
             return _sx31(_pay(x) >> 1)
         return _sx31(_pay(x) >> 1)
     _unsupported_un('__hash__', x)
+
+
+def _id_bits(x):
+    # Address bits used for an identity hash. Builtins carry the native
+    # id above the image address.
+    if _tag(x) == TAG_BUILTIN:
+        return (_pay(x) & BUILTIN_ADDR_MASK) >> 1
+    return _pay(x) >> 1
 
 
 def _sx31(h):
@@ -793,6 +858,10 @@ def _truth(x):
         return _range_len(x) != 0
     if t == TAG_OBJECT:
         k = _ld(x, 0)
+        if k == OB_DICT_VIEW:
+            return _ld(_ld(x, 2), 0) != 0
+        if k == OB_MEMVIEW:
+            return _ld(x, 4) != 0
         if (k == OB_INSTANCE or k == OB_EXCEPTION) and _isuser(x):
             tt = _ld(x, 1)
             f = _tlookup(tt, '__bool__')

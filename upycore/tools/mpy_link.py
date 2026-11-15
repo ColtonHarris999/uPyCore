@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Link user and firmware ``.mpy`` files into a v2 flash image for mpy_core.
+"""Link user and firmware ``.mpy`` files into a v3 flash image for mpy_core.
 
 The image layout, every object layout, and every id the core hard-codes
 come from ``mpy_abi.py``; upycore/docs/mpy_image.md describes the result.
@@ -347,7 +347,7 @@ def emit_dict(img: Image, items: list[tuple[tuple[int, int], tuple[int, int]]], 
     hdr = img.emit_words([
         (T["INT"], used),
         (T["INT"], alloc),
-        (T["CONT"], taddr) if alloc else NULL,
+        (T["CONTINUE"], taddr) if alloc else NULL,
         (T["INT"], abi.DICT_FLAG_ROM if rom else 0),
     ])
     return mut(hdr, "DICT")
@@ -360,10 +360,11 @@ def emit_str(img: Image, text: str | bytes, tag: str = "STR") -> tuple[int, int]
         return img.rom_cache[key]
     addr = img.alloc(abi.STR_HDR_WORDS)
     baddr = img.emit_bytes(data)
+    assert baddr == addr + 12, "immutable string data must immediately follow its header"
     img.set(addr, (T["INT"], len(data)))
     ascii_flag = 0 if all(b < 0x80 for b in data) else abi.STR_NONASCII
     img.set(addr + 4, (T["INT"], abi.qstr_hash(data) | ascii_flag))
-    img.set(addr + 8, (T["CONT"], baddr))
+    img.set(addr + 8, (T["CONTINUE"], baddr))
     img.rom_cache[key] = (T[tag], addr)
     return img.rom_cache[key]
 
@@ -646,7 +647,7 @@ def link(main: Path, modules: list[tuple[str, Path, bool]], fw: Path, out: Path,
                     (T["INT"], fw_mod.rc_addr[id(v.rc)]), NULL, defaults, kwd, fw_globals,
                     NULL,  # word 7: root bag copied into nested functions
                 ])
-            return (T["OBJECT"], v.addr)
+            return (T["FUNCTION"], v.addr)
         if isinstance(v, tuple) and len(v) == 2 and v == NULL:
             return NULL
         return encode_const(img, v)
@@ -655,11 +656,13 @@ def link(main: Path, modules: list[tuple[str, Path, bool]], fw: Path, out: Path,
 
     def emit_native(name: str, fallback: tuple[int, int] = NULL) -> tuple[int, int]:
         short = name.split(".")[-1]
+        nid = abi.NATIVE_ID[name]
         addr = img.emit_words([
             (T["INT"], abi.OB["BUILTIN"]), builtin_type,
-            (T["INT"], abi.NATIVE_ID[name]), fallback, img.qval(short),
+            (T["INT"], nid), fallback, img.qval(short),
         ])
-        return (T["OBJECT"], addr)
+        assert addr < (1 << abi.BUILTIN_NID_SHIFT) and addr % 4 == 0
+        return (T["BUILTIN"], (nid << abi.BUILTIN_NID_SHIFT) | addr)
 
     fw_items: dict[str, tuple[int, int]] = {}
     type_methods: dict[str, dict[str, tuple[int, int]]] = {t: {} for t in abi.TYPES}
@@ -710,6 +713,20 @@ def link(main: Path, modules: list[tuple[str, Path, bool]], fw: Path, out: Path,
     for tname in abi.TYPES:
         addr = img.symbols[f"type:{tname}"]
         methods = type_methods[tname]
+        if tname == "object" and "__new__" in methods:
+            # object.__new__ is a staticmethod on the CPython-compat oracle.
+            fn = methods["__new__"]
+            sm = img.emit_words([
+                (T["INT"], abi.OB["STATICMETHOD"]),
+                type_val(img, "staticmethod"),
+                fn,
+            ])
+            methods["__new__"] = (T["OBJECT"], sm)
+        # super.__new__ is the constructor (word 8). Leaving it in the type
+        # dict makes super(cls, A).__new__ bind that constructor instead of
+        # the proxied object.__new__.
+        if tname == "super":
+            methods.pop("__new__", None)
         dict_val = emit_dict(img, [(img.qval(k), v) for k, v in methods.items()])
         base = abi.EXC_BASES.get(tname) or abi.NATIVE_BASES.get(tname)
         if tname == "object":
@@ -720,6 +737,9 @@ def link(main: Path, modules: list[tuple[str, Path, bool]], fw: Path, out: Path,
         flags = 0
         if tname in abi.EXC_BASES:
             flags |= abi.TF["INST"] | abi.TF["EXC"]
+        # Truth is the length. The core only calls _truth when this flag is set.
+        if tname in ("dict_view", "memoryview"):
+            flags |= abi.TF["TRUTH"]
         make_new = NULL
         if f"new.{tname}" in natives:
             make_new = natives[f"new.{tname}"]
@@ -839,6 +859,15 @@ def link(main: Path, modules: list[tuple[str, Path, bool]], fw: Path, out: Path,
     img.set(4 * hdr["POOL_BYTES"], heap_capacity)
     img.set(4 * hdr["IMAGE_BYTES"], img.here())
     img.set(4 * hdr["FLAGS"], abi.IMAGE_FLAG_BIGINT if img.bigint else 0)
+
+    for slot, tag in img.tags.items():
+        if tag != T["OBJECT"]:
+            continue
+        addr = img.words[slot]
+        target = addr // 4
+        if (addr % 4 == 0 and target < len(img.words) and img.tags.get(target) == T["INT"]
+                and img.words[target] in (abi.OB["FUNCTION"], abi.OB["BUILTIN"])):
+            raise LinkError(f"non-canonical OBJECT at {4 * slot:#x} points to callable at {addr:#x}")
 
     out.parent.mkdir(parents=True, exist_ok=True)
     nwords = len(img.words)

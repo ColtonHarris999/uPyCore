@@ -125,6 +125,14 @@ def _getitem_iter(obj):
 
 
 def iterator____next__(self):
+    # iter(range), iter(list) and the other core iterators are TAG_ITER,
+    # four words. Word 4 belongs to the next heap object. next() already
+    # steps these through _inext; a direct __next__ call must too.
+    if _tag(self) == TAG_ITER:
+        v = _inext(self)
+        if v is STOP:
+            raise StopIteration()
+        return v
     if _ld(self, 4) == 2:
         obj = _ld(self, 2)
         i = _ld(self, 3)
@@ -189,6 +197,9 @@ def zip____new__(cls, *args):
 def zip____next__(self):
     its = _ld(self, 2)
     n = _ld(its, 0)
+    # zip() with no iterables is exhausted immediately (objzip.c).
+    if n == 0:
+        raise StopIteration()
     t = _newtuple(n)
     i = 0
     while i < n:

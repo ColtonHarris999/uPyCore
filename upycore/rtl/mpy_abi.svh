@@ -3,7 +3,7 @@
 `define MPY_ABI_SVH
 
 localparam logic [31:0] ABI_IMAGE_MAGIC = 32'h324D5055;
-localparam logic [31:0] ABI_IMAGE_VERSION = 32'd2;
+localparam logic [31:0] ABI_IMAGE_VERSION = 32'd3;
 localparam logic [31:0] ABI_TYPE_TABLE = 32'h00000040;
 
 localparam logic [3:0] ABI_TAG_CONTROL = 4'd0;
@@ -11,9 +11,9 @@ localparam logic [3:0] ABI_TAG_INT = 4'd1;
 localparam logic [3:0] ABI_TAG_INT64 = 4'd2;
 localparam logic [3:0] ABI_TAG_FLOAT = 4'd3;
 localparam logic [3:0] ABI_TAG_COMPLEX = 4'd4;
-localparam logic [3:0] ABI_TAG_RESERVED = 4'd5;
+localparam logic [3:0] ABI_TAG_BUILTIN = 4'd5;
 localparam logic [3:0] ABI_TAG_QSTR = 4'd6;
-localparam logic [3:0] ABI_TAG_SHORT_STR = 4'd7;
+localparam logic [3:0] ABI_TAG_FUNCTION = 4'd7;
 localparam logic [3:0] ABI_TAG_STR = 4'd8;
 localparam logic [3:0] ABI_TAG_TUPLE = 4'd9;
 localparam logic [3:0] ABI_TAG_MUT = 4'd10;
@@ -21,7 +21,10 @@ localparam logic [3:0] ABI_TAG_RANGE = 4'd11;
 localparam logic [3:0] ABI_TAG_ITER = 4'd12;
 localparam logic [3:0] ABI_TAG_BYTES = 4'd13;
 localparam logic [3:0] ABI_TAG_OBJECT = 4'd14;
-localparam logic [3:0] ABI_TAG_CONT = 4'd15;
+localparam logic [3:0] ABI_TAG_CONTINUE = 4'd15;
+
+localparam logic [31:0] ABI_BUILTIN_NID_SHIFT = 32'd24;
+localparam logic [31:0] ABI_BUILTIN_ADDR_MASK = 32'd16777215;
 
 localparam logic [31:0] ABI_CTL_NULL = 32'd0;
 localparam logic [31:0] ABI_CTL_NONE = 32'd1;

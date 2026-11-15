@@ -13,7 +13,7 @@
 // Operations 5/6 are read-only subset/disjoint predicates; operation 7 scans
 // a word sequence for count/first index, with used_i selecting the mode.
 // Requests are registered and issued once; acknowledgements may be delayed.
-module mpy_map_engine #(parameter bit EXTERNAL_HASH=0, TYPE_CACHE=0) (
+module mpy_map_engine #(parameter bit EXTERNAL_HASH=0, TYPE_CACHE=0, parameter int SOFF=1) (
     input logic cache_clear_i,cache_write_i,cache_write2_i,
     input logic [31:0] cache_addr_i,cache_addr2_i,
     output logic hash_valid_o,
@@ -58,7 +58,7 @@ module mpy_map_engine #(parameter bit EXTERNAL_HASH=0, TYPE_CACHE=0) (
     logic [31:0] qcount, qbase, qext;
     logic eq_ready,eq_valid,eq_result,eq_error,eq_req;
     logic [31:0] eq_addr;
-    mpy_key_equal equality (
+    mpy_key_equal #(.SOFF(SOFF)) equality (
         .clk_i,.rst_n_i,.valid_i(state==EQ_GO),.ready_o(eq_ready),
         .a_i(probe_key),.b_i({key_tag,key}),
         .qstr_count_i(qcount),.qstr_base_i(qbase),.qstr_ext_i(qext),
@@ -75,7 +75,10 @@ module mpy_map_engine #(parameter bit EXTERNAL_HASH=0, TYPE_CACHE=0) (
     logic [1:0] cache_valid,cache_set;
     logic [31:0] cache_base[2],cache_end[2],cache_n[2],cache_used[2];
     logic [15:0] cache_tags[2],scan_tags[2];
-    logic [31:0] dst_scan_used;
+    logic [31:0] dst_scan_used, dst_room;
+    // The destination capacity and initial occupancy are stable during both
+    // scans. Stage the subtraction before deciding whether to admit the map.
+    always_ff @(posedge clk_i) dst_room <= dn - used_o;
     logic src_hit,dst_hit;
     logic [31:0] src_cached_used;
     always_comb begin
@@ -95,6 +98,7 @@ module mpy_map_engine #(parameter bit EXTERNAL_HASH=0, TYPE_CACHE=0) (
     function automatic logic scalar(input logic [3:0] t, input logic [31:0] d);
         return t == ABI_TAG_INT || t == ABI_TAG_INT64 || t == ABI_TAG_FLOAT || t == ABI_TAG_COMPLEX ||
             t == ABI_TAG_STR || t == ABI_TAG_BYTES || t == ABI_TAG_QSTR ||
+            t == ABI_TAG_FUNCTION || t == ABI_TAG_BUILTIN ||
             (t == ABI_TAG_CONTROL && (d == ABI_CTL_NONE || d == ABI_CTL_FALSE || d == ABI_CTL_TRUE));
     endfunction
     function automatic logic numeric(input logic [3:0] t, input logic [31:0] d);
@@ -129,7 +133,7 @@ module mpy_map_engine #(parameter bit EXTERNAL_HASH=0, TYPE_CACHE=0) (
         assign hmreq=hash_mem_req_i;
         assign hmaddr=hash_mem_addr_i;
     end else begin : private_hash
-    mpy_hash #(.DEPTH(1)) hash_unit (
+    mpy_hash #(.DEPTH(1),.SOFF(SOFF)) hash_unit (
         .clk_i, .rst_n_i, .valid_i(state == HASH_GO && key_tag != ABI_TAG_INT && key_tag != ABI_TAG_CONTROL), .ready_o(hr),
         .tag_i(key_tag), .payload_i(key), .qstr_count_i(qcount), .qstr_base_i(qbase), .qstr_ext_i(qext),
         .valid_o(hv), .ready_i(state == HASH_WAIT), .hash_o(hout), .error_o(he),
@@ -237,7 +241,7 @@ module mpy_map_engine #(parameter bit EXTERNAL_HASH=0, TYPE_CACHE=0) (
                     end
                     idx <= 0;
                     // Conservative capacity bound: no mid-command allocation.
-                    if ((op == 1 || op == 4) && src_used > dn - used_o) reject();
+                    if ((op == 1 || op == 4) && src_used > dst_room) reject();
                     else begin admitted_o <= 1;if(op==7)read_word(src,SEQ_TARGET);else state <= SCAN;end
                 end else begin check_dst <= 1; read_word(at(dst,idx), CHECK_KEY); end
                 CHECK_KEY: begin

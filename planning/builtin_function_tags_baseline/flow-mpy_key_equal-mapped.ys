@@ -1,0 +1,15 @@
+read_slang -j 1 --single-unit --top mpy_key_equal -DSYNTHESIS -I upycore/rtl  upycore/rtl/mpy_key_equal.sv
+read_verilog -lib build/sta/step0-mpy_key_equal-mapped/ffbox.v
+hierarchy -check -top mpy_key_equal
+synth -flatten -noshare -noabc -top mpy_key_equal
+delete t:$scopeinfo
+techmap -map build/sta/step0-mpy_key_equal-mapped/noarst.v
+async2sync
+dffunmap
+techmap -map build/sta/step0-mpy_key_equal-mapped/ffmap.v
+opt_clean
+stat
+abc -liberty build/sta/step0-mpy_key_equal-mapped/tt.lib -D 1000 -script build/sta/step0-mpy_key_equal-mapped/map.abc
+opt_clean
+read_liberty -lib build/sta/step0-mpy_key_equal-mapped/tt.lib
+write_json build/sta/step0-mpy_key_equal-mapped/netlist.json

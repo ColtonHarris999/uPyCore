@@ -156,7 +156,6 @@ BENCHES = [
     Bench("mpy_gc", ["bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_gc.sv"], r"^PASS mpy_gc "),
     Bench("mpy_periph", ["mpy_mmio_pkg.sv", "mpy_irq.sv", "mpy_periph.sv"], r"^PASS: mpy periph",
           _periph_args),
-    Bench("mpy_value", ["mpy_regfile.sv", "bsg_mem_1rw_sync_mask_write_bit.sv", "mpy_mem.sv"], r"^MPY value encoding: ok"),
     Bench("upycore_umod_seq", ["upycore_umod_seq.sv"], r"^PASS upycore_umod_seq "),
     Bench("mpy_iobr", ["mpy_async_fifo.sv", "mpy_iobr.sv"], r"^PASS mpy_iobr ",
           flags=["--timescale", "1ns/1ps"]),

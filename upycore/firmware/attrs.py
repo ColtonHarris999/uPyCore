@@ -58,7 +58,7 @@ def _special_attr(obj, name):
         if _streq(name, 'imag'):
             return _mk(TAG_FLOAT, _pay(_ld(obj, 1)))
         return NULL
-    if t != TAG_OBJECT:
+    if t != TAG_OBJECT and t != TAG_FUNCTION and t != TAG_BUILTIN:
         return NULL
     k = _ld(obj, 0)
     if k == OB_TYPE:

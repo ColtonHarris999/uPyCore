@@ -1,0 +1,8 @@
+TypeError
+function got multiple values for argument 'a'
+TypeError
+function got multiple values for argument 'a'
+TypeError
+function got multiple values for argument 'a'
+{'a': 1, 'b': 2}
+{'a': 1, 'b': 2}

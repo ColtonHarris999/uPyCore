@@ -18,6 +18,15 @@ With persistent code, a qstr operand indexes the module qstr table and
 `LOAD_CONST_OBJ` indexes the module const table. `MAKE_FUNCTION` indexes
 the child raw-code table. The bytes are not patched at run time.
 
+## Call dispatch
+
+FUNCTION-tagged values enter bytecode frame binding without reading
+the kind word. BUILTIN-tagged values carry the native ID in payload
+bits 31:24. Dispatch uses that ID directly, and fallback reads the
+object at the masked image address. Method binding can classify both
+tags without a kind-word read. Simulation `+FTAG=0` and `+BTAG=0`
+restore the corresponding header reads.
+
 ## Prelude
 
 A function body starts with the bit-interleaved prelude in `py/bc.h`.
@@ -42,7 +51,7 @@ A call of a function whose scope flags include the generator bit binds
 arguments the usual way, then returns a generator object and does not
 fetch. The object is six words: kind, type, the function, a status
 integer (bit 0 set while the body is running), a pending exception or
-`None`, and a `CONT` pointer to the frame block. The block is the
+`None`, and a `CONTINUE` pointer to the frame block. The block is the
 17-word frame header, the state words, and the exception records. Saved
 `pc == 0` means the generator has finished.
 

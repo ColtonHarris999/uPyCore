@@ -65,7 +65,7 @@ def memoryview___upycore_typecode(self):
 
 def _mv_ptr(base):
     # Something _peek8 and _poke8 take: a data block, or a str/bytes address.
-    if _tag(base) == TAG_CONT:
+    if _tag(base) == TAG_CONTINUE:
         return base
     return _data(base)
 

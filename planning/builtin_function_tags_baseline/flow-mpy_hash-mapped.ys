@@ -1,0 +1,15 @@
+read_slang -j 1 --single-unit --top mpy_hash -DSYNTHESIS -I upycore/rtl  upycore/rtl/mpy_hash.sv
+read_verilog -lib build/sta/step0-mpy_hash-mapped/ffbox.v
+hierarchy -check -top mpy_hash
+synth -flatten -noshare -noabc -top mpy_hash
+delete t:$scopeinfo
+techmap -map build/sta/step0-mpy_hash-mapped/noarst.v
+async2sync
+dffunmap
+techmap -map build/sta/step0-mpy_hash-mapped/ffmap.v
+opt_clean
+stat
+abc -liberty build/sta/step0-mpy_hash-mapped/tt.lib -D 1000 -script build/sta/step0-mpy_hash-mapped/map.abc
+opt_clean
+read_liberty -lib build/sta/step0-mpy_hash-mapped/tt.lib
+write_json build/sta/step0-mpy_hash-mapped/netlist.json

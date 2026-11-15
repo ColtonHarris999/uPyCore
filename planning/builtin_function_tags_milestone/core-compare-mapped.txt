@@ -1,0 +1,23 @@
+worst: base 9.250  new 9.051
+register group                                     base      new
+  u_hmod.r_r                                        9.250    9.051
+  hm_rem                                            9.221    9.021
+  alu_res                                           8.583    8.583
+  u_alu.u_fpu.u_pow.r_r                             8.408    8.408
+  $abc$5616272$auto$proc_rom.cc:154:do_switch$1       new    8.381
+  nb                                                7.628    8.366
+  u_alu.u_fpu.u_div.s1_sig_a_r                      8.319    8.319
+  u_alu.u_fpu.fm_mul_a                              8.319    8.319
+  x2                                                8.284    8.267
+  m_addr                                            8.090    8.160
+  u_alu.u_fpu.u_div.s1_exp_a_r                      8.150    8.150
+  u_hmod.q_r                                        8.094    8.094
+  wret                                              7.817    8.083
+  u_hmod.q_nx                                       8.071    8.071
+  u_fetch.q_r                                       8.037    8.037
+slower than base by more than 0.1:
+  nb                                                7.628    8.366
+  wret                                              7.817    8.083
+  sp                                                7.683    7.863
+  ab_nkw                                            7.547    7.728
+  i0                                                7.531    7.709

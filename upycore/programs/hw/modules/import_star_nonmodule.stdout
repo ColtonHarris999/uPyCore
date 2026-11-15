@@ -1,0 +1,9 @@
+== test with a class as a module ==
+a1
+a2
+== test with a class as a module that overrides __all__ ==
+None b2
+b3 b2
+== test with objects that don't have a __dict__ ==
+ImportError
+end

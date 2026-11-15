@@ -1,0 +1,50 @@
+{
+  "commit": "e12d6fe60528dcfecd7325df3a3dc690c678646e",
+  "working_tree_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "micropython": "0fd6c573ea815774668bbb16b8e197c8822368b2",
+  "compiler_sha256": "0ed8bc14b66c236e4b3d2e3ddbd37b68e8e3199eb9e8396de11eaf952dbb1ac2",
+  "compiler_flags": [
+    "-msmall-int-bits=31",
+    "-O0"
+  ],
+  "measurement_firmware_sha256": "35959cfd6f8b02c186e36cfa7ec2961c5975fe4dfda3a1a00db3322f4d60079b",
+  "simulator_sha256": "b81c91ac89401acf44bac1fe65c8b27e0c2bbf2d746cd9a109e2878dcfb3631f",
+  "verilator": "Verilator 5.048 2026-04-26 rev vUNKNOWN-built20260429",
+  "max_cycles": 400000000,
+  "boundary": "bench_ticks() around run(); 31-bit counter",
+  "rows": [
+    {
+      "name": "bm_pidigits",
+      "point": "100x100",
+      "source_sha256": "5892d89a03bee0e94aaf9e73ddd9a8df0db523040278c9a8088fc2e05b087829",
+      "harness_sha256": "d2a7e7f8f610f9226648bfa90c1234f1421b1eb563f41e74fec540546bb993f9",
+      "runs": [
+        {
+          "mode": "both",
+          "flags": [
+            "+CA=1",
+            "+AALU=1"
+          ],
+          "halt": "CLEAN",
+          "total_cycles": 1583520,
+          "ops": 60981,
+          "gc": 1,
+          "kernel_cycles": 1342992,
+          "result": "(65, '31415926535897932384626433832795028841971693993751058209749445923')",
+          "status": "PASS"
+        }
+      ],
+      "reference": "MicroPython MPZ",
+      "oracle": {
+        "rc": 0,
+        "stdout_tail": "CYCLES 0\nRESULT (65, '31415926535897932384626433832795028841971693993751058209749445923')\n",
+        "stderr_tail": ""
+      },
+      "expected": "(65, '31415926535897932384626433832795028841971693993751058209749445923')",
+      "image_sha256": {
+        ".hex": "7b9136b76333527a7d3615261fa3a55ec62b3964be6f7ef9fb125704e8d1a328",
+        ".tags.hex": "4621a81351f70d145450a7890547eda9bbe04452e2806b5b28c47e953373b31f"
+      }
+    }
+  ]
+}

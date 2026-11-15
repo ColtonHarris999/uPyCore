@@ -1,0 +1,9 @@
+4
+0
+-8
+pow TypeError
+hasattr bytes
+hasattr int
+True
+int TypeError
+42

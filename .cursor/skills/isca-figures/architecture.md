@@ -19,32 +19,11 @@ The draft name RFSF is a spill chunk. The draft name $sb$ is RTL `rf_base`. Figu
 
 36 bits. Tag is [35:32]. Payload is [31:0]. The register file is 16 entries and holds the operand stack only. Locals live in the frame.
 
-| Tag | Name | Registers | Payload |
-| --- | --- | --- | --- |
-| `0000` | `CONTROL` | 1 | Kind in [3:0] |
-| `0001` | `INT` | 1 | Signed 32-bit |
-| `0010` | `INT64` | 2 | Low 32, then `CONT` high 32 |
-| `0011` | `FLOAT` | 1 | IEEE binary32 |
-| `0100` | `COMPLEX` | 2 | Real binary32, then `CONT` imaginary |
-| `0101` | reserved | 0 | Unassigned |
-| `0110` | `QSTR` | 1 | Interned-string id |
-| `0111` | `SHORT_STR` | 4 | Always four registers, at most 15 bytes |
-| `1000` | `STR` | 1 | Pointer to a 3-word header |
-| `1001` | `TUPLE` | 1 | Pointer. Length, then inline elements |
-| `1010` | `MUT_COLLEC` | 1 | Kind in [1:0]. Address is [31:2] with [1:0] cleared |
-| `1011` | `RANGE` | 1 | Pointer to start, stop, step |
-| `1100` | `ITER` | 1 | Pointer to the 4-word iterator record |
-| `1101` | `BYTES` | 1 | Pointer. Same 3-word header as `STR` |
-| `1110` | `OBJECT` | 1 | Pointer. Word 0 is the kind |
-| `1111` | `CONT` | 1 | Continuation only. Not a value |
-
-`CONTROL` kinds: 0 empty (the core's null slot; the ABI constant is named `ABI_CTL_NULL`), 1 `None`, 2 end of iteration (`ABI_CTL_STOP`), 3 tombstone, 4 `False`, 5 `True`, 6 `RF_LINK`.
-
-`MUT_COLLEC` kinds: 0 list, 1 dict, 2 set, 3 bytearray.
-
-Pointer tags: `STR`, `TUPLE`, `MUT_COLLEC`, `RANGE`, `ITER`, `BYTES`, `OBJECT`. Everything else is immediate, including `False`, `True`, and `RF_LINK`.
-
-`SHORT_STR` head payload is `{byte2, byte1, byte0, length}`. Each `CONT` holds the next four bytes, low byte first. Length above 15 faults.
+Every value occupies one slot. The canonical tag table is in
+[`mpy_memory_map.md`](../../../upycore/docs/mpy_memory_map.md#tag-table).
+The collector follows INT64, COMPLEX, FUNCTION, STR, TUPLE, MUT_COLLEC,
+RANGE, ITER, BYTES, OBJECT, and CONTINUE pointers, plus CONTROL/RF_LINK
+spill links. BUILTIN addresses a static image object.
 
 ## Ring and spill
 
@@ -118,7 +97,7 @@ List, three words (`firmware/base.py` `_newlist`, core `S_BL_A` / `S_LA`):
 
 | +0 | length |
 | +4 | capacity. New lists use at least 4. Growth doubles |
-| +8 | `CONT` pointer to item 0 |
+| +8 | `CONTINUE` pointer to item 0 |
 
 Items are tagged words. `BUILD_LIST` may place them at header+12. Growth allocates a new array and updates word 2. The header object does not move.
 
@@ -134,7 +113,7 @@ Dict and set, four words (`firmware/dicts.py`, core `S_BM_A`):
 
 | +0 | used count in [30:0]. Bit 31 is the object indicator |
 | +4 | allocated slots |
-| +8 | `CONT` pointer to the entry table, or null |
+| +8 | `CONTINUE` pointer to the entry table, or null |
 | +12 | types-table pointer, or 0 |
 
 Dict entries are a key then a value (8 bytes per slot). Set entries are one word. Empty is `CONTROL` kind 0. Tombstone is `CONTROL` kind 3. Tombstones are not copied on resize. Slot count grows through the MicroPython map-size table in `next_alloc`.
@@ -167,7 +146,7 @@ List growth does not use this decision. It allocates a new item array, copies `l
 | `EXCEPTION` | 3 | `args`, traceback, `__dict__`. Five words total |
 | `CELL` | 4 | contents |
 | `FUNCTION` | 5 | raw code (immediate), closure, defaults, keyword defaults, globals, root tuple. Eight words total (core `S_MF_A`) |
-| `GENERATOR` | 6 | function, status, pending exception, `CONT` pointer to the saved frame. Six words total |
+| `GENERATOR` | 6 | function, status, pending exception, `CONTINUE` pointer to the saved frame. Six words total |
 | `BOUND_METHOD` | 7 | function, `self`. Four words total (`firmware/attrs.py`) |
 | `BUILTIN` | 8 | native id, fallback, name |
 | `MODULE` | 9 | globals dict, name |
@@ -177,9 +156,7 @@ List growth does not use this decision. It allocates a new item array, copies `l
 
 `QSTR` descriptor, two words in the image pool: word 0 is length in [31:16] and hash in [15:0]. Word 1 is the byte address in [30:0]. Bit 31 is set when the bytes are not ASCII.
 
-`STR` and `BYTES`, three words: byte length, then hash in [15:0] with non-ASCII in bit 30, then a `CONT` pointer to the bytes. Equality compares length and hash before walking bytes. A non-ASCII string is indexed in firmware.
-
-`SHORT_STR` is the register form above. It is not a heap object.
+`STR` and `BYTES`, three words: byte length, then hash in [15:0] with non-ASCII in bit 30, then a `CONTINUE` pointer to the inline bytes at header + 12. Equality compares length and hash before walking bytes. A non-ASCII string is indexed in firmware.
 
 ## Iterators
 

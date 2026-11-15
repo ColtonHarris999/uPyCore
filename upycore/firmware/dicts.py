@@ -22,7 +22,7 @@ def _newdict(n):
     d = _alloc(4, TAG_MUT, MUT_DICT)
     _st(d, 0, 0)
     _st(d, 1, n)
-    _st(d, 2, _alloc(n * 2, TAG_CONT, 0) if n else NULL)
+    _st(d, 2, _alloc(n * 2, TAG_CONTINUE, 0) if n else NULL)
     _st(d, 3, 0)
     return d
 
@@ -31,7 +31,7 @@ def _newset(n):
     s = _alloc(4, TAG_MUT, MUT_SET)
     _st(s, 0, 0)
     _st(s, 1, n)
-    _st(s, 2, _alloc(n, TAG_CONT, 0) if n else NULL)
+    _st(s, 2, _alloc(n, TAG_CONTINUE, 0) if n else NULL)
     _st(s, 3, 0)
     return s
 
@@ -117,7 +117,7 @@ def _map_grow(c, is_set):
     old_n = _ld(c, 1)
     old = _ld(c, 2)
     n = _next_alloc(old_n + 1)
-    tab = _alloc(n if is_set else n * 2, TAG_CONT, 0)
+    tab = _alloc(n if is_set else n * 2, TAG_CONTINUE, 0)
     _st(c, 1, n)
     _st(c, 2, tab)
     _st(c, 0, 0)
@@ -376,6 +376,11 @@ def dict__update(self, *args, **kw):
                 self[k] = other[k]
         else:
             for item in other:
+                # objdict.c rejects a pair whose iteration is not exactly two
+                # values. Tuple and list lengths are one word; other iterables
+                # still use [0] and [1].
+                if (_tag(item) == TAG_TUPLE or _islist(item)) and _ld(item, 0) != 2:
+                    raise ValueError('dict update sequence has wrong length')
                 self[item[0]] = item[1]
     if kw and not _mapbulk(self, kw, 1):
         for k in kw:
@@ -520,7 +525,9 @@ def set__intersection(self, *args):
                 break
         if ok:
             _map_put(r, k, NULL, True)
-    return _set_freeze(r, self)
+    # objset.c set_intersect_int builds mp_obj_new_set, so a frozenset
+    # intersection is a set. Union and difference keep the receiver's type.
+    return r
 
 
 def frozenset__intersection(self, *args):
@@ -641,11 +648,11 @@ def _set_diff(a, others, update):
 def _set_intersect(a, b, update):
     if not update:
         return set__intersection(a, b)
+    # Map-engine op 3 is intersection. Ops 5 and 6 are the yes/no
+    # relations (subset, disjoint) and do not change the set.
+    if _isset(a) and _isset(b) and _mapbulk(a, b, 3):
+        return a
     drop = []
-    if _isset(a) and _isset(b):
-        result = _maprelation(a, b, 5)
-        if result >= 0:
-            return bool(result)
     for k in a:
         if k not in b:
             drop.append(k)

@@ -1,0 +1,17 @@
+worst: base 7.813  new 7.813
+register group                                     base      new
+  len                                               7.813    7.813
+  result                                            7.222    7.222
+  mag_r                                             7.034    7.034
+  frame_idx[7]                                      6.584    6.584
+  frame_idx[6]                                      6.584    6.584
+  frame_idx[5]                                      6.584    6.584
+  frame_idx[4]                                      6.584    6.584
+  frame_idx[3]                                      6.584    6.584
+  frame_idx[2]                                      6.584    6.584
+  frame_idx[1]                                      6.584    6.584
+  frame_idx[0]                                      6.584    6.584
+  ptr                                               6.408    6.408
+  state                                             6.015    6.015
+  sp                                                5.992    5.992
+  frame_sum[7]                                      5.608    5.608

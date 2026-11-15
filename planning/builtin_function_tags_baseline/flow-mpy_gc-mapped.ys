@@ -1,0 +1,15 @@
+read_slang -j 1 --single-unit --top mpy_gc -DSYNTHESIS -I upycore/rtl  build/sta/step0-mpy_gc-mapped/sram_stub.sv upycore/rtl/mpy_gc.sv
+read_verilog -lib build/sta/step0-mpy_gc-mapped/ffbox.v
+hierarchy -check -top mpy_gc
+synth -flatten -noshare -noabc -top mpy_gc
+delete t:$scopeinfo
+techmap -map build/sta/step0-mpy_gc-mapped/noarst.v
+async2sync
+dffunmap
+techmap -map build/sta/step0-mpy_gc-mapped/ffmap.v
+opt_clean
+stat
+abc -liberty build/sta/step0-mpy_gc-mapped/tt.lib -D 1000 -script build/sta/step0-mpy_gc-mapped/map.abc
+opt_clean
+read_liberty -lib build/sta/step0-mpy_gc-mapped/tt.lib
+write_json build/sta/step0-mpy_gc-mapped/netlist.json

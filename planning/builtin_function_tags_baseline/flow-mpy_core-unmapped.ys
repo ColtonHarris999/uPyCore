@@ -1,0 +1,12 @@
+read_slang -j 1 --single-unit --top mpy_core -DSYNTHESIS -I upycore/rtl  upycore/rtl/upycore_umul_seq.sv upycore/rtl/upycore_udiv_seq.sv upycore/rtl/upycore_int_alu.sv upycore/rtl/upycore_mul.sv upycore/rtl/upycore_div.sv upycore/rtl/upycore_ipow.sv upycore/rtl/upycore_fp_add.sv upycore/rtl/upycore_fp_mul.sv upycore/rtl/upycore_fp_divrem.sv upycore/rtl/upycore_fp_pow.sv upycore/rtl/upycore_fpu.sv upycore/rtl/mpy_alu.sv upycore/rtl/upycore_umod_seq.sv upycore/rtl/mpy_decode.sv upycore/rtl/mpy_fetch.sv upycore/rtl/mpy_core.sv
+read_verilog -lib build/sta/step0-mpy_core-unmapped/ffbox.v
+hierarchy -check -top mpy_core
+synth -flatten -noshare -noabc -top mpy_core
+delete t:$scopeinfo
+techmap -map build/sta/step0-mpy_core-unmapped/noarst.v
+async2sync
+dffunmap
+techmap -map build/sta/step0-mpy_core-unmapped/ffmap.v
+opt_clean
+stat
+write_json build/sta/step0-mpy_core-unmapped/netlist.json

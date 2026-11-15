@@ -1,0 +1,17 @@
+worst: base 9.366  new 9.366
+register group                                     base      new
+  bulk_engine.rehash.pipeline.modulo.rem_o          9.366    9.366
+  bulk_engine.rehash.pipeline.modulo.r_r            9.366    9.366
+  bulk_engine.engine.modulo.rem_o                   9.366    9.366
+  bulk_engine.engine.modulo.r_r                     9.366    9.366
+  bulk_engine.engine.addr_o                         9.329    9.342
+  byte_engine.sa                                    9.130    9.130
+  byte_engine.da                                    9.130    9.130
+  bulk_engine.rehash.pipeline.modulo.q_r            9.050    9.050
+  bulk_engine.rehash.pipeline.modulo.$37.t4         9.050    9.050
+  bulk_engine.rehash.pipeline.modulo.$37.e2         9.050    9.050
+  bulk_engine.engine.modulo.q_r                     9.050    9.050
+  bulk_engine.engine.modulo.$37.t4                  9.050    9.050
+  bulk_engine.engine.modulo.$37.e2                  9.050    9.050
+  bulk_engine.rehash.pipeline.modulo.q_nx           9.040    9.040
+  bulk_engine.engine.modulo.q_nx                    9.040    9.040

@@ -8,7 +8,7 @@ def _barr_from(b):
     _st(o, 0, n)
     _st(o, 1, n)
     if n:
-        _st(o, 2, _alloc((n + 3) >> 2, TAG_CONT, 0))
+        _st(o, 2, _alloc((n + 3) >> 2, TAG_CONTINUE, 0))
         _bcopy(o, 0, b, 0, n)
     else:
         _st(o, 2, NULL)
@@ -138,7 +138,7 @@ def _barr_grow(b, n):
         cap = 4
     while cap < n:
         cap *= 2
-    data = _alloc((cap + 3) >> 2, TAG_CONT, 0)
+    data = _alloc((cap + 3) >> 2, TAG_CONTINUE, 0)
     old = _ld(b, 0)
     if old and _ld(b, 2) is not NULL:
         _bcopy(_mk(TAG_BYTES, _pay(data)) if False else b, 0, b, 0, 0)
@@ -198,14 +198,23 @@ def _bfind(s, sub, start, end):
 
 def _norm_span(s, start, end):
     n = _slen(s)
-    if start is NULL or start == _MISSING:
+    if start is NULL or start is None or start == _MISSING:
+        start = 0
+    # A bool is an int index. The byte search treats only a real int as one.
+    if start is True:
+        start = 1
+    elif start is False:
         start = 0
     if start < 0:
         start += n
     if start < 0:
         start = 0
-    if end is NULL or end == _MISSING:
+    if end is NULL or end is None or end == _MISSING:
         end = n
+    if end is True:
+        end = 1
+    elif end is False:
+        end = 0
     if end < 0:
         end += n
     if end > n:
@@ -216,6 +225,13 @@ def _norm_span(s, start, end):
 def _find_method(s, sub, start, end, last):
     if not (_isstr(sub) or _tag(sub) == TAG_BYTES or _isbarr(sub)):
         if _isint(sub) and (_tag(s) == TAG_BYTES or _isbarr(s)):
+            # objstr.c rejects a byte needle outside 0..255.
+            if sub is True:
+                sub = 1
+            elif sub is False:
+                sub = 0
+            if sub < 0 or sub > 255:
+                raise ValueError('bytes value out of range')
             sub = _bytes_of_int(sub)
         else:
             raise TypeError('find argument must be a string')
@@ -770,6 +786,8 @@ def _fmt_spec(val, spec):
         fmt = 'f' if conv == 102 or conv == 70 else ('e' if conv == 101 or conv == 69 else 'g')
         text = _format_float(val + 0.0, fmt, 6 if prec < 0 else prec, '')
     elif conv == 100:
+        if not _isint(val) and not (_BIGINT_ENABLED and _iswide(val)):
+            val = _mod_int(val)
         text = _istr(val)
     elif conv == 114:
         text = _repr(val)
@@ -790,6 +808,21 @@ def _fmt_spec(val, spec):
     if align == 94:
         return _cat(_cat(_mul_str(_ch(fill), pad // 2), text), _mul_str(_ch(fill), pad - pad // 2))
     return _cat(gap, text)
+
+
+def _mod_int(n):
+    # mp_obj_get_int for %d/%i/%u: a float truncates, an object runs __int__.
+    if _tag(n) == TAG_FLOAT:
+        return int(n)
+    if _tag(n) == TAG_OBJECT:
+        f = _tlookup(_ld(n, 1), '__int__')
+        if f is NULL:
+            f = _tlookup(_ld(n, 1), '__index__')
+        if f is not NULL:
+            r = _call_member(f, n, ())
+            if _isint(r) or (_BIGINT_ENABLED and _iswide(r)):
+                return r
+    raise TypeError(_s("can't convert ", _tname(n), " to int"))
 
 
 def _str_modulo(fmt, args, mapping):
@@ -814,17 +847,18 @@ def _str_modulo(fmt, args, mapping):
         prec = -1
         named = i < n and _byte(fmt, i) == 40
         if named:
+            # objstr.c: a bare dict is the map, and the first %(key) consumes it.
+            if mapping is NULL:
+                raise TypeError('format needs a dict')
             j = i + 1
             while j < n and _byte(fmt, j) != 41:
                 j += 1
+            if j >= n:
+                raise ValueError('incomplete format key')
             key = _substr(fmt, i + 1, j, TAG_STR)
             i = j + 1
             val = mapping[key]
-        elif not _BIGINT_ENABLED:
-            if ai >= len(args):
-                raise TypeError('not enough arguments for format string')
-            val = args[ai]
-            ai += 1
+            ai = len(args)
         alternate, zero = False, False
         while i < n:
             flag = _byte(fmt, i)
@@ -842,10 +876,10 @@ def _str_modulo(fmt, args, mapping):
             else:
                 break
             i += 1
-        if _BIGINT_ENABLED and i < n and _byte(fmt, i) == 42:
-            if ai >= len(args) or named:
+        if i < n and _byte(fmt, i) == 42:
+            if ai >= len(args):
                 raise TypeError('not enough arguments for format string')
-            width = _wide_i32(args[ai])
+            width = _wide_i32(args[ai]) if _BIGINT_ENABLED else args[ai]
             ai += 1
             i += 1
         else:
@@ -855,24 +889,24 @@ def _str_modulo(fmt, args, mapping):
         if i < n and _byte(fmt, i) == 46:
             i += 1
             prec = 0
-            if _BIGINT_ENABLED and i < n and _byte(fmt, i) == 42:
-                if ai >= len(args) or named:
+            if i < n and _byte(fmt, i) == 42:
+                if ai >= len(args):
                     raise TypeError('not enough arguments for format string')
-                prec = _wide_i32(args[ai])
+                prec = _wide_i32(args[ai]) if _BIGINT_ENABLED else args[ai]
                 ai += 1
                 i += 1
             else:
                 while i < n and 48 <= _byte(fmt, i) <= 57:
                     prec = prec * 10 + _byte(fmt, i) - 48
                     i += 1
-        if _BIGINT_ENABLED and not named:
+        if i >= n:
+            raise ValueError('incomplete format')
+        if not named:
             if ai >= len(args):
                 raise TypeError('not enough arguments for format string')
             val = args[ai]
             ai += 1
         mpz_int = _BIGINT_ENABLED and (_isint(val) or _iswide(val))
-        if i >= n:
-            break
         conv = _byte(fmt, i)
         i += 1
         if mpz_int and conv in (100, 105, 117, 111, 120, 88):
@@ -888,6 +922,9 @@ def _str_modulo(fmt, args, mapping):
         elif conv == 114:
             text = _repr(val)
         elif conv == 100 or conv == 105 or conv == 117:
+            # mp_print_mp_int calls mp_obj_get_int, which runs __int__.
+            if not _isint(val) and not (_BIGINT_ENABLED and _iswide(val)):
+                val = _mod_int(val)
             text = _istr(val)
         elif conv == 120:
             text = _int_base(val, 16, '', False) if _BIGINT_ENABLED else _ubase(_u32(val) if val < 0 else val, 16, False)
@@ -896,19 +933,27 @@ def _str_modulo(fmt, args, mapping):
         elif conv == 111:
             text = _int_base(val, 8, '', False) if _BIGINT_ENABLED else _ubase(val, 8, False)
         elif conv == 99:
-            text = _ch(val) if _isint(val) else val
+            if _isstr(val):
+                if _slen(val) != 1:
+                    raise TypeError('%c needs int or char')
+                text = val
+            elif _isint(val):
+                text = _ch(val)
+            else:
+                raise TypeError('integer needed')
         elif conv == 102 or conv == 101 or conv == 103 or conv == 70 or conv == 69 or conv == 71:
             fmtc = 'f' if conv == 102 or conv == 70 else ('e' if conv == 101 or conv == 69 else 'g')
             text = _format_float(val + 0.0, fmtc, 6 if prec < 0 else prec, '')
         else:
-            text = _str(val)
+            raise ValueError('unsupported format character')
         if prec >= 0 and (conv == 115 or conv == 114) and _slen(text) > prec:
             text = _substr(text, 0, prec, TAG_STR)
         if _slen(text) < width:
             gap = _mul_str(' ', width - _slen(text))
             text = _cat(text, gap) if left else _cat(gap, text)
         out.append(text)
-    if ai < len(args):
+    # A dict argument counts as consumed even when no %(key) referenced it.
+    if mapping is NULL and ai < len(args):
         raise TypeError("not all arguments converted during string formatting")
     return _join(out)
 

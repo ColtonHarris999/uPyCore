@@ -3,9 +3,10 @@
 // Callback-free key equality. Exact integers, binary32/complex numeric
 // promotion (including the pinned MicroPython int->float rounding), and
 // qstr/str/bytes content comparison. OBJECT/aggregate keys remain on the core.
-// A complete tagged-value identity match has the core's identity semantics.
+// A complete tagged-value identity match has the core's identity semantics,
+// including FUNCTION and BUILTIN keys.
 // Memory requests hold until ack; callers adapt grant/ack ports exactly once.
-module mpy_key_equal (
+module mpy_key_equal #(parameter int SOFF=1) (
     input logic clk_i,rst_n_i,valid_i,
     output logic ready_o,
     input logic [35:0] a_i,b_i,
@@ -37,6 +38,18 @@ module mpy_key_equal (
     logic [2:0] acount,bcount;
     logic [35:0] current;
     logic [31:0] descriptor;
+    logic cfg_soff, inline_ptr;
+`ifndef SYNTHESIS
+    initial begin
+        int soff_v;
+        if (!$value$plusargs("SOFF=%d", soff_v)) soff_v = SOFF;
+        cfg_soff = soff_v != 0;
+    end
+`else
+    assign cfg_soff = SOFF != 0;
+`endif
+    // STR_PTR handles only QSTR, STR, or BYTES.
+    assign inline_ptr = cfg_soff && current[35:32]!=ABI_TAG_QSTR;
     always_ff @(posedge clk_i) desc_r<=descriptor;
     logic [63:0] convert_input,magnitude,normalized;
     logic convert_sign,convert_side;
@@ -86,7 +99,8 @@ module mpy_key_equal (
             NUM_LO:mem_addr_o=current[31:0];
             NUM_HI:mem_addr_o=current[31:0]+4;
             STR_LEN:mem_addr_o=current[35:32]==ABI_TAG_QSTR ? descriptor : current[31:0];
-            STR_PTR:mem_addr_o=current[35:32]==ABI_TAG_QSTR ? desc_r+4 : current[31:0]+8;
+            STR_PTR:if(inline_ptr)mem_req_o=0;
+                else mem_addr_o=current[35:32]==ABI_TAG_QSTR ? desc_r+4 : current[31:0]+8;
             READ_A:mem_addr_o={ptr[0][31:2],2'b00};
             READ_B:mem_addr_o={ptr[1][31:2],2'b00};
             default:mem_req_o=0;
@@ -147,7 +161,15 @@ module mpy_key_equal (
             end
             NUM_COMPARE:finish(float_equal(real_value[0],real_value[1]) && float_equal(imag_value[0],imag_value[1]));
             STR_LEN:if(mem_ack_i)begin length[side]<=current[35:32]==ABI_TAG_QSTR ? {16'd0,mem_data_i[31:16]} : mem_data_i;state<=STR_PTR;end
-            STR_PTR:if(mem_ack_i)begin ptr[side]<=current[35:32]==ABI_TAG_QSTR ? {1'b0,mem_data_i[30:0]} : mem_data_i;state<=STR_NEXT;end
+            STR_PTR:if(inline_ptr || mem_ack_i)begin
+`ifndef SYNTHESIS
+                if (!inline_ptr && current[35:32]!=ABI_TAG_QSTR && mem_data_i!=current[31:0]+32'd12)
+                    $error("mpy_key_equal: non-canonical string data address at %08x: got %08x", current[31:0], mem_data_i);
+`endif
+                if(inline_ptr)ptr[side]<=current[31:0]+32'd12;
+                else ptr[side]<=current[35:32]==ABI_TAG_QSTR ? {1'b0,mem_data_i[30:0]} : mem_data_i;
+                state<=STR_NEXT;
+            end
             STR_NEXT:if(!side)begin side<=1;state<=STR_LEN;end else state<=STR_CHECK;
             STR_CHECK:if(length[0]!=length[1])finish(0);
                 else if(length[0]==0)finish(1);

@@ -1,0 +1,4 @@
+call_builtin 74628 13400 PASS
+call_function 104941 20500 PASS
+call_method 121240 21700 PASS
+str_ops 2370438 163760 PASS

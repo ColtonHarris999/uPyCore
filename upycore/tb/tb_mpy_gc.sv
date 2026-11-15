@@ -199,6 +199,19 @@ module tb_mpy_gc;
         check(overflows > 32'(free0), "the mark stack overflowed");
         check(free_blocks == 32'(NB - 8), "parent and six children survive the overflow");
 
+        collect(ROOTS, ROOTS);
+        alloc(32, ok, a);
+        check(ok, "function allocation");
+        alloc(16, ok, b);
+        check(ok, "builtin decoy allocation");
+        put(ROOTS, MPY_TAG_FUNCTION, a);
+        put(ROOTS + 4, MPY_TAG_BUILTIN, b);
+        collect(ROOTS, ROOTS + 8);
+        check(free_blocks == 32'(NB - 2), "FUNCTION is traced and BUILTIN ignores even a pool payload");
+        put(ROOTS, MPY_TAG_BUILTIN, a);
+        collect(ROOTS, ROOTS + 8);
+        check(free_blocks == 32'(NB), "a BUILTIN root cannot keep a function alive");
+
         // A boot-selected pool smaller than the physical metadata capacity.
         @(negedge clk); rst_n = 0; pool_bytes = 128;
         repeat (3) @(negedge clk);

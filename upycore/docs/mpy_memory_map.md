@@ -53,47 +53,49 @@ only. It is not part of this data map.
 
 ## Tag table
 
-Locked by the pivot plan. Tag `0101` is reserved.
+Each value occupies one 36-bit slot. The tag is bits 35:32 and the
+payload is bits 31:0.
 
-| Tag | Name | Registers | Payload |
-| --- | --- | --- | --- |
-| `0000` | CONTROL | 1 | `[3:0]` kind: `0` empty, `1` `None`, `2` null / end of iteration, `3` dict tombstone, `4` `False`, `5` `True` |
-| `0001` | INT | 1 | Signed 32-bit. Bytecode small-ints stay in the 31-bit range |
-| `0010` | INT64 | 2 | Low 32 bits, then a `CONT` register with the high 32 bits |
-| `0011` | FLOAT | 1 | IEEE binary32 |
-| `0100` | COMPLEX | 2 | Real binary32, then a `CONT` register with the imaginary binary32 |
-| `0101` | reserved | — | Not assigned |
-| `0110` | QSTR | 1 | Interned-string id |
-| `0111` | SHORT_STR | 4 | Length in the first payload's low byte, then up to 15 bytes across this register and three `CONT` registers |
-| `1000` | STR | 1 | Pointer. Length, hash, and bytes live in the object |
-| `1001` | TUPLE | 1 | Pointer |
-| `1010` | MUT_COLLEC | 1 | Pointer. Low 2 bits are `0` list, `1` dict, `2` set, `3` bytearray. The address clears those bits |
-| `1011` | RANGE | 1 | Pointer to start, stop, step |
-| `1100` | ITER | 1 | Pointer to the iterable and the index |
-| `1101` | BYTES | 1 | Pointer to an immutable `bytes` |
-| `1110` | OBJECT | 1 | Pointer. Word 0 is the kind |
-| `1111` | CONT | 1 | Extra entry of INT64, COMPLEX, or SHORT_STR |
+| Tag | Name | Payload |
+| --- | --- | --- |
+| `0000` | CONTROL | Kind in bits 3:0, with the spill address in the remaining bits for `RF_LINK` |
+| `0001` | INT | Signed 32-bit. Bytecode small integers stay in the 31-bit range |
+| `0010` | INT64 | Pointer to a two-word box, low word first |
+| `0011` | FLOAT | IEEE binary32 |
+| `0100` | COMPLEX | Pointer to a two-word box holding the real and imaginary binary32 values |
+| `0101` | BUILTIN | Native ID in bits 31:24 and read-only image address in bits 23:0 |
+| `0110` | QSTR | Interned-string ID |
+| `0111` | FUNCTION | Pointer to a bytecode function object |
+| `1000` | STR | Pointer to an immutable string header |
+| `1001` | TUPLE | Pointer to the length and inline elements |
+| `1010` | MUT_COLLEC | Address in bits 31:2 and kind in bits 1:0. Kind 0 is list, 1 dict, 2 set, and 3 bytearray |
+| `1011` | RANGE | Pointer to start, stop, and step |
+| `1100` | ITER | Pointer to the iterator record |
+| `1101` | BYTES | Pointer to an immutable bytes header |
+| `1110` | OBJECT | Pointer to an object whose word 0 gives its kind |
+| `1111` | CONTINUE | Pointer to internal storage, including container backing arrays |
 
-`False` and `True` are CONTROL kinds 4 and 5. Kind 6 is `RF_LINK`, a
-pointer to a spilled register chunk; the collector follows it, and
-arithmetic does not. Arithmetic and dict hashing use `False` and `True`
-as int 0 and int 1. They are not pointers. CONTROL, INT, INT64,
-FLOAT, COMPLEX, QSTR, SHORT_STR, CONT, and the reserved code are not
-pointers. STR, TUPLE, MUT_COLLEC, RANGE, ITER, BYTES, and OBJECT are.
+CONTROL kinds are 0 empty, 1 `None`, 2 end of iteration, 3 tombstone,
+4 `False`, 5 `True`, and 6 `RF_LINK`. The collector follows the spill
+link separately. It treats INT64, COMPLEX, FUNCTION, STR, TUPLE,
+MUT_COLLEC, RANGE, ITER, BYTES, OBJECT and CONTINUE as pointer tags.
+BUILTIN points into the static image. The core masks off its native
+ID when accessing the object. MUT_COLLEC clears its kind bits to form
+the address.
 
-A `MUT_COLLEC` address is the payload with bits `[1:0]` cleared. Objects
-are 4-byte aligned, so those bits are otherwise zero. Other pointers use
-all 32 payload bits. The tag says what the pointer is.
+`n_state` counts Python values, one slot apiece. FUNCTION and BUILTIN
+headers still carry their kind at word 0 for generic readers.
 
-`n_state` counts Python values. Call setup expands INT64 and COMPLEX to two
-physical registers and SHORT_STR to four. The compiler emits stock bytecode
-and does not encode that expansion.
+### Immutable string storage
 
-SHORT_STR bytes sit after the length. The head word is
-`{byte2, byte1, byte0, length}`. Each `CONT` word holds the next four bytes,
-low byte first. A length above 15 is rejected.
+STR and BYTES use a three-word header. Word 0 is byte length, word 1
+contains the hash and non-ASCII flag, and word 2 stores the data
+pointer. The bytes start at header address + 12, and word 2 always
+holds that address. The core and collection engines can compute it in
+place of the pointer read. List and bytearray backing storage can move.
+QSTR byte addresses come from the qstr descriptor.
 
-OBJECT kinds in word 0:
+### Object header kinds in word 0
 
 | Kind | Value |
 | --- | ---: |
@@ -211,7 +213,6 @@ image, flash store, unaligned access, bus fault, stack overflow, step limit.
 
 `upycore/rtl/mpy_defs.svh` holds the tag table, the widths, the register-file
 depth (`MPY_RF_DEPTH` / `MPY_RF_ADDR_W`), and this map.
-`upycore/rtl/mpy_regfile.sv` is the 16-entry array. `upycore/rtl/mpy_mem.sv`
-is flash, SRAM, the frame spill, and the other two windows.
+`upycore/rtl/mpy_core.sv` owns the 16-entry operand ring.
 `upycore/rtl/upycore_defs.svh` holds the datapath opcodes.
 `make synth` elaborates these modules with Yosys + yosys-slang.

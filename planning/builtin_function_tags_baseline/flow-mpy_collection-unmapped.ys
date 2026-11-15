@@ -1,0 +1,12 @@
+read_slang -j 1 --single-unit --top mpy_collection -DSYNTHESIS -I upycore/rtl  upycore/rtl/mpy_hash.sv upycore/rtl/upycore_umod_seq.sv upycore/rtl/mpy_key_equal.sv upycore/rtl/mpy_map_engine.sv upycore/rtl/mpy_bulk.sv upycore/rtl/mpy_hash_slot.sv upycore/rtl/mpy_rehash_stream.sv upycore/rtl/mpy_ca.sv upycore/rtl/mpy_bytecopy.sv upycore/rtl/mpy_shortlist.sv upycore/rtl/mpy_collection.sv
+read_verilog -lib build/sta/step0-mpy_collection-unmapped/ffbox.v
+hierarchy -check -top mpy_collection
+synth -flatten -noshare -noabc -top mpy_collection
+delete t:$scopeinfo
+techmap -map build/sta/step0-mpy_collection-unmapped/noarst.v
+async2sync
+dffunmap
+techmap -map build/sta/step0-mpy_collection-unmapped/ffmap.v
+opt_clean
+stat
+write_json build/sta/step0-mpy_collection-unmapped/netlist.json

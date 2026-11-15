@@ -1,0 +1,10 @@
+# A missing start or end is None, the same as an omitted argument.
+print("hello".find("ll", None))
+print("hello".find("ll", None, None))
+print("hello".find("ll", 1, None))
+print("hello".rfind("l", None))
+print("hello".index("ll", None))
+print("hello".rindex("l", None, None))
+print(b"hello".find(b"ll", None))
+print(b"hello".index(b"ll", None, None))
+print(bytearray(b"hello").find(b"ll", None))

@@ -2,7 +2,7 @@
 // bulk operation returns at admission; the scoreboard protects both headers
 // and tables until the final used-count write is acknowledged. Rehash returns
 // at completion because its new table remains unpublished until success.
-module mpy_bulk #(parameter bit TYPE_CACHE=0) (
+module mpy_bulk #(parameter bit TYPE_CACHE=0, parameter int SOFF=1) (
     input logic cache_clear_i,cache_write_i,cache_write2_i,
     input logic [31:0] cache_addr_i,cache_addr2_i,
     input logic clk_i,rst_n_i, valid_i,
@@ -38,7 +38,7 @@ module mpy_bulk #(parameter bit TYPE_CACHE=0) (
     logic hready,hvalid,herror,hreq;
     logic [31:0] hvalue,haddr,qcount,qbase,qext;
     wire select_stream=op==0;
-    mpy_hash #(.DEPTH(1)) shared_hash (
+    mpy_hash #(.DEPTH(1),.SOFF(SOFF)) shared_hash (
         .clk_i,.rst_n_i(rst_n_i && state==RUN),
         .valid_i(state==RUN && sh_valid[select_stream]),.ready_o(hready),
         .tag_i(sh_tag[select_stream]),.payload_i(sh_payload[select_stream]),
@@ -76,7 +76,7 @@ module mpy_bulk #(parameter bit TYPE_CACHE=0) (
         (header!=0 && chk_addr_i>=header && chk_addr_i<header+16) ||
         (chk_we_i && ((chk_addr_i>=src && chk_addr_i<src_end) ||
         (source_header!=0 && chk_addr_i>=source_header && chk_addr_i<source_header+16))));
-    mpy_map_engine #(.EXTERNAL_HASH(1),.TYPE_CACHE(TYPE_CACHE)) engine(
+    mpy_map_engine #(.EXTERNAL_HASH(1),.TYPE_CACHE(TYPE_CACHE),.SOFF(SOFF)) engine(
         .cache_clear_i,.cache_write_i,.cache_write2_i,.cache_addr_i,.cache_addr2_i,
         .hash_valid_o(sh_valid[0]),.hash_ready_i(hready && state==RUN && !select_stream),
         .hash_tag_o(sh_tag[0]),.hash_payload_o(sh_payload[0]),
@@ -90,7 +90,7 @@ module mpy_bulk #(parameter bit TYPE_CACHE=0) (
         .req_o(mreq),.we_o(mwe),.addr_o(maddr),.wdata_o(mdata),.wtag_o(mtag),
         .gnt_i(gnt_i && state==RUN && op!=0),.ack_i(ack_i && state==RUN && op!=0),.fault_i,
         .mem_data_i(rdata_i),.mem_tag_i(rtag_i));
-    mpy_rehash_stream #(.EXTERNAL_HASH(1)) rehash (
+    mpy_rehash_stream #(.EXTERNAL_HASH(1),.SOFF(SOFF)) rehash (
         .hash_valid_o(sh_valid[1]),.hash_ready_i(hready && state==RUN && select_stream==1'b1),
         .hash_tag_o(sh_tag[1]),.hash_payload_o(sh_payload[1]),
         .hash_result_valid_i(hvalid && state==RUN && select_stream==1'b1),

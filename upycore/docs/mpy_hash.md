@@ -27,10 +27,11 @@ configuration. In particular, there is no `-1` to `-2` substitution.
 | None / False / True | 6 / 0 / 1 | 0 |
 | QSTR | Low 16 bits of the qstr descriptor, including the extension table | 1 |
 | STR / BYTES, cached | Low 16 bits at object offset 4 | 1 |
-| STR / BYTES, uncached | DJB2: start 5381, update `(h * 33) ^ byte`, keep 16 bits, replace zero with 1 | 3 header reads plus the aligned data words |
+| STR / BYTES, uncached | DJB2: start 5381, update `(h * 33) ^ byte`, keep 16 bits, replace zero with 1 | 2 header reads plus the aligned data words |
 | TUPLE | Seed plus the hashes of its elements, reduced to 31 bits | Length, tagged elements, recursive reads |
 | Frozen SET subtype | Seed plus hashes of occupied table entries; skip empty/tombstone entries | Flags, alloc, table pointer, all table slots, recursive reads |
-| RANGE / ITER / OBJECT | Payload address shifted right by one, then reduced to 31 bits | 0 |
+| RANGE / ITER / OBJECT / FUNCTION | Payload address shifted right by one, then reduced to 31 bits | 0 |
+| BUILTIN | Payload address bits 23:0 shifted right by one | 0 |
 
 The pinned i686 interpreter returns INT_MIN for invalid/out-of-range float
 casts; 31-bit wrapping makes the hash zero. This includes NaN, infinities,
@@ -48,8 +49,8 @@ addresses. Exact cross-image pointer-seeded hash equality is not promised.
 OBJECT always means identity hashing here, including objects reached inside
 tuples or frozensets. The unit does not inspect types or execute `__hash__`.
 The future caller must resolve custom hashing separately before using this
-path. Mutable containers, internal sentinels, reserved tags, and SHORT_STR
-(not emitted by the current image ABI) return an error. `DEPTH` bounds
+path. FUNCTION and BUILTIN use identity hashing and need no callback.
+Mutable containers and internal sentinels return an error. `DEPTH` bounds
 aggregate nesting (default 8); overflow also returns an error so the caller
 can fall back to software. Scalars do not consume stack frames.
 
@@ -65,6 +66,9 @@ with the next scalar response at the same edge.
 There is one outstanding memory transaction. `mem_req_o` and byte address
 hold until `mem_ack_i`; an acknowledgement can be immediate or delayed.
 Only an acknowledged `mem_fault_i` terminates the request with an error.
+STR and BYTES data starts 12 bytes after the header. The hash and key
+equality engines form that address from the registered key. Simulation
+`+SOFF=0` restores the word-2 read and checks the stored address.
 Reset cancels requests and responses. The memory supplies a 32-bit payload
 and 4-bit tag; tags matter for aggregate elements. Unaligned string pointers
 are handled with aligned word reads and a byte buffer. Reading four bytes

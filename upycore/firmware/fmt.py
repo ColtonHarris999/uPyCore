@@ -71,6 +71,8 @@ def _hexaddr(a):
 
 def _addr(x):
     a = _pay(x)
+    if _tag(x) == TAG_BUILTIN:
+        return a & BUILTIN_ADDR_MASK
     if a < 0:
         a += 4294967296
     return a
@@ -380,7 +382,8 @@ def _obj_repr(x, as_str):
         name = 'dict_keys' if vk == 0 else ('dict_values' if vk == 1 else 'dict_items')
         return _s(name, '(', _seq_repr(list(x), '[', ']', False), ')')
     if k == OB_SUPER:
-        return '<super>'
+        # objtype.c super_print. Word 2 is the class, word 3 is the object.
+        return _s('<super: ', _str(_ld(x, 2)), ', ', _str(_ld(x, 3)), '>')
     t = _ld(x, 1)
     return _s('<', _ld(t, 4), '>')
 
@@ -428,7 +431,7 @@ def _repr(x):
         return _s('range(', _istr(_ld(x, 0)), ', ', _istr(_ld(x, 1)), ', ', _istr(step), ')')
     if t == TAG_ITER:
         return '<iterator>'
-    if t == TAG_OBJECT:
+    if t == TAG_OBJECT or t == TAG_FUNCTION or t == TAG_BUILTIN:
         return _obj_repr(x, False)
     return '<?>'
 
@@ -437,7 +440,7 @@ def _str(x):
     t = _tag(x)
     if t == TAG_QSTR or t == TAG_STR:
         return x
-    if t == TAG_OBJECT:
+    if t == TAG_OBJECT or t == TAG_FUNCTION or t == TAG_BUILTIN:
         return _obj_repr(x, True)
     return _repr(x)
 
