@@ -124,6 +124,7 @@ starts 12 bytes after its header, so the core and collection engines
 can compute the data address directly. See
 [bytecode call dispatch](upycore/docs/mpy_bytecode.md#call-dispatch)
 and the [memory map](upycore/docs/mpy_memory_map.md#immutable-string-storage).
+`python3 upycore/tools/tag_bench.py` measures the callable and string switches.
 
 ## Memory and boot
 

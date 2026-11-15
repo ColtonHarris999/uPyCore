@@ -458,3 +458,36 @@ Genus and physical implementation were outside this verification run.
 
 `make test` passed 36 RTL benches, 551 hardware cases under each
 compiler, and all 502 oracle-backed golden checks.
+
+## Step 11 benchmark comparison
+
+The [per-workload report](builtin_function_tags_benchmarks/report.md)
+records base plus all five configurations, cycle speedups, projected
+execution times, and representative event counts. The
+[JSON results](builtin_function_tags_benchmarks/results.json) contain
+every counter and matching output for all 43 workloads across the five
+configurations. The RTL and firmware used for these measurements match
+the Step 10 revision. The testbench digest identifies the counter
+instrumentation added in this step.
+
+Every switch-off result is within the 1% per-workload tolerance.
+The largest absolute difference is +0.614% on `bm_float`, the same
+difference previously measured in Steps 1–3.
+
+| Workloads | All vs none, cycle speedup | All vs Step 0, cycle speedup | All vs Step 0, projected speedup at unmapped periods |
+| --- | ---: | ---: | ---: |
+| Paper suite, 15 workloads | 1.0300× | 1.0287× | 1.0258× |
+| Paper suite excluding `core_qstr`, 14 workloads | 1.0321× | 1.0308× | 1.0279× |
+| Pystone, 300 runs | 1.0136× | 1.0110× | 1.0081× |
+
+The largest speedup is `bm_wordcount` at 1.1152× by cycles. The
+builtin-call microbenchmark drops from 74,628 to 70,409 cycles
+relative to Step 0, and `str_ops` drops from 2,370,438 to 2,241,022.
+
+Collection key equality skipped three reads in `bulk_extended_keys`
+and nine in `set_relations`. The workloads did not reach the
+uncached accelerator string hash path. The dedicated hash vectors
+exercise that path and show its read reduction in Step 9.
+
+A newly linked v2 smoke image was rejected at boot. The v3 smoke
+image produced the same output and 8,918 cycles with counters on and off.

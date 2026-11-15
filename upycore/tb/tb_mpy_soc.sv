@@ -1,4 +1,6 @@
 
+`include "mpy_abi.svh"
+
 // Runs one linked image on mpy_soc.
 //
 //   +IMAGE=<out>.hex +TAGS=<out>.tags.hex   image contents (mpy_link.py); mpy_boot
@@ -8,6 +10,7 @@
 //   +STDOUT=<path> +STDERR=<path>           console streams (default: this log)
 //   +MAX_CYCLES=<n>                         give up after n cycles (default 50M)
 //   +TRACE=1                                one line per executed opcode
+//   +STATS                                  callable and string pointer events
 //   +IOC_CODE=<hex> +IOC_DATA=<hex>         the I/O core's firmware: mpy_boot's simulation
 //                                           stream appends the IOCB section
 //   +IO_CLK_NS=<ns>                         io_clk period (default 20: 50 MHz; the hart's is 10)
@@ -163,6 +166,73 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
         .usb_clk_i(usb_clk), .usb_dp_io(usb_dp), .usb_dn_io(usb_dn), .usb_pu_o(usb_pu),
         .ioc_dbg_valid_o(ioc_dbg_valid), .ioc_dbg_byte_o(ioc_dbg_byte)
     );
+
+    bit tag_stats_enabled;
+    initial tag_stats_enabled = $test$plusargs("STATS");
+    longint unsigned calls_function, calls_builtin, calls_bound, calls_type, calls_other;
+    longint unsigned dispatch_function, dispatch_builtin, binds_function, binds_builtin;
+    longint unsigned skips_sinfo, skips_daddr, skips_strfin, skips_hash, skips_key_equal;
+
+    function automatic logic inline_string_tag(input logic [3:0] tag);
+        return tag == ABI_TAG_STR || tag == ABI_TAG_BYTES;
+    endfunction
+
+    // Follow the same stall checks as the core's microcode case.
+`define TAG_STATS_CORE u_soc.u_core
+`define TAG_STATS_HASH u_soc.u_ca.bulk_engine.shared_hash
+`define TAG_STATS_EQUAL u_soc.u_ca.bulk_engine.engine.equality
+    always @(posedge clk) if (tag_stats_enabled && rst_n && boot_done && !halted) begin
+        if (!`TAG_STATS_CORE.wfault_p && !`TAG_STATS_CORE.rf_icpt &&
+            !(`TAG_STATS_CORE.m_req && `TAG_STATS_CORE.m_we && `TAG_STATS_CORE.m_busy_i)) begin
+            case (`TAG_STATS_CORE.st.name())
+                "S_CALL_Q": case (`TAG_STATS_CORE.mt)
+                    ABI_TAG_FUNCTION: begin
+                        calls_function++;
+                        if (`TAG_STATS_CORE.cfg_ftag) dispatch_function++;
+                    end
+                    ABI_TAG_BUILTIN: begin
+                        calls_builtin++;
+                        if (`TAG_STATS_CORE.cfg_btag) dispatch_builtin++;
+                    end
+                    ABI_TAG_OBJECT: ;
+                    default: calls_other++;
+                endcase
+                "S_CALL_K": if (`TAG_STATS_CORE.ab_q[35:32] == ABI_TAG_OBJECT)
+                    case (`TAG_STATS_CORE.md)
+                        ABI_OB_BOUND_METHOD: calls_bound++;
+                        ABI_OB_TYPE: calls_type++;
+                        default: calls_other++;
+                    endcase
+                "S_AT_MR": if (`TAG_STATS_CORE.scr_id == `TAG_STATS_CORE.SCR_AT &&
+                    `TAG_STATS_CORE.lk_found && !`TAG_STATS_CORE.at_ty)
+                    case (`TAG_STATS_CORE.lk_res[35:32])
+                        ABI_TAG_FUNCTION: if (`TAG_STATS_CORE.cfg_ftag) binds_function++;
+                        ABI_TAG_BUILTIN: if (`TAG_STATS_CORE.cfg_btag) binds_builtin++;
+                        default: ;
+                    endcase
+                "S_AT_VK": if (!`TAG_STATS_CORE.at_ty)
+                    case (`TAG_STATS_CORE.md)
+                        ABI_OB_FUNCTION: binds_function++;
+                        ABI_OB_BUILTIN: binds_builtin++;
+                        default: ;
+                    endcase
+                "S_SI_S1": if (`TAG_STATS_CORE.cfg_soff &&
+                    inline_string_tag(`TAG_STATS_CORE.si_v[35:32])) skips_sinfo++;
+                "S_DADDR": if (`TAG_STATS_CORE.cfg_soff &&
+                    inline_string_tag(`TAG_STATS_CORE.si_v[35:32])) skips_daddr++;
+                "S_N_SF1": if (`TAG_STATS_CORE.cfg_soff &&
+                    inline_string_tag(`TAG_STATS_CORE.ab_q[35:32])) skips_strfin++;
+                default: ;
+            endcase
+        end
+        if (`TAG_STATS_HASH.state.name() == "STR_PTR" && `TAG_STATS_HASH.cfg_soff)
+            skips_hash++;
+        if (`TAG_STATS_EQUAL.state.name() == "STR_PTR" && `TAG_STATS_EQUAL.inline_ptr)
+            skips_key_equal++;
+    end
+`undef TAG_STATS_CORE
+`undef TAG_STATS_HASH
+`undef TAG_STATS_EQUAL
 
     // Measurement events (+MEAS_FILE).
     int fd_meas = 0;
@@ -476,6 +546,11 @@ module tb_mpy_soc #(parameter int SHORTLIST_MAX=16, parameter int SHORTLIST_MODE
         if (fd_err != 0) $fclose(fd_err);
         if (script_on && !script_done)
             $display("MPY_SESSION_STUCK step=%0d", script_step);
+        if (tag_stats_enabled)
+            $display("MPY_TAG_STATS calls_function=%0d calls_builtin=%0d calls_bound=%0d calls_type=%0d calls_other=%0d dispatch_function=%0d dispatch_builtin=%0d binds_function=%0d binds_builtin=%0d skips_sinfo=%0d skips_daddr=%0d skips_strfin=%0d skips_hash=%0d skips_key_equal=%0d",
+                     calls_function, calls_builtin, calls_bound, calls_type, calls_other,
+                     dispatch_function, dispatch_builtin, binds_function, binds_builtin,
+                     skips_sinfo, skips_daddr, skips_strfin, skips_hash, skips_key_equal);
         if (boot_err)
             $display("MPY_BOOT_ERROR cycles=%0d", n);
         else if (halted)
