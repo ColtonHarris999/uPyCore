@@ -56,7 +56,6 @@ ISLAND_FILES = [f for f in _ISLAND if not f.endswith("bsg_mem_1rw_sync_mask_writ
 # Each top is one slang --single-unit so file-scope includes share one $unit.
 TOPS: dict[str, list[str]] = {
     "mpy_decode": ["mpy_decode.sv"],
-    "mpy_regfile": ["mpy_regfile.sv"],
     "mpy_irq": ["mpy_mmio_pkg.sv", "mpy_irq.sv"],
     "mpy_periph": ["mpy_mmio_pkg.sv", "mpy_irq.sv", "mpy_periph.sv"],
     "mpy_hash": ["mpy_hash.sv"],
@@ -119,7 +118,6 @@ USB_SRAM_MODEL = "iocore/rtl/usb/bsg_mem_1r1w_sync_mask_write_bit.sv"
 # Default ``--synth`` covers the logic tops; name gc/mem/soc explicitly.
 GATES_DEFAULT = [
     "mpy_decode",
-    "mpy_regfile",
     "mpy_irq",
     "mpy_periph",
     "mpy_hash",

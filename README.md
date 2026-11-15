@@ -93,8 +93,8 @@ python3 upycore/tools/hw_tests.py repl_raw
 ## Unit testbenches
 
 `upycore/tb` has one testbench per block (ALU, container accelerator,
-decoder, collector, peripherals, register file and memory, the probe
-modulo). `make test-unit` verilates each with the RTL it needs and runs
+decoder, collector, peripherals, memory and the probe modulo).
+`make test-unit` verilates each with the RTL it needs and runs
 it with its inputs; CI runs it as the `unit` job.
 
 ```bash
@@ -117,6 +117,13 @@ the ALU finishes. A scoreboard makes a later access to busy data wait.
 [`upycore/docs/mpy_ca.md`](upycore/docs/mpy_ca.md) has the rules and the
 measurements. `python3 upycore/tools/bench.py` compares the switches,
 and `mpy_build.py run --sim-arg +CA=0 --sim-arg +AALU=0` turns both off.
+
+The core uses dedicated FUNCTION and BUILTIN tags to skip callable
+header reads in dispatch and method binding. Immutable string data
+starts 12 bytes after its header, so the core and collection engines
+can compute the data address directly. See
+[bytecode call dispatch](upycore/docs/mpy_bytecode.md#call-dispatch)
+and the [memory map](upycore/docs/mpy_memory_map.md#immutable-string-storage).
 
 ## Memory and boot
 

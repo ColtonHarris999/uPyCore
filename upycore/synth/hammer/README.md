@@ -235,7 +235,10 @@ machine where sv2v runs, and commit them. Update `converted/RTL_STAMP`
 to the source RTL commit used for the conversion. The `mpy_soc` view
 includes the I/O island. Where sv2v runs on the lab machine itself,
 `--sv2v <binary>` converts while building the folder.
-The converted files also read cleanly in Yosys's own Verilog parser.
+The converted files retain the FPU's constant real cast. Yosys's
+`read_verilog` frontend rejects that expression. Use the SystemVerilog
+frontend for open-tool checks, supplying the memory and clock-gate
+models for the SoC.
 
 ## Power from simulated activity
 

@@ -442,3 +442,19 @@ to 1,026. All 37 RTL unit benches passed, along with the three
 targeted hardware cases for each setting. Both full hardware passes
 returned 551/551, with no invariant failures. The oracle confirmed all
 502 golden cases.
+
+## Step 10 retired value encoding and backend regeneration
+
+Removed the standalone register file and its bench for the retired
+multi-register value encoding. Updated the value, memory, and call
+dispatch documentation to match the linked-image ABI.
+
+Regenerated the Hammer sources with sv2v v0.0.13 and verified the RTL
+stamp. The converted SoC passed Verilator lint with the SRAM and
+clock-gate interfaces supplied. Yosys's legacy parser still rejects
+the inherited FPU real cast. Slang elaborated the ALU, decoder, and
+core. Its SoC flow rejected an existing USB asynchronous reset form.
+Genus and physical implementation were outside this verification run.
+
+`make test` passed 36 RTL benches, 551 hardware cases under each
+compiler, and all 502 oracle-backed golden checks.
