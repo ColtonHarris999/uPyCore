@@ -7208,26 +7208,30 @@ module mpy_core
             // x4 the positional count. b0 means CALL_METHOD.
             // Resident call window: one ARGBUF store per cycle. x1 is v0+2*v1.
             // cf_v and a0_v copy the callable and the first argument word
-            // (self, or argument 0) as they are stored, so the dispatch and
-            // a native's first read take them from flops (cfg_cfwd). With
-            // the FUNCTION and BUILTIN tags the call then reaches S_CF or
-            // S_NAT with no load. The slots stay put: sp is already at s1
-            // and nothing pushes until the call returns.
+            // (self, or argument 0) from the store data register the cycle
+            // after each is stored (no extra register-file read), so the
+            // dispatch and a native's first read take them from flops
+            // (cfg_cfwd). With the FUNCTION and BUILTIN tags the call then
+            // reaches S_CF or S_NAT with no load.
             S_CALL_CP: begin
-                cf_v <= rf[`SX(s1)];
-                a0_v <= b1 ? rf[`SX(6'(s1 + 7'd1))] : rf[`SX(s0)];
+                cf_v <= {m_wtag, m_wdata};   // slot 0, stored by S_EXEC
                 if (b1) wr(ab_ptr(8'd31), rf[`SX(6'(s1 + 7'd1))], S_CALL_CP2);
                 else st <= S_CALL_CP2;
             end
-            S_CALL_CP2: if (32'(i0) == x1) begin
-                            if (cfg_cfwd) begin
-                                md <= cf_v[31:0]; mt <= cf_v[35:32]; a0_ok <= 1'b1;
-                                st <= S_CALL_Q;
-                            end else st <= S_CALL;
-                        end else begin
-                            wr(ab_ptr(8'd32 + i0), rf[`SX(6'(s0 + 7'(i0)))], S_CALL_CP2);
-                            i0 <= i0 + 8'd1;
-                        end
+            S_CALL_CP2: begin
+                // The word stored last cycle is self (b1, i0 = 0) or
+                // argument 0 (i0 = 1).
+                if (i0 == (b1 ? 8'd0 : 8'd1)) a0_v <= {m_wtag, m_wdata};
+                if (32'(i0) == x1) begin
+                    if (cfg_cfwd) begin
+                        md <= cf_v[31:0]; mt <= cf_v[35:32]; a0_ok <= 1'b1;
+                        st <= S_CALL_Q;
+                    end else st <= S_CALL;
+                end else begin
+                    wr(ab_ptr(8'd32 + i0), rf[`SX(6'(s0 + 7'(i0)))], S_CALL_CP2);
+                    i0 <= i0 + 8'd1;
+                end
+            end
             S_CC_FUN: if (stk_hit(x0[15:0])) begin
                     wr(ab_ptr(8'd0), stk_val(x0[15:0]), S_CC_SELF);
                 end else begin
