@@ -7312,7 +7312,13 @@ module mpy_core (
 	assign stk_depth = (has_link ? sd_l : sd_nl);
 	function automatic [31:0] sd_sub;
 		input reg [31:0] k;
-		sd_sub = ((sv2v_cast_32(spilled_reals) + sv2v_cast_32(sp)) + ~k) + {31'd0, !has_link};
+		reg [31:0] with_link;
+		reg [31:0] without_link;
+		begin
+			with_link = (sv2v_cast_32(spilled_reals) + sv2v_cast_32(sp)) + ~k;
+			without_link = ((sv2v_cast_32(spilled_reals) + sv2v_cast_32(sp)) + ~k) + 32'd1;
+			sd_sub = (has_link ? with_link : without_link);
+		end
 	endfunction
 	function automatic stk_hit;
 		input reg [15:0] g;
@@ -17435,7 +17441,7 @@ module mpy_hash (
 		end
 	endtask
 	initial if ((DEPTH < 1) || ((BYTES_PER_CYCLE != 1) && (BYTES_PER_CYCLE != 4)))
-		$display("Error [%0t] /tmp/tmp.nBZpneOjVt/mpy_soc.sv:22451:13 - mpy_hash.<unnamed_block>.<unnamed_block>\n msg: ", $time, "mpy_hash: invalid parameters");
+		$display("Error [%0t] /tmp/tmp.FM3rXK5FiS/mpy_soc.sv:22460:13 - mpy_hash.<unnamed_block>.<unnamed_block>\n msg: ", $time, "mpy_hash: invalid parameters");
 	always @(posedge clk_i or negedge rst_n_i)
 		if (!rst_n_i) begin
 			state <= 5'd0;
@@ -28188,7 +28194,7 @@ module cve2_pmp (
 	wire [(PMPNumChan * PMPNumRegions) - 1:0] region_basic_perm_check;
 	reg [(PMPNumChan * PMPNumRegions) - 1:0] region_mml_perm_check;
 	reg [PMPNumChan - 1:0] access_fault;
-	initial $display("Warning [elaboration] /tmp/tmp.nBZpneOjVt/mpy_soc.sv:43426:3 - cve2_pmp\n msg: ", "CVE2 does not officially support PMP, see rule PVL-40.");
+	initial $display("Warning [elaboration] /tmp/tmp.FM3rXK5FiS/mpy_soc.sv:43435:3 - cve2_pmp\n msg: ", "CVE2 does not officially support PMP, see rule PVL-40.");
 	genvar _gv_r_1;
 	generate
 		for (_gv_r_1 = 0; _gv_r_1 < PMPNumRegions; _gv_r_1 = _gv_r_1 + 1) begin : g_addr_exp

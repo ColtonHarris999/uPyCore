@@ -7312,7 +7312,13 @@ module mpy_core (
 	assign stk_depth = (has_link ? sd_l : sd_nl);
 	function automatic [31:0] sd_sub;
 		input reg [31:0] k;
-		sd_sub = ((sv2v_cast_32(spilled_reals) + sv2v_cast_32(sp)) + ~k) + {31'd0, !has_link};
+		reg [31:0] with_link;
+		reg [31:0] without_link;
+		begin
+			with_link = (sv2v_cast_32(spilled_reals) + sv2v_cast_32(sp)) + ~k;
+			without_link = ((sv2v_cast_32(spilled_reals) + sv2v_cast_32(sp)) + ~k) + 32'd1;
+			sd_sub = (has_link ? with_link : without_link);
+		end
 	endfunction
 	function automatic stk_hit;
 		input reg [15:0] g;

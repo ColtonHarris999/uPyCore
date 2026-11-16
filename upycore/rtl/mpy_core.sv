@@ -2152,8 +2152,17 @@ module mpy_core
     // stk_depth - k for every input (has_link implies sp != 0); all 32
     // equal 32'(stk_depth) - k while spilled_reals + sp fits 16 bits, as
     // stk_hit already assumes.
+    //
+    // Placed and routed, the carry form was the slower one: has_link then
+    // has to ripple through the whole 32-bit sum (28 of the 50 worst paths
+    // after placement went through it, none before). Both sums are formed
+    // from early signals with a constant carry and has_link only picks
+    // between the two finished results, one mux from the end.
     function automatic logic [31:0] sd_sub(input logic [31:0] k);
-        sd_sub = 32'(spilled_reals) + 32'(sp) + ~k + {31'd0, !has_link};
+        logic [31:0] with_link, without_link;
+        with_link    = 32'(spilled_reals) + 32'(sp) + ~k;
+        without_link = 32'(spilled_reals) + 32'(sp) + ~k + 32'd1;
+        sd_sub = has_link ? with_link : without_link;
     endfunction
 
     // g is resident when g - spilled_reals is below the resident count: a
