@@ -149,11 +149,11 @@ def main():
             c['type'] = lib_cell
             c['connections'] = {pm[p]: b for p, b in c['connections'].items()}
             c['port_directions'] = {pm[p]: ('output' if p == 'Y' else 'input') for p in pm}
-        elif c['type'] != 'FFBOX' and not c['type'].startswith('sky130'):
+        elif c['type'] != 'FFBOX' and c['type'].startswith('$'):
             raise SystemExit(f"unmapped cell type {c['type']}")
         if c['type'] == 'FFBOX' and 'port_directions' not in c:
             c['port_directions'] = {'C': 'input', 'D': 'input', 'Q': 'output'}
-    used = {c['type'] for c in cells.values() if c['type'].startswith('sky130')} | {BUF}
+    used = {c['type'] for c in cells.values() if c['type'] != 'FFBOX'} | {BUF}
     L = parse_lib(lib, used)
     # names for nets
     netname = {}
@@ -225,7 +225,9 @@ def main():
         if load > CMAX:
             # Buffer tree: fanout-4 stages of buf_4 until each drives <= CMAX.
             bcap = L[BUF]['A'][0]
-            _, bdl, bsl = L[BUF]['X'][1][0]
+            # The buffer's output pin (X in sky130, Y in ASAP7) and its input.
+            bo = next(q for q, (_, a) in L[BUF].items() if a)
+            _, bdl, bsl = L[BUF][bo][1][0]
             stages, rem = 0, load
             while rem > CMAX:
                 rem /= 4.0; stages += 1
