@@ -12,6 +12,7 @@ progress. The machine as built is documented in `upycore/docs/`, and
 | [`rv_io_core_plan.md`](rv_io_core_plan.md), [`rv_io_core_progress.md`](rv_io_core_progress.md) | Board I/O through an RV32 I/O core behind a bridge, with gates that keep the hart's cycles and timing unchanged. Being implemented phase by phase; the progress file has each phase's gate results |
 | [`builtin_function_tags_plan.md`](builtin_function_tags_plan.md) | Use the two free tags for `BUILTIN` (native id and object address in the payload) and `FUNCTION`, and rename `CONT` to `CONTINUE`, so calls and method binds skip the reads that only learn the callee's kind; and stop reading a `str`/`bytes` header's data-address word, since the bytes are always at `+12`. Not started |
 | [`shortlist_engine_status.md`](shortlist_engine_status.md) | The short-list engine's validation and synthesis handoff |
+| [`fable_clock_round_prompt.md`](fable_clock_round_prompt.md) | Paste-ready assignment for the next clock-and-cycles round. Image tools are in `.cursor/Dockerfile` and `.cursor/install.sh` |
 | [`old/`](old/) | Archived and completed plans, including the CPython-to-MicroPython pivot plan, the GC, generator and uPy2-compiler plans, and the cleanup report. Code comments cite some of them by section, so they stay in the repo |
 
 ## Rules
