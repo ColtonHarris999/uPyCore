@@ -39,8 +39,10 @@ GATES = {
     '$_NOT_': ('sky130_fd_sc_hd__inv_1', {'A': 'A', 'Y': 'Y'}),
     '$_BUF_': ('sky130_fd_sc_hd__buf_1', {'A': 'A', 'Y': 'X'}),
 }
-BUF = 'sky130_fd_sc_hd__buf_4'
-CMAX = 0.03   # pF a gate drives before a buffer tree (repair_design-like)
+BUF = os.environ.get('STA_BUF', 'sky130_fd_sc_hd__buf_4')
+# pF a gate drives before a buffer tree (repair_design-like); STA_CMAX for
+# other libraries (scale it with the library's input capacitance).
+CMAX = float(os.environ.get('STA_CMAX', 0.03))
 
 def parse_lib(path, wanted):
     txt = open(path).read()
