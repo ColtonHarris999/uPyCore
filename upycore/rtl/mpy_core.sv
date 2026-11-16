@@ -1732,6 +1732,17 @@ module mpy_core
     logic [17:0] srd_o;      // S_SRD_T2: the value's word offset in its chunk
     logic        lc_hit_r, call_fit_r, call_ring_r, call_big_r, yf_fast_r;
     logic [2:0]  lc_way_r;
+    // The hit way as one-hot flops beside lc_way_r, and each way's unbound
+    // test from its own flops, so a cached LOAD_FAST / LOAD_DEREF selects
+    // the value with no decode and tests VNULL before the select
+    // (lc_way_r -> m_addr / m_wdata, near-critical in main33a at 12 ns).
+    logic [7:0]  lc_oh_r;
+    logic [7:0]  lc_nul;
+    always_comb for (int k = 0; k < 8; k++) lc_nul[k] = lc_d[k] == VNULL;
+    function automatic val_t lc_hd();
+        lc_hd = '0;
+        for (int k = 0; k < 8; k++) lc_hd = lc_hd | ({36{lc_oh_r[k]}} & lc_d[k]);
+    endfunction
     logic [7:0]  lf_ix;      // the local a LOAD_FAST / STORE_FAST names, from S_DEC
     logic [15:0] bl_base;    // BUILD_LIST: stack depth below the items
     logic        ur_le;      // S_UR_SLOW's depth test
@@ -2143,17 +2154,19 @@ module mpy_core
     // at 11.0 ns).
     assign sd_l  = spilled_reals + {9'd0, 7'(sp - 7'd1)};
     assign stk_depth = has_link ? sd_l : sd_nl;
-    // stk_depth - k as one sum: spilled_reals + sp + ~k + !has_link (a - b
-    // is a + ~b + 1, and a link takes that 1 back). has_link arrives late
-    // (it reads the ring through rf_base), so it enters as a carry instead
-    // of selecting between two depth sums ahead of the subtract (rf ->
-    // cv_fun_g / x0 / x2 / stk_from / bl_base / drop_left, the core's worst
-    // group in the calibrated sign-off estimate). Its low 16 bits equal
-    // stk_depth - k for every input (has_link implies sp != 0); all 32
-    // equal 32'(stk_depth) - k while spilled_reals + sp fits 16 bits, as
-    // stk_hit already assumes.
+    // stk_depth - k with has_link as a late select: both cases are summed
+    // from early operands (spilled_reals, sp, k) and has_link picks one at
+    // the end. has_link reads the ring through rf_base, so it arrives late;
+    // as a carry-in of the 32-bit sums (b4d1a16) it led the carry chain of
+    // seven adders and 28 of the 50 worst post-place paths in main34a.
+    // Low 16 bits equal stk_depth - k for every input (has_link implies
+    // sp != 0); all 32 bits equal 32'(stk_depth) - k while
+    // spilled_reals + sp fits 16 bits, as stk_hit assumes.
     function automatic logic [31:0] sd_sub(input logic [31:0] k);
-        sd_sub = 32'(spilled_reals) + 32'(sp) + ~k + {31'd0, !has_link};
+        logic [31:0] nl, l;
+        nl = 32'(spilled_reals) + 32'(sp) - k;
+        l  = 32'(spilled_reals) + 32'(sp) + ~k;
+        sd_sub = has_link ? l : nl;
     endfunction
 
     // g is resident when g - spilled_reals is below the resident count: a
@@ -3427,6 +3440,7 @@ module mpy_core
                        // take one cycle in S_EXEC_W, which works from arg.
                        lc_hit_r <= lc_is_hit({4'd0, dq_bytes[3:0]});
                        lc_way_r <= lc_hit_way({4'd0, dq_bytes[3:0]});
+                       lc_oh_r <= 8'd1 << lc_hit_way({4'd0, dq_bytes[3:0]});
                        op_pc <= pc; pc <= pc + d_len;
                        soft_pt <= 1'b0;
                        // No scratch image is live across instructions (each
@@ -3450,7 +3464,7 @@ module mpy_core
                 yf_fast_r <= (inj == VNONE && rf[`SX(6'(sp - 7'd1))] == VNONE &&
                               tg(rf[`SX(6'(sp - 7'd2))]) == ABI_TAG_OBJECT);
                 if (op != 8'h34 && op != 8'h36 && op != 8'h68) begin
-                    lc_hit_r <= lc_is_hit(lf_ix); lc_way_r <= lc_hit_way(lf_ix);
+                    lc_hit_r <= lc_is_hit(lf_ix); lc_way_r <= lc_hit_way(lf_ix); lc_oh_r <= 8'd1 << lc_hit_way(lf_ix);
                 end
                 st <= S_EXEC;
             end
@@ -3471,8 +3485,8 @@ module mpy_core
 `endif
                     if (lc_hit_r) begin
                         vs0 = {4'd0, lc_way_r};
-                        if (lc_d[vs0[2:0]] == VNULL && !(fflags & FF_FW)) raise_msg(ABI_MSG_LOCAL_UNBOUND);
-                        else begin push(lc_d[vs0[2:0]]); lc_note(vs0[2:0]); go_next(); end
+                        if (|(lc_oh_r & lc_nul) && !(fflags & FF_FW)) raise_msg(ABI_MSG_LOCAL_UNBOUND);
+                        else begin push(lc_hd()); lc_note(vs0[2:0]); go_next(); end
                     end else begin
                         i0 <= vi; rd(loc_ptr(vi), S_LDF);
                     end
@@ -3496,13 +3510,13 @@ module mpy_core
                     if (lc_hit_r) begin
                         vs0 = {4'd0, lc_way_r};
                         lc_note(vs0[2:0]);
-                        if (lc_d[vs0[2:0]] == VNULL && (op == 8'h28 || !(fflags & FF_FW)))
+                        if (|(lc_oh_r & lc_nul) && (op == 8'h28 || !(fflags & FF_FW)))
                             raise_msg(ABI_MSG_LOCAL_UNBOUND);
-                        else if (op == 8'h25) rd(aoff(adr(lc_d[vs0[2:0]]), 8), S_DEREF);
+                        else if (op == 8'h25) rd(aoff(adr(lc_hd()), 8), S_DEREF);
                         else if (op == 8'h27) begin
-                            wr(aoff(adr(lc_d[vs0[2:0]]), 8), tos1, S_FETCH);
+                            wr(aoff(adr(lc_hd()), 8), tos1, S_FETCH);
                             sp <= sp - 7'd1;
-                        end else if (op == 8'h29) rd(aoff(adr(lc_d[vs0[2:0]]), 8), S_DELDEREF);
+                        end else if (op == 8'h29) rd(aoff(adr(lc_hd()), 8), S_DELDEREF);
                         else begin
                             wr(loc_ptr(vi), VNULL, S_FETCH);
                             lc_v[vs0[2:0]] <= 1'b0;
@@ -4445,7 +4459,7 @@ module mpy_core
                      else begin
                          if (scr_id != SCR_IT) scr_id <= SCR_IT;
                          if (i0 == 8'd4) gosub(S_IT, S_FI_R);
-                         else rd(adr(t[3]) + 4 * i0, S_FI_LD2);
+                         else rd(aoff(adr(t[3]), {2'b00, i0[1:0], 2'b00}), S_FI_LD2);  // i0 < 4
                      end
             S_FI_LD2: begin `iv[i0[1:0]] <= mv; i0 <= i0 + 8'd1; st <= S_FI_LD; end
             S_FI_R: if (it_py) begin
@@ -6053,7 +6067,7 @@ module mpy_core
                        else begin
                            if (scr_id != SCR_IT) scr_id <= SCR_IT;
                            if (i0 == 8'd4) begin it_h <= 1'b1; gosub(S_IT, S_N_IN_R); end
-                           else rd(adr(t[3]) + 4 * i0, S_N_IN_LD2);
+                           else rd(aoff(adr(t[3]), {2'b00, i0[1:0], 2'b00}), S_N_IN_LD2);  // i0 < 4
                        end
             S_N_IN_LD2: begin `iv[i0[1:0]] <= mv; i0 <= i0 + 8'd1; st <= S_N_IN_LD; end
             S_N_IN_R: if (it_py) deliver(VNULL, crk);
