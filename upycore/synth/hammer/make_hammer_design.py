@@ -333,6 +333,16 @@ def main() -> int:
                     help="place and route with antenna diode insertion (sky130_fd_sc_hd__diode_2). "
                          "The class flow repairs antennas by rerouting only, which leaves "
                          "hundreds of violations and adds shorts. Uses the upycore_hammer.py driver")
+    ap.add_argument("--timing-route", action="store_true",
+                    help="route with timing- and crosstalk-driven NanoRoute. The class flow "
+                         "leaves both off, so every route and repair route ignores timing; the "
+                         "last repair route cost up to 0.72 ns in the 12 ns runs. Uses the "
+                         "upycore_hammer.py driver")
+    ap.add_argument("--edge-margin", type=int, default=0, metavar="ROWS",
+                    help="keep ROWS empty standard-cell rows (2.72 um each) at the top and bottom "
+                         "of the die. With no margin the first and last power rails are centered "
+                         "on the die edge and every strap's via stack ends 0.09 um outside it "
+                         "(488 out-of-die DRC markers on the full chip); 1 removes them")
     ap.add_argument("--target-slack", type=float, metavar="NS",
                     help="Innovus opt_setup_target_slack (class 0.10): the optimizer works every "
                          "path to this much positive slack, which leaves margin before routing for "
@@ -511,6 +521,17 @@ def main() -> int:
             tops[0]["width"], tops[0]["height"] = args.die
         else:
             warnings.append("example has no toplevel placement constraint; set the die size by hand")
+    if args.edge_margin:
+        pcs = _get(doc, "vlsi.inputs.placement_constraints")
+        tops = [c for c in pcs or [] if isinstance(c, dict) and c.get("type") == "toplevel"]
+        if tops:
+            m = dict(tops[0].get("margins") or {})
+            for side in ("left", "right"):
+                m.setdefault(side, 0)
+            m["top"] = m["bottom"] = round(2.72 * args.edge_margin, 2)
+            tops[0]["margins"] = m
+        else:
+            warnings.append("example has no toplevel placement constraint; --edge-margin not applied")
     for kv in args.sets:
         k, _, v = kv.partition("=")
         _set(doc, k.strip(), yaml.safe_load(v))
@@ -619,6 +640,9 @@ def main() -> int:
     if args.diodes:
         par_tcl += ["set_db route_design_antenna_diode_insertion true",
                     "set_db route_design_antenna_cell_name sky130_fd_sc_hd__diode_2"]
+    if args.timing_route:
+        par_tcl += ["set_db route_design_with_timing_driven true",
+                    "set_db route_design_with_si_driven true"]
     if args.target_slack is not None:
         par_tcl.append(f"set_db opt_setup_target_slack {args.target_slack:g}")
     syn_tcl = []
